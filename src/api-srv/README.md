@@ -71,10 +71,14 @@ A production-ready Go API server starter template with comprehensive security fe
 - `POST /logoff` - User logout
 
 ### Examples (CRUD)
-- `GET /example?exampleId={id}&securityContext={ctx}` - Get example
+- `GET /example?exampleId={id}` - Get example
 - `POST /example` - Create example
 - `PUT /example` - Update example
-- `DELETE /example?exampleId={id}&securityContext={ctx}&updateTs={ts}` - Delete example
+- `DELETE /example?exampleId={id}&updateTs={ts}` - Delete example
+
+### Example Batch Operations
+- `GET /exampleList?ids={comma-separated}` - Get multiple examples
+- `POST /exampleList` - Create multiple examples (all-or-nothing transaction)
 
 ### Health Check
 - `GET /health` - Service health check
@@ -149,8 +153,18 @@ curl -X POST https://localhost:8080/auth \
   -d '{"username":"admin","password":"admin123!"}'
 
 # Get example (requires auth cookie)
-curl "https://localhost:8080/example?exampleId=1&securityContext=1" \
+curl "https://localhost:8080/example?exampleId=1" \
   -H "Cookie: auth=YOUR_JWT_TOKEN"
+
+# Get multiple examples
+curl "https://localhost:8080/exampleList?ids=1,2,3" \
+  -H "Cookie: auth=YOUR_JWT_TOKEN"
+
+# Create multiple examples
+curl -X POST https://localhost:8080/exampleList \
+  -H "Content-Type: application/json" \
+  -H "Cookie: auth=YOUR_JWT_TOKEN" \
+  -d '[{"example_text":"Batch example 1"}, {"example_text":"Batch example 2"}]'
 ```
 
 ## Architecture
