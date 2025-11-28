@@ -79,6 +79,8 @@ A production-ready Go API server starter template with comprehensive security fe
 ### Example Batch Operations
 - `GET /exampleList?ids={comma-separated}` - Get multiple examples
 - `POST /exampleList` - Create multiple examples (all-or-nothing transaction)
+- `PUT /exampleList` - Update multiple examples (all-or-nothing transaction)
+- `DELETE /exampleList?ids={comma-separated}` - Delete multiple examples (all-or-nothing transaction)
 
 ### Health Check
 - `GET /health` - Service health check
@@ -165,6 +167,16 @@ curl -X POST https://localhost:8080/exampleList \
   -H "Content-Type: application/json" \
   -H "Cookie: auth=YOUR_JWT_TOKEN" \
   -d '[{"example_text":"Batch example 1"}, {"example_text":"Batch example 2"}]'
+
+# Update multiple examples
+curl -X PUT https://localhost:8080/exampleList \
+  -H "Content-Type: application/json" \
+  -H "Cookie: auth=YOUR_JWT_TOKEN" \
+  -d '[{"example_id":1, "example_text":"Updated 1"}, {"example_id":2, "example_text":"Updated 2"}]'
+
+# Delete multiple examples
+curl -X DELETE "https://localhost:8080/exampleList?ids=1,2" \
+  -H "Cookie: auth=YOUR_JWT_TOKEN"
 ```
 
 ## Architecture

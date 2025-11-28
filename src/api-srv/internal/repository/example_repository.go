@@ -211,7 +211,7 @@ func (r *ExampleRepository) CreateExampleList(ctx context.Context, examples []*m
 		).Scan(&examples[i].ExampleID)
 
 		if err != nil {
-			return nil, fmt.Errorf("failed to create example %d: %w", err)
+			return nil, fmt.Errorf("failed to create example %d: %w", i, err)
 		}
 	}
 
@@ -221,4 +221,74 @@ func (r *ExampleRepository) CreateExampleList(ctx context.Context, examples []*m
 	}
 
 	return examples, nil
+}
+
+// UpdateExampleList updates multiple examples in a transaction
+func (r *ExampleRepository) UpdateExampleList(ctx context.Context, examples []*model.ExampleModel) error {
+	if len(examples) == 0 {
+		return nil
+	}
+
+	// Begin transaction
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+		UPDATE example
+		SET note_text = $1, note_int = $2, note_float = $3, note_int_array = $4, note_float_array = $5,
+		    update_ts = $6, update_user_id = $7
+		WHERE note_id = $8 AND security_context = $9 AND delete_user_id IS NULL`
+
+	for _, example := range examples {
+		_, err := tx.Exec(ctx, query,
+			example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
+			example.UpdateTS, example.UpdateUserID, example.ExampleID, example.SecurityContext,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update example %d: %w", example.ExampleID, err)
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteExampleList deletes multiple examples in a transaction
+func (r *ExampleRepository) DeleteExampleList(ctx context.Context, ids []int, securityContext int, deleteTS float64, deleteUserID int) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	// Begin transaction
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+		UPDATE example
+		SET delete_ts = $1, delete_user_id = $2
+		WHERE note_id = $3 AND security_context = $4 AND delete_user_id IS NULL`
+
+	for _, id := range ids {
+		_, err := tx.Exec(ctx, query, deleteTS, deleteUserID, id, securityContext)
+		if err != nil {
+			return fmt.Errorf("failed to delete example %d: %w", id, err)
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }

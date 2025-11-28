@@ -401,3 +401,138 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 
 	logger.Info("example", "BCR0", fmt.Sprintf("Created %d examples", len(createdExamples)))
 }
+
+// UpdateExampleList handles PUT /exampleList
+func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Request) {
+	logger := h.appsrv.Logger
+
+	// Security checks
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec.CheckJWT()
+	sec.CheckRateLimit()
+	sec.CheckUserBlocked()
+	sec.CheckCSRF()
+	sec.CheckAuthorization(model.GrantExampleChange)
+
+	if !sec.CheckAllChecksComplete() {
+		return
+	}
+
+	claims := sec.GetClaims()
+
+	// Parse request body
+	var examples []model.ExampleModel
+	if err := json.NewDecoder(r.Body).Decode(&examples); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger)
+		return
+	}
+
+	if len(examples) == 0 {
+		writeError(w, http.StatusBadRequest, "At least one example required", logger)
+		return
+	}
+
+	// Convert to slice of pointers and validate
+	examplePtrs := make([]*model.ExampleModel, len(examples))
+	for i := range examples {
+		examplePtrs[i] = &examples[i]
+		if examplePtrs[i].SecurityContext != claims.SecurityContext {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), logger)
+			return
+		}
+		if examplePtrs[i].ExampleID == 0 {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d missing example_id", i), logger)
+			return
+		}
+	}
+
+	// Generate update timestamp
+	now := time.Now().Unix()
+	for i := range examples {
+		examples[i].UpdateTS = float64(now)
+		examples[i].UpdateUserID = claims.UserID
+	}
+
+	// Update in transaction
+	err := h.exampleRepo.UpdateExampleList(r.Context(), examplePtrs)
+	if err != nil {
+		logger.Error("example", "BUF0", "Failed to update examples: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to update examples", logger)
+		return
+	}
+
+	// Return success
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]string{"message": "Examples updated successfully"}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logger.Error("example", "ENF0", "Failed to encode response: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to encode response", logger)
+		return
+	}
+
+	logger.Info("example", "BUR0", fmt.Sprintf("Updated %d examples", len(examples)))
+}
+
+// DeleteExampleList handles DELETE /exampleList
+func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Request) {
+	logger := h.appsrv.Logger
+
+	// Security checks
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec.CheckJWT()
+	sec.CheckRateLimit()
+	sec.CheckUserBlocked()
+	sec.CheckCSRF()
+	sec.CheckAuthorization(model.GrantExampleDelete)
+
+	if !sec.CheckAllChecksComplete() {
+		return
+	}
+
+	claims := sec.GetClaims()
+
+	// Parse query parameters
+	idsStr := r.URL.Query().Get("ids")
+	if idsStr == "" {
+		writeError(w, http.StatusBadRequest, "ids parameter is required", logger)
+		return
+	}
+
+	idStrs := strings.Split(idsStr, ",")
+	ids := make([]int, 0, len(idStrs))
+	for _, idStr := range idStrs {
+		id, err := strconv.Atoi(strings.TrimSpace(idStr))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid id in ids parameter", logger)
+			return
+		}
+		ids = append(ids, id)
+	}
+
+	if len(ids) == 0 {
+		writeError(w, http.StatusBadRequest, "At least one id required", logger)
+		return
+	}
+
+	// Generate delete timestamp
+	now := time.Now().Unix()
+
+	// Delete in transaction
+	err := h.exampleRepo.DeleteExampleList(r.Context(), ids, claims.SecurityContext, float64(now), claims.UserID)
+	if err != nil {
+		logger.Error("example", "BDF0", "Failed to delete examples: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to delete examples", logger)
+		return
+	}
+
+	// Return success
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]string{"message": "Examples deleted successfully"}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logger.Error("example", "ENF0", "Failed to encode response: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to encode response", logger)
+		return
+	}
+
+	logger.Info("example", "BDR0", fmt.Sprintf("Deleted %d examples", len(ids)))
+}

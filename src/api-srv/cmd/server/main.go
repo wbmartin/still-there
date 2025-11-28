@@ -91,6 +91,8 @@ func main() {
 	// Example batch operations
 	mux.HandleFunc("GET /exampleList", exampleHandler.GetExampleList)
 	mux.HandleFunc("POST /exampleList", exampleHandler.CreateExampleList)
+	mux.HandleFunc("PUT /exampleList", exampleHandler.UpdateExampleList)
+	mux.HandleFunc("DELETE /exampleList", exampleHandler.DeleteExampleList)
 
 	// Create server
 	server := &http.Server{
