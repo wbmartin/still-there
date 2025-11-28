@@ -45,10 +45,10 @@ A production-ready Go API server starter template with comprehensive security fe
 2. **Start services**:
    ```bash
    # Start shrmpl-kv (port 7171)
-   ./bin/skv-srv
+    ./bin/tools/skv-srv
 
    # Start shrmpl-log (port 7379)
-   ./bin/slog-srv
+    ./bin/tools/slog-srv
    ```
 
 3. **Setup database**:
@@ -110,22 +110,20 @@ A production-ready Go API server starter template with comprehensive security fe
 
 ## Configuration
 
-Edit `etc/loc-dev-config.json`:
+Edit `etc/loc-dev-app-srv-config.env`:
 
-```json
-{
-  "database_url": "postgres://user:pass@host:port/db",
-  "jwt_secret": "your-secret-key",
-  "jwt_session_expire_hours": 72,
-  "max_user_req_per_min": 200,
-  "max_unauth_req_per_min": 20,
-  "log_receiver_host_port": "127.0.0.1:7379",
-  "kv_host_port": "127.0.0.1:7171",
-  "server_name": "proto-go-app",
-  "server_port": 8080,
-  "tls_cert_path": "/etc/ssl/certs/server.crt",
-  "tls_key_path": "/etc/ssl/private/server.key"
-}
+```env
+DATABASE_URL=postgres://user:pass@host:port/db
+JWT_SECRET=your-secret-key
+JWT_SESSION_EXPIRE_HOURS=72
+MAX_USER_REQ_PER_MIN=200
+MAX_UNAUTH_REQ_PER_MIN=20
+LOG_RECEIVER_HOST_PORT=127.0.0.1:7379
+KV_HOST_PORT=127.0.0.1:7171
+SERVER_NAME=proto-go-app
+SERVER_PORT=8080
+TLS_CERT_PATH=/etc/ssl/certs/server.crt
+TLS_KEY_PATH=/etc/ssl/private/server.key
 ```
 
 ## Database Schema

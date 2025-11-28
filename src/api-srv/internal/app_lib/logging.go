@@ -74,7 +74,9 @@ func (l *Logger) log(level string, msg string, args ...any) {
 	fullMessage := formattedMsg + callerInfo
 
 	// Send to shrmpl-log (ignore errors - if it fails, logging fails)
-	_ = l.shrmplLog.Log(level, l.service, "0000", fullMessage)
+	if l.shrmplLog != nil {
+		_ = l.shrmplLog.Log(level, l.service, "0000", fullMessage)
+	}
 }
 
 // Debug logs at debug level

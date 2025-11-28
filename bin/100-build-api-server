@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Build the API server binary
+# Output: dist/proto-go-app
+
+set -e
+
+echo "Building API server..."
+
+# Get the directory of this script (BASH_SOURCE[0])
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Change to the API server source directory
+pushd "$PROJECT_ROOT/src/api-srv" > /dev/null
+
+# Build the binary
+go build -o "$PROJECT_ROOT/dist/proto-go-app" ./cmd/server
+
+# Return to original directory
+popd > /dev/null
+
+echo "API server built successfully: $PROJECT_ROOT/dist/proto-go-app"

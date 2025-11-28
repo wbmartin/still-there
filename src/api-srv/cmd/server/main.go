@@ -18,7 +18,7 @@ import (
 
 func main() {
 	// Parse command line arguments first to get config file
-	configFile := flag.String("config", "etc/loc-dev-app-srv-config.json", "Path to configuration file")
+	configFile := flag.String("config", "etc/loc-dev-app-srv-config.env", "Path to configuration file")
 	flag.Parse()
 
 	// Load configuration

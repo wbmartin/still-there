@@ -1,14 +1,20 @@
 #!/bin/bash
 
 # Script to download shrmpl executables for local development
-# Run this script from the project root directory
 
 set -e
 
 echo "Downloading shrmpl executables..."
 
-# Create bin directory if it doesn't exist
-mkdir -p bin
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Change to the project root directory
+pushd "$PROJECT_ROOT" > /dev/null
+
+# Create bin/tools directory if it doesn't exist
+mkdir -p bin/tools
 
 # Base URL for downloads
 BASE_URL="https://github.com/wbmartin/shrmpl-srv-preview/raw/main/dist/mac"
@@ -18,27 +24,32 @@ EXECUTABLES=(
     "skv-srv"
     "slog-srv"
     "skv-cli"
+    "shrmpl-vault-srv"
+    "shrmpl-vault-cli"
 )
 
 echo "Downloading from: $BASE_URL"
 
 for exe in "${EXECUTABLES[@]}"; do
-    if [ -f "bin/$exe" ]; then
+    if [ -f "bin/tools/$exe" ]; then
         echo "✓ $exe already exists, skipping..."
     else
         echo "Downloading $exe..."
-        curl -L -o "bin/$exe" "$BASE_URL/$exe"
-        chmod +x "bin/$exe"
+        curl -L -o "bin/tools/$exe" "$BASE_URL/$exe"
+        chmod +x "bin/tools/$exe"
         echo "✓ Downloaded and made executable: $exe"
     fi
 done
 
 echo ""
 echo "Download complete!"
-echo "Executables are in the bin/ directory:"
-ls -la bin/
+echo "Executables are in the bin/tools/ directory:"
+ls -la bin/tools/
 
 echo ""
 echo "To start the services:"
-echo "  ./bin/skv-srv  # KV server on port 7171"
-echo "  ./bin/slog-srv # Log server on port 7379"
+echo "  ./bin/tools/skv-srv  # KV server on port 7171"
+echo "  ./bin/tools/slog-srv # Log server on port 7379"
+
+# Return to original directory
+popd > /dev/null

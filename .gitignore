@@ -1,2 +1,5 @@
 .DS_Store
 examples
+bin/tools/*
+dist
+etc/crt/*.pem
