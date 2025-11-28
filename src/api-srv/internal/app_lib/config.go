@@ -13,11 +13,12 @@ type Config struct {
 	JWTSessionExpireHours int    `json:"jwt_session_expire_hours"`
 	MaxUserReqPerMin      int    `json:"max_user_req_per_min"`
 	MaxUnauthReqPerMin    int    `json:"max_unauth_req_per_min"`
-	ShrmplLogDest         string `json:"shrmpl_log_dest"`
-	ShrmplKVHost          string `json:"shrmpl_kv_host"`
-	ShrmplKVPort          int    `json:"shrmpl_kv_port"`
+	LogReceiverHostPort   string `json:"log_receiver_host_port"`
+	KVHostPort            string `json:"kv_host_port"`
 	ServerName            string `json:"server_name"`
 	ServerPort            int    `json:"server_port"`
+	TLSCertPath           string `json:"tls_cert_path"`
+	TLSKeyPath            string `json:"tls_key_path"`
 }
 
 // LoadConfig loads configuration from a JSON file
@@ -41,11 +42,20 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	if config.JWTSecret == "" {
 		return nil, fmt.Errorf("jwt_secret is required")
 	}
-	if config.ShrmplLogDest == "" {
-		return nil, fmt.Errorf("shrmpl_log_dest is required")
+	if config.LogReceiverHostPort == "" {
+		return nil, fmt.Errorf("log_receiver_host_port is required")
+	}
+	if config.KVHostPort == "" {
+		return nil, fmt.Errorf("kv_host_port is required")
 	}
 	if config.ServerName == "" {
 		return nil, fmt.Errorf("server_name is required")
+	}
+	if config.TLSCertPath == "" {
+		return nil, fmt.Errorf("tls_cert_path is required")
+	}
+	if config.TLSKeyPath == "" {
+		return nil, fmt.Errorf("tls_key_path is required")
 	}
 
 	return &config, nil

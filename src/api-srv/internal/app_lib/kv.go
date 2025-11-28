@@ -4,20 +4,87 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// ShrmplKVClient represents a client for the shrmpl-kv service
-type ShrmplKVClient struct {
-	host string
-	port int
-	conn net.Conn
+// ThisAppKVInterface defines the key-value store interface for this application
+type ThisAppKVInterface interface {
+	Get(key string) (string, error)
+	Set(key, value, ttl string) error
+	Incr(key, ttl string) (int, error)
 }
 
-// ShrmplLogClient represents a client for the shrmpl-log service
-type ShrmplLogClient struct {
+// KV wraps shrmpl-kv client for key-value operations
+type KV struct {
+	shrmplKV *ShrmplKVClient
+}
+
+// parseHostPort parses a "host:port" string into separate host and port components
+func parseHostPort(hostPort string) (string, string, error) {
+	parts := strings.Split(hostPort, ":")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid host:port format: %s", hostPort)
+	}
+	return parts[0], parts[1], nil
+}
+
+// NewKV creates a key-value store client
+func NewKV(config *Config) ThisAppKVInterface {
+	// Parse the combined host:port string
+	host, portStr, err := parseHostPort(config.KVHostPort)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to parse kv_host_port: %s\n", err.Error())
+		return &KV{shrmplKV: nil}
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid port in kv_host_port: %s\n", err.Error())
+		return &KV{shrmplKV: nil}
+	}
+
+	shrmplKV := NewShrmplKVClient(host, port)
+	if err := shrmplKV.Connect(); err != nil {
+		// If we can't connect, we'll return a client that logs errors
+		// The operations will fail gracefully
+		fmt.Fprintf(os.Stderr, "Failed to connect to shrmpl-kv: %s\n", err.Error())
+		return &KV{shrmplKV: nil}
+	}
+
+	return &KV{
+		shrmplKV: shrmplKV,
+	}
+}
+
+// Get retrieves a value from the key-value store
+func (kv *KV) Get(key string) (string, error) {
+	if kv.shrmplKV == nil {
+		return "", fmt.Errorf("key-value store not available")
+	}
+	return kv.shrmplKV.Get(key)
+}
+
+// Set stores a key-value pair with optional TTL
+func (kv *KV) Set(key, value, ttl string) error {
+	if kv.shrmplKV == nil {
+		return fmt.Errorf("key-value store not available")
+	}
+	return kv.shrmplKV.Set(key, value, ttl)
+}
+
+// Incr increments a counter and returns the new value
+func (kv *KV) Incr(key, ttl string) (int, error) {
+	if kv.shrmplKV == nil {
+		return 0, fmt.Errorf("key-value store not available")
+	}
+	return kv.shrmplKV.Incr(key, ttl)
+}
+
+// ShrmplKVClient represents a client for the shrmpl-kv service
+type ShrmplKVClient struct {
 	host string
 	port int
 	conn net.Conn
@@ -29,25 +96,6 @@ func NewShrmplKVClient(host string, port int) *ShrmplKVClient {
 		host: host,
 		port: port,
 	}
-}
-
-// NewShrmplLogClient creates a new shrmpl-log client
-func NewShrmplLogClient(logDest string) (*ShrmplLogClient, error) {
-	parts := strings.Split(logDest, ":")
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid log destination format: %s", logDest)
-	}
-
-	host := parts[0]
-	port, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return nil, fmt.Errorf("invalid port in log destination: %w", err)
-	}
-
-	return &ShrmplLogClient{
-		host: host,
-		port: port,
-	}, nil
 }
 
 // Connect establishes connection to shrmpl-kv
@@ -189,64 +237,4 @@ func (c *ShrmplKVClient) sendCommand(cmd string) (string, error) {
 	}
 
 	return response, nil
-}
-
-// Connect establishes connection to shrmpl-log
-func (c *ShrmplLogClient) Connect() error {
-	addr := fmt.Sprintf("%s:%d", c.host, c.port)
-	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
-	if err != nil {
-		return fmt.Errorf("failed to connect to shrmpl-log: %w", err)
-	}
-
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		tcpConn.SetNoDelay(true)
-	}
-
-	c.conn = conn
-	return nil
-}
-
-// Log sends a log message to shrmpl-log
-func (c *ShrmplLogClient) Log(level, host, code, message string) error {
-	// Validate inputs
-	if len(level) != 4 {
-		return fmt.Errorf("level must be exactly 4 characters")
-	}
-	if len(host) > 32 {
-		return fmt.Errorf("host must be <= 32 characters")
-	}
-	if len(code) != 4 {
-		return fmt.Errorf("code must be exactly 4 characters")
-	}
-	if len(message) > 4096 {
-		return fmt.Errorf("message must be <= 4096 characters")
-	}
-
-	// Format: [LVL(4)] [HOST(32)] [CODE(4)] [LEN(4)]: [MSG]\n
-	paddedHost := fmt.Sprintf("%-32s", host[:min(32, len(host))])
-	paddedLevel := fmt.Sprintf("%-4s", level[:4])
-	paddedCode := fmt.Sprintf("%-4s", code[:4])
-	msgLen := fmt.Sprintf("%04d", len(message))
-
-	logLine := fmt.Sprintf("[%s] [%s] [%s] [%s]: %s\n", paddedLevel, paddedHost, paddedCode, msgLen, message)
-
-	_, err := c.conn.Write([]byte(logLine))
-	return err
-}
-
-// Close closes the connection to shrmpl-log
-func (c *ShrmplLogClient) Close() {
-	if c.conn != nil {
-		c.conn.Close()
-		c.conn = nil
-	}
-}
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

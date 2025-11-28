@@ -8,18 +8,18 @@ import (
 )
 
 // writeJSON writes a JSON response
-func writeJSON(w http.ResponseWriter, status int, data interface{}, logger app_lib.LoggerInterface) {
+func writeJSON(w http.ResponseWriter, status int, data interface{}, logger app_lib.ThisAppLoggerInterface) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		logger.Error("Failed to encode JSON response: %v", err.Error())
+		logger.Error("server", "JSONENC", "Failed to encode JSON response: "+err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
 
 // writeError writes an error response
-func writeError(w http.ResponseWriter, status int, message string, logger app_lib.LoggerInterface) {
+func writeError(w http.ResponseWriter, status int, message string, logger app_lib.ThisAppLoggerInterface) {
 	response := map[string]string{"error": message}
 	writeJSON(w, status, response, logger)
 }

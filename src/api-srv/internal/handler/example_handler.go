@@ -2,41 +2,33 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
 )
 
 // ExampleHandler handles example CRUD operations
 type ExampleHandler struct {
-	db          *app_lib.Database
-	shrmplKV    *app_lib.ShrmplKVClient
-	config      *app_lib.Config
-	logger      app_lib.LoggerInterface
-	exampleRepo *repository.ExampleRepository
+	deps *app_lib.AppServices
 }
 
 // NewExampleHandler creates a new example handler
-func NewExampleHandler(db *app_lib.Database, shrmplKV *app_lib.ShrmplKVClient, config *app_lib.Config, logger app_lib.LoggerInterface, exampleRepo *repository.ExampleRepository) *ExampleHandler {
+func NewExampleHandler(deps *app_lib.AppServices) *ExampleHandler {
 	return &ExampleHandler{
-		db:          db,
-		shrmplKV:    shrmplKV,
-		config:      config,
-		logger:      logger.With("handler", "example"),
-		exampleRepo: exampleRepo,
+		deps: deps,
 	}
 }
 
 // GetExample handles GET /example
 func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
-	logger := h.logger.With("method", "GET")
+	logger := h.deps.Logger
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.shrmplKV, h.config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.deps.KV, h.deps.Config, logger)
 	sec.CheckJWT()
 	sec.CheckRateLimit()
 	sec.CheckUserBlocked()
@@ -73,27 +65,27 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger = logger.With("example_id", exampleID, "security_context", securityContext)
+	// Caller information automatically added to log messages
 
 	// Get example
-	example, err := h.exampleRepo.GetExample(r.Context(), exampleID, securityContext)
+	example, err := h.deps.ExampleRepo.GetExample(r.Context(), exampleID, securityContext)
 	if err != nil {
-		logger.Error("Failed to get example: %s", err.Error())
+		logger.Error("example", "GETFAIL", "Failed to get example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve example", logger)
 		return
 	}
 
-	logger.Debug("Example retrieved: %+v", example)
+	logger.Debug("example", "RETRIEVED", fmt.Sprintf("Example retrieved: %+v", example))
 	writeJSON(w, http.StatusOK, example, logger)
-	logger.Info("Example retrieval completed")
+	logger.Info("example", "GETDONE", "Example retrieval completed")
 }
 
 // CreateExample handles POST /example
 func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
-	logger := h.logger.With("method", "POST")
+	logger := h.deps.Logger
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.shrmplKV, h.config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.deps.KV, h.deps.Config, logger)
 	sec.CheckJWT()
 	sec.CheckRateLimit()
 	sec.CheckUserBlocked()
@@ -113,7 +105,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("Example creation request parsed: %+v", example)
+	logger.Debug("example", "CREATEPARSE", fmt.Sprintf("Example creation request parsed: %+v", example))
 
 	// Validate required fields
 	if example.ExampleText == "" {
@@ -133,27 +125,27 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	example.UpdateTS = float64(now)
 	example.UpdateUserID = claims.UserID
 
-	logger = logger.With("security_context", example.SecurityContext)
+	// Caller information automatically added to log messages
 
 	// Create example
-	createdExample, err := h.exampleRepo.CreateExample(r.Context(), &example)
+	createdExample, err := h.deps.ExampleRepo.CreateExample(r.Context(), &example)
 	if err != nil {
-		logger.Error("Failed to create example: %s", err.Error())
+		logger.Error("example", "CREATEFAIL", "Failed to create example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to create example", logger)
 		return
 	}
 
-	logger.Debug("Example created: %+v", createdExample)
+	logger.Debug("example", "CREATED", fmt.Sprintf("Example created: %+v", createdExample))
 	writeJSON(w, http.StatusCreated, createdExample, logger)
-	logger.Info("Example creation completed")
+	logger.Info("example", "CREATEDONE", "Example creation completed")
 }
 
 // UpdateExample handles PUT /example
 func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
-	logger := h.logger.With("method", "PUT")
+	logger := h.deps.Logger
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.shrmplKV, h.config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.deps.KV, h.deps.Config, logger)
 	sec.CheckJWT()
 	sec.CheckRateLimit()
 	sec.CheckUserBlocked()
@@ -173,7 +165,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("Example update request parsed: %+v", example)
+	logger.Debug("example", "UPDATEPARSE", fmt.Sprintf("Example update request parsed: %+v", example))
 
 	// Validate required fields
 	if example.ExampleID == 0 || example.ExampleText == "" || example.UpdateTS == 0 {
@@ -191,10 +183,10 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	example.UpdateTS = float64(now)
 	example.UpdateUserID = claims.UserID
 
-	logger = logger.With("example_id", example.ExampleID, "security_context", example.SecurityContext)
+	// Caller information automatically added to log messages
 
 	// Update example with optimistic locking
-	err := h.exampleRepo.UpdateExample(r.Context(), &example, example.UpdateTS)
+	err := h.deps.ExampleRepo.UpdateExample(r.Context(), &example, example.UpdateTS)
 	if err != nil {
 		if err.Error() == "conflict: example was updated by another user" {
 			writeError(w, http.StatusConflict, "Example was modified by another user", logger)
@@ -204,7 +196,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusGone, "Example no longer exists", logger)
 			return
 		}
-		logger.Error("Failed to update example: %s", err.Error())
+		logger.Error("example", "UPDATEFAIL", "Failed to update example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to update example", logger)
 		return
 	}
@@ -213,17 +205,17 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	example.CreateTS = example.CreateTS         // From request
 	example.CreateUserID = example.CreateUserID // From request
 
-	logger.Debug("Example updated: %+v", example)
+	logger.Debug("example", "UPDATED", fmt.Sprintf("Example updated: %+v", example))
 	writeJSON(w, http.StatusOK, example, logger)
-	logger.Info("Example update completed")
+	logger.Info("example", "UPDATEDONE", "Example update completed")
 }
 
 // DeleteExample handles DELETE /example
 func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
-	logger := h.logger.With("method", "DELETE")
+	logger := h.deps.Logger
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.shrmplKV, h.config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.deps.KV, h.deps.Config, logger)
 	sec.CheckJWT()
 	sec.CheckRateLimit()
 	sec.CheckUserBlocked()
@@ -269,11 +261,11 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger = logger.With("example_id", exampleID, "security_context", securityContext)
+	// Caller information automatically added to log messages
 
 	// Delete example with optimistic locking
 	now := time.Now().Unix()
-	err = h.exampleRepo.DeleteExample(r.Context(), exampleID, securityContext, updateTS, float64(now), claims.UserID)
+	err = h.deps.ExampleRepo.DeleteExample(r.Context(), exampleID, securityContext, updateTS, float64(now), claims.UserID)
 	if err != nil {
 		if err.Error() == "conflict: example was updated by another user" {
 			writeError(w, http.StatusConflict, "Example was modified by another user", logger)
@@ -283,11 +275,11 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusGone, "Example no longer exists", logger)
 			return
 		}
-		logger.Error("Failed to delete example: %s", err.Error())
+		logger.Error("example", "DELETEFAIL", "Failed to delete example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to delete example", logger)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Example deleted successfully"}, logger)
-	logger.Info("Example deletion completed")
+	logger.Info("example", "DELETEDONE", "Example deletion completed")
 }

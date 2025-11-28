@@ -8,37 +8,37 @@ import (
 
 // RBACManager handles role-based access control operations
 type RBACManager struct {
-	logger LoggerInterface
+	logger ThisAppLoggerInterface
 }
 
 // NewRBACManager creates a new RBAC manager
-func NewRBACManager(logger LoggerInterface) *RBACManager {
+func NewRBACManager(logger ThisAppLoggerInterface) *RBACManager {
 	return &RBACManager{
-		logger: logger.With("component", "RBACManager"),
+		logger: logger,
 	}
 }
 
 // HasGrant checks if a user has a specific grant in a security context
 func (r *RBACManager) HasGrant(claims *Claims, grantID int, securityContext int) bool {
 	if claims == nil || claims.Grants == nil {
-		r.logger.Debug("No claims or grants available")
+		r.logger.Debug("rbac", "NOCLAIMS", "No claims or grants available")
 		return false
 	}
 
 	contextGrants, exists := claims.Grants[securityContext]
 	if !exists {
-		r.logger.Debug("No grants found for security context: %d", securityContext)
+		r.logger.Debug("rbac", "NOCONTEXT", fmt.Sprintf("No grants found for security context: %d", securityContext))
 		return false
 	}
 
 	for _, userGrantID := range contextGrants {
 		if userGrantID == grantID {
-			r.logger.Debug("Grant found - ID: %d, context: %d", userGrantID, securityContext)
+			r.logger.Debug("rbac", "GRANTFOUND", fmt.Sprintf("Grant found - ID: %d, context: %d", userGrantID, securityContext))
 			return true
 		}
 	}
 
-	r.logger.Debug("Grant not found - ID: %d, context: %d", grantID, securityContext)
+	r.logger.Debug("rbac", "GRANTNOTFOUND", fmt.Sprintf("Grant not found - ID: %d, context: %d", grantID, securityContext))
 	return false
 }
 
@@ -66,7 +66,7 @@ func (r *RBACManager) GetUserGrantsByContext(claims *Claims) map[int][]string {
 			if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
 				shortCodes = append(shortCodes, shortCode)
 			} else {
-				r.logger.Warn("Unknown grant ID encountered: %d", grantID)
+				r.logger.Warn("rbac", "UNKNOWNGRANT", fmt.Sprintf("Unknown grant ID encountered: %d", grantID))
 			}
 		}
 		result[securityContext] = shortCodes

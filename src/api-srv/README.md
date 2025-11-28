@@ -30,6 +30,18 @@ A production-ready Go API server starter template with comprehensive security fe
    ./bin/010-download-shrmpl.sh
    ```
 
+2. **Setup database**:
+   ```bash
+   createdb loc_starter_db
+   psql -d loc_starter_db -f sql/010-initialcreate.sql
+   psql -d loc_starter_db -f sql/015-data.sql
+   ```
+
+3. **Run the server**:
+   ```bash
+   go run cmd/server/main.go
+   ```
+
 2. **Start services**:
    ```bash
    # Start shrmpl-kv (port 7171)
@@ -101,11 +113,12 @@ Edit `etc/loc-dev-config.json`:
   "jwt_session_expire_hours": 72,
   "max_user_req_per_min": 200,
   "max_unauth_req_per_min": 20,
-  "shrmpl_log_dest": "127.0.0.1:7379",
-  "shrmpl_kv_host": "127.0.0.1",
-  "shrmpl_kv_port": 7171,
+  "log_receiver_host_port": "127.0.0.1:7379",
+  "kv_host_port": "127.0.0.1:7171",
   "server_name": "proto-go-app",
-  "server_port": 8080
+  "server_port": 8080,
+  "tls_cert_path": "/etc/ssl/certs/server.crt",
+  "tls_key_path": "/etc/ssl/private/server.key"
 }
 ```
 
@@ -128,15 +141,15 @@ Edit `etc/loc-dev-config.json`:
 
 ```bash
 # Health check
-curl http://localhost:8080/health
+curl https://localhost:8080/health
 
 # Authenticate (MFA exempt user)
-curl -X POST http://localhost:8080/auth \
+curl -X POST https://localhost:8080/auth \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin123!"}'
 
 # Get example (requires auth cookie)
-curl "http://localhost:8080/example?exampleId=1&securityContext=1" \
+curl "https://localhost:8080/example?exampleId=1&securityContext=1" \
   -H "Cookie: auth=YOUR_JWT_TOKEN"
 ```
 
@@ -149,9 +162,8 @@ cmd/server/
 internal/
 ├── app_lib/                # Shared application libraries
 │   ├── config.go          # Configuration loading
-│   ├── database.go        # Database connection
-│   ├── shrmpl.go          # shrmpl client wrappers
-│   ├── logging.go         # Logger setup
+│   ├── kv.go              # Key-value store interface (ThisAppKVInterface)
+│   ├── logging.go         # Logging interface (ThisAppLoggerInterface)
 │   ├── auth.go            # JWT and password utilities
 │   ├── rbac.go            # Authorization logic
 │   └── security.go        # Security helper with checks
@@ -193,6 +205,19 @@ internal/
 - Passwords are bcrypt hashed
 - All database operations include security context validation
 - Optimistic locking prevents concurrent modification conflicts
+
+## Clean Abstractions
+
+The application uses clean interface abstractions for external dependencies:
+
+- **`ThisAppLoggerInterface`**: Logging abstraction that hides shrmpl-log implementation
+- **`ThisAppKVInterface`**: Key-value store abstraction that hides shrmpl-kv implementation
+
+**Benefits:**
+- **Implementation Hiding**: Main application code never sees shrmpl-specific details
+- **Testability**: Interfaces can be easily mocked for unit testing
+- **Flexibility**: Can swap implementations by editing only `logging.go` and `kv.go`
+- **Clean Architecture**: Dependencies are injected as interfaces, not concrete types
 
 ## License
 
