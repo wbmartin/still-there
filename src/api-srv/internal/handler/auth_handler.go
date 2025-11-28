@@ -9,34 +9,35 @@ import (
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
+	"github.com/wbmartin/starter-api/internal/repository"
 )
 
 // AuthHandler handles initial authentication (username/password)
-func AuthHandler(deps *app_lib.AppServices) http.HandlerFunc {
+func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		deps.Logger.Info("auth", "START", "Auth request started")
+		appServices.Logger.Info("auth", "START", "Auth request started")
 
 		// Parse request
-		var req model.AuthRequest
+		var req model.AuthRequestModel
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid request body", deps.Logger)
+			writeError(w, http.StatusBadRequest, "Invalid request body", appServices.Logger)
 			return
 		}
 
-		deps.Logger.Debug("auth", "PARSE", "Auth request parsed for user: "+req.Username)
+		appServices.Logger.Debug("auth", "PARSE", "Auth request parsed for user: "+req.Username)
 
 		// Get user from database
-		user, err := deps.UserRepo.GetUserByUsername(r.Context(), req.Username)
+		user, err := userRepo.GetUserByUsername(r.Context(), req.Username)
 		if err != nil {
-			deps.Logger.Warn("auth", "USERLOOKUP", "User lookup failed for user: "+req.Username+", error: "+err.Error())
-			writeError(w, http.StatusUnauthorized, "Invalid credentials", deps.Logger)
+			appServices.Logger.Warn("auth", "USERLOOKUP", "User lookup failed for user: "+req.Username+", error: "+err.Error())
+			writeError(w, http.StatusUnauthorized, "Invalid credentials", appServices.Logger)
 			return
 		}
 
 		// Verify password
 		if !app_lib.CheckPasswordHash(req.Password, user.PwHash) {
-			deps.Logger.Warn("auth", "PASSFAIL", "Password verification failed for user: "+req.Username)
-			writeError(w, http.StatusUnauthorized, "Invalid credentials", deps.Logger)
+			appServices.Logger.Warn("auth", "PASSFAIL", "Password verification failed for user: "+req.Username)
+			writeError(w, http.StatusUnauthorized, "Invalid credentials", appServices.Logger)
 			return
 		}
 
@@ -45,21 +46,21 @@ func AuthHandler(deps *app_lib.AppServices) http.HandlerFunc {
 			// Generate temp token for MFA
 			tempTokenBytes := make([]byte, 32)
 			if _, err := rand.Read(tempTokenBytes); err != nil {
-				deps.Logger.Error("auth", "TOKGEN", "Failed to generate temp token: "+err.Error())
-				writeError(w, http.StatusInternalServerError, "Internal server error", deps.Logger)
+				appServices.Logger.Error("auth", "TOKGEN", "Failed to generate temp token: "+err.Error())
+				writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
 				return
 			}
 			tempToken := hex.EncodeToString(tempTokenBytes)
 
 			// Store temp token in key-value store with expiration
 			tempTokenKey := "TEMP_AUTH_" + tempToken
-			if err := deps.KV.Set(tempTokenKey, req.Username, "10m"); err != nil {
-				deps.Logger.Error("auth", "TOKSTORE", "Failed to store temp token: "+err.Error())
-				writeError(w, http.StatusBadRequest, "Invalid request body", deps.Logger)
+			if err := appServices.KV.Set(tempTokenKey, req.Username, "10m"); err != nil {
+				appServices.Logger.Error("auth", "TOKSTORE", "Failed to store temp token: "+err.Error())
+				writeError(w, http.StatusBadRequest, "Invalid request body", appServices.Logger)
 				return
 			}
 
-			response := model.AuthResponse{
+			response := model.AuthResponseModel{
 				AppUserID:              user.AppUserID,
 				Username:               user.Username,
 				FirstName:              user.FirstName,
@@ -69,16 +70,16 @@ func AuthHandler(deps *app_lib.AppServices) http.HandlerFunc {
 				TempToken:              tempToken,
 			}
 
-			writeJSON(w, http.StatusOK, response, deps.Logger)
-			deps.Logger.Info("auth", "TOKISSUE", "Auth temp token issued for user: "+req.Username)
+			writeJSON(w, http.StatusOK, response, appServices.Logger)
+			appServices.Logger.Info("auth", "TOKISSUE", "Auth temp token issued for user: "+req.Username)
 			return
 		}
 
 		// MFA not required, issue full JWT
-		jwt, err := createJWTForUser(r.Context(), user, deps)
+		jwt, err := createJWTForUser(r.Context(), user, appServices, userGroupRepo)
 		if err != nil {
-			deps.Logger.Error("auth", "JWTFAIL", "Failed to create JWT: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", deps.Logger)
+			appServices.Logger.Error("auth", "JWTFAIL", "Failed to create JWT: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
 			return
 		}
 
@@ -88,15 +89,15 @@ func AuthHandler(deps *app_lib.AppServices) http.HandlerFunc {
 			Value:    jwt,
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   true, // In production, set based on deps.Config
+			Secure:   true, // In production, set based on appServices.Config
 			SameSite: http.SameSiteStrictMode,
 		})
 
 		// Get user grants for response
-		grants, err := deps.UserRepo.GetUserGrants(r.Context(), user.UserGroupMembershipList)
+		grants, err := userRepo.GetUserGrants(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
-			deps.Logger.Error("auth", "GRANTFAIL", "Failed to get user grants: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", deps.Logger)
+			appServices.Logger.Error("auth", "GRANTFAIL", "Failed to get user grants: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
 			return
 		}
 
@@ -112,7 +113,7 @@ func AuthHandler(deps *app_lib.AppServices) http.HandlerFunc {
 			grantShortCodes[securityContext] = shortCodes
 		}
 
-		response := model.AuthResponse{
+		response := model.AuthResponseModel{
 			AppUserID:              user.AppUserID,
 			Username:               user.Username,
 			FirstName:              user.FirstName,
@@ -121,54 +122,54 @@ func AuthHandler(deps *app_lib.AppServices) http.HandlerFunc {
 			UserGrantShortCodeList: grantShortCodes,
 		}
 
-		writeJSON(w, http.StatusOK, response, deps.Logger)
-		deps.Logger.Info("auth", "SUCCESS", "Auth successful for user: "+req.Username)
+		writeJSON(w, http.StatusOK, response, appServices.Logger)
+		appServices.Logger.Info("auth", "SUCCESS", "Auth successful for user: "+req.Username)
 	}
 }
 
 // Auth2Handler handles MFA authentication (temp token + TOTP)
-func Auth2Handler(deps *app_lib.AppServices) http.HandlerFunc {
+func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		deps.Logger.Info("auth", "AUTH2START", "Auth2 request started")
+		appServices.Logger.Info("auth", "AUTH2START", "Auth2 request started")
 
 		// Parse request
-		var req model.Auth2Request
+		var req model.Auth2RequestModel
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid request body", deps.Logger)
+			writeError(w, http.StatusBadRequest, "Invalid request body", appServices.Logger)
 			return
 		}
 
-		deps.Logger.Debug("auth", "AUTH2PARSE", "Auth2 request parsed for token: "+req.TempToken[:8]+"...")
+		appServices.Logger.Debug("auth", "AUTH2PARSE", "Auth2 request parsed for token: "+req.TempToken[:8]+"...")
 
 		// Get username from temp token
 		tempTokenKey := "TEMP_AUTH_" + req.TempToken
-		username, err := deps.KV.Get(tempTokenKey)
+		username, err := appServices.KV.Get(tempTokenKey)
 		if err != nil {
-			deps.Logger.Warn("auth", "TOKLOOKUP", "Temp token lookup failed for token: "+req.TempToken[:8]+"..., error: "+err.Error())
-			writeError(w, http.StatusUnauthorized, "Invalid or expired temp token", deps.Logger)
+			appServices.Logger.Warn("auth", "TOKLOOKUP", "Temp token lookup failed for token: "+req.TempToken[:8]+"..., error: "+err.Error())
+			writeError(w, http.StatusUnauthorized, "Invalid or expired temp token", appServices.Logger)
 			return
 		}
 
 		// Delete temp token
-		deps.KV.Set(tempTokenKey, "", "0s") // Expire immediately
+		appServices.KV.Set(tempTokenKey, "", "0s") // Expire immediately
 
 		// Get user
-		user, err := deps.UserRepo.GetUserByUsername(r.Context(), username)
+		user, err := userRepo.GetUserByUsername(r.Context(), username)
 		if err != nil {
-			deps.Logger.Error("auth", "USERLOOKUP", "User lookup failed during auth2 for user: "+username+", error: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", deps.Logger)
+			appServices.Logger.Error("auth", "USERLOOKUP", "User lookup failed during auth2 for user: "+username+", error: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
 			return
 		}
 
 		// TODO: Verify TOTP code here
 		// For now, accept any TOTP (this should be implemented with a proper TOTP library)
-		deps.Logger.Warn("auth", "TOTP", "TOTP verification not implemented - accepting any code")
+		appServices.Logger.Warn("auth", "TOTP", "TOTP verification not implemented - accepting any code")
 
 		// Issue full JWT
-		jwt, err := createJWTForUser(r.Context(), user, deps)
+		jwt, err := createJWTForUser(r.Context(), user, appServices, userGroupRepo)
 		if err != nil {
-			deps.Logger.Error("auth", "JWTFAIL", "Failed to create JWT: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", deps.Logger)
+			appServices.Logger.Error("auth", "JWTFAIL", "Failed to create JWT: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
 			return
 		}
 
@@ -183,10 +184,10 @@ func Auth2Handler(deps *app_lib.AppServices) http.HandlerFunc {
 		})
 
 		// Get user grants for response
-		grants, err := deps.UserRepo.GetUserGrants(r.Context(), user.UserGroupMembershipList)
+		grants, err := userRepo.GetUserGrants(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
-			deps.Logger.Error("auth", "GRANTFAIL", "Failed to get user grants: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", deps.Logger)
+			appServices.Logger.Error("auth", "GRANTFAIL", "Failed to get user grants: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
 			return
 		}
 
@@ -202,7 +203,7 @@ func Auth2Handler(deps *app_lib.AppServices) http.HandlerFunc {
 			grantShortCodes[securityContext] = shortCodes
 		}
 
-		response := model.Auth2Response{
+		response := model.Auth2ResponseModel{
 			AppUserID:              user.AppUserID,
 			Username:               user.Username,
 			FirstName:              user.FirstName,
@@ -211,15 +212,15 @@ func Auth2Handler(deps *app_lib.AppServices) http.HandlerFunc {
 			UserGrantShortCodeList: grantShortCodes,
 		}
 
-		writeJSON(w, http.StatusOK, response, deps.Logger)
-		deps.Logger.Info("auth", "AUTH2SUCCESS", "Auth2 successful for user: "+username)
+		writeJSON(w, http.StatusOK, response, appServices.Logger)
+		appServices.Logger.Info("auth", "AUTH2SUCCESS", "Auth2 successful for user: "+username)
 	}
 }
 
 // LogoffHandler handles user logoff
-func LogoffHandler(deps *app_lib.AppServices) http.HandlerFunc {
+func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		deps.Logger.Info("auth", "LOGOFFSTART", "Logoff request started")
+		appServices.Logger.Info("auth", "LOGOFFSTART", "Logoff request started")
 
 		// Clear the auth cookie
 		http.SetCookie(w, &http.Cookie{
@@ -232,15 +233,15 @@ func LogoffHandler(deps *app_lib.AppServices) http.HandlerFunc {
 			MaxAge:   -1, // Expire immediately
 		})
 
-		writeJSON(w, http.StatusOK, map[string]string{"message": "Logged off successfully"}, deps.Logger)
-		deps.Logger.Info("auth", "LOGOFFDONE", "Logoff completed")
+		writeJSON(w, http.StatusOK, map[string]string{"message": "Logged off successfully"}, appServices.Logger)
+		appServices.Logger.Info("auth", "LOGOFFDONE", "Logoff completed")
 	}
 }
 
 // createJWTForUser creates a JWT token for the authenticated user
-func createJWTForUser(ctx context.Context, user *model.AppUser, deps *app_lib.AppServices) (string, error) {
+func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices *app_lib.AppServices, userGroupRepo *repository.UserGroupRepository) (string, error) {
 	// Get user grants
-	grants, err := deps.UserGroupRepo.GetUserGroups(ctx, user.UserGroupMembershipList)
+	grants, err := userGroupRepo.GetUserGroups(ctx, user.UserGroupMembershipList)
 	if err != nil {
 		return "", err
 	}
@@ -267,7 +268,7 @@ func createJWTForUser(ctx context.Context, user *model.AppUser, deps *app_lib.Ap
 		sessionID,
 		user.SecurityContext,
 		grantsMap,
-		deps.Config.JWTSecret,
-		deps.Config.JWTSessionExpireHours,
+		appServices.Config.JWTSecret,
+		appServices.Config.JWTSessionExpireHours,
 	)
 }

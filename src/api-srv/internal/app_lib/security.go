@@ -105,7 +105,7 @@ func (sh *SecurityHelper) CheckJWT() *SecurityHelper {
 	tokenString := parts[1]
 	claims, err := ValidateJWT(tokenString, sh.config.JWTSecret)
 	if err != nil {
-		sh.logger.Warn("security", "JWTFAIL", "JWT validation failed: "+err.Error())
+		sh.logger.Warn("security", "JWF0", "JWT validation failed: "+err.Error())
 		sh.failAndRespond(http.StatusUnauthorized, "Invalid authentication token")
 		return sh
 	}
@@ -151,18 +151,18 @@ func (sh *SecurityHelper) CheckRateLimit() *SecurityHelper {
 
 	count, err := sh.kv.Incr(shrmplKey, "1m")
 	if err != nil {
-		sh.logger.Error("security", "RATELIMITFAIL", "Rate limit check failed: "+err.Error())
+		sh.logger.Error("security", "RLF0", "Rate limit check failed: "+err.Error())
 		// Fail open on shrmpl-kv errors
 		return sh
 	}
 
 	if count > limit {
-		sh.logger.Warn("security", "RATELIMITEXCEED", fmt.Sprintf("Rate limit exceeded - key: %s, count: %d, limit: %d", shrmplKey, count, limit))
+		sh.logger.Warn("security", "RLE0", fmt.Sprintf("Rate limit exceeded - key: %s, count: %d, limit: %d", shrmplKey, count, limit))
 		sh.failAndRespond(http.StatusTooManyRequests, "Rate limit exceeded")
 		return sh
 	}
 
-	sh.logger.Debug("security", "RATELIMITPASS", fmt.Sprintf("Rate limit check passed - key: %s, count: %d, limit: %d", shrmplKey, count, limit))
+	sh.logger.Debug("security", "RLP0", fmt.Sprintf("Rate limit check passed - key: %s, count: %d, limit: %d", shrmplKey, count, limit))
 	return sh
 }
 
@@ -177,7 +177,7 @@ func (sh *SecurityHelper) CheckUserBlocked() *SecurityHelper {
 	_, err := sh.kv.Get(blockKey)
 	if err == nil {
 		// Key exists, user is blocked
-		sh.logger.Warn("security", "USERBLOCKED", "User is blocked: "+sh.claims.Subject)
+		sh.logger.Warn("security", "UBK0", "User is blocked: "+sh.claims.Subject)
 		sh.failAndRespond(http.StatusForbidden, "User account is blocked")
 		return sh
 	}
@@ -216,7 +216,7 @@ func (sh *SecurityHelper) CheckCSRF() *SecurityHelper {
 
 	expectedToken := sh.claims.SessionID[len(sh.claims.SessionID)-3:]
 	if csrfToken != expectedToken {
-		sh.logger.Warn("security", "CSRFMISMATCH", "CSRF token mismatch - received: "+csrfToken+", expected: "+expectedToken)
+		sh.logger.Warn("security", "CSM0", "CSRF token mismatch - received: "+csrfToken+", expected: "+expectedToken)
 		sh.failAndRespond(http.StatusForbidden, "CSRF validation failed")
 		return sh
 	}
@@ -239,7 +239,7 @@ func (sh *SecurityHelper) CheckAuthorization(requiredGrantID int) *SecurityHelpe
 	if requiredGrantID > 0 {
 		rbac := NewRBACManager(sh.logger)
 		if !rbac.HasGrant(sh.claims, requiredGrantID, sh.claims.SecurityContext) {
-			sh.logger.Warn("security", "AUTHFAIL", fmt.Sprintf("Authorization failed - required grant: %d, security context: %d", requiredGrantID, sh.claims.SecurityContext))
+			sh.logger.Warn("security", "ATF0", fmt.Sprintf("Authorization failed - required grant: %d, security context: %d", requiredGrantID, sh.claims.SecurityContext))
 			sh.failAndRespond(http.StatusForbidden, fmt.Sprintf("Permission denied (grant %d required)", requiredGrantID))
 			return sh
 		}
@@ -261,7 +261,7 @@ func (sh *SecurityHelper) CheckTargetContextAuthorization(requiredGrantID int, t
 
 	rbac := NewRBACManager(sh.logger)
 	if !rbac.HasGrant(sh.claims, requiredGrantID, targetSecurityContext) {
-		sh.logger.Warn("security", "TARGETAUTHFAIL", fmt.Sprintf("Target context authorization failed - required grant: %d, target context: %d", requiredGrantID, targetSecurityContext))
+		sh.logger.Warn("security", "TAF0", fmt.Sprintf("Target context authorization failed - required grant: %d, target context: %d", requiredGrantID, targetSecurityContext))
 		sh.failAndRespond(http.StatusForbidden, fmt.Sprintf("Permission denied (grant %d required in context %d)", requiredGrantID, targetSecurityContext))
 		return false
 	}
@@ -310,7 +310,7 @@ func (sh *SecurityHelper) failAndRespond(statusCode int, reason string) {
 	}
 
 	sh.blocked = true
-	sh.logger.Warn("security", "CHECKFAIL", fmt.Sprintf("Security check failed - status: %d, reason: %s", statusCode, reason))
+	sh.logger.Warn("security", "CHF0", fmt.Sprintf("Security check failed - status: %d, reason: %s", statusCode, reason))
 
 	http.Error(sh.w, reason, statusCode)
 }

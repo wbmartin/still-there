@@ -1,7 +1,7 @@
 package model
 
-// Example represents an example entity
-type Example struct {
+// ExampleModel represents an example entity
+type ExampleModel struct {
 	ExampleID         int       `json:"example_id" db:"note_id"`
 	ExampleText       string    `json:"example_text" db:"note_text"`
 	ExampleInt        *int      `json:"example_int,omitempty" db:"note_int"`

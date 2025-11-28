@@ -5,30 +5,34 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
+	"github.com/wbmartin/starter-api/internal/repository"
 )
 
 // ExampleHandler handles example CRUD operations
 type ExampleHandler struct {
-	deps *app_lib.AppServices
+	appsrv      *app_lib.AppServices
+	exampleRepo *repository.ExampleRepository
 }
 
 // NewExampleHandler creates a new example handler
-func NewExampleHandler(deps *app_lib.AppServices) *ExampleHandler {
+func NewExampleHandler(appServices *app_lib.AppServices, exampleRepo *repository.ExampleRepository) *ExampleHandler {
 	return &ExampleHandler{
-		deps: deps,
+		appsrv:      appServices,
+		exampleRepo: exampleRepo,
 	}
 }
 
 // GetExample handles GET /example
 func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
-	logger := h.deps.Logger
+	logger := h.appsrv.Logger
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.deps.KV, h.deps.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
 	sec.CheckRateLimit()
 	sec.CheckUserBlocked()
@@ -39,12 +43,13 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims := sec.GetClaims()
+
 	// Parse query parameters
 	exampleIDStr := r.URL.Query().Get("exampleId")
-	securityContextStr := r.URL.Query().Get("securityContext")
 
-	if exampleIDStr == "" || securityContextStr == "" {
-		writeError(w, http.StatusBadRequest, "exampleId and securityContext are required", logger)
+	if exampleIDStr == "" {
+		writeError(w, http.StatusBadRequest, "exampleId is required", logger)
 		return
 	}
 
@@ -54,38 +59,27 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	securityContext, err := strconv.Atoi(securityContextStr)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid securityContext", logger)
-		return
-	}
-
-	// Check if user can access this security context
-	if !sec.CheckTargetContextAuthorization(model.GrantExampleGet, securityContext) {
-		return
-	}
-
 	// Caller information automatically added to log messages
 
 	// Get example
-	example, err := h.deps.ExampleRepo.GetExample(r.Context(), exampleID, securityContext)
+	example, err := h.exampleRepo.GetExample(r.Context(), exampleID, claims.SecurityContext)
 	if err != nil {
-		logger.Error("example", "GETFAIL", "Failed to get example: "+err.Error())
+		logger.Error("example", "GTF0", "Failed to get example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve example", logger)
 		return
 	}
 
-	logger.Debug("example", "RETRIEVED", fmt.Sprintf("Example retrieved: %+v", example))
+	logger.Debug("example", "RET0", fmt.Sprintf("Example retrieved: %+v", example))
 	writeJSON(w, http.StatusOK, example, logger)
-	logger.Info("example", "GETDONE", "Example retrieval completed")
+	logger.Info("example", "GTD0", "Example retrieval completed")
 }
 
 // CreateExample handles POST /example
 func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
-	logger := h.deps.Logger
+	logger := h.appsrv.Logger
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.deps.KV, h.deps.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
 	sec.CheckRateLimit()
 	sec.CheckUserBlocked()
@@ -99,13 +93,13 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	claims := sec.GetClaims()
 
 	// Parse request body
-	var example model.Example
+	var example model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&example); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request body", logger)
 		return
 	}
 
-	logger.Debug("example", "CREATEPARSE", fmt.Sprintf("Example creation request parsed: %+v", example))
+	logger.Debug("example", "CRP0", fmt.Sprintf("Example creation request parsed: %+v", example))
 
 	// Validate required fields
 	if example.ExampleText == "" {
@@ -113,13 +107,9 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user can create in this security context
-	if !sec.CheckTargetContextAuthorization(model.GrantExampleAdd, example.SecurityContext) {
-		return
-	}
-
-	// Set creation metadata
+	// Set security context and creation metadata
 	now := time.Now().Unix()
+	example.SecurityContext = claims.SecurityContext
 	example.CreateTS = float64(now)
 	example.CreateUserID = claims.UserID
 	example.UpdateTS = float64(now)
@@ -128,24 +118,24 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	// Caller information automatically added to log messages
 
 	// Create example
-	createdExample, err := h.deps.ExampleRepo.CreateExample(r.Context(), &example)
+	createdExample, err := h.exampleRepo.CreateExample(r.Context(), &example)
 	if err != nil {
-		logger.Error("example", "CREATEFAIL", "Failed to create example: "+err.Error())
+		logger.Error("example", "CRF0", "Failed to create example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to create example", logger)
 		return
 	}
 
-	logger.Debug("example", "CREATED", fmt.Sprintf("Example created: %+v", createdExample))
+	logger.Debug("example", "CRD0", fmt.Sprintf("Example created: %+v", createdExample))
 	writeJSON(w, http.StatusCreated, createdExample, logger)
-	logger.Info("example", "CREATEDONE", "Example creation completed")
+	logger.Info("example", "CRD1", "Example creation completed")
 }
 
 // UpdateExample handles PUT /example
 func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
-	logger := h.deps.Logger
+	logger := h.appsrv.Logger
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.deps.KV, h.deps.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
 	sec.CheckRateLimit()
 	sec.CheckUserBlocked()
@@ -159,34 +149,38 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	claims := sec.GetClaims()
 
 	// Parse request body
-	var example model.Example
+	var example model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&example); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request body", logger)
 		return
 	}
 
-	logger.Debug("example", "UPDATEPARSE", fmt.Sprintf("Example update request parsed: %+v", example))
+	logger.Debug("example", "UPP0", fmt.Sprintf("Example update request parsed: %+v", example))
 
 	// Validate required fields
-	if example.ExampleID == 0 || example.ExampleText == "" || example.UpdateTS == 0 {
-		writeError(w, http.StatusBadRequest, "example_id, example_text, and update_ts are required", logger)
+	if example.ExampleID == 0 || example.ExampleText == "" {
+		writeError(w, http.StatusBadRequest, "example_id and example_text are required", logger)
 		return
 	}
 
-	// Check if user can update in this security context
-	if !sec.CheckTargetContextAuthorization(model.GrantExampleChange, example.SecurityContext) {
+	// Fetch existing example to verify ownership
+	existing, err := h.exampleRepo.GetExample(r.Context(), example.ExampleID, claims.SecurityContext)
+	if err != nil {
+		logger.Error("example", "UFF0", "Failed to fetch existing example: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to retrieve example", logger)
 		return
 	}
 
-	// Set update metadata
+	// Set security context and update metadata
 	now := time.Now().Unix()
+	example.SecurityContext = claims.SecurityContext
 	example.UpdateTS = float64(now)
 	example.UpdateUserID = claims.UserID
 
 	// Caller information automatically added to log messages
 
 	// Update example with optimistic locking
-	err := h.deps.ExampleRepo.UpdateExample(r.Context(), &example, example.UpdateTS)
+	err = h.exampleRepo.UpdateExample(r.Context(), &example, existing.UpdateTS)
 	if err != nil {
 		if err.Error() == "conflict: example was updated by another user" {
 			writeError(w, http.StatusConflict, "Example was modified by another user", logger)
@@ -196,7 +190,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusGone, "Example no longer exists", logger)
 			return
 		}
-		logger.Error("example", "UPDATEFAIL", "Failed to update example: "+err.Error())
+		logger.Error("example", "UPF0", "Failed to update example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to update example", logger)
 		return
 	}
@@ -205,17 +199,17 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	example.CreateTS = example.CreateTS         // From request
 	example.CreateUserID = example.CreateUserID // From request
 
-	logger.Debug("example", "UPDATED", fmt.Sprintf("Example updated: %+v", example))
+	logger.Debug("example", "UPD0", fmt.Sprintf("Example updated: %+v", example))
 	writeJSON(w, http.StatusOK, example, logger)
-	logger.Info("example", "UPDATEDONE", "Example update completed")
+	logger.Info("example", "UPD1", "Example update completed")
 }
 
 // DeleteExample handles DELETE /example
 func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
-	logger := h.deps.Logger
+	logger := h.appsrv.Logger
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.deps.KV, h.deps.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
 	sec.CheckRateLimit()
 	sec.CheckUserBlocked()
@@ -230,11 +224,10 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 
 	// Parse query parameters
 	exampleIDStr := r.URL.Query().Get("exampleId")
-	securityContextStr := r.URL.Query().Get("securityContext")
 	updateTSStr := r.URL.Query().Get("updateTs")
 
-	if exampleIDStr == "" || securityContextStr == "" || updateTSStr == "" {
-		writeError(w, http.StatusBadRequest, "exampleId, securityContext, and updateTs are required", logger)
+	if exampleIDStr == "" || updateTSStr == "" {
+		writeError(w, http.StatusBadRequest, "exampleId and updateTs are required", logger)
 		return
 	}
 
@@ -244,20 +237,9 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	securityContext, err := strconv.Atoi(securityContextStr)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid securityContext", logger)
-		return
-	}
-
 	updateTS, err := strconv.ParseFloat(updateTSStr, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid updateTs", logger)
-		return
-	}
-
-	// Check if user can delete in this security context
-	if !sec.CheckTargetContextAuthorization(model.GrantExampleDelete, securityContext) {
 		return
 	}
 
@@ -265,7 +247,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 
 	// Delete example with optimistic locking
 	now := time.Now().Unix()
-	err = h.deps.ExampleRepo.DeleteExample(r.Context(), exampleID, securityContext, updateTS, float64(now), claims.UserID)
+	err = h.exampleRepo.DeleteExample(r.Context(), exampleID, claims.SecurityContext, updateTS, float64(now), claims.UserID)
 	if err != nil {
 		if err.Error() == "conflict: example was updated by another user" {
 			writeError(w, http.StatusConflict, "Example was modified by another user", logger)
@@ -275,11 +257,147 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusGone, "Example no longer exists", logger)
 			return
 		}
-		logger.Error("example", "DELETEFAIL", "Failed to delete example: "+err.Error())
+		logger.Error("example", "DLF0", "Failed to delete example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to delete example", logger)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Example deleted successfully"}, logger)
-	logger.Info("example", "DELETEDONE", "Example deletion completed")
+	logger.Info("example", "DLD0", "Example deletion completed")
+}
+
+// GetExampleList handles GET /exampleList?ids={comma-separated}
+func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) {
+	logger := h.appsrv.Logger
+
+	// Security checks
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec.CheckJWT()
+	sec.CheckRateLimit()
+	sec.CheckUserBlocked()
+	sec.CheckCSRF()
+	sec.CheckAuthorization(model.GrantExampleGet)
+
+	if !sec.CheckAllChecksComplete() {
+		return
+	}
+
+	claims := sec.GetClaims()
+
+	// Parse query parameters
+	idsStr := r.URL.Query().Get("ids")
+	if idsStr == "" {
+		writeError(w, http.StatusBadRequest, "ids parameter is required", logger)
+		return
+	}
+
+	idStrs := strings.Split(idsStr, ",")
+	ids := make([]int, 0, len(idStrs))
+	for _, idStr := range idStrs {
+		id, err := strconv.Atoi(strings.TrimSpace(idStr))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid id in ids parameter", logger)
+			return
+		}
+		ids = append(ids, id)
+	}
+
+	// Get examples (repo filters by security context)
+	examples, err := h.exampleRepo.GetExampleList(r.Context(), ids, claims.SecurityContext)
+	if err != nil {
+		logger.Error("example", "LIF0", "Failed to get examples: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to retrieve examples", logger)
+		return
+	}
+
+	// Return as JSON
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(examples); err != nil {
+		logger.Error("example", "ENF0", "Failed to encode response: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to encode response", logger)
+		return
+	}
+
+	logger.Info("example", "LIR0", fmt.Sprintf("Returned %d examples", len(examples)))
+}
+
+// CreateExampleList handles POST /exampleList
+func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Request) {
+	logger := h.appsrv.Logger
+
+	// Security checks
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec.CheckJWT()
+	sec.CheckRateLimit()
+	sec.CheckUserBlocked()
+	sec.CheckCSRF()
+	sec.CheckAuthorization(model.GrantExampleAdd)
+
+	if !sec.CheckAllChecksComplete() {
+		return
+	}
+
+	claims := sec.GetClaims()
+
+	// Parse request body
+	var examples []model.ExampleModel
+	if err := json.NewDecoder(r.Body).Decode(&examples); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger)
+		return
+	}
+
+	if len(examples) == 0 {
+		writeError(w, http.StatusBadRequest, "At least one example required", logger)
+		return
+	}
+
+	// Convert to slice of pointers
+	examplePtrs := make([]*model.ExampleModel, len(examples))
+	for i := range examples {
+		examplePtrs[i] = &examples[i]
+	}
+
+	// Validate all examples have the same security context and it's allowed
+	userSecurityContext := claims.SecurityContext
+	for i, example := range examples {
+		if example.SecurityContext != userSecurityContext {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), logger)
+			return
+		}
+		if example.ExampleText == "" {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d missing example_text", i), logger)
+			return
+		}
+	}
+
+	// Generate timestamps once
+	now := time.Now().Unix()
+	createTS := float64(now)
+	updateTS := float64(now)
+
+	// Set metadata for all
+	for i := range examples {
+		examples[i].CreateTS = createTS
+		examples[i].CreateUserID = claims.UserID
+		examples[i].UpdateTS = updateTS
+		examples[i].UpdateUserID = claims.UserID
+	}
+
+	// Create in transaction
+	createdExamples, err := h.exampleRepo.CreateExampleList(r.Context(), examplePtrs)
+	if err != nil {
+		logger.Error("example", "BCF0", "Failed to create examples: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to create examples", logger)
+		return
+	}
+
+	// Return the created examples with IDs
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(createdExamples); err != nil {
+		logger.Error("example", "ENF0", "Failed to encode response: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to encode response", logger)
+		return
+	}
+
+	logger.Info("example", "BCR0", fmt.Sprintf("Created %d examples", len(createdExamples)))
 }

@@ -19,9 +19,9 @@ func NewUserGrantRepository(db *pgxpool.Pool) *UserGrantRepository {
 }
 
 // GetUserGrants retrieves user grants by IDs
-func (r *UserGrantRepository) GetUserGrants(ctx context.Context, grantIDs []int) ([]*model.UserGrant, error) {
+func (r *UserGrantRepository) GetUserGrants(ctx context.Context, grantIDs []int) ([]*model.UserGrantModel, error) {
 	if len(grantIDs) == 0 {
-		return []*model.UserGrant{}, nil
+		return []*model.UserGrantModel{}, nil
 	}
 
 	query := `
@@ -37,9 +37,9 @@ func (r *UserGrantRepository) GetUserGrants(ctx context.Context, grantIDs []int)
 	}
 	defer rows.Close()
 
-	var grants []*model.UserGrant
+	var grants []*model.UserGrantModel
 	for rows.Next() {
-		var grant model.UserGrant
+		var grant model.UserGrantModel
 		err := rows.Scan(
 			&grant.UserGrantID, &grant.GrantShortCode, &grant.GrantDescription, &grant.SecurityContext,
 			&grant.CreateTS, &grant.CreateUserID, &grant.UpdateTS, &grant.UpdateUserID,

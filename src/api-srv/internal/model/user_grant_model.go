@@ -1,7 +1,7 @@
 package model
 
-// UserGrant represents a user grant record
-type UserGrant struct {
+// UserGrantModel represents a user grant record
+type UserGrantModel struct {
 	UserGrantID      int      `json:"user_grant_id" db:"user_grant_id"`
 	GrantShortCode   string   `json:"grant_short_code" db:"grant_short_code"`
 	GrantDescription string   `json:"grant_description" db:"grant_description"`

@@ -1,7 +1,7 @@
 package model
 
-// UserGroup represents a user group
-type UserGroup struct {
+// UserGroupModel represents a user group
+type UserGroupModel struct {
 	UserGroupID     int      `json:"user_group_id" db:"user_group_id"`
 	GroupName       string   `json:"group_name" db:"group_name"`
 	UserGrantList   []int    `json:"user_grant_list" db:"user_grant_list"`

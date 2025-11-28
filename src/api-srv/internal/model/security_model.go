@@ -1,13 +1,13 @@
 package model
 
-// AuthRequest represents the request body for initial authentication
-type AuthRequest struct {
+// AuthRequestModel represents the request body for initial authentication
+type AuthRequestModel struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
-// AuthResponse represents the response for initial authentication
-type AuthResponse struct {
+// AuthResponseModel represents the response for initial authentication
+type AuthResponseModel struct {
 	AppUserID              int              `json:"app_user_id"`
 	Username               string           `json:"username"`
 	FirstName              string           `json:"first_name"`
@@ -17,14 +17,14 @@ type AuthResponse struct {
 	TempToken              string           `json:"temp_token,omitempty"`       // Only present if MFA required
 }
 
-// Auth2Request represents the request body for MFA authentication
-type Auth2Request struct {
+// Auth2RequestModel represents the request body for MFA authentication
+type Auth2RequestModel struct {
 	TempToken string `json:"temp_token"`
 	TOTP      string `json:"totp"`
 }
 
-// Auth2Response represents the response for successful MFA authentication
-type Auth2Response struct {
+// Auth2ResponseModel represents the response for successful MFA authentication
+type Auth2ResponseModel struct {
 	AppUserID              int              `json:"app_user_id"`
 	Username               string           `json:"username"`
 	FirstName              string           `json:"first_name"`

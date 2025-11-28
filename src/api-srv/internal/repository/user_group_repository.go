@@ -19,9 +19,9 @@ func NewUserGroupRepository(db *pgxpool.Pool) *UserGroupRepository {
 }
 
 // GetUserGroups retrieves user groups by IDs
-func (r *UserGroupRepository) GetUserGroups(ctx context.Context, groupIDs []int) ([]*model.UserGroup, error) {
+func (r *UserGroupRepository) GetUserGroups(ctx context.Context, groupIDs []int) ([]*model.UserGroupModel, error) {
 	if len(groupIDs) == 0 {
-		return []*model.UserGroup{}, nil
+		return []*model.UserGroupModel{}, nil
 	}
 
 	query := `
@@ -37,9 +37,9 @@ func (r *UserGroupRepository) GetUserGroups(ctx context.Context, groupIDs []int)
 	}
 	defer rows.Close()
 
-	var groups []*model.UserGroup
+	var groups []*model.UserGroupModel
 	for rows.Next() {
-		var group model.UserGroup
+		var group model.UserGroupModel
 		err := rows.Scan(
 			&group.UserGroupID, &group.GroupName, &group.UserGrantList, &group.SecurityContext,
 			&group.CreateTS, &group.CreateUserID, &group.UpdateTS, &group.UpdateUserID,

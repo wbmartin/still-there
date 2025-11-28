@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,7 +22,7 @@ func NewExampleRepository(db *pgxpool.Pool) *ExampleRepository {
 }
 
 // GetExample retrieves an example by ID and security context
-func (r *ExampleRepository) GetExample(ctx context.Context, exampleID int, securityContext int) (*model.Example, error) {
+func (r *ExampleRepository) GetExample(ctx context.Context, exampleID int, securityContext int) (*model.ExampleModel, error) {
 	query := `
 		SELECT note_id, note_text, note_int, note_float, note_int_array, note_float_array,
 		       security_context, create_ts, create_user_id, update_ts, update_user_id,
@@ -29,7 +30,7 @@ func (r *ExampleRepository) GetExample(ctx context.Context, exampleID int, secur
 		FROM example
 		WHERE note_id = $1 AND security_context = $2 AND delete_user_id IS NULL`
 
-	var example model.Example
+	var example model.ExampleModel
 	err := r.db.QueryRow(ctx, query, exampleID, securityContext).Scan(
 		&example.ExampleID, &example.ExampleText, &example.ExampleInt, &example.ExampleFloat,
 		&example.ExampleIntArray, &example.ExampleFloatArray, &example.SecurityContext,
@@ -48,7 +49,7 @@ func (r *ExampleRepository) GetExample(ctx context.Context, exampleID int, secur
 }
 
 // CreateExample creates a new example
-func (r *ExampleRepository) CreateExample(ctx context.Context, example *model.Example) (*model.Example, error) {
+func (r *ExampleRepository) CreateExample(ctx context.Context, example *model.ExampleModel) (*model.ExampleModel, error) {
 	query := `
 		INSERT INTO example (note_text, note_int, note_float, note_int_array, note_float_array,
 		                 security_context, create_ts, create_user_id, update_ts, update_user_id)
@@ -68,7 +69,7 @@ func (r *ExampleRepository) CreateExample(ctx context.Context, example *model.Ex
 }
 
 // UpdateExample updates an existing example with optimistic locking
-func (r *ExampleRepository) UpdateExample(ctx context.Context, example *model.Example, originalUpdateTS float64) error {
+func (r *ExampleRepository) UpdateExample(ctx context.Context, example *model.ExampleModel, originalUpdateTS float64) error {
 	query := `
 		UPDATE example
 		SET note_text = $1, note_int = $2, note_float = $3, note_int_array = $4, note_float_array = $5,
@@ -131,4 +132,93 @@ func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, se
 	}
 
 	return nil
+}
+
+// GetExampleList retrieves multiple examples by IDs and security context
+func (r *ExampleRepository) GetExampleList(ctx context.Context, ids []int, securityContext int) ([]*model.ExampleModel, error) {
+	if len(ids) == 0 {
+		return []*model.ExampleModel{}, nil
+	}
+
+	// Build IN clause
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids)+1)
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	args[len(ids)] = securityContext
+
+	query := fmt.Sprintf(`
+		SELECT note_id, note_text, note_int, note_float, note_int_array, note_float_array,
+		       security_context, create_ts, create_user_id, update_ts, update_user_id,
+		       delete_ts, delete_user_id
+		FROM example
+		WHERE note_id IN (%s) AND security_context = $%d AND delete_user_id IS NULL`,
+		strings.Join(placeholders, ","), len(ids)+1)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query examples: %w", err)
+	}
+	defer rows.Close()
+
+	var examples []*model.ExampleModel
+	for rows.Next() {
+		var example model.ExampleModel
+		err := rows.Scan(
+			&example.ExampleID, &example.ExampleText, &example.ExampleInt, &example.ExampleFloat,
+			&example.ExampleIntArray, &example.ExampleFloatArray, &example.SecurityContext,
+			&example.CreateTS, &example.CreateUserID, &example.UpdateTS, &example.UpdateUserID,
+			&example.DeleteTS, &example.DeleteUserID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan example: %w", err)
+		}
+		examples = append(examples, &example)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return examples, nil
+}
+
+// CreateExampleList creates multiple examples in a transaction
+func (r *ExampleRepository) CreateExampleList(ctx context.Context, examples []*model.ExampleModel) ([]*model.ExampleModel, error) {
+	if len(examples) == 0 {
+		return []*model.ExampleModel{}, nil
+	}
+
+	// Begin transaction
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+		INSERT INTO example (note_text, note_int, note_float, note_int_array, note_float_array,
+		                 security_context, create_ts, create_user_id, update_ts, update_user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		RETURNING note_id`
+
+	for i, example := range examples {
+		err := tx.QueryRow(ctx, query,
+			example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
+			example.SecurityContext, example.CreateTS, example.CreateUserID, example.UpdateTS, example.UpdateUserID,
+		).Scan(&examples[i].ExampleID)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to create example %d: %w", err)
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return examples, nil
 }

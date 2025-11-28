@@ -21,7 +21,7 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 }
 
 // GetUserByUsername retrieves a user by username
-func (r *UserRepository) GetUserByUsername(ctx context.Context, username string) (*model.AppUser, error) {
+func (r *UserRepository) GetUserByUsername(ctx context.Context, username string) (*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, username, pw_hash, first_name, last_name, email,
 		       security_context, user_group_membership_list, mfa_exempt,
@@ -30,7 +30,7 @@ func (r *UserRepository) GetUserByUsername(ctx context.Context, username string)
 		FROM app_user
 		WHERE username = $1 AND delete_user_id IS NULL`
 
-	var user model.AppUser
+	var user model.AppUserModel
 	err := r.db.QueryRow(ctx, query, username).Scan(
 		&user.AppUserID, &user.Username, &user.PwHash, &user.FirstName, &user.LastName, &user.Email,
 		&user.SecurityContext, &user.UserGroupMembershipList, &user.MFAExempt,
@@ -91,7 +91,7 @@ func (r *UserRepository) GetUserGrants(ctx context.Context, userGroupIDs []int) 
 }
 
 // CreateUser creates a new user
-func (r *UserRepository) CreateUser(ctx context.Context, user *model.AppUser) (*model.AppUser, error) {
+func (r *UserRepository) CreateUser(ctx context.Context, user *model.AppUserModel) (*model.AppUserModel, error) {
 	query := `
 		INSERT INTO app_user (username, pw_hash, first_name, last_name, email,
 		                     security_context, user_group_membership_list, mfa_exempt,
