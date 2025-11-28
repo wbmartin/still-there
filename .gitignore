@@ -3,3 +3,4 @@ examples
 bin/tools/*
 dist
 etc/crt/*.pem
+tmp/

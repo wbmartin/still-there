@@ -21,24 +21,19 @@ BASE_URL="https://github.com/wbmartin/shrmpl-srv-preview/raw/main/dist/mac"
 
 # List of executables to download
 EXECUTABLES=(
-    "skv-srv"
-    "slog-srv"
-    "skv-cli"
+    "shrmpl-kv-srv"
+    "shrmpl-log-srv"
+    "shrmpl-kv-srv"
     "shrmpl-vault-srv"
-    "shrmpl-vault-cli"
 )
 
 echo "Downloading from: $BASE_URL"
 
 for exe in "${EXECUTABLES[@]}"; do
-    if [ -f "bin/tools/$exe" ]; then
-        echo "✓ $exe already exists, skipping..."
-    else
-        echo "Downloading $exe..."
-        curl -L -o "bin/tools/$exe" "$BASE_URL/$exe"
-        chmod +x "bin/tools/$exe"
-        echo "✓ Downloaded and made executable: $exe"
-    fi
+    echo "Downloading $exe..."
+    curl -L -o "bin/tools/$exe" "$BASE_URL/$exe"
+    chmod +x "bin/tools/$exe"
+    echo "✓ Downloaded and made executable: $exe"
 done
 
 echo ""

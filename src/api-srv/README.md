@@ -24,10 +24,16 @@ A production-ready Go API server starter template with comprehensive security fe
 ### Setup
 
 1. **Download shrmpl services**:
+   
    ```bash
-   cd src/api-srv
    chmod +x bin/010-download-shrmpl.sh
    ./bin/010-download-shrmpl.sh
+   ```
+
+2. **Start shrmpl infrastructure**:
+   
+   ```bash
+   ./bin/210-run-shrmpl-app-infra
    ```
 
 2. **Setup database**:
@@ -44,11 +50,13 @@ A production-ready Go API server starter template with comprehensive security fe
 
 2. **Start services**:
    ```bash
-   # Start shrmpl-kv (port 7171)
-    ./bin/tools/skv-srv
+   # Or use the automated script:
+   ./bin/210-run-shrmpl-app-infra
 
-   # Start shrmpl-log (port 7379)
-    ./bin/tools/slog-srv
+   # Manual start (if needed):
+   # ./bin/tools/skv-srv  # KV server on port 7171
+   # ./bin/tools/slog-srv # Log server on port 7379
+   # ./bin/tools/shrmpl-vault-srv  # Vault server
    ```
 
 3. **Setup database**:
