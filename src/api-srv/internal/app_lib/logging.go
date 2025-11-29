@@ -76,6 +76,9 @@ func (l *Logger) log(level string, msg string, args ...any) {
 	// Send to shrmpl-log (ignore errors - if it fails, logging fails)
 	if l.shrmplLog != nil {
 		_ = l.shrmplLog.Log(level, l.service, "0000", fullMessage)
+	} else {
+		// Fallback to console logging
+		fmt.Fprintf(os.Stderr, "[%s] %s: %s\n", level, l.service, fullMessage)
 	}
 }
 

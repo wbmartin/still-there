@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -18,11 +17,15 @@ import (
 
 func main() {
 	// Parse command line arguments first to get config file
-	configFile := flag.String("config", "etc/loc-dev-app-srv-config.env", "Path to configuration file")
-	flag.Parse()
+	if len(os.Args) < 2 {
+		fmt.Fprintf(os.Stderr, "Configuration file path is required\n")
+		os.Exit(1)
+	}
+
+	configFile := os.Args[1]
 
 	// Load configuration
-	config, err := app_lib.LoadConfig(*configFile)
+	config, err := app_lib.LoadConfig(configFile)
 	if err != nil {
 		// Use console logging for early errors
 		fmt.Fprintf(os.Stderr, "Failed to load configuration: %s\n", err.Error())
