@@ -133,6 +133,10 @@ func (r *UserRepository) UpdateUserPassword(ctx context.Context, userID int, new
 
 // removeDuplicates removes duplicate integers from a slice
 func removeDuplicates(slice []int) []int {
+	if len(slice) == 0 {
+		return []int{}
+	}
+
 	keys := make(map[int]bool)
 	var result []int
 	for _, item := range slice {
