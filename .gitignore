@@ -4,3 +4,4 @@ bin/tools/*
 dist
 etc/crt/*.pem
 tmp/
+src/api-srv/server

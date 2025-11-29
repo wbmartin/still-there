@@ -77,7 +77,7 @@ CREATE TABLE example(
 );
 
 -- Indexes for performance
-CREATE INDEX idx_app_user_username ON app_user(username);
+CREATE INDEX idx_app_user_username ON app_user(user_name);
 CREATE INDEX idx_app_user_security_context ON app_user(security_context);
 CREATE INDEX idx_user_group_security_context ON user_group(security_context);
 CREATE INDEX idx_example_security_context ON example(security_context);

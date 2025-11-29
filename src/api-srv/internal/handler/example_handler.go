@@ -43,7 +43,7 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims := sec.GetClaims()
+	jwtClaims := sec.GetClaims()
 
 	// Parse query parameters
 	exampleIDStr := r.URL.Query().Get("exampleId")
@@ -62,7 +62,7 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 	// Caller information automatically added to log messages
 
 	// Get example
-	example, err := h.exampleRepo.GetExample(r.Context(), exampleID, claims.SecurityContext)
+	example, err := h.exampleRepo.GetExample(r.Context(), exampleID, jwtClaims.SecurityContext)
 	if err != nil {
 		logger.Error("example", "GTF0", "Failed to get example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve example", logger)
@@ -91,7 +91,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims := sec.GetClaims()
+	jwtClaims := sec.GetClaims()
 
 	// Parse request body
 	var example model.ExampleModel
@@ -109,12 +109,12 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set security context and creation metadata
-	now := time.Now().Unix()
-	example.SecurityContext = claims.SecurityContext
-	example.CreateTS = float64(now)
-	example.CreateUserID = claims.UserID
-	example.UpdateTS = float64(now)
-	example.UpdateUserID = claims.UserID
+	now := float64(time.Now().UnixNano()) / 1e9
+	example.SecurityContext = jwtClaims.SecurityContext
+	example.CreateTS = now
+	example.CreateUserID = jwtClaims.UserID
+	example.UpdateTS = now
+	example.UpdateUserID = jwtClaims.UserID
 
 	// Caller information automatically added to log messages
 
@@ -148,7 +148,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims := sec.GetClaims()
+	jwtClaims := sec.GetClaims()
 
 	// Parse request body
 	var example model.ExampleModel
@@ -166,7 +166,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch existing example to verify ownership
-	existing, err := h.exampleRepo.GetExample(r.Context(), example.ExampleID, claims.SecurityContext)
+	existing, err := h.exampleRepo.GetExample(r.Context(), example.ExampleID, jwtClaims.SecurityContext)
 	if err != nil {
 		logger.Error("example", "UFF0", "Failed to fetch existing example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve example", logger)
@@ -174,10 +174,10 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set security context and update metadata
-	now := time.Now().Unix()
-	example.SecurityContext = claims.SecurityContext
-	example.UpdateTS = float64(now)
-	example.UpdateUserID = claims.UserID
+	now := float64(time.Now().UnixNano()) / 1e9
+	example.SecurityContext = jwtClaims.SecurityContext
+	example.UpdateTS = now
+	example.UpdateUserID = jwtClaims.UserID
 
 	// Caller information automatically added to log messages
 
@@ -223,7 +223,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims := sec.GetClaims()
+	jwtClaims := sec.GetClaims()
 
 	// Parse query parameters
 	exampleIDStr := r.URL.Query().Get("exampleId")
@@ -249,8 +249,8 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	// Caller information automatically added to log messages
 
 	// Delete example with optimistic locking
-	now := time.Now().Unix()
-	err = h.exampleRepo.DeleteExample(r.Context(), exampleID, claims.SecurityContext, updateTS, float64(now), claims.UserID)
+	now := float64(time.Now().UnixNano()) / 1e9
+	deletedID, err := h.exampleRepo.DeleteExample(r.Context(), exampleID, jwtClaims.SecurityContext, updateTS, now, jwtClaims.UserID)
 	if err != nil {
 		if err.Error() == "conflict: example was updated by another user" {
 			writeError(w, http.StatusConflict, "Example was modified by another user", logger)
@@ -265,13 +265,13 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := map[string]string{"message": "Example deleted successfully"}
+	data := map[string]interface{}{"message": "Example deleted successfully", "example_id": deletedID}
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, logger)
 	logger.Info("example", "DLD0", "Example deletion completed")
 }
 
-// GetExampleList handles GET /exampleList?ids={comma-separated}
+// GetExampleList handles GET /exampleList?exampleIdList={comma-separated}
 func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
 
@@ -287,28 +287,28 @@ func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	claims := sec.GetClaims()
+	jwtClaims := sec.GetClaims()
 
 	// Parse query parameters
-	idsStr := r.URL.Query().Get("ids")
-	if idsStr == "" {
-		writeError(w, http.StatusBadRequest, "ids parameter is required", logger)
+	exampleIdListStr := r.URL.Query().Get("exampleIdList")
+	if exampleIdListStr == "" {
+		writeError(w, http.StatusBadRequest, "exampleIdList parameter is required", logger)
 		return
 	}
 
-	idStrs := strings.Split(idsStr, ",")
+	idStrs := strings.Split(exampleIdListStr, ",")
 	ids := make([]int, 0, len(idStrs))
 	for _, idStr := range idStrs {
 		id, err := strconv.Atoi(strings.TrimSpace(idStr))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid id in ids parameter", logger)
+			writeError(w, http.StatusBadRequest, "Invalid id in exampleIdList parameter", logger)
 			return
 		}
 		ids = append(ids, id)
 	}
 
 	// Get examples (repo filters by security context)
-	examples, err := h.exampleRepo.GetExampleList(r.Context(), ids, claims.SecurityContext)
+	examples, err := h.exampleRepo.GetExampleList(r.Context(), ids, jwtClaims.SecurityContext)
 	if err != nil {
 		logger.Error("example", "LIF0", "Failed to get examples: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve examples", logger)
@@ -338,7 +338,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	claims := sec.GetClaims()
+	jwtClaims := sec.GetClaims()
 
 	// Parse request body
 	var examples []model.ExampleModel
@@ -359,7 +359,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Validate all examples have the same security context and it's allowed
-	userSecurityContext := claims.SecurityContext
+	userSecurityContext := jwtClaims.SecurityContext
 	for i, example := range examples {
 		if example.SecurityContext != userSecurityContext {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), logger)
@@ -372,16 +372,16 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Generate timestamps once
-	now := time.Now().Unix()
-	createTS := float64(now)
-	updateTS := float64(now)
+	now := float64(time.Now().UnixNano()) / 1e9
+	createTS := now
+	updateTS := now
 
 	// Set metadata for all
 	for i := range examples {
 		examples[i].CreateTS = createTS
-		examples[i].CreateUserID = claims.UserID
+		examples[i].CreateUserID = jwtClaims.UserID
 		examples[i].UpdateTS = updateTS
-		examples[i].UpdateUserID = claims.UserID
+		examples[i].UpdateUserID = jwtClaims.UserID
 	}
 
 	// Create in transaction
@@ -415,7 +415,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	claims := sec.GetClaims()
+	jwtClaims := sec.GetClaims()
 
 	// Parse request body
 	var examples []model.ExampleModel
@@ -433,7 +433,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	examplePtrs := make([]*model.ExampleModel, len(examples))
 	for i := range examples {
 		examplePtrs[i] = &examples[i]
-		if examplePtrs[i].SecurityContext != claims.SecurityContext {
+		if examplePtrs[i].SecurityContext != jwtClaims.SecurityContext {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), logger)
 			return
 		}
@@ -444,10 +444,10 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Generate update timestamp
-	now := time.Now().Unix()
+	now := float64(time.Now().UnixNano()) / 1e9
 	for i := range examples {
-		examples[i].UpdateTS = float64(now)
-		examples[i].UpdateUserID = claims.UserID
+		examples[i].UpdateTS = now
+		examples[i].UpdateUserID = jwtClaims.UserID
 	}
 
 	// Update in transaction
@@ -466,7 +466,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	logger.Info("example", "BUR0", fmt.Sprintf("Updated %d examples", len(examples)))
 }
 
-// DeleteExampleList handles DELETE /exampleList
+// DeleteExampleList handles DELETE /exampleList?exampleIdList={comma-separated}&updateTs={comma-separated}
 func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
 
@@ -482,24 +482,43 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	claims := sec.GetClaims()
+	jwtClaims := sec.GetClaims()
 
 	// Parse query parameters
-	idsStr := r.URL.Query().Get("ids")
-	if idsStr == "" {
-		writeError(w, http.StatusBadRequest, "ids parameter is required", logger)
+	exampleIdListStr := r.URL.Query().Get("exampleIdList")
+	updateTsStr := r.URL.Query().Get("updateTs")
+	if exampleIdListStr == "" {
+		writeError(w, http.StatusBadRequest, "exampleIdList parameter is required", logger)
+		return
+	}
+	if updateTsStr == "" {
+		writeError(w, http.StatusBadRequest, "updateTs parameter is required", logger)
 		return
 	}
 
-	idStrs := strings.Split(idsStr, ",")
+	idStrs := strings.Split(exampleIdListStr, ",")
+	updateTsStrs := strings.Split(updateTsStr, ",")
+	if len(idStrs) != len(updateTsStrs) {
+		writeError(w, http.StatusBadRequest, "exampleIdList and updateTs must have the same number of values", logger)
+		return
+	}
+
 	ids := make([]int, 0, len(idStrs))
-	for _, idStr := range idStrs {
+	updateTs := make([]float64, 0, len(updateTsStrs))
+	for i, idStr := range idStrs {
 		id, err := strconv.Atoi(strings.TrimSpace(idStr))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid id in ids parameter", logger)
+			writeError(w, http.StatusBadRequest, "Invalid id in exampleIdList parameter", logger)
 			return
 		}
 		ids = append(ids, id)
+
+		ts, err := strconv.ParseFloat(strings.TrimSpace(updateTsStrs[i]), 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid updateTs value", logger)
+			return
+		}
+		updateTs = append(updateTs, ts)
 	}
 
 	if len(ids) == 0 {
@@ -508,10 +527,10 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Generate delete timestamp
-	now := time.Now().Unix()
+	now := float64(time.Now().UnixNano()) / 1e9
 
 	// Delete in transaction
-	err := h.exampleRepo.DeleteExampleList(r.Context(), ids, claims.SecurityContext, float64(now), claims.UserID)
+	deletedIDs, err := h.exampleRepo.DeleteExampleList(r.Context(), ids, updateTs, jwtClaims.SecurityContext, now, jwtClaims.UserID)
 	if err != nil {
 		logger.Error("example", "BDF0", "Failed to delete examples: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to delete examples", logger)
@@ -519,7 +538,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Return success
-	data := map[string]string{"message": "Examples deleted successfully"}
+	data := map[string]interface{}{"message": "Examples deleted successfully", "example_ids": deletedIDs}
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, logger)
 

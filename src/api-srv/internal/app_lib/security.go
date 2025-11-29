@@ -89,20 +89,13 @@ func (sh *SecurityHelper) CheckJWT() *SecurityHelper {
 		return sh
 	}
 
-	authHeader := sh.r.Header.Get("Authorization")
-	if authHeader == "" {
-		sh.failAndRespond(http.StatusUnauthorized, "Missing authorization header")
+	cookie, err := sh.r.Cookie("auth")
+	if err != nil {
+		sh.failAndRespond(http.StatusUnauthorized, "Missing auth cookie")
 		return sh
 	}
 
-	// Extract token from "Bearer <token>" format
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		sh.failAndRespond(http.StatusUnauthorized, "Invalid authorization header format")
-		return sh
-	}
-
-	tokenString := parts[1]
+	tokenString := cookie.Value
 	claims, err := ValidateJWT(tokenString, sh.config.JWTSecret)
 	if err != nil {
 		sh.logger.Warn("security", "JWF0", "JWT validation failed: "+err.Error())
@@ -111,7 +104,7 @@ func (sh *SecurityHelper) CheckJWT() *SecurityHelper {
 	}
 
 	sh.claims = claims
-	sh.ctx = context.WithValue(sh.ctx, "claims", claims)
+	sh.ctx = context.WithValue(sh.r.Context(), "claims", claims)
 
 	return sh
 }

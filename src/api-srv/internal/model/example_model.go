@@ -2,12 +2,12 @@ package model
 
 // ExampleModel represents an example entity
 type ExampleModel struct {
-	ExampleID         int       `json:"example_id" db:"note_id"`
-	ExampleText       string    `json:"example_text" db:"note_text"`
-	ExampleInt        *int      `json:"example_int,omitempty" db:"note_int"`
-	ExampleFloat      *float64  `json:"example_float,omitempty" db:"note_float"`
-	ExampleIntArray   []int     `json:"example_int_array,omitempty" db:"note_int_array"`
-	ExampleFloatArray []float64 `json:"example_float_array,omitempty" db:"note_float_array"`
+	ExampleID         int       `json:"example_id" db:"example_id"`
+	ExampleText       string    `json:"example_text" db:"example_text"`
+	ExampleInt        *int      `json:"example_int,omitempty" db:"example_int"`
+	ExampleFloat      *float64  `json:"example_float,omitempty" db:"example_float"`
+	ExampleIntArray   []int     `json:"example_int_array,omitempty" db:"example_int_array"`
+	ExampleFloatArray []float64 `json:"example_float_array,omitempty" db:"example_float_array"`
 	SecurityContext   int       `json:"security_context" db:"security_context"`
 	CreateTS          float64   `json:"create_ts" db:"create_ts"`
 	CreateUserID      int       `json:"create_user_id" db:"create_user_id"`
@@ -18,7 +18,7 @@ type ExampleModel struct {
 }
 
 // ExampleGrants maps grant short codes to their IDs for the Example entity
-// Note: The actual constants are defined in user_grant.go for centralization
+// example: The actual constants are defined in user_grant.go for centralization
 var ExampleGrants = map[string]int{
 	"GET_EXAMPLE": 1001,
 	"ADD_EXAMPLE": 1002,

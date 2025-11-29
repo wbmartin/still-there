@@ -15,6 +15,7 @@ import (
 // AuthHandler handles initial authentication (username/password)
 func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		var csrfToken string
 		appServices.Logger.Info("auth", "START", "Auth request started")
 
 		// Parse request
@@ -35,7 +36,6 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 		}
 
 		// Verify password
-		appServices.Logger.Warn("auth", "code", "password"+req.Password+"*"+user.PwHash)
 		if !app_lib.CheckPasswordHash(req.Password, user.PwHash) {
 			appServices.Logger.Warn("auth", "PASSFAIL", "Password verification failed for user: "+req.UserName)
 			writeError(w, http.StatusUnauthorized, "Invalid credentials", appServices.Logger)
@@ -77,13 +77,16 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 			return
 		}
 
-		// MFA not required, issue full JWT
-		jwt, err := createJWTForUser(r.Context(), user, appServices, userGroupRepo)
+		// Issue full JWT
+		jwt, sessionID, err := createJWTForUser(r.Context(), user, appServices, userGroupRepo)
 		if err != nil {
 			appServices.Logger.Error("auth", "JWTFAIL", "Failed to create JWT: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
 			return
 		}
+
+		// CSRF token is last 3 characters of session ID
+		csrfToken = sessionID[len(sessionID)-3:]
 
 		// Set JWT cookie
 		http.SetCookie(w, &http.Cookie{
@@ -91,18 +94,12 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 			Value:    jwt,
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   true, // In production, set based on appServices.Config
+			Secure:   true,
 			SameSite: http.SameSiteStrictMode,
 		})
 
-		// Generate CSRF token
-		csrfBytes := make([]byte, 32)
-		if _, err := rand.Read(csrfBytes); err != nil {
-			appServices.Logger.Error("auth", "CSRFGEN", "Failed to generate CSRF token: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
-			return
-		}
-		csrfToken := hex.EncodeToString(csrfBytes)
+		// CSRF token is last 3 characters of session ID
+		csrfToken = sessionID[len(sessionID)-3:]
 
 		// Get user grants for response
 		grants, err := userRepo.GetUserGrants(r.Context(), user.UserGroupMembershipList)
@@ -142,6 +139,7 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 // Auth2Handler handles MFA authentication (temp token + TOTP)
 func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		var csrfToken string
 		appServices.Logger.Info("auth", "AUTH2START", "Auth2 request started")
 
 		// Parse request
@@ -178,7 +176,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		appServices.Logger.Warn("auth", "TOTP", "TOTP verification not implemented - accepting any code")
 
 		// Issue full JWT
-		jwt, err := createJWTForUser(r.Context(), user, appServices, userGroupRepo)
+		jwt, sessionID, err := createJWTForUser(r.Context(), user, appServices, userGroupRepo)
 		if err != nil {
 			appServices.Logger.Error("auth", "JWTFAIL", "Failed to create JWT: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
@@ -195,14 +193,8 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 			SameSite: http.SameSiteStrictMode,
 		})
 
-		// Generate CSRF token
-		csrfBytes := make([]byte, 32)
-		if _, err := rand.Read(csrfBytes); err != nil {
-			appServices.Logger.Error("auth", "CSRFGEN", "Failed to generate CSRF token: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
-			return
-		}
-		csrfToken := hex.EncodeToString(csrfBytes)
+		// CSRF token is last 3 characters of session ID
+		csrfToken = sessionID[len(sessionID)-3:]
 
 		// Get user grants for response
 		grants, err := userRepo.GetUserGrants(r.Context(), user.UserGroupMembershipList)
@@ -261,11 +253,11 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 }
 
 // createJWTForUser creates a JWT token for the authenticated user
-func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices *app_lib.AppServices, userGroupRepo *repository.UserGroupRepository) (string, error) {
+func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices *app_lib.AppServices, userGroupRepo *repository.UserGroupRepository) (string, string, error) {
 	// Get user grants
 	grants, err := userGroupRepo.GetUserGroups(ctx, user.UserGroupMembershipList)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	// Build grants map by security context
@@ -279,12 +271,12 @@ func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices
 	// Generate session ID
 	sessionIDBytes := make([]byte, 16)
 	if _, err := rand.Read(sessionIDBytes); err != nil {
-		return "", err
+		return "", "", err
 	}
 	sessionID := hex.EncodeToString(sessionIDBytes)
 
 	// Create JWT
-	return app_lib.GenerateJWT(
+	jwt, err := app_lib.GenerateJWT(
 		user.UserName,
 		user.AppUserID,
 		sessionID,
@@ -293,4 +285,8 @@ func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices
 		appServices.Config.JWTSecret,
 		appServices.Config.JWTSessionExpireHours,
 	)
+	if err != nil {
+		return "", "", err
+	}
+	return jwt, sessionID, nil
 }
