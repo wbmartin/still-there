@@ -15,11 +15,11 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 pushd "$PROJECT_ROOT/src/api-srv" > /dev/null
 
 # Clean any existing test data first
-echo "Cleaning existing test data..."
-psql -d loc_starter_db -c "
-  DELETE FROM example WHERE example_text LIKE 'Test%' OR example_text LIKE 'RepoTest%';
-  SELECT setval('example_example_id_seq', (SELECT COALESCE(MAX(example_id), 0) + 1 FROM example));
-" 2>/dev/null || echo "Database cleanup skipped (may not be running)"
+# echo "Cleaning existing test data..."
+# psql -d loc_starter_db -c "
+#   DELETE FROM example WHERE example_text LIKE 'Test%' OR example_text LIKE 'RepoTest%';
+#   SELECT setval('example_example_id_seq', (SELECT COALESCE(MAX(example_id), 0) + 1 FROM example));
+# " 2>/dev/null || echo "Database cleanup skipped (may not be running)"
 
 # Run tests for repository and model packages only
 echo "Running repository tests..."

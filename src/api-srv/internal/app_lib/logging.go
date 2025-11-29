@@ -16,6 +16,7 @@ type ThisAppLoggerInterface interface {
 	Info(host, code, message string)
 	Warn(host, code, message string)
 	Error(host, code, message string)
+	Close()
 }
 
 // Logger wraps shrmpl-log client for structured logging
@@ -199,6 +200,13 @@ func (c *ShrmplLogClient) Close() {
 	if c.conn != nil {
 		c.conn.Close()
 		c.conn = nil
+	}
+}
+
+// Close closes the underlying log client connection
+func (l *Logger) Close() {
+	if l.shrmplLog != nil {
+		l.shrmplLog.Close()
 	}
 }
 

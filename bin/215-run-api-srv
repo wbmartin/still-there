@@ -7,26 +7,28 @@ echo "Building the API server..."
 # Get the directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+BINARY_PATH="$PROJECT_ROOT/dist/proto-go-app"
+CONFIG_PATH="$PROJECT_ROOT/etc/api-srv-loc.env"
 
 # Build the API server first
 "$SCRIPT_DIR/100-build-api-server"
 
 # Check if binary exists and is executable
-if [ ! -f "$PROJECT_ROOT/dist/proto-go-app" ]; then
-    echo "Error: Binary not found at $PROJECT_ROOT/dist/proto-go-app"
+if [ ! -f "$BINARY_PATH" ]; then
+    echo "Error: Binary not found at $BINARY_PATH"
     exit 1
 fi
-if [ ! -x "$PROJECT_ROOT/dist/proto-go-app" ]; then
-    echo "Error: Binary not executable at $PROJECT_ROOT/dist/proto-go-app"
+if [ ! -x "$BINARY_PATH" ]; then
+    echo "Error: Binary not executable at $BINARY_PATH"
     exit 1
 fi
 
 # Check if config exists
-if [ ! -f "$PROJECT_ROOT/etc/loc-dev-app-srv-config.env" ]; then
-    echo "Error: Config file not found at $PROJECT_ROOT/etc/loc-dev-app-srv-config.env"
+if [ ! -f "$CONFIG_PATH" ]; then
+    echo "Error: Config file not found at $CONFIG_PATH"
     exit 1
 fi
 
 # Run the binary
 echo "Starting API server..."
-"$PROJECT_ROOT/dist/proto-go-app" "$PROJECT_ROOT/etc/loc-dev-app-srv-config.env"
+"$BINARY_PATH" "$CONFIG_PATH"

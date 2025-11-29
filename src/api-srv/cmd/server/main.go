@@ -34,9 +34,11 @@ func main() {
 
 	// Initialize key-value store
 	kv := app_lib.NewKV(config)
+	defer kv.Close()
 
 	// Create the logger (it will handle shrmpl-log internally)
 	logger := app_lib.NewLogger(config)
+	defer logger.Close()
 	logger.Info("server", "INI0", "Starting API server")
 
 	// Initialize database
@@ -106,7 +108,6 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-
 		logger.Info("server", "STR0", fmt.Sprintf("Server starting on HTTPS port: %d", config.ServerPort))
 		if err := server.ListenAndServeTLS(config.TLSCertPath, config.TLSKeyPath); err != nil && err != http.ErrServerClosed {
 			logger.Error("server", "STF0", "Server failed to start: "+err.Error())

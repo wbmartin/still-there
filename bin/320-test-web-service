@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Read the server port from config file
-CONFIG_FILE="$PROJECT_ROOT/etc/loc-dev-app-srv-config.env"
+CONFIG_FILE="$PROJECT_ROOT/etc/api-srv-loc.env"
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "❌ ERROR: Config file not found: $CONFIG_FILE"
     exit 1

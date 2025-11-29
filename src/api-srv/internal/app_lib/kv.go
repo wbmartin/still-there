@@ -15,6 +15,7 @@ type ThisAppKVInterface interface {
 	Get(key string) (string, error)
 	Set(key, value, ttl string) error
 	Incr(key, ttl string) (int, error)
+	Close()
 }
 
 // KV wraps shrmpl-kv client for key-value operations
@@ -251,6 +252,13 @@ func (c *ShrmplKVClient) Close() {
 	if c.conn != nil {
 		c.conn.Close()
 		c.conn = nil
+	}
+}
+
+// Close closes the underlying KV client connection
+func (kv *KV) Close() {
+	if kv.shrmplKV != nil {
+		kv.shrmplKV.Close()
 	}
 }
 
