@@ -142,7 +142,7 @@ func (sh *SecurityHelper) CheckRateLimit() *SecurityHelper {
 	currentMinute := time.Now().Minute()
 	shrmplKey := fmt.Sprintf("RPM*%s*%d", keyIdentifier, currentMinute)
 
-	count, err := sh.kv.Incr(shrmplKey, "1m")
+	count, err := sh.kv.Incr(shrmplKey, "1min")
 	if err != nil {
 		sh.logger.Error("security", "RLF0", "Rate limit check failed ("+shrmplKey+") "+err.Error())
 		// Fail open on shrmpl-kv errors

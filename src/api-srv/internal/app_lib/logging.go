@@ -22,10 +22,12 @@ type ThisAppLoggerInterface interface {
 type Logger struct {
 	shrmplLog *ShrmplLogClient
 	service   string
+	hostPort  string
 }
 
 // NewLogger creates a logger that uses shrmpl-log
 func NewLogger(config *Config) *Logger {
+	fmt.Fprintf(os.Stderr, "DEBUG: Creating shrmpl-log client for %s\n", config.LogReceiverHostPort)
 	// Create shrmpl-log client internally
 	shrmplLog, err := NewShrmplLogClient(config.LogReceiverHostPort)
 	if err != nil {
@@ -35,19 +37,24 @@ func NewLogger(config *Config) *Logger {
 		return &Logger{
 			shrmplLog: nil,
 			service:   config.ServerName,
+			hostPort:  config.LogReceiverHostPort,
 		}
 	}
 
+	fmt.Fprintf(os.Stderr, "DEBUG: Connecting to shrmpl-log\n")
 	if err := shrmplLog.Connect(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to connect to shrmpl-log: %s\n", err.Error())
 		return &Logger{
 			shrmplLog: nil,
 			service:   config.ServerName,
+			hostPort:  config.LogReceiverHostPort,
 		}
 	}
+	fmt.Fprintf(os.Stderr, "DEBUG: Connected to shrmpl-log successfully\n")
 	return &Logger{
 		shrmplLog: shrmplLog,
 		service:   config.ServerName,
+		hostPort:  config.LogReceiverHostPort,
 	}
 }
 
@@ -72,9 +79,25 @@ func (l *Logger) log(level string, msg string, args ...any) {
 	// Append caller info to message
 	fullMessage := formattedMsg + callerInfo
 
-	// Send to shrmpl-log (ignore errors - if it fails, logging fails)
+	// Ensure connection to shrmpl-log
+	if l.shrmplLog == nil {
+		shrmplLog, err := NewShrmplLogClient(l.hostPort)
+		if err == nil {
+			if err := shrmplLog.Connect(); err == nil {
+				l.shrmplLog = shrmplLog
+				fmt.Fprintf(os.Stderr, "WARN: Reconnected to shrmpl-log\n")
+			}
+		}
+	}
+
+	// Send to shrmpl-log
 	if l.shrmplLog != nil {
-		_ = l.shrmplLog.Log(level, l.service, "0000", fullMessage)
+		// fmt.Fprintf(os.Stderr, "DEBUG: Sending log to shrmpl-log: [%s] %s\n", level, fullMessage)
+		if err := l.shrmplLog.Log(level, l.service, "0000", fullMessage); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Failed to send log to shrmpl-log: %s\n", err.Error())
+			l.shrmplLog.Close()
+			l.shrmplLog = nil
+		}
 	}
 
 	// Always log to console for local debugging
@@ -165,7 +188,7 @@ func (c *ShrmplLogClient) Log(level, host, code, message string) error {
 	paddedCode := fmt.Sprintf("%-4s", code[:4])
 	msgLen := fmt.Sprintf("%04d", len(message))
 
-	logLine := fmt.Sprintf("[%s] [%s] [%s] [%s]: %s\n", paddedLevel, paddedHost, paddedCode, msgLen, message)
+	logLine := fmt.Sprintf("%s %s %s %s: %s\n", paddedLevel, paddedHost, paddedCode, msgLen, message)
 
 	_, err := c.conn.Write([]byte(logLine))
 	return err
