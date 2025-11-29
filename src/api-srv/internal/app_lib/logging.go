@@ -45,7 +45,7 @@ func NewLogger(config *Config) *Logger {
 			service:   config.ServerName,
 		}
 	}
-
+	fmt.Fprintf(os.Stderr, "here5")
 	return &Logger{
 		shrmplLog: shrmplLog,
 		service:   config.ServerName,
@@ -67,7 +67,7 @@ func (l *Logger) log(level string, msg string, args ...any) {
 		// Extract just the filename from the full path
 		parts := strings.Split(file, "/")
 		filename := parts[len(parts)-1]
-		callerInfo = fmt.Sprintf(" %s:%d", filename, line)
+		callerInfo = fmt.Sprintf(" (%s:%d)", filename, line)
 	}
 
 	// Append caller info to message
@@ -76,10 +76,10 @@ func (l *Logger) log(level string, msg string, args ...any) {
 	// Send to shrmpl-log (ignore errors - if it fails, logging fails)
 	if l.shrmplLog != nil {
 		_ = l.shrmplLog.Log(level, l.service, "0000", fullMessage)
-	} else {
-		// Fallback to console logging
-		fmt.Fprintf(os.Stderr, "[%s] %s: %s\n", level, l.service, fullMessage)
 	}
+
+	// Always log to console for local debugging
+	fmt.Fprintf(os.Stderr, "[%s] %s: %s\n", level, l.service, fullMessage)
 }
 
 // Debug logs at debug level

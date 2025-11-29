@@ -1,10 +1,20 @@
 -- Initial database schema for the starter API server
 -- This creates the core tables for authentication, authorization, and the example example entity
+--
+CREATE DATABASE loc_starter_db;
+\c loc_starter_db
+
+-- app svc account must be unique to each app, change for non-local developer installs
+CREATE USER proto_app_svc_account WITH PASSWORD 'reallygoodPSQLpassword';
+GRANT USAGE ON SCHEMA public TO proto_app_svc_account;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO proto_app_svc_account;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public  TO proto_app_svc_account;
 
 -- User grants table (system-wide, security_context = 0 for system grants)
+--drop table user_grant;
 CREATE TABLE user_grant (
     user_grant_id INTEGER PRIMARY KEY,
-    grant_short_code VARCHAR(5) NOT NULL UNIQUE,
+    grant_short_code VARCHAR(25) NOT NULL UNIQUE,
     grant_description TEXT,
     security_context INTEGER NOT NULL,
     create_ts NUMERIC(17,7) NOT NULL,
@@ -33,7 +43,7 @@ CREATE TABLE user_group (
 -- Application users table
 CREATE TABLE app_user (
     app_user_id SERIAL PRIMARY KEY,
-    username VARCHAR(50) NOT NULL UNIQUE,
+    user_name VARCHAR(50) NOT NULL UNIQUE,
     pw_hash VARCHAR(125) NOT NULL,
     first_name VARCHAR(200) NOT NULL,
     last_name VARCHAR(200) NOT NULL,

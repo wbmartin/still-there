@@ -70,7 +70,8 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Debug("example", "RET0", fmt.Sprintf("Example retrieved: %+v", example))
-	writeJSON(w, http.StatusOK, example, logger)
+	wrapper := model.DataWrapper{Data: example}
+	writeJSON(w, http.StatusOK, wrapper, logger)
 	logger.Info("example", "GTD0", "Example retrieval completed")
 }
 
@@ -126,7 +127,8 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Debug("example", "CRD0", fmt.Sprintf("Example created: %+v", createdExample))
-	writeJSON(w, http.StatusCreated, createdExample, logger)
+	wrapper := model.DataWrapper{Data: createdExample}
+	writeJSON(w, http.StatusCreated, wrapper, logger)
 	logger.Info("example", "CRD1", "Example creation completed")
 }
 
@@ -200,7 +202,8 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	example.CreateUserID = example.CreateUserID // From request
 
 	logger.Debug("example", "UPD0", fmt.Sprintf("Example updated: %+v", example))
-	writeJSON(w, http.StatusOK, example, logger)
+	wrapper := model.DataWrapper{Data: example}
+	writeJSON(w, http.StatusOK, wrapper, logger)
 	logger.Info("example", "UPD1", "Example update completed")
 }
 
@@ -262,7 +265,9 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"message": "Example deleted successfully"}, logger)
+	data := map[string]string{"message": "Example deleted successfully"}
+	wrapper := model.DataWrapper{Data: data}
+	writeJSON(w, http.StatusOK, wrapper, logger)
 	logger.Info("example", "DLD0", "Example deletion completed")
 }
 
@@ -311,12 +316,8 @@ func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Return as JSON
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(examples); err != nil {
-		logger.Error("example", "ENF0", "Failed to encode response: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to encode response", logger)
-		return
-	}
+	wrapper := model.DataWrapper{Data: examples}
+	writeJSON(w, http.StatusOK, wrapper, logger)
 
 	logger.Info("example", "LIR0", fmt.Sprintf("Returned %d examples", len(examples)))
 }
@@ -392,12 +393,8 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Return the created examples with IDs
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(createdExamples); err != nil {
-		logger.Error("example", "ENF0", "Failed to encode response: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to encode response", logger)
-		return
-	}
+	wrapper := model.DataWrapper{Data: createdExamples}
+	writeJSON(w, http.StatusCreated, wrapper, logger)
 
 	logger.Info("example", "BCR0", fmt.Sprintf("Created %d examples", len(createdExamples)))
 }
@@ -462,13 +459,9 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Return success
-	w.Header().Set("Content-Type", "application/json")
-	response := map[string]string{"message": "Examples updated successfully"}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		logger.Error("example", "ENF0", "Failed to encode response: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to encode response", logger)
-		return
-	}
+	data := map[string]string{"message": "Examples updated successfully"}
+	wrapper := model.DataWrapper{Data: data}
+	writeJSON(w, http.StatusOK, wrapper, logger)
 
 	logger.Info("example", "BUR0", fmt.Sprintf("Updated %d examples", len(examples)))
 }
@@ -526,13 +519,9 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Return success
-	w.Header().Set("Content-Type", "application/json")
-	response := map[string]string{"message": "Examples deleted successfully"}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		logger.Error("example", "ENF0", "Failed to encode response: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to encode response", logger)
-		return
-	}
+	data := map[string]string{"message": "Examples deleted successfully"}
+	wrapper := model.DataWrapper{Data: data}
+	writeJSON(w, http.StatusOK, wrapper, logger)
 
 	logger.Info("example", "BDR0", fmt.Sprintf("Deleted %d examples", len(ids)))
 }

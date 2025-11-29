@@ -3,7 +3,7 @@ package model
 // AppUserModel represents an application user
 type AppUserModel struct {
 	AppUserID               int      `json:"app_user_id" db:"app_user_id"`
-	Username                string   `json:"username" db:"username"`
+	UserName                string   `json:"user_name" db:"user_name"`
 	PwHash                  string   `json:"-" db:"pw_hash"` // Never serialize password hash
 	FirstName               string   `json:"first_name" db:"first_name"`
 	LastName                string   `json:"last_name" db:"last_name"`

@@ -46,6 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer dbPool.Close()
+	logger.Info("server", "DBI1", "Database connected")
 
 	// Test the connection
 	if err := dbPool.Ping(context.Background()); err != nil {
@@ -59,7 +60,7 @@ func main() {
 	exampleRepo := repository.NewExampleRepository(dbPool)
 
 	// Initialize app dependencies
-	deps := &app_lib.AppServices{
+	appServices := &app_lib.AppServices{
 		DBPool: dbPool,
 		KV:     kv,
 		Config: config,
@@ -67,12 +68,12 @@ func main() {
 	}
 
 	// Initialize handlers
-	healthHandler := handler.HealthHandler(deps)
-	authHandler := handler.AuthHandler(deps, userRepo, userGroupRepo)
-	auth2Handler := handler.Auth2Handler(deps, userRepo, userGroupRepo)
-	logoffHandler := handler.LogoffHandler(deps)
+	healthHandler := handler.HealthHandler(appServices)
+	authHandler := handler.AuthHandler(appServices, userRepo, userGroupRepo)
+	auth2Handler := handler.Auth2Handler(appServices, userRepo, userGroupRepo)
+	logoffHandler := handler.LogoffHandler(appServices)
 
-	exampleHandler := handler.NewExampleHandler(deps, exampleRepo)
+	exampleHandler := handler.NewExampleHandler(appServices, exampleRepo)
 
 	// Setup routes
 	mux := http.NewServeMux()
@@ -105,6 +106,7 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
+
 		logger.Info("server", "STR0", fmt.Sprintf("Server starting on HTTPS port: %d", config.ServerPort))
 		if err := server.ListenAndServeTLS(config.TLSCertPath, config.TLSKeyPath); err != nil && err != http.ErrServerClosed {
 			logger.Error("server", "STF0", "Server failed to start: "+err.Error())

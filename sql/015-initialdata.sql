@@ -49,7 +49,7 @@ FROM common_vars,
 INSERT INTO app_user (username, pw_hash, first_name, last_name, email, security_context, user_group_membership_list, mfa_exempt, create_ts, create_user_id, update_ts, update_user_id)
 SELECT
     'admin',
-    '$2a$10$8K1p/5w6Yg3B8rXcLpVzAe9dQwJcKvJcKvJcKvJcKvJcKvJcKvJcKv', -- bcrypt hash for 'admin123!'
+    '$2a$10$nrFkDg5BxLgTDxsFzKh2b.a/2ipwowdcey.nY/Si.7h7m8cm8Z0H.' -- bcrypt hash for 'admin123!' change for non-dev builds
     'System',
     'Administrator',
     'admin@example.com',

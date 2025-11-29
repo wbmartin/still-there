@@ -20,19 +20,19 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-// GetUserByUsername retrieves a user by username
-func (r *UserRepository) GetUserByUsername(ctx context.Context, username string) (*model.AppUserModel, error) {
+// GetUserByUserName retrieves a user by username
+func (r *UserRepository) GetUserByUserName(ctx context.Context, username string) (*model.AppUserModel, error) {
 	query := `
-		SELECT app_user_id, username, pw_hash, first_name, last_name, email,
+		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
 		       security_context, user_group_membership_list, mfa_exempt,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
-		WHERE username = $1 AND delete_user_id IS NULL`
+		WHERE user_name = $1 AND delete_user_id IS NULL`
 
 	var user model.AppUserModel
 	err := r.db.QueryRow(ctx, query, username).Scan(
-		&user.AppUserID, &user.Username, &user.PwHash, &user.FirstName, &user.LastName, &user.Email,
+		&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName, &user.LastName, &user.Email,
 		&user.SecurityContext, &user.UserGroupMembershipList, &user.MFAExempt,
 		&user.CreateTS, &user.CreateUserID, &user.UpdateTS, &user.UpdateUserID,
 		&user.DeleteTS, &user.DeleteUserID,
@@ -93,14 +93,14 @@ func (r *UserRepository) GetUserGrants(ctx context.Context, userGroupIDs []int) 
 // CreateUser creates a new user
 func (r *UserRepository) CreateUser(ctx context.Context, user *model.AppUserModel) (*model.AppUserModel, error) {
 	query := `
-		INSERT INTO app_user (username, pw_hash, first_name, last_name, email,
+		INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email,
 		                     security_context, user_group_membership_list, mfa_exempt,
 		                     create_ts, create_user_id, update_ts, update_user_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING app_user_id`
 
 	err := r.db.QueryRow(ctx, query,
-		user.Username, user.PwHash, user.FirstName, user.LastName, user.Email,
+		user.UserName, user.PwHash, user.FirstName, user.LastName, user.Email,
 		user.SecurityContext, user.UserGroupMembershipList, user.MFAExempt,
 		user.CreateTS, user.CreateUserID, user.UpdateTS, user.UpdateUserID,
 	).Scan(&user.AppUserID)

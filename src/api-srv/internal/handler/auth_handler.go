@@ -24,19 +24,20 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 			return
 		}
 
-		appServices.Logger.Debug("auth", "PARSE", "Auth request parsed for user: "+req.Username)
+		appServices.Logger.Debug("auth", "PARSE", "Auth request parsed for user: "+req.UserName)
 
 		// Get user from database
-		user, err := userRepo.GetUserByUsername(r.Context(), req.Username)
+		user, err := userRepo.GetUserByUserName(r.Context(), req.UserName)
 		if err != nil {
-			appServices.Logger.Warn("auth", "USERLOOKUP", "User lookup failed for user: "+req.Username+", error: "+err.Error())
+			appServices.Logger.Warn("auth", "USERLOOKUP", "User lookup failed for user: "+req.UserName+", error: "+err.Error())
 			writeError(w, http.StatusUnauthorized, "Invalid credentials", appServices.Logger)
 			return
 		}
 
 		// Verify password
+		appServices.Logger.Warn("auth", "code", "password"+req.Password+"*"+user.PwHash)
 		if !app_lib.CheckPasswordHash(req.Password, user.PwHash) {
-			appServices.Logger.Warn("auth", "PASSFAIL", "Password verification failed for user: "+req.Username)
+			appServices.Logger.Warn("auth", "PASSFAIL", "Password verification failed for user: "+req.UserName)
 			writeError(w, http.StatusUnauthorized, "Invalid credentials", appServices.Logger)
 			return
 		}
@@ -54,7 +55,7 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 
 			// Store temp token in key-value store with expiration
 			tempTokenKey := "TEMP_AUTH_" + tempToken
-			if err := appServices.KV.Set(tempTokenKey, req.Username, "10m"); err != nil {
+			if err := appServices.KV.Set(tempTokenKey, req.UserName, "10m"); err != nil {
 				appServices.Logger.Error("auth", "TOKSTORE", "Failed to store temp token: "+err.Error())
 				writeError(w, http.StatusBadRequest, "Invalid request body", appServices.Logger)
 				return
@@ -62,7 +63,7 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 
 			response := model.AuthResponseModel{
 				AppUserID:              user.AppUserID,
-				Username:               user.Username,
+				UserName:               user.UserName,
 				FirstName:              user.FirstName,
 				LastName:               user.LastName,
 				SecurityContext:        user.SecurityContext,
@@ -70,8 +71,9 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 				TempToken:              tempToken,
 			}
 
-			writeJSON(w, http.StatusOK, response, appServices.Logger)
-			appServices.Logger.Info("auth", "TOKISSUE", "Auth temp token issued for user: "+req.Username)
+			wrapper := model.AuthResponseWrapper{User: response}
+			writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+			appServices.Logger.Info("auth", "TOKISSUE", "Auth temp token issued for user: "+req.UserName)
 			return
 		}
 
@@ -92,6 +94,15 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 			Secure:   true, // In production, set based on appServices.Config
 			SameSite: http.SameSiteStrictMode,
 		})
+
+		// Generate CSRF token
+		csrfBytes := make([]byte, 32)
+		if _, err := rand.Read(csrfBytes); err != nil {
+			appServices.Logger.Error("auth", "CSRFGEN", "Failed to generate CSRF token: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
+			return
+		}
+		csrfToken := hex.EncodeToString(csrfBytes)
 
 		// Get user grants for response
 		grants, err := userRepo.GetUserGrants(r.Context(), user.UserGroupMembershipList)
@@ -115,15 +126,16 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 
 		response := model.AuthResponseModel{
 			AppUserID:              user.AppUserID,
-			Username:               user.Username,
+			UserName:               user.UserName,
 			FirstName:              user.FirstName,
 			LastName:               user.LastName,
 			SecurityContext:        user.SecurityContext,
 			UserGrantShortCodeList: grantShortCodes,
 		}
 
-		writeJSON(w, http.StatusOK, response, appServices.Logger)
-		appServices.Logger.Info("auth", "SUCCESS", "Auth successful for user: "+req.Username)
+		wrapper := model.AuthResponseWrapper{User: response, CsrfToken: csrfToken}
+		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+		appServices.Logger.Info("auth", "SUCCESS", "Auth successful for user: "+req.UserName)
 	}
 }
 
@@ -154,7 +166,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		appServices.KV.Set(tempTokenKey, "", "0s") // Expire immediately
 
 		// Get user
-		user, err := userRepo.GetUserByUsername(r.Context(), username)
+		user, err := userRepo.GetUserByUserName(r.Context(), username)
 		if err != nil {
 			appServices.Logger.Error("auth", "USERLOOKUP", "User lookup failed during auth2 for user: "+username+", error: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
@@ -183,6 +195,15 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 			SameSite: http.SameSiteStrictMode,
 		})
 
+		// Generate CSRF token
+		csrfBytes := make([]byte, 32)
+		if _, err := rand.Read(csrfBytes); err != nil {
+			appServices.Logger.Error("auth", "CSRFGEN", "Failed to generate CSRF token: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
+			return
+		}
+		csrfToken := hex.EncodeToString(csrfBytes)
+
 		// Get user grants for response
 		grants, err := userRepo.GetUserGrants(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
@@ -205,14 +226,15 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 
 		response := model.Auth2ResponseModel{
 			AppUserID:              user.AppUserID,
-			Username:               user.Username,
+			UserName:               user.UserName,
 			FirstName:              user.FirstName,
 			LastName:               user.LastName,
 			SecurityContext:        user.SecurityContext,
 			UserGrantShortCodeList: grantShortCodes,
 		}
 
-		writeJSON(w, http.StatusOK, response, appServices.Logger)
+		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
+		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
 		appServices.Logger.Info("auth", "AUTH2SUCCESS", "Auth2 successful for user: "+username)
 	}
 }
@@ -263,7 +285,7 @@ func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices
 
 	// Create JWT
 	return app_lib.GenerateJWT(
-		user.Username,
+		user.UserName,
 		user.AppUserID,
 		sessionID,
 		user.SecurityContext,
