@@ -28,24 +28,27 @@ go test -v ./internal/repository/...
 echo "Running model tests..."
 go test -v ./internal/model/...
 
+# Create reports directory if it doesn't exist
+mkdir -p ../../tests/reports
+
 # Generate coverage report for repository and model only
 echo "Generating coverage report..."
-go test -coverprofile=repo_model_coverage.out ./internal/repository/... ./internal/model/...
+go test -coverprofile=../../tests/reports/repo_model_coverage.out ./internal/repository/... ./internal/model/...
 
 # Display coverage summary
 echo ""
 echo "Coverage Summary:"
-go tool cover -func=repo_model_coverage.out
+go tool cover -func=../../tests/reports/repo_model_coverage.out
 
 # Optional: Generate HTML coverage report
 echo ""
 echo "Generating HTML coverage report..."
-go tool cover -html=repo_model_coverage.out -o repo_model_coverage.html
+go tool cover -html=../../tests/reports/repo_model_coverage.out -o ../../tests/reports/repo_model_coverage.html
 
 echo ""
 echo "Tests completed successfully!"
-echo "Coverage report: repo_model_coverage.html"
-echo "Coverage data: repo_model_coverage.out"
+echo "Coverage report: ../../tests/reports/repo_model_coverage.html"
+echo "Coverage data: ../../tests/reports/repo_model_coverage.out"
 
 # Return to original directory
 popd > /dev/null

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -64,6 +65,10 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 	// Get example
 	example, err := h.exampleRepo.GetExample(r.Context(), exampleID, jwtClaims.SecurityContext)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "Example not found", logger)
+			return
+		}
 		logger.Error("example", "GTF0", "Failed to get example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve example", logger)
 		return
@@ -168,6 +173,10 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	// Fetch existing example to verify ownership
 	existing, err := h.exampleRepo.GetExample(r.Context(), example.ExampleID, jwtClaims.SecurityContext)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "Example not found", logger)
+			return
+		}
 		logger.Error("example", "UFF0", "Failed to fetch existing example: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve example", logger)
 		return
@@ -184,12 +193,12 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	// Update example with optimistic locking
 	err = h.exampleRepo.UpdateExample(r.Context(), &example, existing.UpdateTS)
 	if err != nil {
-		if err.Error() == "conflict: example was updated by another user" {
+		if errors.Is(err, repository.ErrConflict) {
 			writeError(w, http.StatusConflict, "Example was modified by another user", logger)
 			return
 		}
-		if err.Error() == "gone: example no longer exists" {
-			writeError(w, http.StatusGone, "Example no longer exists", logger)
+		if errors.Is(err, repository.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "Example not found", logger)
 			return
 		}
 		logger.Error("example", "UPF0", "Failed to update example: "+err.Error())
@@ -252,12 +261,12 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	now := float64(time.Now().UnixNano()) / 1e9
 	deletedID, err := h.exampleRepo.DeleteExample(r.Context(), exampleID, jwtClaims.SecurityContext, updateTS, now, jwtClaims.UserID)
 	if err != nil {
-		if err.Error() == "conflict: example was updated by another user" {
+		if errors.Is(err, repository.ErrConflict) {
 			writeError(w, http.StatusConflict, "Example was modified by another user", logger)
 			return
 		}
-		if err.Error() == "gone: example no longer exists" {
-			writeError(w, http.StatusGone, "Example no longer exists", logger)
+		if errors.Is(err, repository.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "Example not found", logger)
 			return
 		}
 		logger.Error("example", "DLF0", "Failed to delete example: "+err.Error())

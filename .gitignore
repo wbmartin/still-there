@@ -5,3 +5,5 @@ dist
 etc/crt/*.pem
 tmp/
 src/api-srv/server
+tests/.venv/
+tests/__pycache__/

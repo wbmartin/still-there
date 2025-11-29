@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -15,6 +16,11 @@ import (
 type ExampleRepository struct {
 	db *pgxpool.Pool
 }
+
+var (
+	ErrNotFound = errors.New("not found")
+	ErrConflict = errors.New("conflict")
+)
 
 // NewExampleRepository creates a new example repository
 func NewExampleRepository(db *pgxpool.Pool) *ExampleRepository {
@@ -40,7 +46,7 @@ func (r *ExampleRepository) GetExample(ctx context.Context, exampleID int, secur
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("example not found")
+			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get example: %w", err)
 	}
@@ -95,9 +101,9 @@ func (r *ExampleRepository) UpdateExample(ctx context.Context, example *model.Ex
 		}
 
 		if exists {
-			return fmt.Errorf("conflict: example was updated by another user")
+			return ErrConflict
 		}
-		return fmt.Errorf("gone: example no longer exists")
+		return ErrNotFound
 	}
 
 	return nil
@@ -126,9 +132,9 @@ func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, se
 		}
 
 		if exists {
-			return 0, fmt.Errorf("conflict: example was updated by another user")
+			return 0, ErrConflict
 		}
-		return 0, fmt.Errorf("gone: example no longer exists")
+		return 0, ErrNotFound
 	}
 
 	return exampleID, nil
