@@ -4,20 +4,13 @@
 
 set -e
 
-echo "Downloading shrmpl executables..."
+# Base URL for downloads
+BASE_URL="https://github.com/wbmartin/shrmpl-srv-preview/raw/main/dist/mac"
+echo "Downloading shrmpl executables from: $BASE_URL"
 
 # Get the directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# Change to the project root directory
-pushd "$PROJECT_ROOT" > /dev/null
-
-# Create bin/tools directory if it doesn't exist
-mkdir -p bin/tools
-
-# Base URL for downloads
-BASE_URL="https://github.com/wbmartin/shrmpl-srv-preview/raw/main/dist/mac"
 
 # List of executables to download
 EXECUTABLES=(
@@ -27,7 +20,11 @@ EXECUTABLES=(
     "shrmpl-vault-srv"
 )
 
-echo "Downloading from: $BASE_URL"
+# Change to the project root directory
+pushd "$PROJECT_ROOT" > /dev/null
+
+# Create bin/tools directory if it doesn't exist
+mkdir -p bin/tools
 
 for exe in "${EXECUTABLES[@]}"; do
     echo "Downloading $exe..."
