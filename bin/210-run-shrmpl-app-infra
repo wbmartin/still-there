@@ -30,6 +30,8 @@ echo "Starting Log server in Project Root $PROJECT_ROOT..."
 ./bin/tools/shrmpl-log-srv ./etc/shrmpl-log-srv-loc.env &
 echo "✓ Log server started"
 
+sleep 1
+
 echo "Starting KV server..."
 ./bin/tools/shrmpl-kv-srv ./etc/shrmpl-kv-srv-loc.env &
 echo "✓ KV server started"
@@ -37,6 +39,7 @@ echo "✓ KV server started"
 
 
 echo "Starting Vault server..."
+#./bin/tools/shrmpl-vault-srv /Users/brandon/Code/ProtoStack-ReactGo/etc/shrmpl-vault-srv-loc.env &
 ./bin/tools/shrmpl-vault-srv ./etc/shrmpl-vault-srv-loc.env &
 echo "✓ Vault server started"
 
