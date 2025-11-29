@@ -45,7 +45,6 @@ func NewLogger(config *Config) *Logger {
 			service:   config.ServerName,
 		}
 	}
-	fmt.Fprintf(os.Stderr, "here5")
 	return &Logger{
 		shrmplLog: shrmplLog,
 		service:   config.ServerName,

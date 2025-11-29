@@ -46,7 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer dbPool.Close()
-	logger.Info("server", "DBI1", "Database connected")
+	logger.Error("server", "DBI1", "Database connected")
 
 	// Test the connection
 	if err := dbPool.Ping(context.Background()); err != nil {

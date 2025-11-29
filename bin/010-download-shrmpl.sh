@@ -23,7 +23,7 @@ BASE_URL="https://github.com/wbmartin/shrmpl-srv-preview/raw/main/dist/mac"
 EXECUTABLES=(
     "shrmpl-kv-srv"
     "shrmpl-log-srv"
-    "shrmpl-kv-srv"
+    "shrmpl-kv-cli"
     "shrmpl-vault-srv"
 )
 
@@ -41,10 +41,6 @@ echo "Download complete!"
 echo "Executables are in the bin/tools/ directory:"
 ls -la bin/tools/
 
-echo ""
-echo "To start the services:"
-echo "  ./bin/tools/skv-srv  # KV server on port 7171"
-echo "  ./bin/tools/slog-srv # Log server on port 7379"
 
 # Return to original directory
 popd > /dev/null
