@@ -20,8 +20,8 @@ type ThisAppKVInterface interface {
 
 // KV wraps shrmpl-kv client for key-value operations
 type KV struct {
-	shrmplKV *ShrmplKVClient
-	hostPort string
+	shrmplKVClient *ShrmplKVClient
+	hostPort       string
 }
 
 // parseHostPort parses a "host:port" string into separate host and port components
@@ -39,13 +39,13 @@ func NewKV(config *Config) ThisAppKVInterface {
 	host, portStr, err := parseHostPort(config.KVHostPort)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse kv_host_port: %s\n", err.Error())
-		return &KV{shrmplKV: nil, hostPort: config.KVHostPort}
+		return &KV{shrmplKVClient: nil, hostPort: config.KVHostPort}
 	}
 
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Invalid port in kv_host_port: %s\n", err.Error())
-		return &KV{shrmplKV: nil, hostPort: config.KVHostPort}
+		return &KV{shrmplKVClient: nil, hostPort: config.KVHostPort}
 	}
 
 	shrmplKV := NewShrmplKVClient(host, port)
@@ -53,12 +53,12 @@ func NewKV(config *Config) ThisAppKVInterface {
 		// If we can't connect, we'll return a client that logs errors
 		// The operations will fail gracefully
 		fmt.Fprintf(os.Stderr, "Failed to connect to shrmpl-kv: %s\n", err.Error())
-		return &KV{shrmplKV: nil, hostPort: config.KVHostPort}
+		return &KV{shrmplKVClient: nil, hostPort: config.KVHostPort}
 	}
 
 	return &KV{
-		shrmplKV: shrmplKV,
-		hostPort: config.KVHostPort,
+		shrmplKVClient: shrmplKV,
+		hostPort:       config.KVHostPort,
 	}
 }
 
@@ -74,22 +74,22 @@ func (kv *KV) tryReconnect() {
 	}
 	client := NewShrmplKVClient(host, port)
 	if err := client.Connect(); err == nil {
-		kv.shrmplKV = client
+		kv.shrmplKVClient = client
 	}
 }
 
 // Get retrieves a value from the key-value store
 func (kv *KV) Get(key string) (string, error) {
-	if kv.shrmplKV == nil {
+	if kv.shrmplKVClient == nil {
 		kv.tryReconnect()
 	}
-	if kv.shrmplKV == nil {
+	if kv.shrmplKVClient == nil { //try again after reconnect
 		return "", fmt.Errorf("key-value store not available")
 	}
-	val, err := kv.shrmplKV.Get(key)
+	val, err := kv.shrmplKVClient.Get(key)
 	if err != nil {
-		kv.shrmplKV.Close()
-		kv.shrmplKV = nil
+		kv.shrmplKVClient.Close()
+		kv.shrmplKVClient = nil
 		return "", err
 	}
 	return val, nil
@@ -97,16 +97,16 @@ func (kv *KV) Get(key string) (string, error) {
 
 // Set stores a key-value pair with optional TTL
 func (kv *KV) Set(key, value, ttl string) error {
-	if kv.shrmplKV == nil {
+	if kv.shrmplKVClient == nil {
 		kv.tryReconnect()
 	}
-	if kv.shrmplKV == nil {
+	if kv.shrmplKVClient == nil { //try again after reconnect
 		return fmt.Errorf("key-value store not available")
 	}
-	err := kv.shrmplKV.Set(key, value, ttl)
+	err := kv.shrmplKVClient.Set(key, value, ttl)
 	if err != nil {
-		kv.shrmplKV.Close()
-		kv.shrmplKV = nil
+		kv.shrmplKVClient.Close()
+		kv.shrmplKVClient = nil
 		return err
 	}
 	return nil
@@ -114,16 +114,16 @@ func (kv *KV) Set(key, value, ttl string) error {
 
 // Incr increments a counter and returns the new value
 func (kv *KV) Incr(key string, ttl string) (int, error) {
-	if kv.shrmplKV == nil {
+	if kv.shrmplKVClient == nil {
 		kv.tryReconnect()
 	}
-	if kv.shrmplKV == nil {
+	if kv.shrmplKVClient == nil { //try again after reconnect
 		return 0, fmt.Errorf("key-value store not available")
 	}
-	val, err := kv.shrmplKV.Incr(key, ttl)
+	val, err := kv.shrmplKVClient.Incr(key, ttl)
 	if err != nil {
-		kv.shrmplKV.Close()
-		kv.shrmplKV = nil
+		kv.shrmplKVClient.Close()
+		kv.shrmplKVClient = nil
 		return 0, err
 	}
 	return val, nil
@@ -257,8 +257,8 @@ func (c *ShrmplKVClient) Close() {
 
 // Close closes the underlying KV client connection
 func (kv *KV) Close() {
-	if kv.shrmplKV != nil {
-		kv.shrmplKV.Close()
+	if kv.shrmplKVClient != nil {
+		kv.shrmplKVClient.Close()
 	}
 }
 
