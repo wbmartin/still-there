@@ -21,41 +21,41 @@ type ThisAppLoggerInterface interface {
 
 // Logger wraps shrmpl-log client for structured logging
 type Logger struct {
-	shrmplLog *ShrmplLogClient
-	service   string
-	hostPort  string
+	shrmplLogClient *ShrmplLogClient
+	service         string
+	hostPort        string
 }
 
 // NewLogger creates a logger that uses shrmpl-log
 func NewLogger(config *Config) *Logger {
 	fmt.Fprintf(os.Stderr, "DEBUG: Creating shrmpl-log client for %s\n", config.LogReceiverHostPort)
 	// Create shrmpl-log client internally
-	shrmplLog, err := NewShrmplLogClient(config.LogReceiverHostPort)
+	shrmplLogClient, err := NewShrmplLogClient(config.LogReceiverHostPort)
 	if err != nil {
 		// If we can't create the client, we'll log to console and continue
-		// The Log method will handle the case where shrmplLog is nil
+		// The Log method will handle the case where shrmplLogClient is nil
 		fmt.Fprintf(os.Stderr, "Failed to create shrmpl-log client: %s\n", err.Error())
 		return &Logger{
-			shrmplLog: nil,
-			service:   config.ServerName,
-			hostPort:  config.LogReceiverHostPort,
+			shrmplLogClient: nil,
+			service:         config.ServerName,
+			hostPort:        config.LogReceiverHostPort,
 		}
 	}
 
 	fmt.Fprintf(os.Stderr, "DEBUG: Connecting to shrmpl-log\n")
-	if err := shrmplLog.Connect(); err != nil {
+	if err := shrmplLogClient.Connect(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to connect to shrmpl-log: %s\n", err.Error())
 		return &Logger{
-			shrmplLog: nil,
-			service:   config.ServerName,
-			hostPort:  config.LogReceiverHostPort,
+			shrmplLogClient: nil,
+			service:         config.ServerName,
+			hostPort:        config.LogReceiverHostPort,
 		}
 	}
 	fmt.Fprintf(os.Stderr, "DEBUG: Connected to shrmpl-log successfully\n")
 	return &Logger{
-		shrmplLog: shrmplLog,
-		service:   config.ServerName,
-		hostPort:  config.LogReceiverHostPort,
+		shrmplLogClient: shrmplLogClient,
+		service:         config.ServerName,
+		hostPort:        config.LogReceiverHostPort,
 	}
 }
 
@@ -81,23 +81,23 @@ func (l *Logger) log(level string, msg string, args ...any) {
 	fullMessage := formattedMsg + callerInfo
 
 	// Ensure connection to shrmpl-log
-	if l.shrmplLog == nil {
-		shrmplLog, err := NewShrmplLogClient(l.hostPort)
+	if l.shrmplLogClient == nil {
+		shrmplLogClient, err := NewShrmplLogClient(l.hostPort)
 		if err == nil {
-			if err := shrmplLog.Connect(); err == nil {
-				l.shrmplLog = shrmplLog
+			if err := shrmplLogClient.Connect(); err == nil {
+				l.shrmplLogClient = shrmplLogClient
 				fmt.Fprintf(os.Stderr, "WARN: Reconnected to shrmpl-log\n")
 			}
 		}
 	}
 
 	// Send to shrmpl-log
-	if l.shrmplLog != nil {
+	if l.shrmplLogClient != nil {
 		// fmt.Fprintf(os.Stderr, "DEBUG: Sending log to shrmpl-log: [%s] %s\n", level, fullMessage)
-		if err := l.shrmplLog.Log(level, l.service, "0000", fullMessage); err != nil {
+		if err := l.shrmplLogClient.Log(level, l.service, "0000", fullMessage); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: Failed to send log to shrmpl-log: %s\n", err.Error())
-			l.shrmplLog.Close()
-			l.shrmplLog = nil
+			l.shrmplLogClient.Close()
+			l.shrmplLogClient = nil
 		}
 	}
 
@@ -205,8 +205,8 @@ func (c *ShrmplLogClient) Close() {
 
 // Close closes the underlying log client connection
 func (l *Logger) Close() {
-	if l.shrmplLog != nil {
-		l.shrmplLog.Close()
+	if l.shrmplLogClient != nil {
+		l.shrmplLogClient.Close()
 	}
 }
 
