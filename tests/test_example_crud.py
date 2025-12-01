@@ -101,10 +101,10 @@ class TestExampleCRUD:
             })
         assert response.status_code == 200
 
-        # Verify deletion
+        # Verify deletion (soft delete returns 410)
         response = self.client.make_request("GET", "/example",
             params={"exampleId": self.example_id})
-        assert response.status_code == 404
+        assert response.status_code == 410
 
         # Reset class variable
         self.__class__.example_id = None

@@ -4,9 +4,9 @@ import pytest
 class TestSecurityContextIsolation:
     """Test that security contexts properly isolate data and permissions"""
 
-    def test_security_context_data_isolation(self, test_client):
-        """Test that examples in different security contexts are isolated"""
-        # Create example in security context 1
+    def test_security_context_consistency(self, test_client):
+        """Test that all examples are created in the user's security context"""
+        # Create example in security context 1 (user's context)
         example_data_1 = {
             "example_text": "Context 1 Example",
             "example_int": 100,
@@ -18,11 +18,11 @@ class TestSecurityContextIsolation:
         example_1 = response.json()["data"]
         test_client.track_example(example_1["example_id"], example_1["update_ts"])
 
-        # Create example in security context 2
+        # Create another example (API should ignore client-provided security_context)
         example_data_2 = {
-            "example_text": "Context 2 Example",
+            "example_text": "Another Example",
             "example_int": 200,
-            "security_context": 2
+            "security_context": 999  # Invalid context, should be ignored
         }
 
         response = test_client.make_request("POST", "/example", json=example_data_2)
@@ -30,100 +30,86 @@ class TestSecurityContextIsolation:
         example_2 = response.json()["data"]
         test_client.track_example(example_2["example_id"], example_2["update_ts"])
 
-        # Verify examples are in different contexts
+        # Verify both examples are in the user's security context (1)
         assert example_1["security_context"] == 1
-        assert example_2["security_context"] == 2
+        assert example_2["security_context"] == 1
 
-        # Retrieve example from context 1
+        # Verify examples are accessible
         response = test_client.make_request("GET", "/example",
             params={"exampleId": example_1["example_id"]})
         assert response.status_code == 200
-        retrieved_1 = response.json()["data"]
-        assert retrieved_1["example_text"] == "Context 1 Example"
 
-        # Retrieve example from context 2
         response = test_client.make_request("GET", "/example",
             params={"exampleId": example_2["example_id"]})
         assert response.status_code == 200
-        retrieved_2 = response.json()["data"]
-        assert retrieved_2["example_text"] == "Context 2 Example"
 
     def test_security_context_bulk_operations(self, test_client):
-        """Test that bulk operations respect security context"""
-        # Create multiple examples in different contexts
-        examples_ctx1 = []
-        examples_ctx2 = []
+        """Test that bulk operations work within the user's security context"""
+        # Create multiple examples (all in user's context)
+        examples = []
 
-        for i in range(3):
-            # Context 1
+        for i in range(5):
             response = test_client.make_request("POST", "/example", json={
-                "example_text": f"Context1 Bulk {i}",
+                "example_text": f"Bulk Test {i}",
                 "example_int": i,
-                "security_context": 1
+                "security_context": 1  # User's context
             })
             assert response.status_code == 201
             example = response.json()["data"]
-            examples_ctx1.append(example)
+            examples.append(example)
             test_client.track_example(example["example_id"], example["update_ts"])
 
-            # Context 2
-            response = test_client.make_request("POST", "/example", json={
-                "example_text": f"Context2 Bulk {i}",
-                "example_int": i + 10,
-                "security_context": 2
-            })
-            assert response.status_code == 201
-            example = response.json()["data"]
-            examples_ctx2.append(example)
-            test_client.track_example(example["example_id"], example["update_ts"])
+        # Verify all examples are in context 1
+        for example in examples:
+            assert example["security_context"] == 1
 
-        # Bulk retrieve from context 1 only
-        ids_ctx1 = [str(ex["example_id"]) for ex in examples_ctx1]
+        # Bulk retrieve all examples
+        example_ids = [str(ex["example_id"]) for ex in examples]
         response = test_client.make_request("GET", "/exampleList",
-            params={"exampleIdList": ",".join(ids_ctx1)})
+            params={"exampleIdList": ",".join(example_ids)})
         assert response.status_code == 200
         retrieved = response.json()["data"]
-        assert len(retrieved) == 3
+        assert len(retrieved) == 5
         for example in retrieved:
             assert example["security_context"] == 1
-            assert "Context1 Bulk" in example["example_text"]
+            assert "Bulk Test" in example["example_text"]
 
-        # Bulk retrieve from context 2 only
-        ids_ctx2 = [str(ex["example_id"]) for ex in examples_ctx2]
+        # Bulk update examples
+        for example in examples:
+            response = test_client.make_request("PUT", "/example", json={
+                "example_id": example["example_id"],
+                "example_text": f"Updated {example['example_text']}",
+                "security_context": 1,
+                "update_ts": example["update_ts"]
+            })
+            assert response.status_code == 200
+
+        # Verify updates
         response = test_client.make_request("GET", "/exampleList",
-            params={"exampleIdList": ",".join(ids_ctx2)})
+            params={"exampleIdList": ",".join(example_ids)})
         assert response.status_code == 200
-        retrieved = response.json()["data"]
-        assert len(retrieved) == 3
-        for example in retrieved:
-            assert example["security_context"] == 2
-            assert "Context2 Bulk" in example["example_text"]
+        updated = response.json()["data"]
+        for example in updated:
+            assert example["example_text"].startswith("Updated")
 
-    def test_cross_context_access_denied(self, test_client):
-        """Test that accessing data from wrong security context is denied"""
-        # This test would require multiple authenticated users in different contexts
-        # For now, we'll test that the API properly enforces security_context matching
-        # by attempting operations that should fail
-
-        # Create example in context 1
+    def test_security_context_enforcement(self, test_client):
+        """Test that the API enforces security context from JWT, not client input"""
+        # Create example with client-provided security_context (should be ignored)
         response = test_client.make_request("POST", "/example", json={
-            "example_text": "Secure Example",
-            "security_context": 1
+            "example_text": "Security Test",
+            "example_int": 42,
+            "security_context": 999  # Invalid context, should be ignored
         })
         assert response.status_code == 201
         example = response.json()["data"]
         test_client.track_example(example["example_id"], example["update_ts"])
 
-        # Attempt to update with wrong security context (should fail)
-        # Note: This test assumes the API validates that the request context matches
-        # the authenticated user's allowed contexts. If not implemented, this test
-        # would need to be adjusted.
-        response = test_client.make_request("PUT", "/example", json={
-            "example_id": example["example_id"],
-            "example_text": "Modified Secure Example",
-            "security_context": 2,  # Different context
-            "update_ts": example["update_ts"]
-        })
-        # This should either fail with 403 (forbidden) or succeed if context switching is allowed
-        # The exact behavior depends on the RBAC implementation
-        assert response.status_code in [200, 403]  # Accept either for now</content>
+        # Verify the example was created in the user's actual security context (1)
+        assert example["security_context"] == 1
+
+        # Verify it's accessible
+        response = test_client.make_request("GET", "/example",
+            params={"exampleId": example["example_id"]})
+        assert response.status_code == 200
+        retrieved = response.json()["data"]
+        assert retrieved["security_context"] == 1

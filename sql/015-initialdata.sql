@@ -49,7 +49,7 @@ FROM common_vars,
 INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context, user_group_membership_list, mfa_exempt, create_ts, create_user_id, update_ts, update_user_id)
 SELECT
     'admin',
-    '$2a$10$nrFkDg5BxLgTDxsFzKh2b.a/2ipwowdcey.nY/Si.7h7m8cm8Z0H.' -- bcrypt hash for 'admin123!' change for non-dev/server builds
+    '$argon2id$v=19$m=65536,t=3,p=4$dvj9Tc0FPrJvKevg+DCOhg$TlKP/tTUBnTZ0VIR8IU4JAYQl8i1jnCcIRUrPgWCUIg' -- Argon2id hash for 'admin123!' change for non-dev/server builds
     'System',
     'Administrator',
     'admin@example.com',

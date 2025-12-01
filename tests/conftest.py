@@ -29,16 +29,41 @@ class TestClient:
 
     def authenticate(self, username: str = "admin", password: str = "admin123!") -> Dict:
         """Authenticate and store JWT/CSRF tokens"""
+        # Initial auth request
         response = self.session.post(f"{self.base_url}/auth", json={
             "user_name": username,
             "password": password
         })
         response.raise_for_status()
 
-        # Extract tokens from response
         data = response.json()
-        self.jwt_token = response.cookies.get("auth")
+
+        # Check if MFA is required
+        if "temp_token" in data:
+            # MFA required, complete 2FA
+            temp_token = data["temp_token"]
+            response = self.session.post(f"{self.base_url}/auth2", json={
+                "temp_token": temp_token,
+                "totp_code": "123456"  # Placeholder TOTP code
+            })
+            response.raise_for_status()
+            data = response.json()
+
+        # Extract tokens from final response
+        # Manually parse Set-Cookie header for JWT token (workaround for HTTP/2 cookie issues)
+        self.jwt_token = None
+        if 'Set-Cookie' in response.headers:
+            cookie_header = response.headers['Set-Cookie']
+            if 'auth=' in cookie_header:
+                # Extract the token value from the cookie header
+                auth_part = cookie_header.split('auth=')[1].split(';')[0]
+                self.jwt_token = auth_part
+
         self.csrf_token = data.get("csrf_token")
+
+        # Set the auth cookie in the session for future requests
+        if self.jwt_token:
+            self.session.cookies.set("auth", self.jwt_token, path="/")
 
         return data
 
@@ -49,7 +74,8 @@ class TestClient:
         # Add CSRF token for state-changing requests
         if method.upper() in ["POST", "PUT", "DELETE"]:
             headers = kwargs.get("headers", {})
-            headers["X-CSRF-Token"] = self.csrf_token
+            if self.csrf_token:
+                headers["X-CSRF-Token"] = self.csrf_token
             kwargs["headers"] = headers
 
         return self.session.request(method, url, **kwargs)
