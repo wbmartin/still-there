@@ -59,17 +59,17 @@ func (r *UserRepository) GetUserGrants(ctx context.Context, userGroupIDs []int) 
 		FROM user_group ug
 		WHERE ug.user_group_id = ANY($1) AND ug.delete_user_id IS NULL`
 
-	rows, err := r.db.Query(ctx, query, userGroupIDs)
+	rowList, err := r.db.Query(ctx, query, userGroupIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user grants: %w", err)
 	}
-	defer rows.Close()
+	defer rowList.Close()
 
 	grants := make(map[int][]int)
-	for rows.Next() {
+	for rowList.Next() {
 		var securityContext int
 		var grantList []int
-		err := rows.Scan(&securityContext, &grantList)
+		err := rowList.Scan(&securityContext, &grantList)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user grants: %w", err)
 		}

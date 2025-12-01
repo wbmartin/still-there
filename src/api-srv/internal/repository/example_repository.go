@@ -162,16 +162,16 @@ func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, se
 		WHERE example_id IN (%s) AND security_context = $%d AND delete_user_id IS NULL`,
 		strings.Join(placeholderList, ","), len(idList)+1)
 
-	rows, err := r.db.Query(ctx, query, argList...)
+	rowList, err := r.db.Query(ctx, query, argList...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query examples: %w", err)
 	}
-	defer rows.Close()
+	defer rowList.Close()
 
-	var examples []*model.ExampleModel
-	for rows.Next() {
+	var exampleList []*model.ExampleModel
+	for rowList.Next() {
 		var example model.ExampleModel
-		err := rows.Scan(
+		err := rowList.Scan(
 			&example.ExampleID, &example.ExampleText, &example.ExampleInt, &example.ExampleFloat,
 			&example.ExampleIntArray, &example.ExampleFloatArray, &example.SecurityContext,
 			&example.CreateTS, &example.CreateUserID, &example.UpdateTS, &example.UpdateUserID,
@@ -180,19 +180,19 @@ func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, se
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan example: %w", err)
 		}
-		examples = append(examples, &example)
+		exampleList = append(exampleList, &example)
 	}
 
-	if err := rows.Err(); err != nil {
+	if err := rowList.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating rows: %w", err)
 	}
 
-	return examples, nil
+	return exampleList, nil
 }
 
 // CreateExampleList creates multiple examples in a transaction
-func (r *ExampleRepository) CreateExampleList(ctx context.Context, examples []*model.ExampleModel) ([]*model.ExampleModel, error) {
-	if len(examples) == 0 {
+func (r *ExampleRepository) CreateExampleList(ctx context.Context, exampleList []*model.ExampleModel) ([]*model.ExampleModel, error) {
+	if len(exampleList) == 0 {
 		return []*model.ExampleModel{}, nil
 	}
 
@@ -209,11 +209,11 @@ func (r *ExampleRepository) CreateExampleList(ctx context.Context, examples []*m
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING example_id`
 
-	for i, example := range examples {
+	for i, example := range exampleList {
 		err := tx.QueryRow(ctx, query,
 			example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
 			example.SecurityContext, example.CreateTS, example.CreateUserID, example.UpdateTS, example.UpdateUserID,
-		).Scan(&examples[i].ExampleID)
+		).Scan(&exampleList[i].ExampleID)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to create example %d: %w", i, err)
@@ -225,7 +225,7 @@ func (r *ExampleRepository) CreateExampleList(ctx context.Context, examples []*m
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return examples, nil
+	return exampleList, nil
 }
 
 // UpdateExampleList updates multiple examples in a transaction

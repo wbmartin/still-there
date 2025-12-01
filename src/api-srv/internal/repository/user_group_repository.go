@@ -31,16 +31,16 @@ func (r *UserGroupRepository) GetUserGroups(ctx context.Context, groupIDs []int)
 		FROM user_group
 		WHERE user_group_id = ANY($1) AND delete_user_id IS NULL`
 
-	rows, err := r.db.Query(ctx, query, groupIDs)
+	rowList, err := r.db.Query(ctx, query, groupIDs)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rowList.Close()
 
 	var groupList []*model.UserGroupModel
-	for rows.Next() {
+	for rowList.Next() {
 		var group model.UserGroupModel
-		err := rows.Scan(
+		err := rowList.Scan(
 			&group.UserGroupID, &group.GroupName, &group.UserGrantList, &group.SecurityContext,
 			&group.CreateTS, &group.CreateUserID, &group.UpdateTS, &group.UpdateUserID,
 			&group.DeleteTS, &group.DeleteUserID,

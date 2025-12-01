@@ -31,16 +31,16 @@ func (r *UserGrantRepository) GetUserGrants(ctx context.Context, grantIDs []int)
 		FROM user_grant
 		WHERE user_grant_id = ANY($1) AND delete_user_id IS NULL`
 
-	rows, err := r.db.Query(ctx, query, grantIDs)
+	rowList, err := r.db.Query(ctx, query, grantIDs)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rowList.Close()
 
 	var grantList []*model.UserGrantModel
-	for rows.Next() {
+	for rowList.Next() {
 		var grant model.UserGrantModel
-		err := rows.Scan(
+		err := rowList.Scan(
 			&grant.UserGrantID, &grant.GrantShortCode, &grant.GrantDescription, &grant.SecurityContext,
 			&grant.CreateTS, &grant.CreateUserID, &grant.UpdateTS, &grant.UpdateUserID,
 			&grant.DeleteTS, &grant.DeleteUserID,
