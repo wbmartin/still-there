@@ -22,7 +22,7 @@ type UserRepositoryTestSuite struct {
 
 func (s *UserRepositoryTestSuite) SetupSuite() {
 	// Load configuration from the same file used by the application
-	config, err := app_lib.LoadConfig("../../../../etc/api-srv-loc.env")
+	config, err := app_lib.LoadConfig("../../../../etc/loc-api-srv.env")
 	s.Require().NoError(err)
 
 	// Connect to the database using the configured URL

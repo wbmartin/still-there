@@ -8,7 +8,7 @@ echo "Building the API server..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BINARY_PATH="$PROJECT_ROOT/dist/proto-go-app"
-CONFIG_PATH="$PROJECT_ROOT/etc/api-srv-loc.env"
+CONFIG_PATH="$PROJECT_ROOT/etc/loc-api-srv.env"
 
 # Build the API server first
 "$SCRIPT_DIR/100-build-api-server"

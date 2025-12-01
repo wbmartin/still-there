@@ -118,7 +118,7 @@ A production-ready Go API server starter template with comprehensive security fe
 
 ## Configuration
 
-Edit `etc/api-srv-loc.env`:
+Edit `etc/loc-api-srv.env`:
 
 ```env
 DATABASE_URL=postgres://user:pass@host:port/db

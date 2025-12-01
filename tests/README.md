@@ -7,14 +7,14 @@ This directory contains integration tests that validate the full HTTPS stack of 
 - Python 3.8+
 - The API server must be running with TLS enabled
 - All required services (KV store, logging, database) must be running
-- `TEST_BASE_URL` must be configured in `etc/api-srv-loc.env`
+- `TEST_BASE_URL` must be configured in `etc/loc-api-srv.env`
 
 ## Configuration
 
 Add the test base URL to your configuration file:
 
 ```bash
-# etc/api-srv-loc.env
+# etc/loc-api-srv.env
 TEST_BASE_URL=https://local-atticus-snipper.teamtaggle.com:8443
 ```
 
@@ -23,7 +23,7 @@ This should match your TLS certificate's hostname and the port your application 
 ## Setup
 
 1. **Configure the test URL:**
-   Add `TEST_BASE_URL=https://your-tls-hostname:port` to `etc/api-srv-loc.env`
+   Add `TEST_BASE_URL=https://your-tls-hostname:port` to `etc/loc-api-srv.env`
 
 2. **Start the application:**
    ```bash
@@ -136,7 +136,7 @@ Test execution generates:
    ```bash
    ./bin/215-run-api-srv
    ```
-2. Ensure `TEST_BASE_URL` in `etc/api-srv-loc.env` matches your TLS hostname and port
+2. Ensure `TEST_BASE_URL` in `etc/loc-api-srv.env` matches your TLS hostname and port
 3. Verify the TLS certificate is valid for the hostname
 
 ### Missing Dependencies

@@ -160,6 +160,8 @@ initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.s
 ## Configuration
 
 ### Environment Variables (.env format)
+Environment files follow the naming convention `loc-{service}.env` for local development configurations.
+
 ```env
 # Database
 ENV_CFG_SQL_DB_NAME=proto_db
@@ -182,6 +184,9 @@ ENV_CFG_SHRMPL_LOG_DEST=localhost:7380
 
 # Application
 ENV_CFG_SERVER_NAME=proto-go-app
+
+# Testing (only in loc-api-srv.env)
+TEST_BASE_URL=https://localhost:8443
 ```
 
 ### Loading
