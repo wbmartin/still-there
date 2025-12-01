@@ -146,19 +146,19 @@ func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, se
 }
 
 // GetExampleList retrieves multiple examples by IDs and security context
-func (r *ExampleRepository) GetExampleList(ctx context.Context, idsList []int, securityContext int) ([]*model.ExampleModel, error) {
-	if len(idsList) == 0 {
+func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, securityContext int) ([]*model.ExampleModel, error) {
+	if len(idList) == 0 {
 		return []*model.ExampleModel{}, nil
 	}
 
 	// Build IN clause
-	placeholdersList := make([]string, len(idsList))
-	argsList := make([]interface{}, len(idsList)+1)
-	for i, id := range idsList {
+	placeholdersList := make([]string, len(idList))
+	argsList := make([]interface{}, len(idList)+1)
+	for i, id := range idList {
 		placeholdersList[i] = fmt.Sprintf("$%d", i+1)
 		argsList[i] = id
 	}
-	argsList[len(idsList)] = securityContext
+	argsList[len(idList)] = securityContext
 
 	query := fmt.Sprintf(`
 		SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
@@ -166,7 +166,7 @@ func (r *ExampleRepository) GetExampleList(ctx context.Context, idsList []int, s
 		       delete_ts, delete_user_id
 		FROM example
 		WHERE example_id IN (%s) AND security_context = $%d AND delete_user_id IS NULL`,
-		strings.Join(placeholdersList, ","), len(idsList)+1)
+		strings.Join(placeholdersList, ","), len(idList)+1)
 
 	rows, err := r.db.Query(ctx, query, argsList...)
 	if err != nil {
@@ -275,8 +275,8 @@ func (r *ExampleRepository) UpdateExampleList(ctx context.Context, examplesList 
 }
 
 // DeleteExampleList deletes multiple examples in a transaction
-func (r *ExampleRepository) DeleteExampleList(ctx context.Context, idsList []int, updateTsList []float64, securityContext int, deleteTS float64, deleteUserID int) ([]int, error) {
-	if len(idsList) == 0 {
+func (r *ExampleRepository) DeleteExampleList(ctx context.Context, idList []int, updateTsList []float64, securityContext int, deleteTS float64, deleteUserID int) ([]int, error) {
+	if len(idList) == 0 {
 		return []int{}, nil
 	}
 
@@ -292,7 +292,7 @@ func (r *ExampleRepository) DeleteExampleList(ctx context.Context, idsList []int
 		SET delete_ts = $1, delete_user_id = $2
 		WHERE example_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
-	for i, id := range idsList {
+	for i, id := range idList {
 		_, err := tx.Exec(ctx, query, deleteTS, deleteUserID, id, securityContext, updateTsList[i])
 		if err != nil {
 			return nil, fmt.Errorf("failed to delete example %d: %w", id, err)
@@ -304,5 +304,5 @@ func (r *ExampleRepository) DeleteExampleList(ctx context.Context, idsList []int
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return idsList, nil
+	return idList, nil
 }

@@ -294,17 +294,17 @@ func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	idStrs := strings.Split(exampleIdListStr, ",")
-	idsList := make([]int, 0, len(idStrs))
-	for _, idStr := range idStrs {
+	idStrList := strings.Split(exampleIdListStr, ",")
+	idList := make([]int, 0, len(idStrList))
+	for _, idStr := range idStrList {
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "Invalid id in exampleIdList parameter", logger)
 			return
 		}
-		idsList = append(idsList, id)
+		idList = append(idList, id)
 	}
-	examples, err := h.exampleRepo.GetExampleList(r.Context(), idsList, jwtClaims.SecurityContext)
+	examples, err := h.exampleRepo.GetExampleList(r.Context(), idList, jwtClaims.SecurityContext)
 	if err != nil {
 		logger.Error("LIF0", "Failed to get examples: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve examples", logger)
