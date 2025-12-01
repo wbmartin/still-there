@@ -31,12 +31,14 @@ func (r *UserRepository) GetUserByUserName(ctx context.Context, username string)
 		WHERE user_name = $1 AND delete_user_id IS NULL`
 
 	var user model.AppUserModel
-	err := r.db.QueryRow(ctx, query, username).Scan(
-		&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName, &user.LastName, &user.Email,
-		&user.SecurityContext, &user.UserGroupMembershipList, &user.MFAExempt,
-		&user.CreateTS, &user.CreateUserID, &user.UpdateTS, &user.UpdateUserID,
-		&user.DeleteTS, &user.DeleteUserID,
-	)
+	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+		return r.db.QueryRow(ctx, query, username).Scan(
+			&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName, &user.LastName, &user.Email,
+			&user.SecurityContext, &user.UserGroupMembershipList, &user.MFAExempt,
+			&user.CreateTS, &user.CreateUserID, &user.UpdateTS, &user.UpdateUserID,
+			&user.DeleteTS, &user.DeleteUserID,
+		)
+	})
 
 	if err != nil {
 		if err == pgx.ErrNoRows {

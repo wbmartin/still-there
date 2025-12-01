@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/wbmartin/starter-api/internal/model"
@@ -31,12 +32,14 @@ func (r *ExampleRepository) GetExample(ctx context.Context, exampleID int, secur
 		WHERE example_id = $1 AND security_context = $2 AND delete_user_id IS NULL`
 
 	var example model.ExampleModel
-	err := r.db.QueryRow(ctx, query, exampleID, securityContext).Scan(
-		&example.ExampleID, &example.ExampleText, &example.ExampleInt, &example.ExampleFloat,
-		&example.ExampleIntArray, &example.ExampleFloatArray, &example.SecurityContext,
-		&example.CreateTS, &example.CreateUserID, &example.UpdateTS, &example.UpdateUserID,
-		&example.DeleteTS, &example.DeleteUserID,
-	)
+	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+		return r.db.QueryRow(ctx, query, exampleID, securityContext).Scan(
+			&example.ExampleID, &example.ExampleText, &example.ExampleInt, &example.ExampleFloat,
+			&example.ExampleIntArray, &example.ExampleFloatArray, &example.SecurityContext,
+			&example.CreateTS, &example.CreateUserID, &example.UpdateTS, &example.UpdateUserID,
+			&example.DeleteTS, &example.DeleteUserID,
+		)
+	})
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -56,10 +59,12 @@ func (r *ExampleRepository) CreateExample(ctx context.Context, example *model.Ex
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING example_id`
 
-	err := r.db.QueryRow(ctx, query,
-		example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
-		example.SecurityContext, example.CreateTS, example.CreateUserID, example.UpdateTS, example.UpdateUserID,
-	).Scan(&example.ExampleID)
+	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+		return r.db.QueryRow(ctx, query,
+			example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
+			example.SecurityContext, example.CreateTS, example.CreateUserID, example.UpdateTS, example.UpdateUserID,
+		).Scan(&example.ExampleID)
+	})
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create example: %w", err)
@@ -76,10 +81,15 @@ func (r *ExampleRepository) UpdateExample(ctx context.Context, example *model.Ex
 		    update_ts = $6, update_user_id = $7
 		WHERE example_id = $8 AND security_context = $9 AND update_ts = $10 AND delete_user_id IS NULL`
 
-	result, err := r.db.Exec(ctx, query,
-		example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
-		example.UpdateTS, example.UpdateUserID, example.ExampleID, example.SecurityContext, originalUpdateTS,
-	)
+	var result pgconn.CommandTag
+	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+		var execErr error
+		result, execErr = r.db.Exec(ctx, query,
+			example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
+			example.UpdateTS, example.UpdateUserID, example.ExampleID, example.SecurityContext, originalUpdateTS,
+		)
+		return execErr
+	})
 
 	if err != nil {
 		return fmt.Errorf("failed to update example: %w", err)
@@ -89,7 +99,9 @@ func (r *ExampleRepository) UpdateExample(ctx context.Context, example *model.Ex
 		// Assess the state of the example
 		var deleteUserID *int
 		checkQuery := `SELECT delete_user_id FROM example WHERE example_id = $1 AND security_context = $2`
-		err := r.db.QueryRow(ctx, checkQuery, example.ExampleID, example.SecurityContext).Scan(&deleteUserID)
+		err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+			return r.db.QueryRow(ctx, checkQuery, example.ExampleID, example.SecurityContext).Scan(&deleteUserID)
+		})
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				return ErrNotFound
@@ -113,16 +125,23 @@ func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, se
 		SET delete_ts = $1, delete_user_id = $2
 		WHERE example_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
-	result, err := r.db.Exec(ctx, query, deleteTS, deleteUserID, exampleID, securityContext, originalUpdateTS)
+	var result pgconn.CommandTag
+	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+		var execErr error
+		result, execErr = r.db.Exec(ctx, query, deleteTS, deleteUserID, exampleID, securityContext, originalUpdateTS)
+		return execErr
+	})
 
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete example: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {
-		var deleteUserID *int
+		var deleteUserIDCheck *int
 		checkQuery := `SELECT delete_user_id FROM example WHERE example_id = $1 AND security_context = $2`
-		err := r.db.QueryRow(ctx, checkQuery, exampleID, securityContext).Scan(&deleteUserID)
+		err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+			return r.db.QueryRow(ctx, checkQuery, exampleID, securityContext).Scan(&deleteUserIDCheck)
+		})
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				return 0, ErrNotFound
@@ -130,7 +149,7 @@ func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, se
 			return 0, fmt.Errorf("failed to assess example state: %w", err)
 		}
 
-		if deleteUserID != nil {
+		if deleteUserIDCheck != nil {
 			return 0, ErrDeleted
 		}
 		return 0, ErrConflict
@@ -162,7 +181,12 @@ func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, se
 		WHERE example_id IN (%s) AND security_context = $%d AND delete_user_id IS NULL`,
 		strings.Join(placeholderList, ","), len(idList)+1)
 
-	rowList, err := r.db.Query(ctx, query, argList...)
+	var rowList pgx.Rows
+	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+		var queryErr error
+		rowList, queryErr = r.db.Query(ctx, query, argList...)
+		return queryErr
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to query examples: %w", err)
 	}
