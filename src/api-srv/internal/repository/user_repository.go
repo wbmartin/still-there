@@ -48,8 +48,8 @@ func (r *UserRepository) GetUserByUserName(ctx context.Context, username string)
 	return &user, nil
 }
 
-// GetUserGrants retrieves user grants by security context
-func (r *UserRepository) GetUserGrants(ctx context.Context, userGroupIDs []int) (map[int][]int, error) {
+// GetUserGrantList retrieves user grants by security context
+func (r *UserRepository) GetUserGrantList(ctx context.Context, userGroupIDs []int) (map[int][]int, error) {
 	if len(userGroupIDs) == 0 {
 		return make(map[int][]int), nil
 	}

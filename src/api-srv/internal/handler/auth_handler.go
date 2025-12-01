@@ -98,56 +98,36 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 		csrfToken = sessionID[len(sessionID)-3:]
 
 		// Get user grants for response
-		grants, err := userRepo.GetUserGrants(r.Context(), user.UserGroupMembershipList)
+		grantList, err := userRepo.GetUserGrantList(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
 			return
 		}
 		// Convert grants map to short codes
-		grantShortCodes := make(map[int][]string)
-		for securityContext, grantIDs := range grants {
+		grantShortCodeList := make(map[int][]string)
+		for securityContext, grantIDs := range grantList {
 			var shortCodeList []string
 			for _, grantID := range grantIDs {
 				if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
 					shortCodeList = append(shortCodeList, shortCode)
 				}
 			}
-			grantShortCodes[securityContext] = shortCodeList
+			grantShortCodeList[securityContext] = shortCodeList
 		}
+
 		response := model.Auth2ResponseModel{
 			AppUserID:              user.AppUserID,
 			UserName:               user.UserName,
 			FirstName:              user.FirstName,
 			LastName:               user.LastName,
 			SecurityContext:        user.SecurityContext,
-			UserGrantShortCodeList: grantShortCodes,
+			UserGrantShortCodeList: grantShortCodeList,
 		}
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
 		appServices.Logger.Info("A2SC", "Auth2 successful for user: "+user.UserName)
-	}
-}
-
-// LogoffHandler handles user logoff
-func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		appServices.Logger.Info("LOST", "Logoff request started")
-
-		// Clear the auth cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:     "auth",
-			Value:    "",
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
-			MaxAge:   -1, // Expire immediately
-		})
-
-		writeJSON(w, http.StatusOK, map[string]string{"message": "Logged off successfully"}, appServices.Logger)
-		appServices.Logger.Info("LODN", "Logoff completed")
 	}
 }
 
@@ -212,7 +192,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		csrfToken = sessionID[len(sessionID)-3:]
 
 		// Get user grants for response
-		grants, err := userRepo.GetUserGrants(r.Context(), user.UserGroupMembershipList)
+		grantList, err := userRepo.GetUserGrantList(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
@@ -220,15 +200,15 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		}
 
 		// Convert grants map to short codes
-		grantShortCodes := make(map[int][]string)
-		for securityContext, grantIDs := range grants {
+		grantShortCodeList := make(map[int][]string)
+		for securityContext, grantIDs := range grantList {
 			var shortCodeList []string
 			for _, grantID := range grantIDs {
 				if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
 					shortCodeList = append(shortCodeList, shortCode)
 				}
 			}
-			grantShortCodes[securityContext] = shortCodeList
+			grantShortCodeList[securityContext] = shortCodeList
 		}
 
 		response := model.Auth2ResponseModel{
@@ -237,7 +217,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 			FirstName:              user.FirstName,
 			LastName:               user.LastName,
 			SecurityContext:        user.SecurityContext,
-			UserGrantShortCodeList: grantShortCodes,
+			UserGrantShortCodeList: grantShortCodeList,
 		}
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
@@ -246,10 +226,31 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 	}
 }
 
+// LogoffHandler handles user logoff
+func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		appServices.Logger.Info("LOST", "Logoff request started")
+
+		// Clear the auth cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "auth",
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   -1, // Expire immediately
+		})
+
+		writeJSON(w, http.StatusOK, map[string]string{"message": "Logged off successfully"}, appServices.Logger)
+		appServices.Logger.Info("LODN", "Logoff completed")
+	}
+}
+
 // createJWTForUser creates a JWT token for the authenticated user
 func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices *app_lib.AppServices, userGroupRepo *repository.UserGroupRepository) (string, string, error) {
 	// Get user grants
-	grants, err := userGroupRepo.GetUserGroups(ctx, user.UserGroupMembershipList)
+	grants, err := userGroupRepo.GetUserGroupList(ctx, user.UserGroupMembershipList)
 	if err != nil {
 		return "", "", err
 	}

@@ -18,8 +18,8 @@ func NewUserGrantRepository(db *pgxpool.Pool) *UserGrantRepository {
 	return &UserGrantRepository{db: db}
 }
 
-// GetUserGrants retrieves user grants by IDs
-func (r *UserGrantRepository) GetUserGrants(ctx context.Context, grantIDs []int) ([]*model.UserGrantModel, error) {
+// GetUserGrantList retrieves user grants by IDs
+func (r *UserGrantRepository) GetUserGrantList(ctx context.Context, grantIDs []int) ([]*model.UserGrantModel, error) {
 	if len(grantIDs) == 0 {
 		return []*model.UserGrantModel{}, nil
 	}

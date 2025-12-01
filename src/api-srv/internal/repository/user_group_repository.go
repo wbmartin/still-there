@@ -18,8 +18,8 @@ func NewUserGroupRepository(db *pgxpool.Pool) *UserGroupRepository {
 	return &UserGroupRepository{db: db}
 }
 
-// GetUserGroups retrieves user groups by IDs
-func (r *UserGroupRepository) GetUserGroups(ctx context.Context, groupIDs []int) ([]*model.UserGroupModel, error) {
+// GetUserGroupList retrieves user groups by IDs
+func (r *UserGroupRepository) GetUserGroupList(ctx context.Context, groupIDs []int) ([]*model.UserGroupModel, error) {
 	if len(groupIDs) == 0 {
 		return []*model.UserGroupModel{}, nil
 	}

@@ -49,7 +49,7 @@ func (s *UserGrantRepositoryTestSuite) TestNewUserGrantRepository() {
 	s.Equal(s.db, repo.db)
 }
 
-func (s *UserGrantRepositoryTestSuite) TestGetUserGrants() {
+func (s *UserGrantRepositoryTestSuite) TestGetUserGrantList() {
 	// First, check what grants actually exist in the database
 	// This makes the test work regardless of whether initial data was loaded
 	allGrants, err := s.db.Query(context.Background(), "SELECT user_grant_id FROM user_grant WHERE delete_user_id IS NULL ORDER BY user_grant_id")
@@ -71,7 +71,7 @@ func (s *UserGrantRepositoryTestSuite) TestGetUserGrants() {
 	}
 
 	// Test retrieving existing grants
-	grants, err := s.repo.GetUserGrants(context.Background(), existingGrantIDList)
+	grants, err := s.repo.GetUserGrantList(context.Background(), existingGrantIDList)
 	s.NoError(err)
 	s.NotNil(grants)
 	s.Len(grants, len(existingGrantIDList))
@@ -90,24 +90,24 @@ func (s *UserGrantRepositoryTestSuite) TestGetUserGrants() {
 	}
 }
 
-func (s *UserGrantRepositoryTestSuite) TestGetUserGrantsEmpty() {
+func (s *UserGrantRepositoryTestSuite) TestGetUserGrantListEmpty() {
 	// Test with empty slice
-	grants, err := s.repo.GetUserGrants(context.Background(), []int{})
+	grants, err := s.repo.GetUserGrantList(context.Background(), []int{})
 	s.NoError(err)
 	s.Equal(0, len(grants))
 	s.Equal([]*model.UserGrantModel{}, grants)
 }
 
-func (s *UserGrantRepositoryTestSuite) TestGetUserGrantsNonExistent() {
+func (s *UserGrantRepositoryTestSuite) TestGetUserGrantListNonExistent() {
 	// Test with IDs that don't exist
 	grantIDs := []int{99999, 88888} // Non-existent grant IDs
 
-	grants, err := s.repo.GetUserGrants(context.Background(), grantIDs)
+	grants, err := s.repo.GetUserGrantList(context.Background(), grantIDs)
 	s.NoError(err)
 	s.Equal(0, len(grants)) // Should return empty slice for non-existent grants
 }
 
-func (s *UserGrantRepositoryTestSuite) TestGetUserGrantsPartial() {
+func (s *UserGrantRepositoryTestSuite) TestGetUserGrantListPartial() {
 	// First, check what grants actually exist
 	allGrants, err := s.db.Query(context.Background(), "SELECT user_grant_id, grant_short_code FROM user_grant WHERE delete_user_id IS NULL ORDER BY user_grant_id LIMIT 1")
 	s.NoError(err)
@@ -127,7 +127,7 @@ func (s *UserGrantRepositoryTestSuite) TestGetUserGrantsPartial() {
 	// Test with mix of existing and non-existing grants
 	grantIDs := []int{existingID, 99999} // One existing, one non-existing
 
-	grants, err := s.repo.GetUserGrants(context.Background(), grantIDs)
+	grants, err := s.repo.GetUserGrantList(context.Background(), grantIDs)
 	s.NoError(err)
 
 	// Should find only the existing grant
