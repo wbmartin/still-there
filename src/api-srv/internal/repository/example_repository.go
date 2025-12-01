@@ -275,7 +275,7 @@ func (r *ExampleRepository) UpdateExampleList(ctx context.Context, examplesList 
 }
 
 // DeleteExampleList deletes multiple examples in a transaction
-func (r *ExampleRepository) DeleteExampleList(ctx context.Context, idList []int, updateTsList []float64, securityContext int, deleteTS float64, deleteUserID int) ([]int, error) {
+func (r *ExampleRepository) DeleteExampleList(ctx context.Context, idList []int, updateTimestampList []float64, securityContext int, deleteTS float64, deleteUserID int) ([]int, error) {
 	if len(idList) == 0 {
 		return []int{}, nil
 	}
@@ -293,7 +293,7 @@ func (r *ExampleRepository) DeleteExampleList(ctx context.Context, idList []int,
 		WHERE example_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
 	for i, id := range idList {
-		_, err := tx.Exec(ctx, query, deleteTS, deleteUserID, id, securityContext, updateTsList[i])
+		_, err := tx.Exec(ctx, query, deleteTS, deleteUserID, id, securityContext, updateTimestampList[i])
 		if err != nil {
 			return nil, fmt.Errorf("failed to delete example %d: %w", id, err)
 		}

@@ -504,7 +504,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	idList := make([]int, 0, len(idStrList))
-	updateTsList := make([]float64, 0, len(updateTsStrList))
+	updateTimestampList := make([]float64, 0, len(updateTsStrList))
 	for i, idStr := range idStrList {
 		id, err := strconv.Atoi(strings.TrimSpace(idStr))
 		if err != nil {
@@ -518,7 +518,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusBadRequest, "Invalid updateTs value", logger)
 			return
 		}
-		updateTsList = append(updateTsList, ts)
+		updateTimestampList = append(updateTimestampList, ts)
 	}
 
 	if len(idList) == 0 {
@@ -530,7 +530,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	now := float64(time.Now().UnixNano()) / 1e9
 
 	// Delete in transaction
-	deletedIDList, err := h.exampleRepo.DeleteExampleList(r.Context(), idList, updateTsList, jwtClaims.SecurityContext, now, jwtClaims.UserID)
+	deletedIDList, err := h.exampleRepo.DeleteExampleList(r.Context(), idList, updateTimestampList, jwtClaims.SecurityContext, now, jwtClaims.UserID)
 	if err != nil {
 		logger.Error("BDF0", "Failed to delete examples: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to delete examples", logger)
