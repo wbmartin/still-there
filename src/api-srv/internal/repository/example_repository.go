@@ -24,6 +24,30 @@ func NewExampleRepository(db *pgxpool.Pool) *ExampleRepository {
 
 // GetExample retrieves an example by ID and security context
 func (r *ExampleRepository) GetExample(ctx context.Context, exampleID int, securityContext int) (*model.ExampleModel, error) {
+	// First check if record exists (including deleted ones)
+	checkQuery := `
+		SELECT delete_user_id
+		FROM example
+		WHERE example_id = $1 AND security_context = $2`
+
+	var deleteUserID *int
+	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+		return r.db.QueryRow(ctx, checkQuery, exampleID, securityContext).Scan(&deleteUserID)
+	})
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to check example existence: %w", err)
+	}
+
+	// If record exists but is deleted, return ErrDeleted
+	if deleteUserID != nil {
+		return nil, ErrDeleted
+	}
+
+	// Record exists and is not deleted, retrieve full data
 	query := `
 		SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
 		       security_context, create_ts, create_user_id, update_ts, update_user_id,
@@ -32,7 +56,7 @@ func (r *ExampleRepository) GetExample(ctx context.Context, exampleID int, secur
 		WHERE example_id = $1 AND security_context = $2 AND delete_user_id IS NULL`
 
 	var example model.ExampleModel
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		return r.db.QueryRow(ctx, query, exampleID, securityContext).Scan(
 			&example.ExampleID, &example.ExampleText, &example.ExampleInt, &example.ExampleFloat,
 			&example.ExampleIntArray, &example.ExampleFloatArray, &example.SecurityContext,
@@ -42,9 +66,6 @@ func (r *ExampleRepository) GetExample(ctx context.Context, exampleID int, secur
 	})
 
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, ErrNotFound
-		}
 		return nil, fmt.Errorf("failed to get example: %w", err)
 	}
 

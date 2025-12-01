@@ -50,13 +50,13 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 	exampleIDStr := r.URL.Query().Get("exampleId")
 
 	if exampleIDStr == "" {
-		writeError(w, http.StatusBadRequest, "exampleId is required", logger, "PreAuth")
+		writeError(w, http.StatusBadRequest, "exampleId is required", logger, jwtClaims.Subject)
 		return
 	}
 
 	exampleID, err := strconv.Atoi(exampleIDStr)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid exampleId", logger, "PreAuth")
+		writeError(w, http.StatusBadRequest, "Invalid exampleId", logger, jwtClaims.Subject)
 		return
 	}
 
@@ -66,11 +66,15 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 	example, err := h.exampleRepo.GetExample(r.Context(), exampleID, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "Example not found", logger, "PreAuth")
+			writeError(w, http.StatusNotFound, "Example not found", logger, jwtClaims.Subject)
+			return
+		}
+		if errors.Is(err, repository.ErrDeleted) {
+			writeError(w, http.StatusGone, "Example has been deleted", logger, jwtClaims.Subject)
 			return
 		}
 		logger.Error("GTF0", "Failed to get example: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to retrieve example", logger, "PreAuth")
+		writeError(w, http.StatusInternalServerError, "Failed to retrieve example", logger, jwtClaims.Subject)
 		return
 	}
 

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/suite"
 	"github.com/wbmartin/starter-api/internal/app_lib"
@@ -124,9 +125,10 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExample() {
 	s.NoError(err)
 	s.Equal(created.ExampleID, deletedID)
 
-	// Verify deletion (soft delete)
+	// Verify deletion (soft delete) - should return ErrDeleted
 	_, err = s.repo.GetExample(context.Background(), created.ExampleID, 1)
-	s.Error(err) // Should not find the deleted record
+	s.Error(err)
+	s.True(errors.Is(err, ErrDeleted))
 }
 
 func (s *ExampleRepositoryTestSuite) TestCreateExampleList() {

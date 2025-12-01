@@ -264,7 +264,13 @@ TEST_BASE_URL=https://localhost:8443
 
 ### Integration Tests
 - **Python-based**: pytest with requests
-- **Coverage**: Full API workflows
+- **Coverage**: Comprehensive API testing including:
+  - Security context isolation and multi-tenancy
+  - Error scenarios (401, 403, 404, 409, 410, 429, 400)
+  - Bulk operations performance and correctness
+  - Authentication and authorization flows
+  - Optimistic locking and conflict resolution
+  - Rate limiting and CSRF protection
 - **Environment**: Requires running server and dependencies
 
 ### Test Data
@@ -303,7 +309,7 @@ TEST_BASE_URL=https://localhost:8443
 ### Code Quality
 - **Formatting**: `go fmt`
 - **Linting**: Manual review (future: golangci-lint)
-- **Testing**: Required before commits
+- **Testing**: Run `go test ./...` to validate changes
 - **Documentation**: Inline comments, README updates
 
 ## Future Enhancements
