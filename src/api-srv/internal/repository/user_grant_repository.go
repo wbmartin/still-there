@@ -37,7 +37,7 @@ func (r *UserGrantRepository) GetUserGrants(ctx context.Context, grantIDs []int)
 	}
 	defer rows.Close()
 
-	var grants []*model.UserGrantModel
+	var grantsList []*model.UserGrantModel
 	for rows.Next() {
 		var grant model.UserGrantModel
 		err := rows.Scan(
@@ -48,8 +48,8 @@ func (r *UserGrantRepository) GetUserGrants(ctx context.Context, grantIDs []int)
 		if err != nil {
 			return nil, err
 		}
-		grants = append(grants, &grant)
+		grantsList = append(grantsList, &grant)
 	}
 
-	return grants, nil
+	return grantsList, nil
 }

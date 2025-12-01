@@ -138,12 +138,12 @@ func removeDuplicates(slice []int) []int {
 	}
 
 	keys := make(map[int]bool)
-	var result []int
+	var resultList []int
 	for _, item := range slice {
 		if !keys[item] {
 			keys[item] = true
-			result = append(result, item)
+			resultList = append(resultList, item)
 		}
 	}
-	return result
+	return resultList
 }

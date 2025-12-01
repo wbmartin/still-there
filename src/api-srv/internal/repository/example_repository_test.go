@@ -216,7 +216,8 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExampleList() {
 	created[0].UpdateUserID = 2
 	created[1].UpdateUserID = 2
 
-	err := s.repo.UpdateExampleList(context.Background(), created)
+	originalUpdateTSList := []float64{1234567890.123, 1234567890.123}
+	err := s.repo.UpdateExampleList(context.Background(), created, originalUpdateTSList)
 	s.NoError(err)
 }
 

@@ -87,22 +87,22 @@ func (s *UserRepositoryTestSuite) TestGetUserGrants() {
 	s.NoError(err)
 	defer allGroups.Close()
 
-	var existingGroupIDs []int
+	var existingGroupIDList []int
 	for allGroups.Next() {
 		var id int
 		err := allGroups.Scan(&id)
 		s.NoError(err)
-		existingGroupIDs = append(existingGroupIDs, id)
+		existingGroupIDList = append(existingGroupIDList, id)
 	}
 
-	if len(existingGroupIDs) == 0 {
+	if len(existingGroupIDList) == 0 {
 		// No groups in database, skip this test
 		s.T().Skip("No user groups found in database - skipping grants test")
 		return
 	}
 
 	// Test retrieving grants for existing groups
-	grants, err := s.repo.GetUserGrants(context.Background(), existingGroupIDs)
+	grants, err := s.repo.GetUserGrants(context.Background(), existingGroupIDList)
 	s.NoError(err)
 	s.NotNil(grants)
 

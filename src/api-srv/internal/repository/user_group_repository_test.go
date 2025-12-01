@@ -55,25 +55,25 @@ func (s *UserGroupRepositoryTestSuite) TestGetUserGroups() {
 	s.NoError(err)
 	defer allGroups.Close()
 
-	var existingGroupIDs []int
+	var existingGroupIDList []int
 	for allGroups.Next() {
 		var id int
 		err := allGroups.Scan(&id)
 		s.NoError(err)
-		existingGroupIDs = append(existingGroupIDs, id)
+		existingGroupIDList = append(existingGroupIDList, id)
 	}
 
-	if len(existingGroupIDs) == 0 {
+	if len(existingGroupIDList) == 0 {
 		// No groups in database, skip this test
 		s.T().Skip("No user groups found in database - skipping test")
 		return
 	}
 
 	// Test retrieving existing groups
-	groups, err := s.repo.GetUserGroups(context.Background(), existingGroupIDs)
+	groups, err := s.repo.GetUserGroups(context.Background(), existingGroupIDList)
 	s.NoError(err)
 	s.NotNil(groups)
-	s.Len(groups, len(existingGroupIDs))
+	s.Len(groups, len(existingGroupIDList))
 
 	// Validate each returned group
 	for _, group := range groups {

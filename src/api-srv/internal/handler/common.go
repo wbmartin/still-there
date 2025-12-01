@@ -13,7 +13,7 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}, logger app_l
 	w.WriteHeader(status)
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		logger.Error("server", "JEN0", "Failed to encode JSON response: "+err.Error())
+		logger.Error("JEN0", "Failed to encode JSON response: "+err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }

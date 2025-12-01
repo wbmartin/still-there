@@ -56,25 +56,25 @@ func (s *UserGrantRepositoryTestSuite) TestGetUserGrants() {
 	s.NoError(err)
 	defer allGrants.Close()
 
-	var existingGrantIDs []int
+	var existingGrantIDList []int
 	for allGrants.Next() {
 		var id int
 		err := allGrants.Scan(&id)
 		s.NoError(err)
-		existingGrantIDs = append(existingGrantIDs, id)
+		existingGrantIDList = append(existingGrantIDList, id)
 	}
 
-	if len(existingGrantIDs) == 0 {
+	if len(existingGrantIDList) == 0 {
 		// No grants in database, skip this test
 		s.T().Skip("No user grants found in database - skipping test")
 		return
 	}
 
 	// Test retrieving existing grants
-	grants, err := s.repo.GetUserGrants(context.Background(), existingGrantIDs)
+	grants, err := s.repo.GetUserGrants(context.Background(), existingGrantIDList)
 	s.NoError(err)
 	s.NotNil(grants)
-	s.Len(grants, len(existingGrantIDs))
+	s.Len(grants, len(existingGrantIDList))
 
 	// Validate each returned grant
 	for _, grant := range grants {

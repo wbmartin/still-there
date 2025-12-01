@@ -21,24 +21,24 @@ func NewRBACManager(logger ThisAppLoggerInterface) *RBACManager {
 // HasGrant checks if a user has a specific grant in a security context
 func (r *RBACManager) HasGrant(claims *Claims, grantID int, securityContext int) bool {
 	if claims == nil || claims.Grants == nil {
-		r.logger.Debug("rbac", "NCL0", "No claims or grants available")
+		r.logger.Debug("NCL0", "No claims or grants available")
 		return false
 	}
 
 	contextGrants, exists := claims.Grants[securityContext]
 	if !exists {
-		r.logger.Debug("rbac", "NCT0", fmt.Sprintf("No grants found for security context: %d", securityContext))
+		r.logger.Debug("NCT0", fmt.Sprintf("No grants found for security context: %d", securityContext))
 		return false
 	}
 
 	for _, userGrantID := range contextGrants {
 		if userGrantID == grantID {
-			r.logger.Debug("rbac", "GFD0", fmt.Sprintf("Grant found - ID: %d, context: %d", userGrantID, securityContext))
+			r.logger.Debug("GFD0", fmt.Sprintf("Grant found - ID: %d, context: %d", userGrantID, securityContext))
 			return true
 		}
 	}
 
-	r.logger.Debug("rbac", "GNF0", fmt.Sprintf("Grant not found - ID: %d, context: %d", grantID, securityContext))
+	r.logger.Debug("GNF0", fmt.Sprintf("Grant not found - ID: %d, context: %d", grantID, securityContext))
 	return false
 }
 
@@ -61,15 +61,15 @@ func (r *RBACManager) GetUserGrantsByContext(claims *Claims) map[int][]string {
 	}
 
 	for securityContext, grantIDs := range claims.Grants {
-		var shortCodes []string
+		var shortCodesList []string
 		for _, grantID := range grantIDs {
 			if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
-				shortCodes = append(shortCodes, shortCode)
+				shortCodesList = append(shortCodesList, shortCode)
 			} else {
-				r.logger.Warn("rbac", "UGT0", fmt.Sprintf("Unknown grant ID encountered: %d", grantID))
+				r.logger.Warn("UGT0", fmt.Sprintf("Unknown grant ID encountered: %d", grantID))
 			}
 		}
-		result[securityContext] = shortCodes
+		result[securityContext] = shortCodesList
 	}
 
 	return result

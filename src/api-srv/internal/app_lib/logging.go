@@ -12,10 +12,10 @@ import (
 
 // ThisAppLoggerInterface defines the logging interface for this application
 type ThisAppLoggerInterface interface {
-	Debug(host, code, message string)
-	Info(host, code, message string)
-	Warn(host, code, message string)
-	Error(host, code, message string)
+	Debug(code, message string)
+	Info(code, message string)
+	Warn(code, message string)
+	Error(code, message string)
 	Close()
 }
 
@@ -106,22 +106,22 @@ func (l *Logger) log(level string, msg string, args ...any) {
 }
 
 // Debug logs at debug level
-func (l *Logger) Debug(host, code, message string) {
+func (l *Logger) Debug(code, message string) {
 	l.log("DEBG", message)
 }
 
 // Info logs at info level
-func (l *Logger) Info(host, code, message string) {
+func (l *Logger) Info(code, message string) {
 	l.log("INFO", message)
 }
 
 // Warn logs at warn level
-func (l *Logger) Warn(host, code, message string) {
+func (l *Logger) Warn(code, message string) {
 	l.log("WARN", message)
 }
 
 // Error logs at error level
-func (l *Logger) Error(host, code, message string) {
+func (l *Logger) Error(code, message string) {
 	l.log("ERRO", message)
 }
 
@@ -176,9 +176,7 @@ func (c *ShrmplLogClient) Log(level, host, code, message string) error {
 	if len(host) > 32 {
 		return fmt.Errorf("host must be <= 32 characters")
 	}
-	if len(code) != 4 {
-		return fmt.Errorf("code must be exactly 4 characters")
-	}
+
 	if len(message) > 4096 {
 		return fmt.Errorf("message must be <= 4096 characters")
 	}

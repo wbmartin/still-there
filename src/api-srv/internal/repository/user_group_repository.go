@@ -37,7 +37,7 @@ func (r *UserGroupRepository) GetUserGroups(ctx context.Context, groupIDs []int)
 	}
 	defer rows.Close()
 
-	var groups []*model.UserGroupModel
+	var groupsList []*model.UserGroupModel
 	for rows.Next() {
 		var group model.UserGroupModel
 		err := rows.Scan(
@@ -48,8 +48,8 @@ func (r *UserGroupRepository) GetUserGroups(ctx context.Context, groupIDs []int)
 		if err != nil {
 			return nil, err
 		}
-		groups = append(groups, &group)
+		groupsList = append(groupsList, &group)
 	}
 
-	return groups, nil
+	return groupsList, nil
 }
