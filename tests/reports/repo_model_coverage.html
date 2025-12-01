@@ -57,13 +57,15 @@
 				
 				<option value="file0">github.com/wbmartin/starter-api/internal/model/user_grant_model.go (0.0%)</option>
 				
-				<option value="file1">github.com/wbmartin/starter-api/internal/repository/example_repository.go (63.7%)</option>
+				<option value="file1">github.com/wbmartin/starter-api/internal/repository/example_repository.go (66.7%)</option>
 				
-				<option value="file2">github.com/wbmartin/starter-api/internal/repository/user_grant_repository.go (62.5%)</option>
+				<option value="file2">github.com/wbmartin/starter-api/internal/repository/retry.go (84.6%)</option>
 				
-				<option value="file3">github.com/wbmartin/starter-api/internal/repository/user_group_repository.go (87.5%)</option>
+				<option value="file3">github.com/wbmartin/starter-api/internal/repository/user_grant_repository.go (62.5%)</option>
 				
-				<option value="file4">github.com/wbmartin/starter-api/internal/repository/user_repository.go (90.0%)</option>
+				<option value="file4">github.com/wbmartin/starter-api/internal/repository/user_group_repository.go (87.5%)</option>
+				
+				<option value="file5">github.com/wbmartin/starter-api/internal/repository/user_repository.go (90.2%)</option>
 				
 				</select>
 			</div>
@@ -146,6 +148,7 @@ import (
         "strings"
 
         "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgconn"
         "github.com/jackc/pgx/v5/pgxpool"
 
         "github.com/wbmartin/starter-api/internal/model"
@@ -171,14 +174,16 @@ func (r *ExampleRepository) GetExample(ctx context.Context, exampleID int, secur
                 WHERE example_id = $1 AND security_context = $2 AND delete_user_id IS NULL`
 
         var example model.ExampleModel
-        err := r.db.QueryRow(ctx, query, exampleID, securityContext).Scan(
-                &amp;example.ExampleID, &amp;example.ExampleText, &amp;example.ExampleInt, &amp;example.ExampleFloat,
-                &amp;example.ExampleIntArray, &amp;example.ExampleFloatArray, &amp;example.SecurityContext,
-                &amp;example.CreateTS, &amp;example.CreateUserID, &amp;example.UpdateTS, &amp;example.UpdateUserID,
-                &amp;example.DeleteTS, &amp;example.DeleteUserID,
-        )
+        err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error </span><span class="cov8" title="1">{
+                return r.db.QueryRow(ctx, query, exampleID, securityContext).Scan(
+                        &amp;example.ExampleID, &amp;example.ExampleText, &amp;example.ExampleInt, &amp;example.ExampleFloat,
+                        &amp;example.ExampleIntArray, &amp;example.ExampleFloatArray, &amp;example.SecurityContext,
+                        &amp;example.CreateTS, &amp;example.CreateUserID, &amp;example.UpdateTS, &amp;example.UpdateUserID,
+                        &amp;example.DeleteTS, &amp;example.DeleteUserID,
+                )
+        }</span>)
 
-        if err != nil </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
                 if err == pgx.ErrNoRows </span><span class="cov8" title="1">{
                         return nil, ErrNotFound
                 }</span>
@@ -196,12 +201,14 @@ func (r *ExampleRepository) CreateExample(ctx context.Context, example *model.Ex
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 RETURNING example_id`
 
-        err := r.db.QueryRow(ctx, query,
-                example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
-                example.SecurityContext, example.CreateTS, example.CreateUserID, example.UpdateTS, example.UpdateUserID,
-        ).Scan(&amp;example.ExampleID)
+        err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error </span><span class="cov8" title="1">{
+                return r.db.QueryRow(ctx, query,
+                        example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
+                        example.SecurityContext, example.CreateTS, example.CreateUserID, example.UpdateTS, example.UpdateUserID,
+                ).Scan(&amp;example.ExampleID)
+        }</span>)
 
-        if err != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("failed to create example: %w", err)
         }</span>
 
@@ -216,12 +223,17 @@ func (r *ExampleRepository) UpdateExample(ctx context.Context, example *model.Ex
                     update_ts = $6, update_user_id = $7
                 WHERE example_id = $8 AND security_context = $9 AND update_ts = $10 AND delete_user_id IS NULL`
 
-        result, err := r.db.Exec(ctx, query,
-                example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
-                example.UpdateTS, example.UpdateUserID, example.ExampleID, example.SecurityContext, originalUpdateTS,
-        )
+        var result pgconn.CommandTag
+        err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error </span><span class="cov8" title="1">{
+                var execErr error
+                result, execErr = r.db.Exec(ctx, query,
+                        example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
+                        example.UpdateTS, example.UpdateUserID, example.ExampleID, example.SecurityContext, originalUpdateTS,
+                )
+                return execErr
+        }</span>)
 
-        if err != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
                 return fmt.Errorf("failed to update example: %w", err)
         }</span>
 
@@ -229,8 +241,10 @@ func (r *ExampleRepository) UpdateExample(ctx context.Context, example *model.Ex
                 // Assess the state of the example
                 var deleteUserID *int
                 checkQuery := `SELECT delete_user_id FROM example WHERE example_id = $1 AND security_context = $2`
-                err := r.db.QueryRow(ctx, checkQuery, example.ExampleID, example.SecurityContext).Scan(&amp;deleteUserID)
-                if err != nil </span><span class="cov0" title="0">{
+                err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error </span><span class="cov0" title="0">{
+                        return r.db.QueryRow(ctx, checkQuery, example.ExampleID, example.SecurityContext).Scan(&amp;deleteUserID)
+                }</span>)
+                <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
                         if err == pgx.ErrNoRows </span><span class="cov0" title="0">{
                                 return ErrNotFound
                         }</span>
@@ -253,24 +267,31 @@ func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, se
                 SET delete_ts = $1, delete_user_id = $2
                 WHERE example_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
-        result, err := r.db.Exec(ctx, query, deleteTS, deleteUserID, exampleID, securityContext, originalUpdateTS)
+        var result pgconn.CommandTag
+        err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error </span><span class="cov8" title="1">{
+                var execErr error
+                result, execErr = r.db.Exec(ctx, query, deleteTS, deleteUserID, exampleID, securityContext, originalUpdateTS)
+                return execErr
+        }</span>)
 
-        if err != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
                 return 0, fmt.Errorf("failed to delete example: %w", err)
         }</span>
 
         <span class="cov8" title="1">if result.RowsAffected() == 0 </span><span class="cov0" title="0">{
-                var deleteUserID *int
+                var deleteUserIDCheck *int
                 checkQuery := `SELECT delete_user_id FROM example WHERE example_id = $1 AND security_context = $2`
-                err := r.db.QueryRow(ctx, checkQuery, exampleID, securityContext).Scan(&amp;deleteUserID)
-                if err != nil </span><span class="cov0" title="0">{
+                err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error </span><span class="cov0" title="0">{
+                        return r.db.QueryRow(ctx, checkQuery, exampleID, securityContext).Scan(&amp;deleteUserIDCheck)
+                }</span>)
+                <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
                         if err == pgx.ErrNoRows </span><span class="cov0" title="0">{
                                 return 0, ErrNotFound
                         }</span>
                         <span class="cov0" title="0">return 0, fmt.Errorf("failed to assess example state: %w", err)</span>
                 }
 
-                <span class="cov0" title="0">if deleteUserID != nil </span><span class="cov0" title="0">{
+                <span class="cov0" title="0">if deleteUserIDCheck != nil </span><span class="cov0" title="0">{
                         return 0, ErrDeleted
                 }</span>
                 <span class="cov0" title="0">return 0, ErrConflict</span>
@@ -302,8 +323,13 @@ func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, se
                 WHERE example_id IN (%s) AND security_context = $%d AND delete_user_id IS NULL`,
                 strings.Join(placeholderList, ","), len(idList)+1)
 
-        rowList, err := r.db.Query(ctx, query, argList...)
-        if err != nil </span><span class="cov0" title="0">{
+        var rowList pgx.Rows
+        err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error </span><span class="cov8" title="1">{
+                var queryErr error
+                rowList, queryErr = r.db.Query(ctx, query, argList...)
+                return queryErr
+        }</span>)
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("failed to query examples: %w", err)
         }</span>
         <span class="cov8" title="1">defer rowList.Close()
@@ -446,6 +472,74 @@ func (r *ExampleRepository) DeleteExampleList(ctx context.Context, idList []int,
 
 import (
         "context"
+        "database/sql"
+        "time"
+
+        "github.com/cenkalti/backoff/v4"
+)
+
+// RetryConfig holds configuration for database operation retries
+type RetryConfig struct {
+        MaxRetries      uint64
+        InitialInterval time.Duration
+        MaxInterval     time.Duration
+        Multiplier      float64
+}
+
+// DefaultRetryConfig returns a sensible default retry configuration
+func DefaultRetryConfig() RetryConfig <span class="cov8" title="1">{
+        return RetryConfig{
+                MaxRetries:      3,
+                InitialInterval: time.Second,
+                MaxInterval:     10 * time.Second,
+                Multiplier:      2.0,
+        }
+}</span>
+
+// isRetryableError determines if a database error should trigger a retry
+func isRetryableError(err error) bool <span class="cov8" title="1">{
+        if err == nil </span><span class="cov8" title="1">{
+                return false
+        }</span>
+
+        // Retry on connection-related errors
+        <span class="cov8" title="1">if err == sql.ErrConnDone || err == sql.ErrTxDone </span><span class="cov0" title="0">{
+                return true
+        }</span>
+
+        // Check for common PostgreSQL connection errors
+        <span class="cov8" title="1">errStr := err.Error()
+        return errStr == "connection refused" ||
+                errStr == "connection reset by peer" ||
+                errStr == "broken pipe" ||
+                errStr == "i/o timeout"</span>
+}
+
+// ExecuteWithRetry executes a database operation with exponential backoff retry
+func ExecuteWithRetry(ctx context.Context, config RetryConfig, operation func() error) error <span class="cov8" title="1">{
+        backoffStrategy := backoff.WithMaxRetries(
+                backoff.NewExponentialBackOff(
+                        backoff.WithInitialInterval(config.InitialInterval),
+                        backoff.WithMaxInterval(config.MaxInterval),
+                        backoff.WithMultiplier(config.Multiplier),
+                ),
+                config.MaxRetries,
+        )
+
+        return backoff.Retry(func() error </span><span class="cov8" title="1">{
+                err := operation()
+                if !isRetryableError(err) </span><span class="cov8" title="1">{
+                        return backoff.Permanent(err) // Don't retry non-retryable errors
+                }</span>
+                <span class="cov0" title="0">return err</span>
+        }, backoff.WithContext(backoffStrategy, ctx))
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package repository
+
+import (
+        "context"
 
         "github.com/jackc/pgx/v5/pgxpool"
 
@@ -499,7 +593,7 @@ func (r *UserGrantRepository) GetUserGrantList(ctx context.Context, grantIDs []i
 }
 </pre>
 		
-		<pre class="file" id="file3" style="display: none">package repository
+		<pre class="file" id="file4" style="display: none">package repository
 
 import (
         "context"
@@ -556,7 +650,7 @@ func (r *UserGroupRepository) GetUserGroupList(ctx context.Context, groupIDs []i
 }
 </pre>
 		
-		<pre class="file" id="file4" style="display: none">package repository
+		<pre class="file" id="file5" style="display: none">package repository
 
 import (
         "context"
@@ -589,14 +683,16 @@ func (r *UserRepository) GetUserByUserName(ctx context.Context, username string)
                 WHERE user_name = $1 AND delete_user_id IS NULL`
 
         var user model.AppUserModel
-        err := r.db.QueryRow(ctx, query, username).Scan(
-                &amp;user.AppUserID, &amp;user.UserName, &amp;user.PwHash, &amp;user.FirstName, &amp;user.LastName, &amp;user.Email,
-                &amp;user.SecurityContext, &amp;user.UserGroupMembershipList, &amp;user.MFAExempt,
-                &amp;user.CreateTS, &amp;user.CreateUserID, &amp;user.UpdateTS, &amp;user.UpdateUserID,
-                &amp;user.DeleteTS, &amp;user.DeleteUserID,
-        )
+        err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error </span><span class="cov8" title="1">{
+                return r.db.QueryRow(ctx, query, username).Scan(
+                        &amp;user.AppUserID, &amp;user.UserName, &amp;user.PwHash, &amp;user.FirstName, &amp;user.LastName, &amp;user.Email,
+                        &amp;user.SecurityContext, &amp;user.UserGroupMembershipList, &amp;user.MFAExempt,
+                        &amp;user.CreateTS, &amp;user.CreateUserID, &amp;user.UpdateTS, &amp;user.UpdateUserID,
+                        &amp;user.DeleteTS, &amp;user.DeleteUserID,
+                )
+        }</span>)
 
-        if err != nil </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
                 if err == pgx.ErrNoRows </span><span class="cov8" title="1">{
                         return nil, fmt.Errorf("user not found")
                 }</span>

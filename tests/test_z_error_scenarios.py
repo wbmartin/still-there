@@ -7,12 +7,19 @@ class TestErrorScenarios:
 
     def test_invalid_jwt_returns_401(self, test_client):
         """Test that invalid JWT tokens return 401"""
-        # Clear authentication
-        test_client.jwt_token = "invalid.jwt.token"
-        test_client.csrf_token = "invalid-csrf"
+        # Save original JWT token
+        original_jwt = test_client.jwt_token
+
+        # Set invalid auth cookie directly in session
+        test_client.session.cookies.set("auth", "invalid.jwt.token", path="/")
 
         response = test_client.make_request("GET", "/example", params={"exampleId": 1})
         assert response.status_code == 401
+
+        # Restore original JWT token for subsequent tests
+        test_client.jwt_token = original_jwt
+        if original_jwt:
+            test_client.session.cookies.set("auth", original_jwt, path="/")
 
     def test_missing_csrf_token_returns_403(self, test_client):
         """Test that POST/PUT/DELETE requests without CSRF token return 403"""
@@ -92,20 +99,6 @@ class TestErrorScenarios:
         response = test_client.make_request("GET", "/example", params={"exampleId": example["example_id"]})
         assert response.status_code == 410
 
-    def test_rate_limiting_returns_429(self, test_client):
-        """Test that exceeding rate limits returns 429"""
-        # Make many rapid requests to trigger rate limiting
-        responses = []
-        for i in range(250):  # Exceed typical rate limits
-            response = test_client.make_request("GET", "/health")
-            responses.append(response.status_code)
-            if response.status_code == 429:
-                break
-            time.sleep(0.01)  # Small delay to avoid overwhelming
-
-        # At least one request should be rate limited
-        assert 429 in responses
-
     def test_invalid_request_body_returns_400(self, test_client):
         """Test that malformed JSON returns 400"""
         response = test_client.make_request("POST", "/example",
@@ -159,3 +152,18 @@ class TestErrorScenarios:
         })
         # Should return 409 for conflict or succeed if timestamps are handled differently
         assert response.status_code in [200, 409]
+
+    def test_rate_limiting_returns_429(self, test_client):
+        """Test that exceeding rate limits returns 429"""
+        # Test authenticated user rate limiting (limit: 200 per minute)
+        # Use an authenticated endpoint that goes through security checks
+        responses = []
+        for i in range(250):  # Exceed limit to trigger rate limiting
+            response = test_client.make_request("GET", "/example", params={"exampleId": 999999})
+            responses.append(response.status_code)
+            if response.status_code == 429:
+                break
+            time.sleep(0.01)  # Small delay to avoid overwhelming
+
+        # At least one request should be rate limited
+        assert 429 in responses, f"Expected 429 in responses, got: {responses[:10]}... (showing first 10)"
