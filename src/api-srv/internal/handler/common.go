@@ -19,7 +19,8 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}, logger app_l
 }
 
 // writeError writes an error response
-func writeError(w http.ResponseWriter, status int, message string, logger app_lib.ThisAppLoggerInterface) {
+func writeError(w http.ResponseWriter, status int, message string, logger app_lib.ThisAppLoggerInterface, username string) {
+	logger.Error("ERR", message, "username", username)
 	response := map[string]string{"error": message}
 	writeJSON(w, status, response, logger)
 }

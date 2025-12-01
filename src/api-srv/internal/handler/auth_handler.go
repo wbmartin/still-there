@@ -21,7 +21,7 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 		// Parse request
 		var req model.AuthRequestModel
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid request body", appServices.Logger)
+			writeError(w, http.StatusBadRequest, "Invalid request body", appServices.Logger, "PreAuth")
 			return
 		}
 
@@ -31,14 +31,14 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 		user, err := userRepo.GetUserByUserName(r.Context(), req.UserName)
 		if err != nil {
 			appServices.Logger.Warn("USLK", "User lookup failed for user: "+req.UserName+", error: "+err.Error())
-			writeError(w, http.StatusUnauthorized, "Invalid credentials", appServices.Logger)
+			writeError(w, http.StatusUnauthorized, "Invalid credentials", appServices.Logger, "PreAuth")
 			return
 		}
 
 		// Verify password
 		if !app_lib.CheckPasswordHash(req.Password, user.PwHash) {
 			appServices.Logger.Warn("PSFL", "Password verification failed for user: "+req.UserName)
-			writeError(w, http.StatusUnauthorized, "Invalid credentials", appServices.Logger)
+			writeError(w, http.StatusUnauthorized, "Invalid credentials", appServices.Logger, "PreAuth")
 			return
 		}
 
@@ -48,7 +48,7 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 			tempTokenBytes := make([]byte, 32)
 			if _, err := rand.Read(tempTokenBytes); err != nil {
 				appServices.Logger.Error("TKGN", "Failed to generate temp token: "+err.Error())
-				writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
+				writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
 				return
 			}
 			tempToken := hex.EncodeToString(tempTokenBytes)
@@ -57,7 +57,7 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 			tempTokenKey := "TEMP_AUTH_" + tempToken
 			if err := appServices.KV.Set(tempTokenKey, req.UserName, "10m"); err != nil {
 				appServices.Logger.Error("TKST", "Failed to store temp token: "+err.Error())
-				writeError(w, http.StatusBadRequest, "Invalid request body", appServices.Logger)
+				writeError(w, http.StatusBadRequest, "Invalid request body", appServices.Logger, "PreAuth")
 				return
 			}
 
@@ -81,7 +81,7 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 		jwt, sessionID, err := createJWTForUser(r.Context(), user, appServices, userGroupRepo)
 		if err != nil {
 			appServices.Logger.Error("JWFL", "Failed to create JWT: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
 			return
 		}
 		// Set JWT cookie
@@ -101,7 +101,7 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 		grantList, err := userRepo.GetUserGrantList(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
 			return
 		}
 		// Convert grants map to short codes
@@ -140,7 +140,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		// Parse request
 		var req model.Auth2RequestModel
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid request body", appServices.Logger)
+			writeError(w, http.StatusBadRequest, "Invalid request body", appServices.Logger, "PreAuth")
 			return
 		}
 
@@ -151,7 +151,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		username, err := appServices.KV.Get(tempTokenKey)
 		if err != nil {
 			appServices.Logger.Warn("TKLK", "Temp token lookup failed for token: "+req.TempToken[:8]+"..., error: "+err.Error())
-			writeError(w, http.StatusUnauthorized, "Invalid or expired temp token", appServices.Logger)
+			writeError(w, http.StatusUnauthorized, "Invalid or expired temp token", appServices.Logger, "PreAuth")
 			return
 		}
 
@@ -162,7 +162,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		user, err := userRepo.GetUserByUserName(r.Context(), username)
 		if err != nil {
 			appServices.Logger.Error("USLK", "User lookup failed during auth2 for user: "+username+", error: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
 			return
 		}
 
@@ -174,7 +174,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		jwt, sessionID, err := createJWTForUser(r.Context(), user, appServices, userGroupRepo)
 		if err != nil {
 			appServices.Logger.Error("JWFL", "Failed to create JWT: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
 			return
 		}
 
@@ -195,7 +195,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		grantList, err := userRepo.GetUserGrantList(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger)
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
 			return
 		}
 

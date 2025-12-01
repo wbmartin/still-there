@@ -12,10 +12,10 @@ import (
 
 // ThisAppLoggerInterface defines the logging interface for this application
 type ThisAppLoggerInterface interface {
-	Debug(code, message string)
-	Info(code, message string)
-	Warn(code, message string)
-	Error(code, message string)
+	Debug(code, message string, keyvals ...interface{})
+	Info(code, message string, keyvals ...interface{})
+	Warn(code, message string, keyvals ...interface{})
+	Error(code, message string, keyvals ...interface{})
 	Close()
 }
 
@@ -60,12 +60,19 @@ func NewLogger(config *Config) *Logger {
 }
 
 // log sends a log message to shrmpl-log with caller information
-func (l *Logger) log(level string, msg string, args ...any) {
-	// Format message with structured args
-	formattedMsg := msg
-	if len(args) > 0 {
-		formattedMsg = fmt.Sprintf(msg, args...)
+func (l *Logger) log(level string, code string, message string, keyvals ...interface{}) {
+	// Parse key-value pairs for username
+	username := "unknown"
+	for i := 0; i < len(keyvals); i += 2 {
+		if i+1 < len(keyvals) && keyvals[i] == "username" {
+			if u, ok := keyvals[i+1].(string); ok {
+				username = u
+			}
+		}
 	}
+
+	// Format message with username
+	formattedMsg := fmt.Sprintf("[%s] %s: %s", username, l.service, message)
 
 	// Add caller information (skip 2 frames: log() -> Debug/Info/Warn/Error() -> caller)
 	_, file, line, ok := runtime.Caller(2)
@@ -106,23 +113,23 @@ func (l *Logger) log(level string, msg string, args ...any) {
 }
 
 // Debug logs at debug level
-func (l *Logger) Debug(code, message string) {
-	l.log("DEBG", message)
+func (l *Logger) Debug(code, message string, keyvals ...interface{}) {
+	l.log("DEBG", code, message, keyvals...)
 }
 
 // Info logs at info level
-func (l *Logger) Info(code, message string) {
-	l.log("INFO", message)
+func (l *Logger) Info(code, message string, keyvals ...interface{}) {
+	l.log("INFO", code, message, keyvals...)
 }
 
 // Warn logs at warn level
-func (l *Logger) Warn(code, message string) {
-	l.log("WARN", message)
+func (l *Logger) Warn(code, message string, keyvals ...interface{}) {
+	l.log("WARN", code, message, keyvals...)
 }
 
 // Error logs at error level
-func (l *Logger) Error(code, message string) {
-	l.log("ERRO", message)
+func (l *Logger) Error(code, message string, keyvals ...interface{}) {
+	l.log("ERRO", code, message, keyvals...)
 }
 
 // ShrmplLogClient represents a client for the shrmpl-log service

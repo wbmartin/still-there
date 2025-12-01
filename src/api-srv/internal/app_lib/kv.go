@@ -2,6 +2,7 @@ package app_lib
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -172,7 +173,7 @@ func (c *ShrmplKVClient) Get(key string) (string, error) {
 	}
 
 	if strings.HasPrefix(response, "ERROR") {
-		return "", fmt.Errorf(response)
+		return "", errors.New(response)
 	}
 
 	return response, nil
@@ -222,7 +223,7 @@ func (c *ShrmplKVClient) Incr(key string, ttl string) (int, error) {
 	}
 
 	if strings.HasPrefix(response, "ERROR") {
-		return 0, fmt.Errorf(response)
+		return 0, errors.New(response)
 	}
 
 	result, err := strconv.Atoi(response)
