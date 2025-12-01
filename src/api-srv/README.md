@@ -234,7 +234,7 @@ internal/
 
 - All handlers use the SecurityHelper for consistent security checks
 - JWT tokens are HttpOnly and Secure in production
-- Passwords are bcrypt hashed
+- Passwords are Argon2id hashed
 - All database operations include security context validation
 - Optimistic locking prevents concurrent modification conflicts
 

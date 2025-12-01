@@ -39,20 +39,20 @@ func main() {
 	// Create the logger (it will handle shrmpl-log internally)
 	logger := app_lib.NewLogger(config)
 	defer logger.Close()
-	logger.Info("INI0", "Starting API server")
+	logger.Info("INI0", "Starting API server", "username", "app-root")
 
 	// Initialize database
 	dbPool, err := pgxpool.New(context.Background(), config.DatabaseURL)
 	if err != nil {
-		logger.Error("DBI0", "Failed to create database connection pool: "+err.Error())
+		logger.Error("DBI0", "Failed to create database connection pool: "+err.Error(), "username", "app-root")
 		os.Exit(1)
 	}
 	defer dbPool.Close()
-	logger.Error("DBI1", "Database connected")
+	logger.Info("DBI1", "Database connected", "username", "app-root")
 
 	// Test the connection
 	if err := dbPool.Ping(context.Background()); err != nil {
-		logger.Error("DBP0", "Failed to ping database: "+err.Error())
+		logger.Error("DBP0", "Failed to ping database: "+err.Error(), "username", "app-root")
 		os.Exit(1)
 	}
 
@@ -108,9 +108,9 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		logger.Info("STR0", fmt.Sprintf("Server starting on HTTPS port: %d", config.ServerPort))
+		logger.Info("STR0", fmt.Sprintf("Server starting on HTTPS port: %d", config.ServerPort), "username", "app-root")
 		if err := server.ListenAndServeTLS(config.TLSCertPath, config.TLSKeyPath); err != nil && err != http.ErrServerClosed {
-			logger.Error("STF0", "Server failed to start: "+err.Error())
+			logger.Error("STF0", "Server failed to start: "+err.Error(), "username", "app-root")
 			os.Exit(1)
 		}
 	}()
@@ -120,16 +120,16 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	logger.Info("SHD0", "Shutting down server")
+	logger.Info("SHD0", "Shutting down server", "username", "app-root")
 
 	// Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		logger.Error("SHF0", "Server forced to shutdown: "+err.Error())
+		logger.Error("SHF0", "Server forced to shutdown: "+err.Error(), "username", "app-root")
 		os.Exit(1)
 	}
 
-	logger.Info("STP0", "Server stopped")
+	logger.Info("STP0", "Server stopped", "username", "app-root")
 }

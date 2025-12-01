@@ -8,7 +8,7 @@ This document specifies the ProtoStack-ReactGo API server, a production-ready Go
 
 - **Language**: Go 1.25.4
 - **Framework**: Standard library with pgx for PostgreSQL
-- **Architecture**: Clean Architecture with layered design
+- **Architecture**: n-tier
   - **Presentation Layer**: HTTP handlers with JSON APIs
   - **Application Layer**: Business logic and security checks
   - **Domain Layer**: Models and business rules
@@ -62,107 +62,15 @@ src/api-srv/
 - **Timestamps**: `numeric(17,7)` for high-precision timestamps
 - **Audit Fields**: All tables include:
   - `create_ts`, `create_user_id`
-  - `update_ts`, `update_user_id`
+  - `update_ts`, `update_user_id` (optimistic locking)
   - `delete_ts`, `delete_user_id` (soft deletes)
 - **Multi-tenancy**: `security_context` integer field on all tables
 - **Naming**: Snake_case column names
 - **Relationships**: No foreign keys; managed in application layer
 - **Defaults/Triggers**: Prohibited; all logic in application code
 
-### Core Tables
-
-#### app_user
-```sql
-CREATE TABLE app_user (
-    app_user_id serial PRIMARY KEY,
-    user_name text NOT NULL,
-    pw_hash text NOT NULL,
-    first_name text,
-    last_name text,
-    email text,
-    security_context integer NOT NULL,
-    user_group_membership_list integer[],
-    mfa_exempt boolean NOT NULL DEFAULT false,
-    create_ts numeric(17,7) NOT NULL,
-    create_user_id integer NOT NULL,
-    update_ts numeric(17,7) NOT NULL,
-    update_user_id integer NOT NULL,
-    delete_ts numeric(17,7),
-    delete_user_id integer
-);
-```
-
-#### user_group
-```sql
-CREATE TABLE user_group (
-    user_group_id integer PRIMARY KEY,
-    user_grant_list integer[],
-    security_context integer NOT NULL,
-    create_ts numeric(17,7) NOT NULL,
-    create_user_id integer NOT NULL,
-    update_ts numeric(17,7) NOT NULL,
-    update_user_id integer NOT NULL,
-    delete_ts numeric(17,7),
-    delete_user_id integer
-);
-```
-
-#### user_grant
-```sql
-CREATE TABLE user_grant (
-    user_grant_id integer PRIMARY KEY,
-    grant_short_code text NOT NULL,
-    grant_description text NOT NULL,
-    security_context integer NOT NULL DEFAULT 0,
-    create_ts numeric(17,7) NOT NULL,
-    create_user_id integer NOT NULL,
-    update_ts numeric(17,7) NOT NULL,
-    update_user_id integer NOT NULL,
-    delete_ts numeric(17,7),
-    delete_user_id integer
-);
-```
-
-#### example
-```sql
-CREATE TABLE example (
-    example_id serial PRIMARY KEY,
-    example_text text,
-    example_int integer,
-    example_float float,
-    example_int_array integer[],
-    example_float_array float[],
-    security_context integer NOT NULL,
-    create_ts numeric(17,7) NOT NULL,
-    create_user_id integer NOT NULL,
-    update_ts numeric(17,7) NOT NULL,
-    update_user_id integer NOT NULL,
-    delete_ts numeric(17,7),
-    delete_user_id integer
-);
-```
-
-### Data Seeding
-
-Initial data uses CTE for common values:
-```sql
-WITH common_vars AS (
-    SELECT NOW() as ts, 0 as system_id
-)
-INSERT INTO user_grant (user_grant_id, grant_short_code, grant_description, security_context, create_ts, create_user_id, update_ts, update_user_id)
-SELECT data.user_grant_id, data.grant_short_code, data.grant_description, data.security_context, common_vars.ts, common_vars.system_id, common_vars.ts, common_vars.system_id
-FROM common_vars,
-(VALUES
-    (1001, 'GET_EXAMPLE', 'Retrieve examples', 0),
-    (1002, 'ADD_EXAMPLE', 'Add new examples', 0),
-    (1003, 'CHG_EXAMPLE', 'Change existing examples', 0),
-    (1004, 'DEL_EXAMPLE', 'Delete examples', 0),
-    (8001, 'CHG_OWN_PW', 'Change own password', 0),
-    (9001, 'ADD_USER', 'Add new users', 0),
-    (9002, 'BLOCK_USER', 'Block user access', 0),
-    (9003, 'CHG_OTHER_USER_PW', 'Reset another user password', 0)
-) AS data(user_grant_id, grant_short_code, grant_description, security_context);
-```
+## Database
+initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.sql (DML)
 
 ## API Design
 
@@ -227,7 +135,7 @@ FROM common_vars,
 
 ### Authentication
 - **JWT**: RS256 signed tokens with session management
-- **Password Hashing**: bcrypt with cost factor 12
+- **Password Hashing**: Argon2id with time=3, memory=64MB, threads=4, key length=32
 - **Session Management**: Session IDs stored in JWT, validated against shrmpl-kv for blocking
 
 ### Authorization (RBAC)
