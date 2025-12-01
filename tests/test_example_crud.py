@@ -67,6 +67,7 @@ class TestExampleCRUD:
             "example_float": 3.14159,
             "example_int_array": [1, 2, 3, 4],
             "example_float_array": [1.1, 2.2, 3.3, 4.4],
+            "update_ts": current_update_ts,
             "security_context": 1
         }
 
@@ -143,12 +144,14 @@ class TestExampleCRUD:
                 "example_id": example_ids[0],
                 "example_text": "Updated Bulk Test Example 1",
                 "example_int": 101,
+                "update_ts": update_timestamps[0],
                 "security_context": 1
             },
             {
                 "example_id": example_ids[1],
                 "example_text": "Updated Bulk Test Example 2",
                 "example_int": 201,
+                "update_ts": update_timestamps[1],
                 "security_context": 1
             }
         ]
