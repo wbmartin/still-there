@@ -337,26 +337,26 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	jwtClaims := sec.GetClaims()
 
 	// Parse request body
-	var examplesList []model.ExampleModel
-	if err := json.NewDecoder(r.Body).Decode(&examplesList); err != nil {
+	var exampleList []model.ExampleModel
+	if err := json.NewDecoder(r.Body).Decode(&exampleList); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request body", logger)
 		return
 	}
 
-	if len(examplesList) == 0 {
+	if len(exampleList) == 0 {
 		writeError(w, http.StatusBadRequest, "At least one example required", logger)
 		return
 	}
 
 	// Convert to slice of pointers
-	examplePtrList := make([]*model.ExampleModel, len(examplesList))
-	for i := range examplesList {
-		examplePtrList[i] = &examplesList[i]
+	examplePtrList := make([]*model.ExampleModel, len(exampleList))
+	for i := range exampleList {
+		examplePtrList[i] = &exampleList[i]
 	}
 
 	// Validate all examples have the same security context and it's allowed
 	userSecurityContext := jwtClaims.SecurityContext
-	for i, example := range examplesList {
+	for i, example := range exampleList {
 		if example.SecurityContext != userSecurityContext {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), logger)
 			return
@@ -373,11 +373,11 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	updateTS := now
 
 	// Set metadata for all
-	for i := range examplesList {
-		examplesList[i].CreateTS = createTS
-		examplesList[i].CreateUserID = jwtClaims.UserID
-		examplesList[i].UpdateTS = updateTS
-		examplesList[i].UpdateUserID = jwtClaims.UserID
+	for i := range exampleList {
+		exampleList[i].CreateTS = createTS
+		exampleList[i].CreateUserID = jwtClaims.UserID
+		exampleList[i].UpdateTS = updateTS
+		exampleList[i].UpdateUserID = jwtClaims.UserID
 	}
 
 	// Create in transaction
@@ -414,13 +414,13 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	jwtClaims := sec.GetClaims()
 
 	// Parse request body
-	var examplesList []model.ExampleModel
-	if err := json.NewDecoder(r.Body).Decode(&examplesList); err != nil {
+	var exampleList []model.ExampleModel
+	if err := json.NewDecoder(r.Body).Decode(&exampleList); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request body", logger)
 		return
 	}
 
-	if len(examplesList) == 0 {
+	if len(exampleList) == 0 {
 		writeError(w, http.StatusBadRequest, "At least one example required", logger)
 		return
 	}
@@ -429,11 +429,11 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	now := float64(time.Now().UnixNano()) / 1e9
 
 	// Collect original update timestamps, validate, and set new values
-	originalUpdateTSList := make([]float64, len(examplesList))
-	examplePtrList := make([]*model.ExampleModel, len(examplesList))
-	for i := range examplesList {
-		examplePtrList[i] = &examplesList[i]
-		originalUpdateTSList[i] = examplesList[i].UpdateTS
+	originalUpdateTSList := make([]float64, len(exampleList))
+	examplePtrList := make([]*model.ExampleModel, len(exampleList))
+	for i := range exampleList {
+		examplePtrList[i] = &exampleList[i]
+		originalUpdateTSList[i] = exampleList[i].UpdateTS
 		if examplePtrList[i].SecurityContext != jwtClaims.SecurityContext {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), logger)
 			return
@@ -442,8 +442,8 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d missing example_id", i), logger)
 			return
 		}
-		examplesList[i].UpdateTS = now
-		examplesList[i].UpdateUserID = jwtClaims.UserID
+		exampleList[i].UpdateTS = now
+		exampleList[i].UpdateUserID = jwtClaims.UserID
 	}
 
 	// Update in transaction
@@ -463,7 +463,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, logger)
 
-	logger.Info("BUR0", fmt.Sprintf("Updated %d examples", len(examplesList)))
+	logger.Info("BUR0", fmt.Sprintf("Updated %d examples", len(exampleList)))
 }
 
 // DeleteExampleList handles DELETE /exampleList?exampleIdList={comma-separated}&updateTs={comma-separated}

@@ -107,13 +107,13 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 		// Convert grants map to short codes
 		grantShortCodes := make(map[int][]string)
 		for securityContext, grantIDs := range grants {
-			var shortCodesList []string
+			var shortCodeList []string
 			for _, grantID := range grantIDs {
 				if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
-					shortCodesList = append(shortCodesList, shortCode)
+					shortCodeList = append(shortCodeList, shortCode)
 				}
 			}
-			grantShortCodes[securityContext] = shortCodesList
+			grantShortCodes[securityContext] = shortCodeList
 		}
 		response := model.Auth2ResponseModel{
 			AppUserID:              user.AppUserID,
@@ -222,13 +222,13 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		// Convert grants map to short codes
 		grantShortCodes := make(map[int][]string)
 		for securityContext, grantIDs := range grants {
-			var shortCodesList []string
+			var shortCodeList []string
 			for _, grantID := range grantIDs {
 				if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
-					shortCodesList = append(shortCodesList, shortCode)
+					shortCodeList = append(shortCodeList, shortCode)
 				}
 			}
-			grantShortCodes[securityContext] = shortCodesList
+			grantShortCodes[securityContext] = shortCodeList
 		}
 
 		response := model.Auth2ResponseModel{

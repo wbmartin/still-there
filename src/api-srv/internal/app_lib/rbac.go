@@ -61,15 +61,15 @@ func (r *RBACManager) GetUserGrantsByContext(claims *Claims) map[int][]string {
 	}
 
 	for securityContext, grantIDs := range claims.Grants {
-		var shortCodesList []string
+		var shortCodeList []string
 		for _, grantID := range grantIDs {
 			if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
-				shortCodesList = append(shortCodesList, shortCode)
+				shortCodeList = append(shortCodeList, shortCode)
 			} else {
 				r.logger.Warn("UGT0", fmt.Sprintf("Unknown grant ID encountered: %d", grantID))
 			}
 		}
-		result[securityContext] = shortCodesList
+		result[securityContext] = shortCodeList
 	}
 
 	return result

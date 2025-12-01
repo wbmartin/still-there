@@ -152,13 +152,13 @@ func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, se
 	}
 
 	// Build IN clause
-	placeholdersList := make([]string, len(idList))
-	argsList := make([]interface{}, len(idList)+1)
+	placeholderList := make([]string, len(idList))
+	argList := make([]interface{}, len(idList)+1)
 	for i, id := range idList {
-		placeholdersList[i] = fmt.Sprintf("$%d", i+1)
-		argsList[i] = id
+		placeholderList[i] = fmt.Sprintf("$%d", i+1)
+		argList[i] = id
 	}
-	argsList[len(idList)] = securityContext
+	argList[len(idList)] = securityContext
 
 	query := fmt.Sprintf(`
 		SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
@@ -166,9 +166,9 @@ func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, se
 		       delete_ts, delete_user_id
 		FROM example
 		WHERE example_id IN (%s) AND security_context = $%d AND delete_user_id IS NULL`,
-		strings.Join(placeholdersList, ","), len(idList)+1)
+		strings.Join(placeholderList, ","), len(idList)+1)
 
-	rows, err := r.db.Query(ctx, query, argsList...)
+	rows, err := r.db.Query(ctx, query, argList...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query examples: %w", err)
 	}
@@ -235,8 +235,8 @@ func (r *ExampleRepository) CreateExampleList(ctx context.Context, examples []*m
 }
 
 // UpdateExampleList updates multiple examples in a transaction
-func (r *ExampleRepository) UpdateExampleList(ctx context.Context, examplesList []*model.ExampleModel, originalUpdateTSList []float64) error {
-	if len(examplesList) == 0 {
+func (r *ExampleRepository) UpdateExampleList(ctx context.Context, exampleList []*model.ExampleModel, originalUpdateTSList []float64) error {
+	if len(exampleList) == 0 {
 		return nil
 	}
 
@@ -253,7 +253,7 @@ func (r *ExampleRepository) UpdateExampleList(ctx context.Context, examplesList 
 		    update_ts = $6, update_user_id = $7
 		WHERE example_id = $8 AND security_context = $9 AND update_ts = $10 AND delete_user_id IS NULL`
 
-	for i, example := range examplesList {
+	for i, example := range exampleList {
 		result, err := tx.Exec(ctx, query,
 			example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
 			example.UpdateTS, example.UpdateUserID, example.ExampleID, example.SecurityContext, originalUpdateTSList[i],
