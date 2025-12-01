@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -16,13 +15,6 @@ import (
 type ExampleRepository struct {
 	db *pgxpool.Pool
 }
-
-var (
-	ErrNotFound          = errors.New("not found")
-	ErrConflict          = errors.New("conflict")
-	ErrDeleted           = errors.New("deleted")
-	ErrExpectationFailed = errors.New("expectation failed")
-)
 
 // NewExampleRepository creates a new example repository
 func NewExampleRepository(db *pgxpool.Pool) *ExampleRepository {
@@ -128,18 +120,20 @@ func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, se
 	}
 
 	if result.RowsAffected() == 0 {
-		// Check if the example exists
-		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM example WHERE example_id = $1 AND security_context = $2 AND delete_user_id IS NULL)`
-		err := r.db.QueryRow(ctx, checkQuery, exampleID, securityContext).Scan(&exists)
+		var deleteUserID *int
+		checkQuery := `SELECT delete_user_id FROM example WHERE example_id = $1 AND security_context = $2`
+		err := r.db.QueryRow(ctx, checkQuery, exampleID, securityContext).Scan(&deleteUserID)
 		if err != nil {
-			return 0, fmt.Errorf("failed to check example existence: %w", err)
+			if err == pgx.ErrNoRows {
+				return 0, ErrNotFound
+			}
+			return 0, fmt.Errorf("failed to assess example state: %w", err)
 		}
 
-		if exists {
-			return 0, ErrConflict
+		if deleteUserID != nil {
+			return 0, ErrDeleted
 		}
-		return 0, ErrNotFound
+		return 0, ErrConflict
 	}
 
 	return exampleID, nil

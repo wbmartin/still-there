@@ -256,6 +256,8 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "Example was modified by another user", logger)
 		case errors.Is(err, repository.ErrNotFound):
 			writeError(w, http.StatusNotFound, "Example not found", logger)
+		case errors.Is(err, repository.ErrDeleted):
+			writeError(w, http.StatusGone, "Example has been deleted", logger)
 		default:
 			logger.Error("DLF0", "Failed to delete example: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Failed to delete example", logger)
