@@ -1,27 +1,37 @@
 import { apiSvc } from "./api-svc";
 
-interface AuthPackage {
-  loginSuccess: boolean;
-  csrfToken: string;
-  securityContext: number;
+interface AuthResponse {
   user: {
-    username: string;
+    userName: string;
+    securityContext: number;
     grantList: string[];
   };
+  csrfToken: string;
 }
 
 export interface AuthRequest {
-  username: string;
-  passwd: string;
+  userName: string;
+  password: string;
 }
 
 export const authApi = apiSvc.injectEndpoints({
   endpoints: (build) => ({
-    login: build.mutation<AuthPackage, AuthRequest>({
+    login: build.mutation<AuthResponse, AuthRequest>({
       query: (body) => ({
         url: "/auth",
         method: "POST",
-        body,
+        body: {
+          user_name: body.userName,
+          password: body.password,
+        },
+      }),
+      transformResponse: (response: any) => ({
+        user: {
+          userName: response.user.user_name,
+          securityContext: response.user.security_context,
+          grantList: Object.values(response.user.user_grant_short_code_list || {}).flat(),
+        },
+        csrfToken: response.csrf_token,
       }),
     }),
     logout: build.query<AuthPackage, void>({

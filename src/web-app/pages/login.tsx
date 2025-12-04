@@ -13,8 +13,8 @@ function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const result = await login({ username, passwd: password }).unwrap();
-      if (result.loginSuccess) {
+      const result = await login({ userName: username, password }).unwrap();
+      if (result.user) {
         navigate("/dashboard");
       }
     } catch {

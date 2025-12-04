@@ -179,28 +179,39 @@ func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, se
 	return exampleID, nil
 }
 
-// GetExampleList retrieves multiple examples by IDs and security context
+// GetExampleList retrieves multiple examples by IDs and security context, or all if idList is empty
 func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, securityContext int) ([]*model.ExampleModel, error) {
+	var query string
+	var argList []interface{}
+
 	if len(idList) == 0 {
-		return []*model.ExampleModel{}, nil
-	}
+		// Get all
+		query = `
+			SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
+			       security_context, create_ts, create_user_id, update_ts, update_user_id,
+			       delete_ts, delete_user_id
+			FROM example
+			WHERE security_context = $1 AND delete_user_id IS NULL
+			ORDER BY example_id`
+		argList = []interface{}{securityContext}
+	} else {
+		// Build IN clause
+		placeholderList := make([]string, len(idList))
+		argList = make([]interface{}, len(idList)+1)
+		for i, id := range idList {
+			placeholderList[i] = fmt.Sprintf("$%d", i+1)
+			argList[i] = id
+		}
+		argList[len(idList)] = securityContext
 
-	// Build IN clause
-	placeholderList := make([]string, len(idList))
-	argList := make([]interface{}, len(idList)+1)
-	for i, id := range idList {
-		placeholderList[i] = fmt.Sprintf("$%d", i+1)
-		argList[i] = id
+		query = fmt.Sprintf(`
+			SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
+			       security_context, create_ts, create_user_id, update_ts, update_user_id,
+			       delete_ts, delete_user_id
+			FROM example
+			WHERE example_id IN (%s) AND security_context = $%d AND delete_user_id IS NULL`,
+			strings.Join(placeholderList, ","), len(idList)+1)
 	}
-	argList[len(idList)] = securityContext
-
-	query := fmt.Sprintf(`
-		SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
-		       security_context, create_ts, create_user_id, update_ts, update_user_id,
-		       delete_ts, delete_user_id
-		FROM example
-		WHERE example_id IN (%s) AND security_context = $%d AND delete_user_id IS NULL`,
-		strings.Join(placeholderList, ","), len(idList)+1)
 
 	var rowList pgx.Rows
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {

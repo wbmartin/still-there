@@ -15,21 +15,21 @@ function ExampleEditPage() {
   const [updateExample] = useUpdateExampleMutation();
 
   const [formData, setFormData] = useState({
-    example_text: "",
-    example_int: "",
-    example_float: "",
-    example_int_array: "",
-    example_float_array: "",
+    exampleText: "",
+    exampleInt: "",
+    exampleFloat: "",
+    exampleIntArray: "",
+    exampleFloatArray: "",
   });
 
   useEffect(() => {
     if (example && !isNew) {
       setFormData({
-        example_text: example.example_text,
-        example_int: example.example_int?.toString() || "",
-        example_float: example.example_float?.toString() || "",
-        example_int_array: example.example_int_array?.join(", ") || "",
-        example_float_array: example.example_float_array?.join(", ") || "",
+        exampleText: example.exampleText,
+        exampleInt: example.exampleInt?.toString() || "",
+        exampleFloat: example.exampleFloat?.toString() || "",
+        exampleIntArray: example.exampleIntArray?.join(", ") || "",
+        exampleFloatArray: example.exampleFloatArray?.join(", ") || "",
       });
     }
   }, [example, isNew]);
@@ -37,11 +37,11 @@ function ExampleEditPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const data = {
-      example_text: formData.example_text,
-      example_int: formData.example_int ? Number(formData.example_int) : undefined,
-      example_float: formData.example_float ? Number(formData.example_float) : undefined,
-      example_int_array: formData.example_int_array ? formData.example_int_array.split(",").map(Number) : undefined,
-      example_float_array: formData.example_float_array ? formData.example_float_array.split(",").map(Number) : undefined,
+      exampleText: formData.exampleText,
+      exampleInt: formData.exampleInt ? Number(formData.exampleInt) : undefined,
+      exampleFloat: formData.exampleFloat ? Number(formData.exampleFloat) : undefined,
+      exampleIntArray: formData.exampleIntArray ? formData.exampleIntArray.split(",").map(Number) : undefined,
+      exampleFloatArray: formData.exampleFloatArray ? formData.exampleFloatArray.split(",").map(Number) : undefined,
     };
 
     try {
@@ -66,33 +66,33 @@ function ExampleEditPage() {
       <form onSubmit={handleSubmit}>
         <TextInput
           label="Text"
-          value={formData.example_text}
-          onChange={(e) => setFormData({ ...formData, example_text: e.target.value })}
+          value={formData.exampleText}
+          onChange={(e) => setFormData({ ...formData, exampleText: e.target.value })}
           required
           mb="md"
         />
         <NumberInput
           label="Int"
-          value={formData.example_int}
-          onChange={(value) => setFormData({ ...formData, example_int: value?.toString() || "" })}
+          value={formData.exampleInt}
+          onChange={(value) => setFormData({ ...formData, exampleInt: value?.toString() || "" })}
           mb="md"
         />
         <NumberInput
           label="Float"
-          value={formData.example_float}
-          onChange={(value) => setFormData({ ...formData, example_float: value?.toString() || "" })}
+          value={formData.exampleFloat}
+          onChange={(value) => setFormData({ ...formData, exampleFloat: value?.toString() || "" })}
           mb="md"
         />
         <Textarea
           label="Int Array (comma-separated)"
-          value={formData.example_int_array}
-          onChange={(e) => setFormData({ ...formData, example_int_array: e.target.value })}
+          value={formData.exampleIntArray}
+          onChange={(e) => setFormData({ ...formData, exampleIntArray: e.target.value })}
           mb="md"
         />
         <Textarea
           label="Float Array (comma-separated)"
-          value={formData.example_float_array}
-          onChange={(e) => setFormData({ ...formData, example_float_array: e.target.value })}
+          value={formData.exampleFloatArray}
+          onChange={(e) => setFormData({ ...formData, exampleFloatArray: e.target.value })}
           mb="md"
         />
         <Group>

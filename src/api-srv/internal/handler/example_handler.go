@@ -283,17 +283,13 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	logger.Info("DLD0", "Example deletion completed")
 }
 
-// GetExampleList handles GET /exampleList?exampleIdList={comma-separated}
+// GetExampleList handles GET /exampleList?exampleIdList={comma-separated} (optional, if empty returns all)
 func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
 	username := "PreAuth"
 
 	// Parse query parameters
 	exampleIdListStr := r.URL.Query().Get("exampleIdList")
-	if exampleIdListStr == "" {
-		writeError(w, http.StatusBadRequest, "exampleIdList parameter is required", logger, username)
-		return
-	}
 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
@@ -312,16 +308,20 @@ func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) 
 		username = jwtClaims.Subject
 	}
 
-	idStrList := strings.Split(exampleIdListStr, ",")
-	idList := make([]int, 0, len(idStrList))
-	for _, idStr := range idStrList {
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid id in exampleIdList parameter", logger, username)
-			return
+	var idList []int
+	if exampleIdListStr != "" {
+		idStrList := strings.Split(exampleIdListStr, ",")
+		idList = make([]int, 0, len(idStrList))
+		for _, idStr := range idStrList {
+			id, err := strconv.Atoi(idStr)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "Invalid id in exampleIdList parameter", logger, username)
+				return
+			}
+			idList = append(idList, id)
 		}
-		idList = append(idList, id)
 	}
+	// If idList is empty, GetExampleList returns all
 	examples, err := h.exampleRepo.GetExampleList(r.Context(), idList, jwtClaims.SecurityContext)
 	if err != nil {
 		logger.Error("LIF0", "Failed to get examples: "+err.Error())
