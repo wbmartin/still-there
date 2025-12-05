@@ -5,7 +5,7 @@ import { useGetExampleQuery, useCreateExampleMutation, useUpdateExampleMutation 
 import useUnauthRedirect from "../hooks/unauth-redirect";
 
 function ExampleEditPage() {
-  useUnauthRedirect(`/examples/${id}`);
+  useUnauthRedirect(`/example/${id}`);
   const { id } = useParams<{ id: string }>();
   const isNew = id === "new";
   const navigate = useNavigate();
@@ -50,7 +50,7 @@ function ExampleEditPage() {
       } else {
         await updateExample({ id: Number(id), data }).unwrap();
       }
-      navigate("/examples");
+      navigate("/exampleList");
     } catch (error) {
       console.error("Error saving example:", error);
     }
@@ -97,7 +97,7 @@ function ExampleEditPage() {
         />
         <Group>
           <Button type="submit">Save</Button>
-          <Button variant="outline" onClick={() => navigate("/examples")}>
+          <Button variant="outline" onClick={() => navigate("/exampleList")}>
             Cancel
           </Button>
         </Group>

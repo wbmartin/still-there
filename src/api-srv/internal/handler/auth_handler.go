@@ -226,6 +226,69 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 	}
 }
 
+// RefreshHandler handles session refresh
+func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		appServices.Logger.Info("RFST", "Refresh request started")
+
+		// Security checks
+		sec := app_lib.NewSecurityHelper(w, r, appServices.KV, appServices.Config, appServices.Logger)
+		sec.CheckJWT()
+		sec.CheckRateLimit()
+		sec.CheckUserBlocked()
+		sec.SkipCSRF()          // CSRF not required for read-only refresh
+		sec.SkipAuthorization() // Authorization not required for token refresh
+
+		if !sec.CheckAllChecksComplete() {
+			return
+		}
+
+		jwtClaims := sec.GetClaims()
+
+		// Get user
+		user, err := userRepo.GetUserByUserName(r.Context(), jwtClaims.Subject)
+		if err != nil {
+			appServices.Logger.Error("USLK", "User lookup failed during refresh for user: "+jwtClaims.Subject+", error: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, jwtClaims.Subject)
+			return
+		}
+
+		// Get user grants
+		grantList, err := userRepo.GetUserGrantList(r.Context(), user.UserGroupMembershipList)
+		if err != nil {
+			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, jwtClaims.Subject)
+			return
+		}
+
+		// Convert grants map to short codes
+		grantShortCodeList := make(map[int][]string)
+		for securityContext, grantIDs := range grantList {
+			var shortCodeList []string
+			for _, grantID := range grantIDs {
+				if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
+					shortCodeList = append(shortCodeList, shortCode)
+				}
+			}
+			grantShortCodeList[securityContext] = shortCodeList
+		}
+
+		response := model.Auth2ResponseModel{
+			AppUserID:              user.AppUserID,
+			UserName:               user.UserName,
+			FirstName:              user.FirstName,
+			LastName:               user.LastName,
+			SecurityContext:        user.SecurityContext,
+			UserGrantShortCodeList: grantShortCodeList,
+		}
+
+		csrfToken := jwtClaims.SessionID[len(jwtClaims.SessionID)-3:]
+		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
+		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+		appServices.Logger.Info("RFSC", "Refresh successful for user: "+user.UserName)
+	}
+}
+
 // LogoffHandler handles user logoff
 func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

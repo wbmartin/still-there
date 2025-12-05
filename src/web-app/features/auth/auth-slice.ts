@@ -30,12 +30,12 @@ const authSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addMatcher(authApi.endpoints.login.matchFulfilled, (state, action) => {
-        if (action.payload.loginSuccess) {
-          state.isAuthenticated = action.payload.loginSuccess;
+        if (action.payload.user) {
+          state.isAuthenticated = true;
           state.csrfToken = action.payload.csrfToken;
           state.grantList = action.payload.user.grantList || [];
-          state.username = action.payload.user.username || "";
-          state.securityContext = action.payload.securityContext || 0;
+          state.username = action.payload.user.userName || "";
+          state.securityContext = action.payload.user.securityContext || 0;
           localStorage.setItem("csrfToken", action.payload.csrfToken);
         } else {
           state.isAuthenticated = false;
@@ -45,6 +45,19 @@ const authSlice = createSlice({
             message: "Invalid credentials",
             color: "red",
           });
+        }
+      })
+      .addMatcher(authApi.endpoints.refresh.matchFulfilled, (state, action) => {
+        if (action.payload.user) {
+          state.isAuthenticated = true;
+          state.csrfToken = action.payload.csrfToken;
+          state.grantList = action.payload.user.grantList || [];
+          state.username = action.payload.user.userName || "";
+          state.securityContext = action.payload.user.securityContext || 0;
+          localStorage.setItem("csrfToken", action.payload.csrfToken);
+        } else {
+          state.isAuthenticated = false;
+          state.grantList = [];
         }
       })
       .addMatcher(authApi.endpoints.logout.matchFulfilled, (state) => {

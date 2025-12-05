@@ -21,14 +21,14 @@ const router = createBrowserRouter([
         path: 'dashboard',
         element: <Dashboard />,
       },
-      {
-        path: 'examples',
-        element: <ExampleListPage />,
-      },
-      {
-        path: 'examples/:id',
-        element: <ExampleEditPage />,
-      },
+       {
+         path: 'exampleList',
+         element: <ExampleListPage />,
+       },
+       {
+         path: 'example/:id',
+         element: <ExampleEditPage />,
+       },
     ],
   },
 ])

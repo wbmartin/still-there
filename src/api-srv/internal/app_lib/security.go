@@ -144,7 +144,7 @@ func (sh *SecurityHelper) CheckRateLimit() *SecurityHelper {
 
 	count, err := sh.kv.Incr(shrmplKey, "1min")
 	if err != nil {
-		sh.logger.Error("RLF0", "Rate limit check failed ("+shrmplKey+") "+err.Error())
+		sh.logger.Info("RLF0", "Rate limit check encountered KV error, failing open ("+shrmplKey+") "+err.Error())
 		// Fail open on shrmpl-kv errors
 		return sh
 	}

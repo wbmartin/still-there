@@ -34,11 +34,10 @@ const transformExample = (e: any): Example => ({
 
 export const exampleApi = apiSvc.injectEndpoints({
   endpoints: (build) => ({
-    getExamples: build.query<{ examples: Example[]; count: number }, void>({
+    getExamples: build.query<{ examples: Example[] }, void>({
       query: () => "/exampleList",
       transformResponse: (response: any) => ({
-        examples: response.data.examples.map(transformExample),
-        count: response.data.count,
+        examples: response.data.map(transformExample),
       }),
     }),
     getExample: build.query<Example, number>({

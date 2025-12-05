@@ -73,6 +73,7 @@ func main() {
 	healthHandler := handler.HealthHandler(appServices)
 	authHandler := handler.AuthHandler(appServices, userRepo, userGroupRepo)
 	auth2Handler := handler.Auth2Handler(appServices, userRepo, userGroupRepo)
+	refreshHandler := handler.RefreshHandler(appServices, userRepo, userGroupRepo)
 	logoffHandler := handler.LogoffHandler(appServices)
 
 	exampleHandler := handler.NewExampleHandler(appServices, exampleRepo)
@@ -86,6 +87,7 @@ func main() {
 	// Authentication
 	mux.HandleFunc("POST /auth", authHandler)
 	mux.HandleFunc("POST /auth2", auth2Handler)
+	mux.HandleFunc("GET /refresh", refreshHandler)
 	mux.HandleFunc("POST /logoff", logoffHandler)
 
 	// Example CRUD
@@ -94,7 +96,7 @@ func main() {
 	mux.HandleFunc("PUT /example", exampleHandler.UpdateExample)
 	mux.HandleFunc("DELETE /example", exampleHandler.DeleteExample)
 
-	// Example batch operations
+	// Example list (all or by IDs)
 	mux.HandleFunc("GET /exampleList", exampleHandler.GetExampleList)
 	mux.HandleFunc("POST /exampleList", exampleHandler.CreateExampleList)
 	mux.HandleFunc("PUT /exampleList", exampleHandler.UpdateExampleList)

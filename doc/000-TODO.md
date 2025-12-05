@@ -1,8 +1,18 @@
 # React App
-
+- add admin page
+ - add user admin page
+ - add group admin page
+- Add left nav
+  - add logout nav option
+  - add admin nav option
+  - add example List Nav option
+  
+- add Example List page
+- add Example Edit Page
+  
 
 # API Server
-* add a session refresh that can be called to get the user's javascript side data (CSRF)
+
 * TOTP implementation, open to do in auth_handler.go
 
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,7 @@ type ThisAppKVInterface interface {
 type KV struct {
 	shrmplKVClient *ShrmplKVClient
 	hostPort       string
+	mu             sync.Mutex
 }
 
 // parseHostPort parses a "host:port" string into separate host and port components
@@ -65,6 +67,8 @@ func NewKV(config *Config) ThisAppKVInterface {
 
 // tryReconnect attempts to reconnect to the KV server
 func (kv *KV) tryReconnect() {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
 	host, portStr, err := parseHostPort(kv.hostPort)
 	if err != nil {
 		return
@@ -81,16 +85,26 @@ func (kv *KV) tryReconnect() {
 
 // Get retrieves a value from the key-value store
 func (kv *KV) Get(key string) (string, error) {
+	kv.mu.Lock()
 	if kv.shrmplKVClient == nil {
+		kv.mu.Unlock()
 		kv.tryReconnect()
+		kv.mu.Lock()
 	}
 	if kv.shrmplKVClient == nil { //try again after reconnect
+		kv.mu.Unlock()
 		return "", fmt.Errorf("key-value store not available")
 	}
-	val, err := kv.shrmplKVClient.Get(key)
+	client := kv.shrmplKVClient
+	kv.mu.Unlock()
+	val, err := client.Get(key)
 	if err != nil {
-		kv.shrmplKVClient.Close()
-		kv.shrmplKVClient = nil
+		kv.mu.Lock()
+		if kv.shrmplKVClient == client {
+			kv.shrmplKVClient.Close()
+			kv.shrmplKVClient = nil
+		}
+		kv.mu.Unlock()
 		return "", err
 	}
 	return val, nil
@@ -98,16 +112,26 @@ func (kv *KV) Get(key string) (string, error) {
 
 // Set stores a key-value pair with optional TTL
 func (kv *KV) Set(key, value, ttl string) error {
+	kv.mu.Lock()
 	if kv.shrmplKVClient == nil {
+		kv.mu.Unlock()
 		kv.tryReconnect()
+		kv.mu.Lock()
 	}
 	if kv.shrmplKVClient == nil { //try again after reconnect
+		kv.mu.Unlock()
 		return fmt.Errorf("key-value store not available")
 	}
-	err := kv.shrmplKVClient.Set(key, value, ttl)
+	client := kv.shrmplKVClient
+	kv.mu.Unlock()
+	err := client.Set(key, value, ttl)
 	if err != nil {
-		kv.shrmplKVClient.Close()
-		kv.shrmplKVClient = nil
+		kv.mu.Lock()
+		if kv.shrmplKVClient == client {
+			kv.shrmplKVClient.Close()
+			kv.shrmplKVClient = nil
+		}
+		kv.mu.Unlock()
 		return err
 	}
 	return nil
@@ -115,16 +139,26 @@ func (kv *KV) Set(key, value, ttl string) error {
 
 // Incr increments a counter and returns the new value
 func (kv *KV) Incr(key string, ttl string) (int, error) {
+	kv.mu.Lock()
 	if kv.shrmplKVClient == nil {
+		kv.mu.Unlock()
 		kv.tryReconnect()
+		kv.mu.Lock()
 	}
 	if kv.shrmplKVClient == nil { //try again after reconnect
+		kv.mu.Unlock()
 		return 0, fmt.Errorf("key-value store not available")
 	}
-	val, err := kv.shrmplKVClient.Incr(key, ttl)
+	client := kv.shrmplKVClient
+	kv.mu.Unlock()
+	val, err := client.Incr(key, ttl)
 	if err != nil {
-		kv.shrmplKVClient.Close()
-		kv.shrmplKVClient = nil
+		kv.mu.Lock()
+		if kv.shrmplKVClient == client {
+			kv.shrmplKVClient.Close()
+			kv.shrmplKVClient = nil
+		}
+		kv.mu.Unlock()
 		return 0, err
 	}
 	return val, nil
@@ -250,16 +284,20 @@ func (c *ShrmplKVClient) Ping() error {
 
 // Close closes the connection to shrmpl-kv
 func (c *ShrmplKVClient) Close() {
-	if c.conn != nil {
-		c.conn.Close()
-		c.conn = nil
+	if c == nil || c.conn == nil {
+		return
 	}
+	c.conn.Close()
+	c.conn = nil
 }
 
 // Close closes the underlying KV client connection
 func (kv *KV) Close() {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
 	if kv.shrmplKVClient != nil {
 		kv.shrmplKVClient.Close()
+		kv.shrmplKVClient = nil
 	}
 }
 
@@ -275,20 +313,22 @@ func (c *ShrmplKVClient) sendCommand(cmd string) (string, error) {
 	}
 
 	reader := bufio.NewReader(c.conn)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return "", err
-	}
+	for {
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
 
-	response = strings.TrimSpace(response)
+		response = strings.TrimSpace(response)
 
-	// Filter out heartbeats
-	if response == "UPONG" {
-		return "", fmt.Errorf("heartbeat received")
-	}
-	if response == "TERM" {
-		return "", fmt.Errorf("server shutting down")
-	}
+		// Skip heartbeats
+		if response == "UPONG" {
+			continue
+		}
+		if response == "TERM" {
+			return "", fmt.Errorf("server shutting down")
+		}
 
-	return response, nil
+		return response, nil
+	}
 }

@@ -4,7 +4,7 @@ import { useGetExamplesQuery } from "../services/example-svc";
 import useUnauthRedirect from "../hooks/unauth-redirect";
 
 function ExampleListPage() {
-  useUnauthRedirect("/examples");
+  useUnauthRedirect("/exampleList");
   const { data, isLoading } = useGetExamplesQuery();
   const navigate = useNavigate();
 
@@ -16,7 +16,7 @@ function ExampleListPage() {
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
         <Title order={1}>Examples</Title>
-        <Button onClick={() => navigate("/examples/new")}>Add Example</Button>
+        <Button onClick={() => navigate("/example/new")}>Add Example</Button>
       </Group>
       <Table>
         <Table.Thead>
@@ -30,15 +30,15 @@ function ExampleListPage() {
         </Table.Thead>
         <Table.Tbody>
           {examples.map((example) => (
-            <Table.Tr key={example.example_id}>
-              <Table.Td>{example.example_id}</Table.Td>
-              <Table.Td>{example.example_text}</Table.Td>
-              <Table.Td>{example.example_int || ""}</Table.Td>
-              <Table.Td>{example.example_float || ""}</Table.Td>
+            <Table.Tr key={example.exampleId}>
+              <Table.Td>{example.exampleId}</Table.Td>
+              <Table.Td>{example.exampleText}</Table.Td>
+              <Table.Td>{example.exampleInt || ""}</Table.Td>
+              <Table.Td>{example.exampleFloat || ""}</Table.Td>
               <Table.Td>
                 <Button
                   size="xs"
-                  onClick={() => navigate(`/examples/${example.example_id}`)}
+                  onClick={() => navigate(`/example/${example.exampleId}`)}
                 >
                   Edit
                 </Button>

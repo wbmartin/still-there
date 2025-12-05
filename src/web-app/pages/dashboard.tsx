@@ -12,7 +12,7 @@ function Dashboard() {
         Dashboard
       </Title>
       <Card shadow="sm" p="lg">
-        <Text size="lg">Total Examples: {isLoading ? "Loading..." : data?.count || 0}</Text>
+        <Text size="lg">Total Examples: {isLoading ? "Loading..." : data?.examples?.length || 0}</Text>
       </Card>
     </div>
   );
