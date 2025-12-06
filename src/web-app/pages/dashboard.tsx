@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import { Title, Text, Card } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
+import { useAuthStore } from "../stores/auth-store";
 import useUnauthRedirect from "../hooks/unauth-redirect";
 
 function Dashboard() {
+  const { isAuthenticated } = useAuthStore();
   useUnauthRedirect("/dashboard");
   const { examples, loading, fetchExamples } = useExamplesStore();
 

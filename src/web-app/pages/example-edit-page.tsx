@@ -3,13 +3,17 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { TextInput, NumberInput, Textarea, Button, Title, Group } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useExamplesStore } from "../stores/examples-store";
+import { useAuthStore } from "../stores/auth-store";
 import useUnauthRedirect from "../hooks/unauth-redirect";
 
 function ExampleEditPage() {
+  const { isAuthenticated } = useAuthStore();
   const [searchParams] = useSearchParams();
   const id = searchParams.get('exampleId') || '';
   const isNew = id === "new";
   useUnauthRedirect(`/example?exampleId=${id}`);
+
+
   const { examples, createExample, updateExample } = useExamplesStore();
   const navigate = useNavigate();
 

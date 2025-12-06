@@ -1,22 +1,20 @@
-import { useAppSelector } from "../hooks";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useRefreshQuery } from "../services/auth-svc";
+import { useAuthStore } from "../stores/auth-store";
 
 const useUnauthRedirect = (postAuthTarget: string) => {
-  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  const { isAuthenticated, refresh } = useAuthStore();
   const navigate = useNavigate();
-  const { data, isLoading } = useRefreshQuery(undefined, { skip: isAuthenticated });
 
   useEffect(() => {
-    if (!isAuthenticated && !isLoading) {
-      if (data?.user) {
-        // Refresh succeeded, state updated by slice
-      } else {
-        navigate("/login");
-      }
+    if (!isAuthenticated) {
+      refresh().then(() => {
+        if (!useAuthStore.getState().isAuthenticated) {
+          navigate("/login");
+        }
+      });
     }
-  }, [isAuthenticated, navigate, postAuthTarget, data, isLoading]);
+  }, [isAuthenticated, navigate, postAuthTarget, refresh]);
 };
 
 export default useUnauthRedirect;

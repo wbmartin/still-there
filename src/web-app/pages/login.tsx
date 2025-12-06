@@ -1,26 +1,24 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { TextInput, PasswordInput, Button, Paper, Title, Container } from "@mantine/core";
-import { useLoginMutation } from "../services/auth-svc";
+import { useAuthStore } from "../stores/auth-store";
 import { notifications } from "@mantine/notifications";
 
 function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [login, { isLoading }] = useLoginMutation();
+  const { login, loading, error } = useAuthStore();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const result = await login({ userName: username, password }).unwrap();
-      if (result.user) {
-        navigate("/dashboard");
-      }
-    } catch {
+    await login(username, password);
+    if (useAuthStore.getState().isAuthenticated) {
+      navigate("/dashboard");
+    } else {
       notifications.show({
         title: "Login Failed",
-        message: "An error occurred",
+        message: error || "Invalid credentials",
         color: "red",
       });
     }
@@ -47,7 +45,7 @@ function Login() {
             required
             mb="md"
           />
-          <Button type="submit" fullWidth loading={isLoading}>
+          <Button type="submit" fullWidth loading={loading}>
             Login
           </Button>
         </form>

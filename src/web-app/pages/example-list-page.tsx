@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Table, Button, Title, Group, Pagination } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
+import { useAuthStore } from "../stores/auth-store";
 import { useExamplesSync } from "../hooks/use-examples-sync";
 import useUnauthRedirect from "../hooks/unauth-redirect";
 
 function ExampleListPage() {
+  const { isAuthenticated } = useAuthStore();
   useUnauthRedirect("/exampleList");
   const { examples, loading, fetchExamples } = useExamplesStore();
   const navigate = useNavigate();
@@ -17,6 +19,8 @@ function ExampleListPage() {
   useEffect(() => {
     fetchExamples();
   }, [fetchExamples]);
+
+  if (loading) return <div>Loading...</div>;
 
   if (loading) return <div>Loading...</div>;
 

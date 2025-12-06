@@ -3,6 +3,7 @@ import Login from './pages/login'
 import Dashboard from './pages/dashboard'
 import ExampleListPage from './pages/example-list-page'
 import ExampleEditPage from './pages/example-edit-page'
+import { useAuthStore } from './stores/auth-store'
 
 const router = createBrowserRouter([
   {
@@ -34,14 +35,23 @@ const router = createBrowserRouter([
 ])
 
 function AppLayout() {
+  const { logout, isAuthenticated } = useAuthStore();
+
+  const handleLogout = () => {
+    logout();
+  };
+
   return (
     <div style={{ display: 'flex' }}>
-      <nav style={{ width: '200px', padding: '1rem', borderRight: '1px solid #ccc' }}>
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          <li><Link to="/dashboard">Dashboard</Link></li>
-          <li><Link to="/exampleList">Examples</Link></li>
-        </ul>
-      </nav>
+      {isAuthenticated && (
+        <nav style={{ width: '200px', padding: '1rem', borderRight: '1px solid #ccc' }}>
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            <li><Link to="/dashboard">Dashboard</Link></li>
+            <li><Link to="/exampleList">Examples</Link></li>
+            <li><button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer', textDecoration: 'underline' }}>Logout</button></li>
+          </ul>
+        </nav>
+      )}
       <main style={{ flex: 1, padding: '1rem' }}>
         <Outlet />
       </main>
