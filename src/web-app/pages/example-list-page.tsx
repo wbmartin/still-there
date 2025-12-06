@@ -16,7 +16,7 @@ function ExampleListPage() {
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
         <Title order={1}>Examples</Title>
-        <Button onClick={() => navigate("/example/new")}>Add Example</Button>
+         <Button onClick={() => navigate("/example?example_id=new")}>Add Example</Button>
       </Group>
       <Table>
         <Table.Thead>
@@ -36,10 +36,10 @@ function ExampleListPage() {
               <Table.Td>{example.exampleInt || ""}</Table.Td>
               <Table.Td>{example.exampleFloat || ""}</Table.Td>
               <Table.Td>
-                <Button
-                  size="xs"
-                  onClick={() => navigate(`/example/${example.exampleId}`)}
-                >
+                 <Button
+                   size="xs"
+                   onClick={() => navigate(`/example?example_id=${example.exampleId}`)}
+                 >
                   Edit
                 </Button>
               </Table.Td>

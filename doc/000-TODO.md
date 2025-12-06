@@ -7,8 +7,7 @@
   - add admin nav option
   - add example List Nav option
   
-- add Example List page
-- add Example Edit Page
+ 
   
 
 # API Server

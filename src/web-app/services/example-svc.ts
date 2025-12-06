@@ -33,15 +33,18 @@ const transformExample = (e: any): Example => ({
 });
 
 export const exampleApi = apiSvc.injectEndpoints({
+  tagTypes: ["ExampleList", "Example"],
   endpoints: (build) => ({
     getExamples: build.query<{ examples: Example[] }, void>({
       query: () => "/exampleList",
+      providesTags: ["ExampleList"],
       transformResponse: (response: any) => ({
         examples: response.data.map(transformExample),
       }),
     }),
     getExample: build.query<Example, number>({
       query: (id) => `/example?exampleId=${id}`,
+      providesTags: ["Example"],
       transformResponse: (response: any) => transformExample(response.data),
     }),
     createExample: build.mutation<Example, Partial<Example>>({
@@ -53,9 +56,10 @@ export const exampleApi = apiSvc.injectEndpoints({
           example_int: body.exampleInt,
           example_float: body.exampleFloat,
           example_int_array: body.exampleIntArray,
-          example_float_array: body.exampleFloatArray,
+          example_float_array: data.exampleFloatArray,
         },
       }),
+      invalidatesTags: ["ExampleList"],
       transformResponse: (response: any) => transformExample(response.data),
     }),
     updateExample: build.mutation<Example, { id: number; data: Partial<Example> }>({
@@ -72,6 +76,7 @@ export const exampleApi = apiSvc.injectEndpoints({
           update_ts: data.updateTs,
         },
       }),
+      invalidatesTags: ["ExampleList", "Example"],
       transformResponse: (response: any) => transformExample(response.data),
     }),
     deleteExample: build.mutation<void, { id: number; updateTs: number }>({
@@ -79,6 +84,7 @@ export const exampleApi = apiSvc.injectEndpoints({
         url: `/example?exampleId=${id}&updateTs=${updateTs}`,
         method: "DELETE",
       }),
+      invalidatesTags: ["ExampleList", "Example"],
     }),
   }),
 });

@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { TextInput, NumberInput, Textarea, Button, Title, Group } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useGetExampleQuery, useCreateExampleMutation, useUpdateExampleMutation } from "../services/example-svc";
 import useUnauthRedirect from "../hooks/unauth-redirect";
 
 function ExampleEditPage() {
-  useUnauthRedirect(`/example/${id}`);
-  const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const id = searchParams.get('example_id') || '';
   const isNew = id === "new";
+  useUnauthRedirect(`/example?example_id=${id}`);
   const navigate = useNavigate();
 
   const { data: example, isLoading } = useGetExampleQuery(Number(id), { skip: isNew });
@@ -20,6 +22,7 @@ function ExampleEditPage() {
     exampleFloat: "",
     exampleIntArray: "",
     exampleFloatArray: "",
+    updateTs: "",
   });
 
   useEffect(() => {
@@ -30,6 +33,7 @@ function ExampleEditPage() {
         exampleFloat: example.exampleFloat?.toString() || "",
         exampleIntArray: example.exampleIntArray?.join(", ") || "",
         exampleFloatArray: example.exampleFloatArray?.join(", ") || "",
+        updateTs: example.updateTs.toString(),
       });
     }
   }, [example, isNew]);
@@ -42,17 +46,39 @@ function ExampleEditPage() {
       exampleFloat: formData.exampleFloat ? Number(formData.exampleFloat) : undefined,
       exampleIntArray: formData.exampleIntArray ? formData.exampleIntArray.split(",").map(Number) : undefined,
       exampleFloatArray: formData.exampleFloatArray ? formData.exampleFloatArray.split(",").map(Number) : undefined,
+      updateTs: !isNew ? Number(formData.updateTs) : undefined,
     };
 
     try {
       if (isNew) {
         await createExample(data).unwrap();
+        notifications.show({
+          title: "Success",
+          message: "Example created successfully",
+          color: "green",
+          autoClose: 3000,
+          withCloseButton: false,
+        });
       } else {
         await updateExample({ id: Number(id), data }).unwrap();
+        notifications.show({
+          title: "Success",
+          message: "Example updated successfully",
+          color: "green",
+          autoClose: 3000,
+          withCloseButton: false,
+        });
       }
       navigate("/exampleList");
     } catch (error) {
       console.error("Error saving example:", error);
+      notifications.show({
+        title: "Error",
+        message: "Failed to save example",
+        color: "red",
+        autoClose: 5000,
+        withCloseButton: true,
+      });
     }
   };
 

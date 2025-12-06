@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider, Outlet } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Outlet, Link } from 'react-router-dom'
 import Login from './pages/login'
 import Dashboard from './pages/dashboard'
 import ExampleListPage from './pages/example-list-page'
@@ -25,16 +25,28 @@ const router = createBrowserRouter([
          path: 'exampleList',
          element: <ExampleListPage />,
        },
-       {
-         path: 'example/:id',
-         element: <ExampleEditPage />,
-       },
+        {
+          path: 'example',
+          element: <ExampleEditPage />,
+        },
     ],
   },
 ])
 
 function AppLayout() {
-  return <Outlet />
+  return (
+    <div style={{ display: 'flex' }}>
+      <nav style={{ width: '200px', padding: '1rem', borderRight: '1px solid #ccc' }}>
+        <ul style={{ listStyle: 'none', padding: 0 }}>
+          <li><Link to="/dashboard">Dashboard</Link></li>
+          <li><Link to="/exampleList">Examples</Link></li>
+        </ul>
+      </nav>
+      <main style={{ flex: 1, padding: '1rem' }}>
+        <Outlet />
+      </main>
+    </div>
+  )
 }
 
 function App() {

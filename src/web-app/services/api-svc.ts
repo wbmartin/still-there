@@ -5,6 +5,13 @@ export const apiSvc = createApi({
   baseQuery: fetchBaseQuery({
     baseUrl: "/api",
     credentials: "include", // Include cookies for JWT
+    prepareHeaders: (headers) => {
+      const csrfToken = localStorage.getItem("csrfToken");
+      if (csrfToken) {
+        headers.set("X-CSRF-Token", csrfToken);
+      }
+      return headers;
+    },
   }),
   endpoints: () => ({}),
 });
