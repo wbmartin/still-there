@@ -180,38 +180,42 @@ func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, se
 }
 
 // GetExampleList retrieves multiple examples by IDs and security context, or all if idList is empty
-func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, securityContext int) ([]*model.ExampleModel, error) {
-	var query string
+// If afterUpdateTs > 0, only returns examples with update_ts > afterUpdateTs
+func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, securityContext int, afterUpdateTs float64) ([]*model.ExampleModel, error) {
+	selectClause := `
+		SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
+		       security_context, create_ts, create_user_id, update_ts, update_user_id,
+		       delete_ts, delete_user_id
+		FROM example`
+	orderBy := ` ORDER BY example_id`
+
+	var whereClause string
 	var argList []interface{}
 
 	if len(idList) == 0 {
-		// Get all
-		query = `
-			SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
-			       security_context, create_ts, create_user_id, update_ts, update_user_id,
-			       delete_ts, delete_user_id
-			FROM example
-			WHERE security_context = $1 AND delete_user_id IS NULL
-			ORDER BY example_id`
+		// Get all or after update_ts
+		whereClause = `WHERE security_context = $1 AND delete_user_id IS NULL`
 		argList = []interface{}{securityContext}
+		if afterUpdateTs > 0 {
+			whereClause += ` AND update_ts > $2`
+			argList = append(argList, afterUpdateTs)
+		}
 	} else {
 		// Build IN clause
 		placeholderList := make([]string, len(idList))
 		argList = make([]interface{}, len(idList)+1)
 		for i, id := range idList {
-			placeholderList[i] = fmt.Sprintf("$%d", i+1)
-			argList[i] = id
+			placeholderList[i] = fmt.Sprintf("$%d", i+2) // $1 is securityContext
+			argList[i+1] = id
 		}
-		argList[len(idList)] = securityContext
+		argList[0] = securityContext
+		argList[len(idList)+1] = securityContext // Wait, no, securityContext is $1, ids are $2, $3, etc.
 
-		query = fmt.Sprintf(`
-			SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
-			       security_context, create_ts, create_user_id, update_ts, update_user_id,
-			       delete_ts, delete_user_id
-			FROM example
-			WHERE example_id IN (%s) AND security_context = $%d AND delete_user_id IS NULL`,
-			strings.Join(placeholderList, ","), len(idList)+1)
+		whereClause = fmt.Sprintf(` WHERE example_id IN (%s) AND security_context = $1 AND delete_user_id IS NULL`,
+			strings.Join(placeholderList, ","))
 	}
+
+	query := selectClause + " " + whereClause + orderBy
 
 	var rowList pgx.Rows
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
@@ -224,7 +228,7 @@ func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, se
 	}
 	defer rowList.Close()
 
-	var exampleList []*model.ExampleModel
+	exampleList := make([]*model.ExampleModel, 0)
 	for rowList.Next() {
 		var example model.ExampleModel
 		err := rowList.Scan(

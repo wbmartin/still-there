@@ -1,22 +1,33 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Table, Button, Title, Group } from "@mantine/core";
-import { useGetExamplesQuery } from "../services/example-svc";
+import { Table, Button, Title, Group, Pagination } from "@mantine/core";
+import { useExamplesStore } from "../stores/examples-store";
+import { useExamplesSync } from "../hooks/use-examples-sync";
 import useUnauthRedirect from "../hooks/unauth-redirect";
 
 function ExampleListPage() {
   useUnauthRedirect("/exampleList");
-  const { data, isLoading } = useGetExamplesQuery();
+  const { examples, loading, fetchExamples } = useExamplesStore();
   const navigate = useNavigate();
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 20;
 
-  if (isLoading) return <div>Loading...</div>;
+  useExamplesSync(); // Start sync
 
-  const examples = data?.examples || [];
+  useEffect(() => {
+    fetchExamples();
+  }, [fetchExamples]);
+
+  if (loading) return <div>Loading...</div>;
+
+  const totalPages = Math.ceil(examples.length / itemsPerPage);
+  const paginatedExamples = examples.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
   return (
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
         <Title order={1}>Examples</Title>
-         <Button onClick={() => navigate("/example?example_id=new")}>Add Example</Button>
+        <Button onClick={() => navigate("/example?exampleId=new")}>Add Example</Button>
       </Group>
       <Table>
         <Table.Thead>
@@ -29,17 +40,17 @@ function ExampleListPage() {
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {examples.map((example) => (
+          {paginatedExamples.map((example) => (
             <Table.Tr key={example.exampleId}>
               <Table.Td>{example.exampleId}</Table.Td>
               <Table.Td>{example.exampleText}</Table.Td>
               <Table.Td>{example.exampleInt || ""}</Table.Td>
               <Table.Td>{example.exampleFloat || ""}</Table.Td>
               <Table.Td>
-                 <Button
-                   size="xs"
-                   onClick={() => navigate(`/example?example_id=${example.exampleId}`)}
-                 >
+                <Button
+                  size="xs"
+                  onClick={() => navigate(`/example?exampleId=${example.exampleId}`)}
+                >
                   Edit
                 </Button>
               </Table.Td>
@@ -47,6 +58,11 @@ function ExampleListPage() {
           ))}
         </Table.Tbody>
       </Table>
+      {totalPages > 1 && (
+        <Group justify="center" mt="lg">
+          <Pagination total={totalPages} value={page} onChange={setPage} />
+        </Group>
+      )}
     </div>
   );
 }

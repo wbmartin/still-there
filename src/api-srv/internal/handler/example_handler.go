@@ -288,9 +288,6 @@ func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) 
 	logger := h.appsrv.Logger
 	username := "PreAuth"
 
-	// Parse query parameters
-	exampleIdListStr := r.URL.Query().Get("exampleIdList")
-
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
@@ -308,6 +305,10 @@ func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) 
 		username = jwtClaims.Subject
 	}
 
+	// Parse query parameters
+	exampleIdListStr := r.URL.Query().Get("exampleIdList")
+	afterUpdateTsStr := r.URL.Query().Get("afterUpdateTs")
+
 	var idList []int
 	if exampleIdListStr != "" {
 		idStrList := strings.Split(exampleIdListStr, ",")
@@ -321,8 +322,19 @@ func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) 
 			idList = append(idList, id)
 		}
 	}
-	// If idList is empty, GetExampleList returns all
-	examples, err := h.exampleRepo.GetExampleList(r.Context(), idList, jwtClaims.SecurityContext)
+
+	var afterUpdateTs float64
+	if afterUpdateTsStr != "" {
+		var err error
+		afterUpdateTs, err = strconv.ParseFloat(afterUpdateTsStr, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid afterUpdateTs parameter", logger, username)
+			return
+		}
+	}
+
+	// If idList is empty, GetExampleList returns all or filtered by afterUpdateTs
+	examples, err := h.exampleRepo.GetExampleList(r.Context(), idList, jwtClaims.SecurityContext, afterUpdateTs)
 	if err != nil {
 		logger.Error("LIF0", "Failed to get examples: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve examples", logger, username)

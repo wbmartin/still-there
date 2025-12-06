@@ -2,12 +2,10 @@
 import { configureStore } from "@reduxjs/toolkit";
 import apiSvc from "./services/api-svc";
 import authReducer from "./features/auth/auth-slice";
-import exampleReducer from "./features/example/example-slice";
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
-    example: exampleReducer,
     [apiSvc.reducerPath]: apiSvc.reducer,
   },
   middleware: (getDefaultMiddleware) => {

@@ -2,19 +2,18 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { TextInput, NumberInput, Textarea, Button, Title, Group } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useGetExampleQuery, useCreateExampleMutation, useUpdateExampleMutation } from "../services/example-svc";
+import { useExamplesStore } from "../stores/examples-store";
 import useUnauthRedirect from "../hooks/unauth-redirect";
 
 function ExampleEditPage() {
   const [searchParams] = useSearchParams();
-  const id = searchParams.get('example_id') || '';
+  const id = searchParams.get('exampleId') || '';
   const isNew = id === "new";
-  useUnauthRedirect(`/example?example_id=${id}`);
+  useUnauthRedirect(`/example?exampleId=${id}`);
+  const { examples, createExample, updateExample } = useExamplesStore();
   const navigate = useNavigate();
 
-  const { data: example, isLoading } = useGetExampleQuery(Number(id), { skip: isNew });
-  const [createExample] = useCreateExampleMutation();
-  const [updateExample] = useUpdateExampleMutation();
+  const existingExample = examples.find(e => e.exampleId === Number(id));
 
   const [formData, setFormData] = useState({
     exampleText: "",
@@ -26,17 +25,17 @@ function ExampleEditPage() {
   });
 
   useEffect(() => {
-    if (example && !isNew) {
+    if (existingExample && !isNew) {
       setFormData({
-        exampleText: example.exampleText,
-        exampleInt: example.exampleInt?.toString() || "",
-        exampleFloat: example.exampleFloat?.toString() || "",
-        exampleIntArray: example.exampleIntArray?.join(", ") || "",
-        exampleFloatArray: example.exampleFloatArray?.join(", ") || "",
-        updateTs: example.updateTs.toString(),
+        exampleText: existingExample.exampleText,
+        exampleInt: existingExample.exampleInt?.toString() || "",
+        exampleFloat: existingExample.exampleFloat?.toString() || "",
+        exampleIntArray: existingExample.exampleIntArray?.join(", ") || "",
+        exampleFloatArray: existingExample.exampleFloatArray?.join(", ") || "",
+        updateTs: existingExample.updateTs.toString(),
       });
     }
-  }, [example, isNew]);
+  }, [existingExample, isNew]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +50,7 @@ function ExampleEditPage() {
 
     try {
       if (isNew) {
-        await createExample(data).unwrap();
+        await createExample(data);
         notifications.show({
           title: "Success",
           message: "Example created successfully",
@@ -60,7 +59,7 @@ function ExampleEditPage() {
           withCloseButton: false,
         });
       } else {
-        await updateExample({ id: Number(id), data }).unwrap();
+        await updateExample(Number(id), data);
         notifications.show({
           title: "Success",
           message: "Example updated successfully",
@@ -81,8 +80,6 @@ function ExampleEditPage() {
       });
     }
   };
-
-  if (isLoading) return <div>Loading...</div>;
 
   return (
     <div style={{ padding: "2rem" }}>
@@ -123,7 +120,7 @@ function ExampleEditPage() {
         />
         <Group>
           <Button type="submit">Save</Button>
-          <Button variant="outline" onClick={() => navigate("/exampleList")}>
+          <Button variant="outline" onClick={() => navigate("/exampleZustandList")}>
             Cancel
           </Button>
         </Group>
