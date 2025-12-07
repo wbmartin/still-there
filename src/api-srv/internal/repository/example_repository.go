@@ -204,12 +204,11 @@ func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, se
 		// Build IN clause
 		placeholderList := make([]string, len(idList))
 		argList = make([]interface{}, len(idList)+1)
+		argList[0] = securityContext
 		for i, id := range idList {
 			placeholderList[i] = fmt.Sprintf("$%d", i+2) // $1 is securityContext
 			argList[i+1] = id
 		}
-		argList[0] = securityContext
-		argList[len(idList)+1] = securityContext // Wait, no, securityContext is $1, ids are $2, $3, etc.
 
 		whereClause = fmt.Sprintf(` WHERE example_id IN (%s) AND security_context = $1 AND delete_user_id IS NULL`,
 			strings.Join(placeholderList, ","))

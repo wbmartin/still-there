@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -94,6 +95,10 @@ func (r *UserRepository) GetUserGrantList(ctx context.Context, userGroupIDs []in
 
 // CreateUser creates a new user
 func (r *UserRepository) CreateUser(ctx context.Context, user *model.AppUserModel) (*model.AppUserModel, error) {
+	if !regexp.MustCompile(`^[a-zA-Z0-9]+$`).MatchString(user.UserName) {
+		return nil, fmt.Errorf("username must contain only alphanumeric characters")
+	}
+
 	query := `
 		INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email,
 		                     security_context, user_group_membership_list, mfa_exempt,

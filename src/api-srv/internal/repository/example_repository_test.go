@@ -182,7 +182,7 @@ func (s *ExampleRepositoryTestSuite) TestGetExampleList() {
 
 	// Test list retrieval
 	ids := []int{created1.ExampleID, created2.ExampleID}
-	retrieved, err := s.repo.GetExampleList(context.Background(), ids, 1)
+	retrieved, err := s.repo.GetExampleList(context.Background(), ids, 1, 0)
 	s.NoError(err)
 	s.Len(retrieved, 2)
 }

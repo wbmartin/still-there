@@ -16,7 +16,8 @@ import (
 type ThisAppKVInterface interface {
 	Get(key string) (string, error)
 	Set(key, value, ttl string) error
-	Incr(key, ttl string) (int, error)
+	Incr(key string, ttl string) (int, error)
+	Batch(commands []string) ([]string, error)
 	Close()
 }
 
@@ -162,6 +163,46 @@ func (kv *KV) Incr(key string, ttl string) (int, error) {
 		return 0, err
 	}
 	return val, nil
+}
+
+// Batch executes multiple commands in a single call
+func (kv *KV) Batch(commands []string) ([]string, error) {
+	if len(commands) > 3 {
+		return nil, fmt.Errorf("batch cannot exceed 3 commands")
+	}
+	kv.mu.Lock()
+	if kv.shrmplKVClient == nil {
+		kv.mu.Unlock()
+		kv.tryReconnect()
+		kv.mu.Lock()
+	}
+	if kv.shrmplKVClient == nil {
+		kv.mu.Unlock()
+		return nil, fmt.Errorf("key-value store not available")
+	}
+	client := kv.shrmplKVClient
+	kv.mu.Unlock()
+
+	batchCmd := "BATCH " + strings.Join(commands, ";")
+	fmt.Printf("DEBUG: Sending batchCmd: %s\n", batchCmd)
+	response, err := client.sendCommand(batchCmd)
+	fmt.Printf("DEBUG: Received response: %s\n", response)
+	if err != nil {
+		kv.mu.Lock()
+		if kv.shrmplKVClient == client {
+			kv.shrmplKVClient.Close()
+			kv.shrmplKVClient = nil
+		}
+		kv.mu.Unlock()
+		return nil, err
+	}
+
+	if strings.HasPrefix(response, "ERROR") {
+		return nil, errors.New(response)
+	}
+
+	results := strings.Split(strings.TrimSpace(response), ";")
+	return results, nil
 }
 
 // ShrmplKVClient represents a client for the shrmpl-kv service

@@ -234,8 +234,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		// Security checks
 		sec := app_lib.NewSecurityHelper(w, r, appServices.KV, appServices.Config, appServices.Logger)
 		sec.CheckJWT()
-		sec.CheckRateLimit()
-		sec.CheckUserBlocked()
+		sec.CheckRateLimitAndUserBlock()
 		sec.SkipCSRF()          // CSRF not required for read-only refresh
 		sec.SkipAuthorization() // Authorization not required for token refresh
 

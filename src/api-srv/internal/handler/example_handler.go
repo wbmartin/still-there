@@ -35,8 +35,7 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
-	sec.CheckRateLimit()
-	sec.CheckUserBlocked()
+	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
 	sec.CheckAuthorization(model.GrantExampleGet)
 
@@ -91,8 +90,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
-	sec.CheckRateLimit()
-	sec.CheckUserBlocked()
+	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
 	sec.CheckAuthorization(model.GrantExampleAdd)
 
@@ -148,8 +146,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
-	sec.CheckRateLimit()
-	sec.CheckUserBlocked()
+	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
 	sec.CheckAuthorization(model.GrantExampleChange)
 
@@ -221,8 +218,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
-	sec.CheckRateLimit()
-	sec.CheckUserBlocked()
+	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
 	sec.CheckAuthorization(model.GrantExampleDelete)
 
@@ -291,8 +287,7 @@ func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
-	sec.CheckRateLimit()
-	sec.CheckUserBlocked()
+	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
 	sec.CheckAuthorization(model.GrantExampleGet)
 
@@ -355,8 +350,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
-	sec.CheckRateLimit()
-	sec.CheckUserBlocked()
+	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
 	sec.CheckAuthorization(model.GrantExampleAdd)
 
@@ -436,8 +430,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
-	sec.CheckRateLimit()
-	sec.CheckUserBlocked()
+	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
 	sec.CheckAuthorization(model.GrantExampleChange)
 
@@ -511,8 +504,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
-	sec.CheckRateLimit()
-	sec.CheckUserBlocked()
+	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
 	sec.CheckAuthorization(model.GrantExampleDelete)
 

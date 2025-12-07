@@ -156,6 +156,29 @@ func (s *UserRepositoryTestSuite) TestCreateUser() {
 	s.Equal("test@example.com", created.Email)
 }
 
+func (s *UserRepositoryTestSuite) TestCreateUserInvalidUsername() {
+	// Create a test user with invalid username
+	user := &model.AppUserModel{
+		UserName:                "invalid-user!",
+		PwHash:                  "$2a$10$test.hash.for.testing.purposes.only",
+		FirstName:               "Test",
+		LastName:                "User",
+		Email:                   "test@example.com",
+		SecurityContext:         1,
+		UserGroupMembershipList: []int{1},
+		MFAExempt:               false,
+		CreateTS:                1234567890.123,
+		CreateUserID:            1,
+		UpdateTS:                1234567890.123,
+		UpdateUserID:            1,
+	}
+
+	created, err := s.repo.CreateUser(context.Background(), user)
+	s.Error(err)
+	s.Nil(created)
+	s.Contains(err.Error(), "username must contain only alphanumeric characters")
+}
+
 func (s *UserRepositoryTestSuite) TestUpdateUserPassword() {
 	// First create a test user
 	user := &model.AppUserModel{

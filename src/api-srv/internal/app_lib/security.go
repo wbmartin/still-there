@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -159,16 +160,82 @@ func (sh *SecurityHelper) CheckRateLimit() *SecurityHelper {
 	return sh
 }
 
+// CheckRateLimitAndUserBlock performs rate limit and user block checks in a single batch
+func (sh *SecurityHelper) CheckRateLimitAndUserBlock() *SecurityHelper {
+	if sh.blocked {
+		return sh
+	}
+
+	currentMinute := time.Now().Minute()
+
+	// Build batch commands
+	var commands []string
+	var rateKey string
+	if sh.claims != nil {
+		rateKey = fmt.Sprintf("RPM*%s*%d", sh.claims.Subject, currentMinute)
+	} else {
+		rateKey = fmt.Sprintf("RPM*%s*%d", "anon", currentMinute)
+	}
+	commands = append(commands, "INCR "+rateKey+" 1min")
+
+	var blockedKey string
+	if sh.claims != nil {
+		blockedKey = "BLOCKED*" + sh.claims.Subject
+		commands = append(commands, "GET "+blockedKey)
+	}
+
+	// Execute batch
+	results, err := sh.kv.Batch(commands)
+	if err != nil {
+		sh.logger.Info("RLF0", "Batch check failed, failing open: "+err.Error())
+		// Fail open on errors
+		return sh
+	}
+
+	// Parse results
+	rateCount, err := strconv.Atoi(results[0])
+	if err != nil {
+		sh.logger.Warn("RLF0", "Invalid rate count: "+results[0])
+		return sh
+	}
+
+	limit := 100 // Example limit
+	if rateCount > limit {
+		sh.logger.Warn("RLE0", fmt.Sprintf("Rate limit exceeded - key: %s, count: %d, limit: %d", rateKey, rateCount, limit))
+		sh.failAndRespond(http.StatusTooManyRequests, "Rate limit exceeded")
+		return sh
+	}
+
+	sh.logger.Debug("RLP0", fmt.Sprintf("Rate limit check passed - key: %s, count: %d, limit: %d", rateKey, rateCount, limit))
+	// Check block if applicable
+	if len(results) > 1 {
+		blockedValue := results[1]
+		if !strings.HasPrefix(blockedValue, "ERROR") && blockedValue != "" {
+			sh.logger.Warn("UBK0", "User is blocked: "+sh.claims.Subject)
+			sh.failAndRespond(http.StatusForbidden, "User account is blocked")
+			return sh
+		}
+	}
+
+	sh.rateChecked = true
+	sh.userChecked = true
+	return sh
+}
+
 // CheckUserBlocked checks if the user is blocked
 func (sh *SecurityHelper) CheckUserBlocked() *SecurityHelper {
-	sh.userChecked = true
 	if sh.blocked || sh.claims == nil {
 		return sh
 	}
 
-	blockKey := fmt.Sprintf("USER_%s_BLOCK", sh.claims.Subject)
-	_, err := sh.kv.Get(blockKey)
-	if err == nil {
+	blockedKey := "BLOCKED*" + sh.claims.Subject
+	blockedValue, err := sh.kv.Get(blockedKey)
+	if err != nil {
+		sh.logger.Warn("UBK0", "Failed to check blocked status: "+err.Error())
+		return sh
+	}
+
+	if blockedValue != "" {
 		// Key exists, user is blocked
 		sh.logger.Warn("UBK0", "User is blocked: "+sh.claims.Subject)
 		sh.failAndRespond(http.StatusForbidden, "User account is blocked")
