@@ -6,7 +6,7 @@ export const apiSvc = createApi({
     baseUrl: "/api",
     credentials: "include", // Include cookies for JWT
     prepareHeaders: (headers) => {
-      const csrfToken = localStorage.getItem("csrfToken");
+      const csrfToken = sessionStorage.getItem("csrfToken");
       if (csrfToken) {
         headers.set("X-CSRF-Token", csrfToken);
       }

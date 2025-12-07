@@ -25,32 +25,34 @@ function Login() {
   };
 
   return (
-    <Container size="sm" mt="xl">
-      <Paper shadow="md" p="xl">
-        <Title order={2} mb="md" ta="center">
-          Login to Proto
-        </Title>
-        <form onSubmit={handleSubmit}>
-          <TextInput
-            label="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            mb="md"
-          />
-          <PasswordInput
-            label="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            mb="md"
-          />
-          <Button type="submit" fullWidth loading={loading}>
-            Login
-          </Button>
-        </form>
-      </Paper>
-    </Container>
+    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
+      <Container size="sm">
+        <Paper shadow="md" p="xl">
+          <Title order={2} mb="md" ta="center">
+            Login to Proto
+          </Title>
+          <form onSubmit={handleSubmit}>
+            <TextInput
+              label="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              mb="md"
+            />
+            <PasswordInput
+              label="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              mb="md"
+            />
+            <Button type="submit" fullWidth loading={loading}>
+              Login
+            </Button>
+          </form>
+        </Paper>
+      </Container>
+    </div>
   );
 }
 

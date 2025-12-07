@@ -12,11 +12,11 @@ interface ExamplesState {
   syncUpdates: () => Promise<void>;
 }
 
-const getCsrfToken = () => localStorage.getItem('csrfToken');
+const getCsrfToken = () => sessionStorage.getItem('csrfToken');
 
 const apiFetch = async (url: string, options: RequestInit = {}) => {
   const headers = new Headers(options.headers);
-  const csrfToken = getCsrfToken();
+  const csrfToken = sessionStorage.getItem('csrfToken');
   if (csrfToken) {
     headers.set('X-CSRF-Token', csrfToken);
   }

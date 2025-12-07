@@ -14,7 +14,7 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
-const getCsrfToken = () => localStorage.getItem('csrfToken');
+const getCsrfToken = () => sessionStorage.getItem('csrfToken');
 
 const apiFetch = async (url: string, options: RequestInit = {}) => {
   const headers = new Headers(options.headers);
@@ -52,14 +52,12 @@ export const useAuthStore = create<AuthState>()(
           if (data.user) {
             set({
               isAuthenticated: true,
-              csrfToken: data.csrfToken,
+              csrfToken: data.csrf_token,
               grantList: data.user.grantList || [],
               username: data.user.userName || '',
               securityContext: data.user.securityContext || 0,
             });
-            localStorage.setItem('csrfToken', data.csrfToken);
-          } else {
-            set({ error: 'Invalid credentials' });
+            localStorage.setItem('csrfToken', data.csrf_token);
           }
         } catch (err: any) {
           set({ error: err.message });
@@ -76,12 +74,12 @@ export const useAuthStore = create<AuthState>()(
           if (data.user) {
             set({
               isAuthenticated: true,
-              csrfToken: data.csrfToken,
+              csrfToken: data.csrf_token,
               grantList: data.user.grantList || [],
               username: data.user.userName || '',
               securityContext: data.user.securityContext || 0,
             });
-            localStorage.setItem('csrfToken', data.csrfToken);
+            localStorage.setItem('csrfToken', data.csrf_token);
           } else {
             set({ isAuthenticated: false });
           }
@@ -104,7 +102,7 @@ export const useAuthStore = create<AuthState>()(
           username: '',
           securityContext: 0,
         });
-        localStorage.removeItem('csrfToken');
+            sessionStorage.removeItem('csrfToken');
       },
     }),
     {
