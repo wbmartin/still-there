@@ -210,7 +210,7 @@ func (sh *SecurityHelper) CheckRateLimitAndUserBlock() *SecurityHelper {
 	// Check block if applicable
 	if len(results) > 1 {
 		blockedValue := results[1]
-		if !strings.HasPrefix(blockedValue, "ERROR") && blockedValue != "" {
+		if blockedValue != "" && blockedValue != "*KEY NOT FOUND*" {
 			sh.logger.Warn("UBK0", "User is blocked: "+sh.claims.Subject)
 			sh.failAndRespond(http.StatusForbidden, "User account is blocked")
 			return sh
@@ -235,7 +235,7 @@ func (sh *SecurityHelper) CheckUserBlocked() *SecurityHelper {
 		return sh
 	}
 
-	if blockedValue != "" {
+	if blockedValue != "" && blockedValue != "*KEY NOT FOUND*" {
 		// Key exists, user is blocked
 		sh.logger.Warn("UBK0", "User is blocked: "+sh.claims.Subject)
 		sh.failAndRespond(http.StatusForbidden, "User account is blocked")

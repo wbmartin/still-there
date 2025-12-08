@@ -1,23 +1,26 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { TextInput, NumberInput, Textarea, Button, Title, Group } from "@mantine/core";
+import {
+  TextInput,
+  NumberInput,
+  Textarea,
+  Button,
+  Title,
+  Group,
+} from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useExamplesStore } from "../stores/examples-store";
-import { useAuthStore } from "../stores/auth-store";
-import useUnauthRedirect from "../hooks/unauth-redirect";
+
+import useAuthGuard from "../hooks/use-auth-guard";
 
 function ExampleEditPage() {
-  const { isAuthenticated } = useAuthStore();
+  const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
-  const id = searchParams.get('exampleId') || '';
-  const isNew = id === "new";
-  useUnauthRedirect(`/example?exampleId=${id}`);
-
-
-  const { examples, createExample, updateExample } = useExamplesStore();
+  const { getExample, createExample, updateExample } = useExamplesStore();
   const navigate = useNavigate();
 
-  const existingExample = examples.find(e => e.exampleId === Number(id));
+  const id = searchParams.get("exampleId") || "";
+  const numericId = isNaN(Number(id)) ? null : Number(id);
 
   const [formData, setFormData] = useState({
     exampleText: "",
@@ -28,27 +31,71 @@ function ExampleEditPage() {
     updateTs: "",
   });
 
+  const [exampleLoading, setExampleLoading] = useState(false);
+  const isNew = id === "new";
+
   useEffect(() => {
-    if (existingExample && !isNew) {
-      setFormData({
-        exampleText: existingExample.exampleText,
-        exampleInt: existingExample.exampleInt?.toString() || "",
-        exampleFloat: existingExample.exampleFloat?.toString() || "",
-        exampleIntArray: existingExample.exampleIntArray?.join(", ") || "",
-        exampleFloatArray: existingExample.exampleFloatArray?.join(", ") || "",
-        updateTs: existingExample.updateTs.toString(),
-      });
+    if (numericId && !isNew) {
+      setExampleLoading(true);
+      getExample(numericId)
+        .then((existingExample) => {
+          if (existingExample) {
+            const newFormData = {
+              exampleText: existingExample.exampleText,
+              exampleInt: existingExample.exampleInt?.toString() || "",
+              exampleFloat: existingExample.exampleFloat?.toString() || "",
+              exampleIntArray:
+                existingExample.exampleIntArray?.join(", ") || "",
+              exampleFloatArray:
+                existingExample.exampleFloatArray?.join(", ") || "",
+              updateTs: existingExample.updateTs.toString(),
+            };
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+            setFormData((prev) => {
+              // Only update if different to prevent cascading renders
+              if (
+                prev.exampleText !== newFormData.exampleText ||
+                prev.exampleInt !== newFormData.exampleInt ||
+                prev.exampleFloat !== newFormData.exampleFloat ||
+                prev.exampleIntArray !== newFormData.exampleIntArray ||
+                prev.exampleFloatArray !== newFormData.exampleFloatArray ||
+                prev.updateTs !== newFormData.updateTs
+              ) {
+                return newFormData;
+              }
+              return prev;
+            });
+          }
+        })
+        .finally(() => {
+          setExampleLoading(false);
+        });
     }
-  }, [existingExample, isNew]);
+  }, [numericId, isNew, getExample]);
+
+  //============================^HOOOK LINE ^====================================
+  if (authState !== "YES") {
+    return <div>Checking Auth...</div>;
+  }
+
+  if (exampleLoading) {
+    return <div>Loading example...</div>;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const data = {
       exampleText: formData.exampleText,
       exampleInt: formData.exampleInt ? Number(formData.exampleInt) : undefined,
-      exampleFloat: formData.exampleFloat ? Number(formData.exampleFloat) : undefined,
-      exampleIntArray: formData.exampleIntArray ? formData.exampleIntArray.split(",").map(Number) : undefined,
-      exampleFloatArray: formData.exampleFloatArray ? formData.exampleFloatArray.split(",").map(Number) : undefined,
+      exampleFloat: formData.exampleFloat
+        ? Number(formData.exampleFloat)
+        : undefined,
+      exampleIntArray: formData.exampleIntArray
+        ? formData.exampleIntArray.split(",").map(Number)
+        : undefined,
+      exampleFloatArray: formData.exampleFloatArray
+        ? formData.exampleFloatArray.split(",").map(Number)
+        : undefined,
       updateTs: !isNew ? Number(formData.updateTs) : undefined,
     };
 
@@ -94,37 +141,50 @@ function ExampleEditPage() {
         <TextInput
           label="Text"
           value={formData.exampleText}
-          onChange={(e) => setFormData({ ...formData, exampleText: e.target.value })}
+          onChange={(e) =>
+            setFormData({ ...formData, exampleText: e.target.value })
+          }
           required
           mb="md"
         />
         <NumberInput
           label="Int"
           value={formData.exampleInt}
-          onChange={(value) => setFormData({ ...formData, exampleInt: value?.toString() || "" })}
+          onChange={(value) =>
+            setFormData({ ...formData, exampleInt: value?.toString() || "" })
+          }
           mb="md"
         />
         <NumberInput
           label="Float"
           value={formData.exampleFloat}
-          onChange={(value) => setFormData({ ...formData, exampleFloat: value?.toString() || "" })}
+          onChange={(value) =>
+            setFormData({ ...formData, exampleFloat: value?.toString() || "" })
+          }
           mb="md"
         />
         <Textarea
           label="Int Array (comma-separated)"
           value={formData.exampleIntArray}
-          onChange={(e) => setFormData({ ...formData, exampleIntArray: e.target.value })}
+          onChange={(e) =>
+            setFormData({ ...formData, exampleIntArray: e.target.value })
+          }
           mb="md"
         />
         <Textarea
           label="Float Array (comma-separated)"
           value={formData.exampleFloatArray}
-          onChange={(e) => setFormData({ ...formData, exampleFloatArray: e.target.value })}
+          onChange={(e) =>
+            setFormData({ ...formData, exampleFloatArray: e.target.value })
+          }
           mb="md"
         />
         <Group>
           <Button type="submit">Save</Button>
-          <Button variant="outline" onClick={() => navigate("/exampleZustandList")}>
+          <Button
+            variant="outline"
+            onClick={() => navigate("/exampleZustandList")}
+          >
             Cancel
           </Button>
         </Group>

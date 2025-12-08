@@ -1,119 +1,109 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { create } from "zustand";
+import type {
+  AuthState,
+  AuthStateType,
+  LoginRequest,
+  LoginResponse,
+  RefreshResponse,
+} from "../types/auth-type";
+import { apiRequest } from "../utils/api";
 
-interface AuthState {
-  isAuthenticated: boolean;
-  csrfToken: string;
-  grantList: string[];
-  username: string;
-  securityContext: number;
-  loading: boolean;
-  error: string | null;
-  login: (username: string, password: string) => Promise<void>;
-  refresh: () => Promise<void>;
+interface AuthStore extends AuthState {
+  authenticateWithUsernamePassword: (
+    username: string,
+    password: string,
+  ) => Promise<void>;
+  authenticateWithAuthToken: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
-const getCsrfToken = () => sessionStorage.getItem('csrfToken');
-
-const apiFetch = async (url: string, options: RequestInit = {}) => {
-  const headers = new Headers(options.headers);
-  const csrfToken = getCsrfToken();
-  if (csrfToken) {
-    headers.set('X-CSRF-Token', csrfToken);
-  }
-  return fetch(`/api${url}`, {
-    ...options,
-    headers,
-    credentials: 'include',
-  });
-};
-
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
-      isAuthenticated: false,
-      csrfToken: '',
-      grantList: [],
-      username: '',
-      securityContext: 0,
-      loading: false,
-      error: null,
-      login: async (username: string, password: string) => {
-        set({ loading: true, error: null });
-        try {
-          const response = await apiFetch('/auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_name: username, password }),
-          });
-          if (!response.ok) throw new Error('Login failed');
-          const data = await response.json();
-          if (data.user) {
-            set({
-              isAuthenticated: true,
-              csrfToken: data.csrf_token,
-              grantList: data.user.grantList || [],
-              username: data.user.userName || '',
-              securityContext: data.user.securityContext || 0,
-            });
-            localStorage.setItem('csrfToken', data.csrf_token);
-          }
-        } catch (err: any) {
-          set({ error: err.message });
-        } finally {
-          set({ loading: false });
-        }
-      },
-      refresh: async () => {
-        set({ loading: true, error: null });
-        try {
-          const response = await apiFetch('/refresh');
-          if (!response.ok) throw new Error('Refresh failed');
-          const data = await response.json();
-          if (data.user) {
-            set({
-              isAuthenticated: true,
-              csrfToken: data.csrf_token,
-              grantList: data.user.grantList || [],
-              username: data.user.userName || '',
-              securityContext: data.user.securityContext || 0,
-            });
-            localStorage.setItem('csrfToken', data.csrf_token);
-          } else {
-            set({ isAuthenticated: false });
-          }
-        } catch (err) {
-          set({ isAuthenticated: false, error: err.message });
-        } finally {
-          set({ loading: false });
-        }
-      },
-      logout: async () => {
-        try {
-          await apiFetch('/logoff', { method: 'POST' });
-        } catch (err) {
-          // Ignore logout errors
-        }
+export const useAuthStore = create<AuthStore>((set, get) => ({
+  authState: "TBD" as AuthStateType,
+  csrfToken: "",
+  grantList: [],
+  username: "",
+  securityContext: 0,
+  postAuthDestination: "",
+  loading: false,
+  error: null,
+  authenticateWithUsernamePassword: async (
+    username: string,
+    password: string,
+  ) => {
+    set({ loading: true, error: null });
+    try {
+      const loginRequest: LoginRequest = { user_name: username, password };
+      const response = await apiRequest("/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(loginRequest),
+      });
+      if (!response.ok) throw new Error("Login failed");
+      const data: LoginResponse = await response.json();
+      if (data.user) {
+        localStorage.setItem('csrfToken', data.csrf_token);
         set({
-          isAuthenticated: false,
-          csrfToken: '',
-          grantList: [],
-          username: '',
-          securityContext: 0,
+          authState: "YES",
+          csrfToken: data.csrf_token,
+          grantList: data.user.grantList || [],
+          username: data.user.userName || "",
+          securityContext: data.user.securityContext || 0,
         });
-            sessionStorage.removeItem('csrfToken');
-      },
-    }),
-    {
-      name: 'auth-storage',
-      partialize: (state) => ({
-        isAuthenticated: state.isAuthenticated,
-        csrfToken: state.csrfToken,
-        grantList: state.grantList,
-        username: state.username,
-        securityContext: state.securityContext,
-      }),
+      }
+    } catch (err) {
+      set({
+        authState: "NO",
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      set({ loading: false });
     }
-  )
-);
+  },
+  authenticateWithAuthToken: async () => {
+    // console.log("refresh async starting ");
+    set({ authState: "CHECKING", loading: true, error: null });
+    try {
+      const response = await apiRequest("/refresh", {}, get().csrfToken);
+      if (!response.ok) throw new Error("Refresh failed");
+      const data: RefreshResponse = await response.json();
+      if (data.user) {
+        // console.log("Auth refresh successful for user:", data.user);
+        localStorage.setItem('csrfToken', data.csrf_token);
+        set({
+          authState: "YES",
+          csrfToken: data.csrf_token,
+          grantList: data.user.grantList || [],
+          username: data.user.userName || "",
+          securityContext: data.user.securityContext || 0,
+        });
+      } else {
+        // console.log("Auth refresh not successful 1 ");
+        set({ authState: "NO" });
+      }
+    } catch (err) {
+      // console.log("Auth refresh not successful 2");
+      set({
+        authState: "NO",
+        error: err instanceof Error ? err.message : "Refresh failed",
+      });
+    } finally {
+      set({ loading: false });
+    }
+  },
+  logout: async () => {
+    try {
+      await apiRequest("/logoff", { method: "POST" }, get().csrfToken);
+    } catch (err) {
+      console.error(err);
+    }
+    localStorage.removeItem('csrfToken');
+    set({
+      authState: "NO",
+      csrfToken: "",
+      grantList: [],
+      username: "",
+      securityContext: 0,
+      postAuthDestination: "",
+    });
+  },
+}));

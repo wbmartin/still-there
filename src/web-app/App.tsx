@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider, Outlet, Link } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Outlet, Link, useNavigate } from 'react-router-dom'
 import Login from './pages/login'
 import Dashboard from './pages/dashboard'
 import ExampleListPage from './pages/example-list-page'
@@ -35,15 +35,17 @@ const router = createBrowserRouter([
 ])
 
 function AppLayout() {
-  const { logout, isAuthenticated } = useAuthStore();
+  const { logout, authState } = useAuthStore();
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
+    navigate('/login');
   };
 
   return (
     <div style={{ display: 'flex' }}>
-      {isAuthenticated && (
+      {authState === 'YES' && (
         <nav style={{ width: '200px', padding: '1rem', borderRight: '1px solid #ccc' }}>
           <ul style={{ listStyle: 'none', padding: 0 }}>
             <li><Link to="/dashboard">Dashboard</Link></li>

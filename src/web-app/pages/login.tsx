@@ -1,21 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { TextInput, PasswordInput, Button, Paper, Title, Container } from "@mantine/core";
+import {
+  TextInput,
+  PasswordInput,
+  Button,
+  Paper,
+  Title,
+  Container,
+} from "@mantine/core";
 import { useAuthStore } from "../stores/auth-store";
 import { notifications } from "@mantine/notifications";
 
 function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const { login, loading, error } = useAuthStore();
+  const {
+    authenticateWithUsernamePassword,
+    authState,
+    postAuthDestination,
+    error,
+  } = useAuthStore();
   const navigate = useNavigate();
+  const refreshCalled = useRef(false);
+
+  useEffect(() => {
+    if (authState === "TBD" && !refreshCalled.current) {
+      refreshCalled.current = true;
+      // Try refresh
+      useAuthStore.getState().authenticateWithAuthToken();
+    } else if (authState === "YES") {
+      // Navigate to postAuthDestination or dashboard
+      const destination = postAuthDestination || "/dashboard";
+      navigate(destination);
+    }
+  }, [authState, postAuthDestination, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await login(username, password);
-    if (useAuthStore.getState().isAuthenticated) {
-      navigate("/dashboard");
-    } else {
+    await authenticateWithUsernamePassword(username, password);
+    const state = useAuthStore.getState();
+    if (state.authState !== "YES") {
       notifications.show({
         title: "Login Failed",
         message: error || "Invalid credentials",
@@ -25,7 +49,14 @@ function Login() {
   };
 
   return (
-    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
+    <div
+      style={{
+        position: "absolute",
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+      }}
+    >
       <Container size="sm">
         <Paper shadow="md" p="xl">
           <Title order={2} mb="md" ta="center">
@@ -46,7 +77,7 @@ function Login() {
               required
               mb="md"
             />
-            <Button type="submit" fullWidth loading={loading}>
+            <Button type="submit" fullWidth loading={authState === "CHECKING"}>
               Login
             </Button>
           </form>

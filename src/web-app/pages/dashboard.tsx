@@ -1,19 +1,27 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Title, Text, Card } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
-import { useAuthStore } from "../stores/auth-store";
-import useUnauthRedirect from "../hooks/unauth-redirect";
+import useAuthGuard from "../hooks/use-auth-guard";
 
 function Dashboard() {
-  const { isAuthenticated } = useAuthStore();
-  useUnauthRedirect("/dashboard");
-  const { examples, loading, fetchExamples } = useExamplesStore();
+  const authState = useAuthGuard();
+  const { examples, loading, getExampleList } = useExamplesStore();
+  const hasFetched = useRef(false);
 
   useEffect(() => {
-    if (examples.length === 0) {
-      fetchExamples();
+    if (!hasFetched.current && authState === "YES") {
+      hasFetched.current = true;
+      getExampleList();
     }
-  }, [examples.length, fetchExamples]);
+  }, [authState, getExampleList]);
+
+  //============================^HOOOK LINE ^====================================
+  if (authState !== "YES") {
+    return <div>Checking Auth...</div>;
+  }
+  if (loading) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div style={{ padding: "2rem" }}>
@@ -21,7 +29,7 @@ function Dashboard() {
         Dashboard
       </Title>
       <Card shadow="sm" p="lg">
-        <Text size="lg">Total Examples: {loading ? "Loading..." : examples.length}</Text>
+        <Text size="lg">Total Examples: {examples.length}</Text>
       </Card>
     </div>
   );

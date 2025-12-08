@@ -31,6 +31,7 @@ func NewExampleHandler(appServices *app_lib.AppServices, exampleRepo *repository
 // GetExample handles GET /example
 func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
+	logger.Info("GTS0", "GetExample invoked")
 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
@@ -86,6 +87,7 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 // CreateExample handles POST /example
 func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
+	logger.Info("CRS0", "CreateExample invoked")
 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
@@ -142,6 +144,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 // UpdateExample handles PUT /example
 func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
+	logger.Info("UPS0", "UpdateExample invoked")
 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
@@ -214,6 +217,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 // DeleteExample handles DELETE /example
 func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
+	logger.Info("DES0", "DeleteExample invoked")
 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
@@ -282,6 +286,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 // GetExampleList handles GET /exampleList?exampleIdList={comma-separated} (optional, if empty returns all)
 func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
+	logger.Info("GLS0", "GetExampleList invoked")
 	username := "PreAuth"
 
 	// Security checks
@@ -346,6 +351,7 @@ func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) 
 // CreateExampleList handles POST /exampleList
 func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
+	logger.Info("CLS0", "CreateExampleList invoked")
 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
@@ -426,6 +432,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 // UpdateExampleList handles PUT /exampleList
 func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
+	logger.Info("ULS0", "UpdateExampleList invoked")
 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
@@ -500,6 +507,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 // DeleteExampleList handles DELETE /exampleList?exampleIdList={comma-separated}&updateTs={comma-separated}
 func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
+	logger.Info("DLS0", "DeleteExampleList invoked")
 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)

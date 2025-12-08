@@ -184,9 +184,9 @@ func (kv *KV) Batch(commands []string) ([]string, error) {
 	kv.mu.Unlock()
 
 	batchCmd := "BATCH " + strings.Join(commands, ";")
-	fmt.Printf("DEBUG: Sending batchCmd: %s\n", batchCmd)
+	// fmt.Printf("DEBUG: Sending batchCmd: %s\n", batchCmd)
 	response, err := client.sendCommand(batchCmd)
-	fmt.Printf("DEBUG: Received response: %s\n", response)
+	// fmt.Printf("DEBUG: Received response: %s\n", response)
 	if err != nil {
 		kv.mu.Lock()
 		if kv.shrmplKVClient == client {
@@ -247,6 +247,9 @@ func (c *ShrmplKVClient) Get(key string) (string, error) {
 		return "", err
 	}
 
+	if response == "*KEY NOT FOUND*" {
+		return "", nil
+	}
 	if strings.HasPrefix(response, "ERROR") {
 		return "", errors.New(response)
 	}

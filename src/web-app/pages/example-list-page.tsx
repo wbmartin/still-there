@@ -1,37 +1,45 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Table, Button, Title, Group, Pagination } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
-import { useAuthStore } from "../stores/auth-store";
-import { useExamplesSync } from "../hooks/use-examples-sync";
-import useUnauthRedirect from "../hooks/unauth-redirect";
+import useAuthGuard from "../hooks/use-auth-guard";
 
 function ExampleListPage() {
-  const { isAuthenticated } = useAuthStore();
-  useUnauthRedirect("/exampleList");
-  const { examples, loading, fetchExamples } = useExamplesStore();
+  const authState = useAuthGuard();
+  const { examples, loading, getExampleList } = useExamplesStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
-
-  useExamplesSync(); // Start sync
+  const hasFetched = useRef(false);
 
   useEffect(() => {
-    fetchExamples();
-  }, [fetchExamples]);
+    if (!hasFetched.current && authState === "YES") {
+      hasFetched.current = true;
+      getExampleList();
+    }
+  }, [authState, getExampleList]);
 
-  if (loading) return <div>Loading...</div>;
+  //============================^HOOOK LINE ^====================================
+
+  if (authState !== "YES") {
+    return <div>Loading...</div>;
+  }
 
   if (loading) return <div>Loading...</div>;
 
   const totalPages = Math.ceil(examples.length / itemsPerPage);
-  const paginatedExamples = examples.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  const paginatedExamples = examples.slice(
+    (page - 1) * itemsPerPage,
+    page * itemsPerPage,
+  );
 
   return (
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
         <Title order={1}>Examples</Title>
-        <Button onClick={() => navigate("/example?exampleId=new")}>Add Example</Button>
+        <Button onClick={() => navigate("/example?exampleId=new")}>
+          Add Example
+        </Button>
       </Group>
       <Table>
         <Table.Thead>
@@ -53,7 +61,9 @@ function ExampleListPage() {
               <Table.Td>
                 <Button
                   size="xs"
-                  onClick={() => navigate(`/example?exampleId=${example.exampleId}`)}
+                  onClick={() =>
+                    navigate(`/example?exampleId=${example.exampleId}`)
+                  }
                 >
                   Edit
                 </Button>
