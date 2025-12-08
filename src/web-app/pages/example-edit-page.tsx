@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   TextInput,
@@ -31,12 +31,13 @@ function ExampleEditPage() {
     updateTs: "",
   });
 
-  const [exampleLoading, setExampleLoading] = useState(false);
   const isNew = id === "new";
+  const [exampleLoading, setExampleLoading] = useState(!isNew && numericId !== null);
+  const hasFetched = useRef(false);
 
   useEffect(() => {
-    if (numericId && !isNew) {
-      setExampleLoading(true);
+    if (numericId && !isNew && !hasFetched.current) {
+      hasFetched.current = true;
       getExample(numericId)
         .then((existingExample) => {
           if (existingExample) {
@@ -50,7 +51,6 @@ function ExampleEditPage() {
                 existingExample.exampleFloatArray?.join(", ") || "",
               updateTs: existingExample.updateTs.toString(),
             };
-            // eslint-disable-next-line react-hooks/exhaustive-deps
             setFormData((prev) => {
               // Only update if different to prevent cascading renders
               if (

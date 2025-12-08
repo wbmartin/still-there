@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Example } from "../types/example-type";
+import type { Example, ApiExampleModel, ApiResponse } from "../types/example-type";
 import { apiRequest } from "../utils/api";
 
 interface ExamplesState {
@@ -33,7 +33,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
           csrfToken || undefined,
         );
         if (!response.ok) throw new Error("Failed to fetch examples");
-        const data: { data: any[] } = await response.json();
+        const data: ApiResponse<ApiExampleModel[]> = await response.json();
         const examples = data.data.map((e) => ({
           exampleId: e.example_id,
           exampleText: e.example_text,
@@ -63,7 +63,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
           csrfToken || undefined,
         );
         if (!response.ok) throw new Error("Failed to sync examples");
-        const data: { data: any[] } = await response.json();
+        const data: ApiResponse<ApiExampleModel[]> = await response.json();
         const newExamples = data.data.map((e) => ({
           exampleId: e.example_id,
           exampleText: e.example_text,
@@ -106,8 +106,9 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
           set({ loading: false });
         }
       }
-    } catch (err: any) {
-      set({ loading: false, error: err.message });
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      set({ loading: false, error: errorMessage });
     } finally {
       // console.log("getExampleList finally setting loading to false");
       // Note: loading is already set in try/catch, but ensure
@@ -125,21 +126,22 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         if (response.status === 404 || response.status === 400) return null;
         throw new Error("Failed to fetch example");
       }
-      const data = await response.json();
+      const data: ApiResponse<ApiExampleModel> = await response.json();
+      const apiExample = data.data;
       const example: Example = {
-        exampleId: data.data.example_id,
-        exampleText: data.data.example_text,
-        exampleInt: data.data.example_int,
-        exampleFloat: data.data.example_float,
-        exampleIntArray: data.data.example_int_array,
-        exampleFloatArray: data.data.example_float_array,
-        securityContext: data.data.security_context,
-        createTs: data.data.create_ts,
-        createUserId: data.data.create_user_id,
-        updateTs: data.data.update_ts,
-        updateUserId: data.data.update_user_id,
-        deleteTs: data.data.delete_ts,
-        deleteUserId: data.data.delete_user_id,
+        exampleId: apiExample.example_id,
+        exampleText: apiExample.example_text,
+        exampleInt: apiExample.example_int,
+        exampleFloat: apiExample.example_float,
+        exampleIntArray: apiExample.example_int_array,
+        exampleFloatArray: apiExample.example_float_array,
+        securityContext: apiExample.security_context,
+        createTs: apiExample.create_ts,
+        createUserId: apiExample.create_user_id,
+        updateTs: apiExample.update_ts,
+        updateUserId: apiExample.update_user_id,
+        deleteTs: apiExample.delete_ts,
+        deleteUserId: apiExample.delete_user_id,
       };
       // Update cached examples list if this item exists
       set((state) => {
@@ -154,7 +156,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         return state;
       });
       return example;
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error fetching example:", err);
       return null;
     }
@@ -180,27 +182,28 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         csrfToken || undefined,
       );
       if (!response.ok) throw new Error("Failed to create example");
-      const result = await response.json();
+      const result: ApiResponse<ApiExampleModel> = await response.json();
+      const apiExample = result.data;
       const newExample: Example = {
-        exampleId: result.data.example_id,
-        exampleText: result.data.example_text,
-        exampleInt: result.data.example_int,
-        exampleFloat: result.data.example_float,
-        exampleIntArray: result.data.example_int_array,
-        exampleFloatArray: result.data.example_float_array,
-        securityContext: result.data.security_context,
-        createTs: result.data.create_ts,
-        createUserId: result.data.create_user_id,
-        updateTs: result.data.update_ts,
-        updateUserId: result.data.update_user_id,
-        deleteTs: result.data.delete_ts,
-        deleteUserId: result.data.delete_user_id,
+        exampleId: apiExample.example_id,
+        exampleText: apiExample.example_text,
+        exampleInt: apiExample.example_int,
+        exampleFloat: apiExample.example_float,
+        exampleIntArray: apiExample.example_int_array,
+        exampleFloatArray: apiExample.example_float_array,
+        securityContext: apiExample.security_context,
+        createTs: apiExample.create_ts,
+        createUserId: apiExample.create_user_id,
+        updateTs: apiExample.update_ts,
+        updateUserId: apiExample.update_user_id,
+        deleteTs: apiExample.delete_ts,
+        deleteUserId: apiExample.delete_user_id,
       };
       set((state) => ({
         examples: [...state.examples, newExample],
         maxUpdateTs: Math.max(state.maxUpdateTs, newExample.updateTs),
       }));
-    } catch (err) {
+    } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       set({ error: errorMessage });
       throw new Error(errorMessage);
@@ -231,7 +234,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       if (!response.ok) throw new Error("Failed to update example");
       // Optionally refetch or update local state
       await get().getExampleList();
-    } catch (err) {
+    } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
     }
   },

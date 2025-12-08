@@ -15,6 +15,26 @@ export interface Example {
   deleteUserId?: number;
 }
 
+export interface ApiExampleModel {
+  example_id: number;
+  example_text: string;
+  example_int?: number;
+  example_float?: number;
+  example_int_array?: number[];
+  example_float_array?: number[];
+  security_context: number;
+  create_ts: number;
+  create_user_id: number;
+  update_ts: number;
+  update_user_id: number;
+  delete_ts?: number;
+  delete_user_id?: number;
+}
+
+export interface ApiResponse<T> {
+  data: T;
+}
+
 export interface ExampleListResponse {
   examples: Example[];
 }

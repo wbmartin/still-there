@@ -204,10 +204,6 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return updated example (keeping original create fields)
-	example.CreateTS = example.CreateTS         // From request
-	example.CreateUserID = example.CreateUserID // From request
-
 	logger.Debug("UPD0", fmt.Sprintf("Example updated: %+v", example))
 	wrapper := model.DataWrapper{Data: example}
 	writeJSON(w, http.StatusOK, wrapper, logger)

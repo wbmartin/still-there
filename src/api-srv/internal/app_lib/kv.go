@@ -30,11 +30,11 @@ type KV struct {
 
 // parseHostPort parses a "host:port" string into separate host and port components
 func parseHostPort(hostPort string) (string, string, error) {
-	parts := strings.Split(hostPort, ":")
-	if len(parts) != 2 {
+	host, port, err := net.SplitHostPort(hostPort)
+	if err != nil {
 		return "", "", fmt.Errorf("invalid host:port format: %s", hostPort)
 	}
-	return parts[0], parts[1], nil
+	return host, port, nil
 }
 
 // NewKV creates a key-value store client
@@ -222,7 +222,7 @@ func NewShrmplKVClient(host string, port int) *ShrmplKVClient {
 
 // Connect establishes connection to shrmpl-kv
 func (c *ShrmplKVClient) Connect() error {
-	addr := fmt.Sprintf("%s:%d", c.host, c.port)
+	addr := net.JoinHostPort(c.host, strconv.Itoa(c.port))
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
 		return fmt.Errorf("failed to connect to shrmpl-kv: %w", err)

@@ -141,13 +141,12 @@ type ShrmplLogClient struct {
 
 // NewShrmplLogClient creates a new shrmpl-log client
 func NewShrmplLogClient(logDest string) (*ShrmplLogClient, error) {
-	parts := strings.Split(logDest, ":")
-	if len(parts) != 2 {
+	host, portStr, err := net.SplitHostPort(logDest)
+	if err != nil {
 		return nil, fmt.Errorf("invalid log destination format: %s", logDest)
 	}
 
-	host := parts[0]
-	port, err := strconv.Atoi(parts[1])
+	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid port in log destination: %w", err)
 	}
@@ -160,7 +159,7 @@ func NewShrmplLogClient(logDest string) (*ShrmplLogClient, error) {
 
 // Connect establishes connection to shrmpl-log
 func (c *ShrmplLogClient) Connect() error {
-	addr := fmt.Sprintf("%s:%d", c.host, c.port)
+	addr := net.JoinHostPort(c.host, strconv.Itoa(c.port))
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
 		return fmt.Errorf("failed to connect to shrmpl-log: %w", err)
