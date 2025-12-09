@@ -10,13 +10,13 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useExamplesStore } from "../stores/examples-store";
-
 import useAuthGuard from "../hooks/use-auth-guard";
+import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 
 function ExampleEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
-  const { getExample, createExample, updateExample } = useExamplesStore();
+  const { getExample, createExample, updateExample, deleteExample } = useExamplesStore();
   const navigate = useNavigate();
 
   const id = searchParams.get("exampleId") || "";
@@ -34,6 +34,7 @@ function ExampleEditPage() {
   const isNew = id === "new";
   const [exampleLoading, setExampleLoading] = useState(!isNew && numericId !== null);
   const hasFetched = useRef(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   useEffect(() => {
     if (numericId && !isNew && !hasFetched.current) {
@@ -132,6 +133,40 @@ function ExampleEditPage() {
     }
   };
 
+  const handleDeleteClick = () => {
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (numericId) {
+      try {
+        await deleteExample(numericId);
+        notifications.show({
+          title: "Success",
+          message: "Example deleted successfully",
+          color: "green",
+          autoClose: 3000,
+          withCloseButton: false,
+        });
+        navigate("/exampleList");
+      } catch (error) {
+        console.error("Error deleting example:", error);
+        notifications.show({
+          title: "Error",
+          message: "Failed to delete example",
+          color: "red",
+          autoClose: 5000,
+          withCloseButton: true,
+        });
+      }
+    }
+    setDeleteModalOpen(false);
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModalOpen(false);
+  };
+
   return (
     <div style={{ padding: "2rem" }}>
       <Title order={1} mb="lg">
@@ -180,15 +215,26 @@ function ExampleEditPage() {
           mb="md"
         />
         <Group>
-          <Button type="submit">Save</Button>
-          <Button
-            variant="outline"
-            onClick={() => navigate("/exampleZustandList")}
-          >
-            Cancel
-          </Button>
-        </Group>
+           <Button type="submit">Save</Button>
+           {!isNew && (
+             <Button color="red" onClick={handleDeleteClick}>
+               Delete
+             </Button>
+           )}
+           <Button
+             variant="outline"
+             onClick={() => navigate("/exampleList")}
+           >
+             Cancel
+           </Button>
+         </Group>
       </form>
+      <DeleteConfirmModal
+        isOpen={deleteModalOpen}
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+        entityType="example"
+      />
     </div>
   );
 }

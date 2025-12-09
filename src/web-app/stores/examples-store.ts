@@ -10,6 +10,7 @@ interface ExamplesState {
   getExample: (id: number) => Promise<Example | null>;
   createExample: (data: Partial<Example>) => Promise<void>;
   updateExample: (id: number, data: Partial<Example>) => Promise<void>;
+  deleteExample: (id: number) => Promise<void>;
   getExampleList: () => Promise<void>;
   clearCache: () => void;
 }
@@ -30,19 +31,19 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         if (!response.ok) throw new Error("Failed to fetch examples");
         const data: ApiResponse<ApiExampleModel[]> = await response.json();
         const examples = data.data.map((e) => ({
-          exampleId: e.example_id,
-          exampleText: e.example_text,
-          exampleInt: e.example_int,
-          exampleFloat: e.example_float,
-          exampleIntArray: e.example_int_array,
-          exampleFloatArray: e.example_float_array,
-          securityContext: e.security_context,
-          createTs: e.create_ts,
-          createUserId: e.create_user_id,
-          updateTs: e.update_ts,
-          updateUserId: e.update_user_id,
-          deleteTs: e.delete_ts,
-          deleteUserId: e.delete_user_id,
+          exampleId: e.exampleId,
+          exampleText: e.exampleText,
+          exampleInt: e.exampleInt,
+          exampleFloat: e.exampleFloat,
+          exampleIntArray: e.exampleIntArray,
+          exampleFloatArray: e.exampleFloatArray,
+          securityContext: e.securityContext,
+          createTs: e.createTs,
+          createUserId: e.createUserId,
+          updateTs: e.updateTs,
+          updateUserId: e.updateUserId,
+          deleteTs: e.deleteTs,
+          deleteUserId: e.deleteUserId,
         }));
         const newMaxUpdateTs =
           examples.length > 0
@@ -55,19 +56,19 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         if (!response.ok) throw new Error("Failed to sync examples");
         const data: ApiResponse<ApiExampleModel[]> = await response.json();
         const newExamples = data.data.map((e) => ({
-          exampleId: e.example_id,
-          exampleText: e.example_text,
-          exampleInt: e.example_int,
-          exampleFloat: e.example_float,
-          exampleIntArray: e.example_int_array,
-          exampleFloatArray: e.example_float_array,
-          securityContext: e.security_context,
-          createTs: e.create_ts,
-          createUserId: e.create_user_id,
-          updateTs: e.update_ts,
-          updateUserId: e.update_user_id,
-          deleteTs: e.delete_ts,
-          deleteUserId: e.delete_user_id,
+          exampleId: e.exampleId,
+          exampleText: e.exampleText,
+          exampleInt: e.exampleInt,
+          exampleFloat: e.exampleFloat,
+          exampleIntArray: e.exampleIntArray,
+          exampleFloatArray: e.exampleFloatArray,
+          securityContext: e.securityContext,
+          createTs: e.createTs,
+          createUserId: e.createUserId,
+          updateTs: e.updateTs,
+          updateUserId: e.updateUserId,
+          deleteTs: e.deleteTs,
+          deleteUserId: e.deleteUserId,
         }));
         if (newExamples.length > 0) {
           set((state) => {
@@ -114,19 +115,19 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       const data: ApiResponse<ApiExampleModel> = await response.json();
       const apiExample = data.data;
       const example: Example = {
-        exampleId: apiExample.example_id,
-        exampleText: apiExample.example_text,
-        exampleInt: apiExample.example_int,
-        exampleFloat: apiExample.example_float,
-        exampleIntArray: apiExample.example_int_array,
-        exampleFloatArray: apiExample.example_float_array,
-        securityContext: apiExample.security_context,
-        createTs: apiExample.create_ts,
-        createUserId: apiExample.create_user_id,
-        updateTs: apiExample.update_ts,
-        updateUserId: apiExample.update_user_id,
-        deleteTs: apiExample.delete_ts,
-        deleteUserId: apiExample.delete_user_id,
+        exampleId: apiExample.exampleId,
+        exampleText: apiExample.exampleText,
+        exampleInt: apiExample.exampleInt,
+        exampleFloat: apiExample.exampleFloat,
+        exampleIntArray: apiExample.exampleIntArray,
+        exampleFloatArray: apiExample.exampleFloatArray,
+        securityContext: apiExample.securityContext,
+        createTs: apiExample.createTs,
+        createUserId: apiExample.createUserId,
+        updateTs: apiExample.updateTs,
+        updateUserId: apiExample.updateUserId,
+        deleteTs: apiExample.deleteTs,
+        deleteUserId: apiExample.deleteUserId,
       };
       // Update cached examples list if this item exists
       set((state) => {
@@ -150,11 +151,11 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
     set({ error: null });
     try {
       const body = {
-        example_text: data.exampleText,
-        example_int: data.exampleInt,
-        example_float: data.exampleFloat,
-        example_int_array: data.exampleIntArray,
-        example_float_array: data.exampleFloatArray,
+        exampleText: data.exampleText,
+        exampleInt: data.exampleInt,
+        exampleFloat: data.exampleFloat,
+        exampleIntArray: data.exampleIntArray,
+        exampleFloatArray: data.exampleFloatArray,
       };
       const response = await apiRequest("/example", {
         method: "POST",
@@ -165,19 +166,19 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       const result: ApiResponse<ApiExampleModel> = await response.json();
       const apiExample = result.data;
       const newExample: Example = {
-        exampleId: apiExample.example_id,
-        exampleText: apiExample.example_text,
-        exampleInt: apiExample.example_int,
-        exampleFloat: apiExample.example_float,
-        exampleIntArray: apiExample.example_int_array,
-        exampleFloatArray: apiExample.example_float_array,
-        securityContext: apiExample.security_context,
-        createTs: apiExample.create_ts,
-        createUserId: apiExample.create_user_id,
-        updateTs: apiExample.update_ts,
-        updateUserId: apiExample.update_user_id,
-        deleteTs: apiExample.delete_ts,
-        deleteUserId: apiExample.delete_user_id,
+        exampleId: apiExample.exampleId,
+        exampleText: apiExample.exampleText,
+        exampleInt: apiExample.exampleInt,
+        exampleFloat: apiExample.exampleFloat,
+        exampleIntArray: apiExample.exampleIntArray,
+        exampleFloatArray: apiExample.exampleFloatArray,
+        securityContext: apiExample.securityContext,
+        createTs: apiExample.createTs,
+        createUserId: apiExample.createUserId,
+        updateTs: apiExample.updateTs,
+        updateUserId: apiExample.updateUserId,
+        deleteTs: apiExample.deleteTs,
+        deleteUserId: apiExample.deleteUserId,
       };
       set((state) => ({
         examples: [...state.examples, newExample],
@@ -193,13 +194,13 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
     set({ error: null });
     try {
       const body = {
-        example_id: id,
-        example_text: data.exampleText,
-        example_int: data.exampleInt,
-        example_float: data.exampleFloat,
-        example_int_array: data.exampleIntArray,
-        example_float_array: data.exampleFloatArray,
-        update_ts: data.updateTs,
+        exampleId: id,
+        exampleText: data.exampleText,
+        exampleInt: data.exampleInt,
+        exampleFloat: data.exampleFloat,
+        exampleIntArray: data.exampleIntArray,
+        exampleFloatArray: data.exampleFloatArray,
+        updateTs: data.updateTs,
       };
       const response = await apiRequest("/example", {
         method: "PUT",
@@ -211,6 +212,25 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       await get().getExampleList();
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  },
+  deleteExample: async (id) => {
+    set({ error: null });
+    try {
+      const state = get();
+      const example = state.examples.find((ex) => ex.exampleId === id);
+      if (!example) throw new Error("Example not found");
+      const response = await apiRequest(`/example?exampleId=${id}&updateTs=${example.updateTs}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to delete example");
+      // Remove from local state
+      set((state) => ({
+        examples: state.examples.filter((ex) => ex.exampleId !== id),
+      }));
+    } catch (err: unknown) {
+      set({ error: err instanceof Error ? err.message : "Unknown error" });
+      throw err; // Re-throw to handle in component
     }
   },
   clearCache: () => {

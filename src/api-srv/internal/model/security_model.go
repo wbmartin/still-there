@@ -2,47 +2,47 @@ package model
 
 // AuthRequestModel represents the request body for initial authentication
 type AuthRequestModel struct {
-	UserName string `json:"user_name"`
+	UserName string `json:"userName"`
 	Password string `json:"password"`
 }
 
 // AuthResponseModel represents the response for initial authentication
 type AuthResponseModel struct {
-	AppUserID              int              `json:"app_user_id"`
-	UserName               string           `json:"user_name"`
-	FirstName              string           `json:"first_name"`
-	LastName               string           `json:"last_name"`
-	SecurityContext        int              `json:"security_context"`
-	UserGrantShortCodeList map[int][]string `json:"user_grant_short_code_list"` // indexed by security_context
-	TempToken              string           `json:"temp_token,omitempty"`       // Only present if MFA required
+	AppUserID              int              `json:"appUserId"`
+	UserName               string           `json:"userName"`
+	FirstName              string           `json:"firstName"`
+	LastName               string           `json:"lastName"`
+	SecurityContext        int              `json:"securityContext"`
+	UserGrantShortCodeList map[int][]string `json:"userGrantShortCodeList"` // indexed by security_context
+	TempToken              string           `json:"tempToken,omitempty"`    // Only present if MFA required
 }
 
 // AuthResponseWrapper wraps the auth response for consistency
 type AuthResponseWrapper struct {
 	User      AuthResponseModel `json:"user"`
-	CsrfToken string            `json:"csrf_token,omitempty"`
+	CsrfToken string            `json:"csrfToken,omitempty"`
 }
 
 // Auth2RequestModel represents the request body for MFA authentication
 type Auth2RequestModel struct {
-	TempToken string `json:"temp_token"`
+	TempToken string `json:"tempToken"`
 	TOTP      string `json:"totp"`
 }
 
 // Auth2ResponseModel represents the response for successful MFA authentication
 type Auth2ResponseModel struct {
-	AppUserID              int              `json:"app_user_id"`
-	UserName               string           `json:"user_name"`
-	FirstName              string           `json:"first_name"`
-	LastName               string           `json:"last_name"`
-	SecurityContext        int              `json:"security_context"`
-	UserGrantShortCodeList map[int][]string `json:"user_grant_short_code_list"`
+	AppUserID              int              `json:"appUserId"`
+	UserName               string           `json:"userName"`
+	FirstName              string           `json:"firstName"`
+	LastName               string           `json:"lastName"`
+	SecurityContext        int              `json:"securityContext"`
+	UserGrantShortCodeList map[int][]string `json:"userGrantShortCodeList"`
 }
 
 // Auth2ResponseWrapper wraps the auth2 response for consistency
 type Auth2ResponseWrapper struct {
 	User      Auth2ResponseModel `json:"user"`
-	CsrfToken string             `json:"csrf_token,omitempty"`
+	CsrfToken string             `json:"csrfToken,omitempty"`
 }
 
 // LogoffRequest represents the request body for logoff
@@ -52,17 +52,17 @@ type LogoffRequest struct {
 
 // ChangeSecurityContextRequest represents the request body for changing security context
 type ChangeSecurityContextRequest struct {
-	TargetSecurityContext int `json:"target_security_context"`
+	TargetSecurityContext int `json:"targetSecurityContext"`
 }
 
 // ChangeSecurityContextResponse represents the response for changing security context
 type ChangeSecurityContextResponse struct {
-	AppUserID              int              `json:"app_user_id"`
-	UserName               string           `json:"user_name"`
-	FirstName              string           `json:"first_name"`
-	LastName               string           `json:"last_name"`
-	SecurityContext        int              `json:"security_context"`
-	UserGrantShortCodeList map[int][]string `json:"user_grant_short_code_list"`
+	AppUserID              int              `json:"appUserId"`
+	UserName               string           `json:"userName"`
+	FirstName              string           `json:"firstName"`
+	LastName               string           `json:"lastName"`
+	SecurityContext        int              `json:"securityContext"`
+	UserGrantShortCodeList map[int][]string `json:"userGrantShortCodeList"`
 }
 
 // ChangeSecurityContextResponseWrapper wraps the change security context response for consistency
@@ -77,28 +77,28 @@ type DataWrapper struct {
 
 // ChangeCurrentUserPasswordRequest represents the request body for changing password
 type ChangeCurrentUserPasswordRequest struct {
-	CurrentPassword string `json:"current_password"`
-	NewPassword     string `json:"new_password"`
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
 }
 
 // BlockUserRequest represents the request body for blocking a user
 type BlockUserRequest struct {
-	UserName string `json:"user_name"`
+	UserName string `json:"userName"`
 }
 
 // ResetUserPasswordRequest represents the request body for resetting another user's password
 type ResetUserPasswordRequest struct {
-	UserName    string `json:"user_name"`
-	NewPassword string `json:"new_password"`
+	UserName    string `json:"userName"`
+	NewPassword string `json:"newPassword"`
 }
 
 // AddUserRequest represents the request body for adding a new user
 type AddUserRequest struct {
-	UserName        string `json:"user_name"`
+	UserName        string `json:"userName"`
 	Password        string `json:"password"`
-	FirstName       string `json:"first_name"`
-	LastName        string `json:"last_name"`
+	FirstName       string `json:"firstName"`
+	LastName        string `json:"lastName"`
 	Email           string `json:"email"`
-	SecurityContext int    `json:"security_context"`
-	MFAExempt       bool   `json:"mfa_exempt"`
+	SecurityContext int    `json:"securityContext"`
+	MFAExempt       bool   `json:"mfaExempt"`
 }

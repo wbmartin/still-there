@@ -3,14 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { Table, Button, Title, Group, Pagination } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
+import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 
 function ExampleListPage() {
   const authState = useAuthGuard();
-  const { examples, loading, getExampleList } = useExamplesStore();
+  const { examples, loading, getExampleList, deleteExample } = useExamplesStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
   const hasFetched = useRef(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
@@ -32,6 +35,31 @@ function ExampleListPage() {
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
   );
+
+  const handleDeleteClick = (id: number) => {
+    setDeleteId(id);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (deleteId !== null) {
+      try {
+        await deleteExample(deleteId);
+        // List is updated locally, but refresh to ensure sync
+        await getExampleList();
+      } catch (error) {
+        console.error("Error deleting example:", error);
+        // Error is handled in store
+      }
+    }
+    setDeleteModalOpen(false);
+    setDeleteId(null);
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModalOpen(false);
+    setDeleteId(null);
+  };
 
   return (
     <div style={{ padding: "2rem" }}>
@@ -58,16 +86,24 @@ function ExampleListPage() {
               <Table.Td>{example.exampleText}</Table.Td>
               <Table.Td>{example.exampleInt || ""}</Table.Td>
               <Table.Td>{example.exampleFloat || ""}</Table.Td>
-              <Table.Td>
-                <Button
-                  size="xs"
-                  onClick={() =>
-                    navigate(`/example?exampleId=${example.exampleId}`)
-                  }
-                >
-                  Edit
-                </Button>
-              </Table.Td>
+               <Table.Td>
+                 <Button
+                   size="xs"
+                   onClick={() =>
+                     navigate(`/example?exampleId=${example.exampleId}`)
+                   }
+                 >
+                   Edit
+                 </Button>
+                 <Button
+                   size="xs"
+                   color="red"
+                   ml="xs"
+                   onClick={() => handleDeleteClick(example.exampleId)}
+                 >
+                   Delete
+                 </Button>
+               </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
@@ -77,6 +113,12 @@ function ExampleListPage() {
           <Pagination total={totalPages} value={page} onChange={setPage} />
         </Group>
       )}
+      <DeleteConfirmModal
+        isOpen={deleteModalOpen}
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+        entityType="example"
+      />
     </div>
   );
 }

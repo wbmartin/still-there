@@ -10,7 +10,7 @@ import { apiRequest, setCsrfToken, clearCsrfToken } from "../utils/api";
 
 interface AuthStore extends Omit<AuthState, 'csrfToken'> {
   authenticateWithUsernamePassword: (
-    username: string,
+    userName: string,
     password: string,
   ) => Promise<void>;
   authenticateWithAuthToken: () => Promise<void>;
@@ -26,12 +26,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   loading: false,
   error: null,
   authenticateWithUsernamePassword: async (
-    username: string,
+    userName: string,
     password: string,
   ) => {
     set({ loading: true, error: null });
     try {
-      const loginRequest: LoginRequest = { user_name: username, password };
+      const loginRequest: LoginRequest = { userName, password };
       const response = await apiRequest("/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -40,11 +40,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       if (!response.ok) throw new Error("Login failed");
        const data: LoginResponse = await response.json();
         if (data.user) {
-          setCsrfToken(data.csrf_token);
+          setCsrfToken(data.csrfToken);
           set({
             authState: "YES",
             grantList: data.user.grantList || [],
-            username: data.user.userName || "",
+            userName: data.user.userName || "",
             securityContext: data.user.securityContext || 0,
           });
         }
@@ -66,11 +66,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
        const data: RefreshResponse = await response.json();
         if (data.user) {
           // console.log("Auth refresh successful for user:", data.user);
-          setCsrfToken(data.csrf_token);
+          setCsrfToken(data.csrfToken);
           set({
             authState: "YES",
             grantList: data.user.grantList || [],
-            username: data.user.userName || "",
+            userName: data.user.userName || "",
             securityContext: data.user.securityContext || 0,
           });
         }
@@ -94,7 +94,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({
       authState: "NO",
       grantList: [],
-      username: "",
+      userName: "",
       securityContext: 0,
       postAuthDestination: "",
     });

@@ -7,24 +7,24 @@ export interface User {
 }
 
 export interface LoginRequest {
-  user_name: string;
+  userName: string;
   password: string;
 }
 
 export interface LoginResponse {
   user: User;
-  csrf_token: string;
+  csrfToken: string;
 }
 
 export interface RefreshResponse {
   user: User;
-  csrf_token: string;
+  csrfToken: string;
 }
 
 export interface AuthState {
   authState: AuthStateType;
   grantList: string[];
-  username: string;
+  userName: string;
   securityContext: number;
   postAuthDestination: string;
   loading: boolean;

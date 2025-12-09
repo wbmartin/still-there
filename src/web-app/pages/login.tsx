@@ -37,7 +37,7 @@ function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await authenticateWithUsernamePassword(username, password);
+    await authenticateWithUsernamePassword(username, password); // username is userName
     const state = useAuthStore.getState();
     if (state.authState !== "YES") {
       notifications.show({
