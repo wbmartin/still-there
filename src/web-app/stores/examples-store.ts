@@ -20,6 +20,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
   maxUpdateTs: 0,
   loading: false,
   error: null,
+  //============================^FUNCTION LINE ^============================
   getExampleList: async () => {
     // console.log("getExampleList called");
     const { maxUpdateTs } = get();
@@ -42,8 +43,6 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
           createUserId: e.createUserId,
           updateTs: e.updateTs,
           updateUserId: e.updateUserId,
-          deleteTs: e.deleteTs,
-          deleteUserId: e.deleteUserId,
         }));
         const newMaxUpdateTs =
           examples.length > 0
@@ -67,8 +66,6 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
           createUserId: e.createUserId,
           updateTs: e.updateTs,
           updateUserId: e.updateUserId,
-          deleteTs: e.deleteTs,
-          deleteUserId: e.deleteUserId,
         }));
         if (newExamples.length > 0) {
           set((state) => {
@@ -105,6 +102,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       // Note: loading is already set in try/catch, but ensure
     }
   },
+  //============================^FUNCTION LINE ^============================
   getExample: async (id: number): Promise<Example | null> => {
     try {
       const response = await apiRequest(`/example?exampleId=${id}`);
@@ -126,8 +124,6 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         createUserId: apiExample.createUserId,
         updateTs: apiExample.updateTs,
         updateUserId: apiExample.updateUserId,
-        deleteTs: apiExample.deleteTs,
-        deleteUserId: apiExample.deleteUserId,
       };
       // Update cached examples list if this item exists
       set((state) => {
@@ -147,6 +143,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       return null;
     }
   },
+  //============================^FUNCTION LINE ^============================
   createExample: async (data) => {
     set({ error: null });
     try {
@@ -177,8 +174,6 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         createUserId: apiExample.createUserId,
         updateTs: apiExample.updateTs,
         updateUserId: apiExample.updateUserId,
-        deleteTs: apiExample.deleteTs,
-        deleteUserId: apiExample.deleteUserId,
       };
       set((state) => ({
         examples: [...state.examples, newExample],
@@ -190,6 +185,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       throw new Error(errorMessage);
     }
   },
+  //============================^FUNCTION LINE ^============================
   updateExample: async (id, data) => {
     set({ error: null });
     try {
@@ -214,6 +210,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       set({ error: err instanceof Error ? err.message : "Unknown error" });
     }
   },
+  //============================^FUNCTION LINE ^============================
   deleteExample: async (id) => {
     set({ error: null });
     try {
@@ -233,6 +230,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       throw err; // Re-throw to handle in component
     }
   },
+  //============================^FUNCTION LINE ^============================
   clearCache: () => {
     set({ examples: [], maxUpdateTs: 0 });
   },

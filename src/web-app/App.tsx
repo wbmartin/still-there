@@ -3,6 +3,8 @@ import Login from './pages/login'
 import Dashboard from './pages/dashboard'
 import ExampleListPage from './pages/example-list-page'
 import ExampleEditPage from './pages/example-edit-page'
+import UserAdminPage from './pages/user-admin-page'
+
 import { useAuthStore } from './stores/auth-store'
 
 const router = createBrowserRouter([
@@ -30,6 +32,10 @@ const router = createBrowserRouter([
            path: 'example',
            element: <ExampleEditPage />,
          },
+        {
+          path: 'userAdmin',
+          element: <UserAdminPage />,
+        },
     ],
   },
 ])
@@ -50,6 +56,7 @@ function AppLayout() {
           <ul style={{ listStyle: 'none', padding: 0 }}>
             <li><Link to="/dashboard">Dashboard</Link></li>
             <li><Link to="/exampleList">Examples</Link></li>
+            <li><Link to="/userAdmin">User Admin</Link></li>
             <li><button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer', textDecoration: 'underline' }}>Logout</button></li>
           </ul>
         </nav>

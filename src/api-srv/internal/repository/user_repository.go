@@ -95,7 +95,7 @@ func (r *UserRepository) GetUserGrantList(ctx context.Context, userGroupIDs []in
 
 // CreateUser creates a new user
 func (r *UserRepository) CreateUser(ctx context.Context, user *model.AppUserModel) (*model.AppUserModel, error) {
-	if !regexp.MustCompile(`^[a-zA-Z0-9]+$`).MatchString(user.UserName) {
+	if !regexp.MustCompile(`^[a-zA-Z0-9-]+$`).MatchString(user.UserName) {
 		return nil, fmt.Errorf("username must contain only alphanumeric characters")
 	}
 
@@ -136,6 +136,105 @@ func (r *UserRepository) UpdateUserPassword(ctx context.Context, userID int, new
 	}
 
 	return nil
+}
+
+// GetUserList retrieves all users for a security context
+func (r *UserRepository) GetUserList(ctx context.Context, securityContext int) ([]*model.AppUserModel, error) {
+	query := `
+		SELECT app_user_id, user_name, first_name, last_name, email,
+		       security_context, user_group_membership_list, mfa_exempt,
+		       create_ts, create_user_id, update_ts, update_user_id,
+		       delete_ts, delete_user_id
+		FROM app_user
+		WHERE security_context = $1 AND delete_user_id IS NULL
+		ORDER BY user_name`
+
+	rows, err := r.db.Query(ctx, query, securityContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*model.AppUserModel
+	for rows.Next() {
+		var user model.AppUserModel
+		err := rows.Scan(
+			&user.AppUserID, &user.UserName, &user.FirstName, &user.LastName, &user.Email,
+			&user.SecurityContext, &user.UserGroupMembershipList, &user.MFAExempt,
+			&user.CreateTS, &user.CreateUserID, &user.UpdateTS, &user.UpdateUserID,
+			&user.DeleteTS, &user.DeleteUserID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, &user)
+	}
+
+	return users, nil
+}
+
+// UpdateUser updates a user with optimistic locking
+func (r *UserRepository) UpdateUser(ctx context.Context, user *model.AppUserModel, clientUpdateTS float64) error {
+	query := `
+		UPDATE app_user
+		SET user_name = $1, first_name = $2, last_name = $3, email = $4,
+		    user_group_membership_list = $5, mfa_exempt = $6,
+		    update_ts = $7, update_user_id = $8
+		WHERE app_user_id = $9 AND update_ts = $10 AND delete_user_id IS NULL`
+
+	result, err := r.db.Exec(ctx, query,
+		user.UserName, user.FirstName, user.LastName, user.Email,
+		user.UserGroupMembershipList, user.MFAExempt,
+		user.UpdateTS, user.UpdateUserID,
+		user.AppUserID, clientUpdateTS)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		// Check if user exists
+		var exists bool
+		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user WHERE app_user_id = $1 AND delete_user_id IS NULL)`
+		err = r.db.QueryRow(ctx, checkQuery, user.AppUserID).Scan(&exists)
+		if err != nil {
+			return fmt.Errorf("failed to check user existence: %w", err)
+		}
+		if !exists {
+			return ErrNotFound
+		}
+		return ErrConflict
+	}
+
+	return nil
+}
+
+// DeleteUser soft deletes a user with optimistic locking
+func (r *UserRepository) DeleteUser(ctx context.Context, userID int, securityContext int, clientUpdateTS float64, deleteTS float64, deleteUserID int) (int, error) {
+	query := `
+		UPDATE app_user
+		SET delete_ts = $1, delete_user_id = $2
+		WHERE app_user_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+
+	result, err := r.db.Exec(ctx, query, deleteTS, deleteUserID, userID, securityContext, clientUpdateTS)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		// Check if user exists
+		var exists bool
+		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user WHERE app_user_id = $1 AND delete_user_id IS NULL)`
+		err = r.db.QueryRow(ctx, checkQuery, userID).Scan(&exists)
+		if err != nil {
+			return 0, fmt.Errorf("failed to check user existence: %w", err)
+		}
+		if !exists {
+			return 0, ErrNotFound
+		}
+		return 0, ErrConflict
+	}
+
+	return userID, nil
 }
 
 // removeDuplicates removes duplicate integers from a slice

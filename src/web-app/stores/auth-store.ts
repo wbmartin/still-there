@@ -17,14 +17,15 @@ interface AuthStore extends Omit<AuthState, 'csrfToken'> {
   logout: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthStore>((set, get) => ({
+export const useAuthStore = create<AuthStore>((set) => ({
   authState: "TBD" as AuthStateType,
   grantList: [],
-  username: "",
+  userName: "",
   securityContext: 0,
   postAuthDestination: "",
   loading: false,
   error: null,
+  //============================^FUNCTION LINE ^============================
   authenticateWithUsernamePassword: async (
     userName: string,
     password: string,
@@ -57,11 +58,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       set({ loading: false });
     }
   },
+  //============================^FUNCTION LINE ^============================
   authenticateWithAuthToken: async () => {
     // console.log("refresh async starting ");
     set({ authState: "CHECKING", loading: true, error: null });
     try {
-      const response = await apiRequest("/refresh", {}, get().csrfToken);
+      const response = await apiRequest("/refresh", {});
       if (!response.ok) throw new Error("Refresh failed");
        const data: RefreshResponse = await response.json();
         if (data.user) {
@@ -84,9 +86,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       set({ loading: false });
     }
   },
+  //============================^FUNCTION LINE ^============================
   logout: async () => {
     try {
-      await apiRequest("/logoff", { method: "POST" }, get().csrfToken);
+      await apiRequest("/logoff", { method: "POST" });
     } catch (err) {
       console.error(err);
     }

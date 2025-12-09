@@ -18,8 +18,8 @@ func NewUserGroupRepository(db *pgxpool.Pool) *UserGroupRepository {
 	return &UserGroupRepository{db: db}
 }
 
-// GetUserGroupList retrieves user groups by IDs
-func (r *UserGroupRepository) GetUserGroupList(ctx context.Context, groupIDs []int) ([]*model.UserGroupModel, error) {
+// GetUserGroupListByIDList retrieves user groups by IDs
+func (r *UserGroupRepository) GetUserGroupListByIDList(ctx context.Context, groupIDs []int) ([]*model.UserGroupModel, error) {
 	if len(groupIDs) == 0 {
 		return []*model.UserGroupModel{}, nil
 	}
@@ -52,4 +52,37 @@ func (r *UserGroupRepository) GetUserGroupList(ctx context.Context, groupIDs []i
 	}
 
 	return groupList, nil
+}
+
+// GetUserGroupList retrieves all user groups for a security context
+func (r *UserGroupRepository) GetUserGroupList(ctx context.Context, securityContext int) ([]*model.UserGroupModel, error) {
+	query := `
+		SELECT user_group_id, group_name, user_grant_list, security_context,
+		       create_ts, create_user_id, update_ts, update_user_id,
+		       delete_ts, delete_user_id
+		FROM user_group
+		WHERE security_context = $1 AND delete_user_id IS NULL
+		ORDER BY group_name`
+
+	rows, err := r.db.Query(ctx, query, securityContext)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var groups []*model.UserGroupModel
+	for rows.Next() {
+		var group model.UserGroupModel
+		err := rows.Scan(
+			&group.UserGroupID, &group.GroupName, &group.UserGrantList, &group.SecurityContext,
+			&group.CreateTS, &group.CreateUserID, &group.UpdateTS, &group.UpdateUserID,
+			&group.DeleteTS, &group.DeleteUserID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		groups = append(groups, &group)
+	}
+
+	return groups, nil
 }

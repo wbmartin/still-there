@@ -77,6 +77,8 @@ func main() {
 	logoffHandler := handler.LogoffHandler(appServices)
 
 	exampleHandler := handler.NewExampleHandler(appServices, exampleRepo)
+	userHandler := handler.NewUserHandler(appServices, userRepo)
+	userGroupHandler := handler.NewUserGroupHandler(appServices, userGroupRepo)
 
 	// Setup routes
 	mux := http.NewServeMux()
@@ -101,6 +103,15 @@ func main() {
 	mux.HandleFunc("POST /exampleList", exampleHandler.CreateExampleList)
 	mux.HandleFunc("PUT /exampleList", exampleHandler.UpdateExampleList)
 	mux.HandleFunc("DELETE /exampleList", exampleHandler.DeleteExampleList)
+
+	// User CRUD
+	mux.HandleFunc("GET /userList", userHandler.GetUserList)
+	mux.HandleFunc("POST /user", userHandler.CreateUser)
+	mux.HandleFunc("PUT /user", userHandler.UpdateUser)
+	mux.HandleFunc("DELETE /user", userHandler.DeleteUser)
+
+	// User groups
+	mux.HandleFunc("GET /userGroupList", userGroupHandler.GetUserGroupList)
 
 	// Create server
 	server := &http.Server{

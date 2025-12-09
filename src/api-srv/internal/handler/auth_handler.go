@@ -312,7 +312,7 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 // createJWTForUser creates a JWT token for the authenticated user
 func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices *app_lib.AppServices, userGroupRepo *repository.UserGroupRepository) (string, string, error) {
 	// Get user grants
-	grants, err := userGroupRepo.GetUserGroupList(ctx, user.UserGroupMembershipList)
+	grants, err := userGroupRepo.GetUserGroupListByIDList(ctx, user.UserGroupMembershipList)
 	if err != nil {
 		return "", "", err
 	}
