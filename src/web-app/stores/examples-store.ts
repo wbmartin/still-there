@@ -26,12 +26,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
     try {
       if (maxUpdateTs === 0) {
         // Fetch all examples
-        const csrfToken = localStorage.getItem("csrfToken");
-        const response = await apiRequest(
-          "/exampleList",
-          {},
-          csrfToken || undefined,
-        );
+        const response = await apiRequest("/exampleList");
         if (!response.ok) throw new Error("Failed to fetch examples");
         const data: ApiResponse<ApiExampleModel[]> = await response.json();
         const examples = data.data.map((e) => ({
@@ -56,12 +51,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         set({ examples, maxUpdateTs: newMaxUpdateTs, loading: false });
       } else {
         // Fetch updates
-        const csrfToken = localStorage.getItem("csrfToken");
-        const response = await apiRequest(
-          `/exampleList?afterUpdateTs=${maxUpdateTs}`,
-          {},
-          csrfToken || undefined,
-        );
+        const response = await apiRequest(`/exampleList?afterUpdateTs=${maxUpdateTs}`);
         if (!response.ok) throw new Error("Failed to sync examples");
         const data: ApiResponse<ApiExampleModel[]> = await response.json();
         const newExamples = data.data.map((e) => ({
@@ -116,12 +106,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
   },
   getExample: async (id: number): Promise<Example | null> => {
     try {
-      const csrfToken = localStorage.getItem("csrfToken");
-      const response = await apiRequest(
-        `/example?exampleId=${id}`,
-        {},
-        csrfToken || undefined,
-      );
+      const response = await apiRequest(`/example?exampleId=${id}`);
       if (!response.ok) {
         if (response.status === 404 || response.status === 400) return null;
         throw new Error("Failed to fetch example");
@@ -171,16 +156,11 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         example_int_array: data.exampleIntArray,
         example_float_array: data.exampleFloatArray,
       };
-      const csrfToken = localStorage.getItem("csrfToken");
-      const response = await apiRequest(
-        "/example",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-        csrfToken || undefined,
-      );
+      const response = await apiRequest("/example", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       if (!response.ok) throw new Error("Failed to create example");
       const result: ApiResponse<ApiExampleModel> = await response.json();
       const apiExample = result.data;
@@ -221,16 +201,11 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         example_float_array: data.exampleFloatArray,
         update_ts: data.updateTs,
       };
-      const csrfToken = localStorage.getItem("csrfToken");
-      const response = await apiRequest(
-        "/example",
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-        csrfToken || undefined,
-      );
+      const response = await apiRequest("/example", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       if (!response.ok) throw new Error("Failed to update example");
       // Optionally refetch or update local state
       await get().getExampleList();

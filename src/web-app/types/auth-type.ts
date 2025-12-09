@@ -23,7 +23,6 @@ export interface RefreshResponse {
 
 export interface AuthState {
   authState: AuthStateType;
-  csrfToken: string;
   grantList: string[];
   username: string;
   securityContext: number;

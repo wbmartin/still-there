@@ -6,9 +6,9 @@ import type {
   LoginResponse,
   RefreshResponse,
 } from "../types/auth-type";
-import { apiRequest } from "../utils/api";
+import { apiRequest, setCsrfToken, clearCsrfToken } from "../utils/api";
 
-interface AuthStore extends AuthState {
+interface AuthStore extends Omit<AuthState, 'csrfToken'> {
   authenticateWithUsernamePassword: (
     username: string,
     password: string,
@@ -19,7 +19,6 @@ interface AuthStore extends AuthState {
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
   authState: "TBD" as AuthStateType,
-  csrfToken: "",
   grantList: [],
   username: "",
   securityContext: 0,
@@ -39,17 +38,16 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         body: JSON.stringify(loginRequest),
       });
       if (!response.ok) throw new Error("Login failed");
-      const data: LoginResponse = await response.json();
-      if (data.user) {
-        localStorage.setItem('csrfToken', data.csrf_token);
-        set({
-          authState: "YES",
-          csrfToken: data.csrf_token,
-          grantList: data.user.grantList || [],
-          username: data.user.userName || "",
-          securityContext: data.user.securityContext || 0,
-        });
-      }
+       const data: LoginResponse = await response.json();
+        if (data.user) {
+          setCsrfToken(data.csrf_token);
+          set({
+            authState: "YES",
+            grantList: data.user.grantList || [],
+            username: data.user.userName || "",
+            securityContext: data.user.securityContext || 0,
+          });
+        }
     } catch (err) {
       set({
         authState: "NO",
@@ -65,21 +63,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const response = await apiRequest("/refresh", {}, get().csrfToken);
       if (!response.ok) throw new Error("Refresh failed");
-      const data: RefreshResponse = await response.json();
-      if (data.user) {
-        // console.log("Auth refresh successful for user:", data.user);
-        localStorage.setItem('csrfToken', data.csrf_token);
-        set({
-          authState: "YES",
-          csrfToken: data.csrf_token,
-          grantList: data.user.grantList || [],
-          username: data.user.userName || "",
-          securityContext: data.user.securityContext || 0,
-        });
-      } else {
-        // console.log("Auth refresh not successful 1 ");
-        set({ authState: "NO" });
-      }
+       const data: RefreshResponse = await response.json();
+        if (data.user) {
+          // console.log("Auth refresh successful for user:", data.user);
+          setCsrfToken(data.csrf_token);
+          set({
+            authState: "YES",
+            grantList: data.user.grantList || [],
+            username: data.user.userName || "",
+            securityContext: data.user.securityContext || 0,
+          });
+        }
     } catch (err) {
       // console.log("Auth refresh not successful 2");
       set({
@@ -96,10 +90,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     } catch (err) {
       console.error(err);
     }
-    localStorage.removeItem('csrfToken');
+    clearCsrfToken();
     set({
       authState: "NO",
-      csrfToken: "",
       grantList: [],
       username: "",
       securityContext: 0,

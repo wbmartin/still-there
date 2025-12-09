@@ -1,4 +1,5 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { getCsrfToken } from "../utils/api";
 
 export const apiSvc = createApi({
   reducerPath: "apiSvc",
@@ -6,7 +7,7 @@ export const apiSvc = createApi({
     baseUrl: "/api",
     credentials: "include", // Include cookies for JWT
     prepareHeaders: (headers) => {
-      const csrfToken = sessionStorage.getItem("csrfToken");
+      const csrfToken = getCsrfToken();
       if (csrfToken) {
         headers.set("X-CSRF-Token", csrfToken);
       }
