@@ -99,19 +99,25 @@ func main() {
 	mux.HandleFunc("DELETE /example", exampleHandler.DeleteExample)
 
 	// Example list (all or by IDs)
-	mux.HandleFunc("GET /exampleList", exampleHandler.GetExampleList)
+	mux.HandleFunc("GET /exampleList", exampleHandler.ReadExampleList)
 	mux.HandleFunc("POST /exampleList", exampleHandler.CreateExampleList)
 	mux.HandleFunc("PUT /exampleList", exampleHandler.UpdateExampleList)
 	mux.HandleFunc("DELETE /exampleList", exampleHandler.DeleteExampleList)
 
 	// User CRUD
-	mux.HandleFunc("GET /userList", userHandler.GetUserList)
+	mux.HandleFunc("GET /userList", userHandler.ReadUserList)
 	mux.HandleFunc("POST /user", userHandler.CreateUser)
 	mux.HandleFunc("PUT /user", userHandler.UpdateUser)
 	mux.HandleFunc("DELETE /user", userHandler.DeleteUser)
 
+	// Grant list
+	mux.HandleFunc("GET /grantList", userHandler.ReadGrantList)
+
 	// User groups
-	mux.HandleFunc("GET /userGroupList", userGroupHandler.GetUserGroupList)
+	mux.HandleFunc("GET /userGroupList", userGroupHandler.ReadUserGroupList)
+	mux.HandleFunc("POST /userGroup", userGroupHandler.CreateUserGroup)
+	mux.HandleFunc("PUT /userGroup", userGroupHandler.UpdateUserGroup)
+	mux.HandleFunc("DELETE /userGroup", userGroupHandler.DeleteUserGroup)
 
 	// Create server
 	server := &http.Server{

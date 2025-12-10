@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import type { User, ApiUserModel, ApiResponse } from "../types/user-type";
 import { apiRequest } from "../utils/api";
+import { API_ENDPOINTS } from "../constants/api";
 
 interface UserState {
   users: User[];
   loading: boolean;
   error: string | null;
-  getUserList: () => Promise<void>;
+  readUserList: () => Promise<void>;
   createUser: (data: Partial<User>) => Promise<void>;
   updateUser: (id: number, data: Partial<User>) => Promise<void>;
   deleteUser: (id: number) => Promise<void>;
@@ -18,10 +19,10 @@ export const useUserStore = create<UserState>((set, get) => ({
   loading: false,
   error: null,
   //============================^FUNCTION LINE ^============================
-  getUserList: async () => {
+  readUserList: async () => {
     set({ loading: true });
     try {
-      const response = await apiRequest("/userList");
+      const response = await apiRequest(API_ENDPOINTS.USER_LIST);
       if (!response.ok) throw new Error("Failed to fetch users");
       const data: ApiResponse<ApiUserModel[]> = await response.json();
       const users = data.data.map((u) => ({
@@ -57,7 +58,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         mfaExempt: data.mfaExempt,
         pwHash: data.pwHash, // Assuming password is passed as pwHash
       };
-      const response = await apiRequest("/user", {
+      const response = await apiRequest(API_ENDPOINTS.USER, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -102,7 +103,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         mfaExempt: data.mfaExempt,
         updateTs: data.updateTs,
       };
-      const response = await apiRequest("/user", {
+      const response = await apiRequest(API_ENDPOINTS.USER, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -123,7 +124,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       const state = get();
       const user = state.users.find((u) => u.appUserId === id);
       if (!user) throw new Error("User not found");
-      const response = await apiRequest(`/user?userId=${id}&updateTs=${user.updateTs}`, {
+      const response = await apiRequest(API_ENDPOINTS.USER + `?userId=${id}&updateTs=${user.updateTs}`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete user");

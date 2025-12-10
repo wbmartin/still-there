@@ -181,7 +181,7 @@ func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, se
 
 // GetExampleList retrieves multiple examples by IDs and security context, or all if idList is empty
 // If afterUpdateTs > 0, only returns examples with update_ts > afterUpdateTs
-func (r *ExampleRepository) GetExampleList(ctx context.Context, idList []int, securityContext int, afterUpdateTs float64) ([]*model.ExampleModel, error) {
+func (r *ExampleRepository) ReadExampleList(ctx context.Context, idList []int, securityContext int, afterUpdateTs float64) ([]*model.ExampleModel, error) {
 	selectClause := `
 		SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
 		       security_context, create_ts, create_user_id, update_ts, update_user_id,

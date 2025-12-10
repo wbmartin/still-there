@@ -38,7 +38,7 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleGet)
+	sec.CheckAuthorization(model.GrantExampleRead)
 
 	if !sec.CheckAllChecksComplete() {
 		return
@@ -94,7 +94,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleAdd)
+	sec.CheckAuthorization(model.GrantExampleCreate)
 
 	if !sec.CheckAllChecksComplete() {
 		return
@@ -151,7 +151,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleChange)
+	sec.CheckAuthorization(model.GrantExampleUpdate)
 
 	if !sec.CheckAllChecksComplete() {
 		return
@@ -279,8 +279,8 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	logger.Info("DLD0", "Example deletion completed")
 }
 
-// GetExampleList handles GET /exampleList?exampleIdList={comma-separated} (optional, if empty returns all)
-func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) {
+// ReadExampleList handles GET /exampleList?exampleIdList={comma-separated} (optional, if empty returns all)
+func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
 	logger.Info("GLS0", "GetExampleList invoked")
 	username := "PreAuth"
@@ -290,7 +290,7 @@ func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) 
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleGet)
+	sec.CheckAuthorization(model.GrantExampleRead)
 
 	if !sec.CheckAllChecksComplete() {
 		return
@@ -329,8 +329,8 @@ func (h *ExampleHandler) GetExampleList(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// If idList is empty, GetExampleList returns all or filtered by afterUpdateTs
-	examples, err := h.exampleRepo.GetExampleList(r.Context(), idList, jwtClaims.SecurityContext, afterUpdateTs)
+	// If idList is empty, ReadExampleList returns all or filtered by afterUpdateTs
+	examples, err := h.exampleRepo.ReadExampleList(r.Context(), idList, jwtClaims.SecurityContext, afterUpdateTs)
 	if err != nil {
 		logger.Error("LIF0", "Failed to get examples: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve examples", logger, username)
@@ -354,7 +354,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleAdd)
+	sec.CheckAuthorization(model.GrantExampleCreate)
 
 	if !sec.CheckAllChecksComplete() {
 		return
@@ -435,7 +435,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleChange)
+	sec.CheckAuthorization(model.GrantExampleUpdate)
 
 	username := "PreAuth"
 	if !sec.CheckAllChecksComplete() {

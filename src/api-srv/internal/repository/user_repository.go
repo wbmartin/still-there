@@ -138,8 +138,8 @@ func (r *UserRepository) UpdateUserPassword(ctx context.Context, userID int, new
 	return nil
 }
 
-// GetUserList retrieves all users for a security context
-func (r *UserRepository) GetUserList(ctx context.Context, securityContext int) ([]*model.AppUserModel, error) {
+// ReadUserList retrieves all users for a security context
+func (r *UserRepository) ReadUserList(ctx context.Context, securityContext int) ([]*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, first_name, last_name, email,
 		       security_context, user_group_membership_list, mfa_exempt,

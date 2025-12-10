@@ -16,12 +16,3 @@ type ExampleModel struct {
 	DeleteTS          *float64  `json:"deleteTs,omitempty" db:"delete_ts"`
 	DeleteUserID      *int      `json:"deleteUserId,omitempty" db:"delete_user_id"`
 }
-
-// ExampleGrants maps grant short codes to their IDs for the Example entity
-// example: The actual constants are defined in user_grant.go for centralization
-var ExampleGrants = map[string]int{
-	"GET_EXAMPLE": 1001,
-	"ADD_EXAMPLE": 1002,
-	"CHG_EXAMPLE": 1003,
-	"DEL_EXAMPLE": 1004,
-}

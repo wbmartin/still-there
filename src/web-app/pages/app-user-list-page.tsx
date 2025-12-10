@@ -1,30 +1,27 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Table, Button, Title, Group, Pagination } from "@mantine/core";
 import { useUserStore } from "../stores/user-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
-import UserEditPage from "./user-edit-page";
+import { ROUTES } from "../constants/routes";
 
 function UserAdminPage() {
   const authState = useAuthGuard();
-  const { users, loading, getUserList, deleteUser } = useUserStore();
+  const { users, loading, readUserList, deleteUser } = useUserStore();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
   const hasFetched = useRef(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const appUserId = searchParams.get("appUserId");
-
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      getUserList();
+      readUserList();
     }
-  }, [authState, getUserList]);
+  }, [authState, readUserList]);
 
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
@@ -60,17 +57,15 @@ function UserAdminPage() {
     setDeleteId(null);
   };
 
-  if (appUserId) {
-    return <UserEditPage />;
-  }
+
 
   return (
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
         <Title order={1}>User Admin</Title>
-        <Button onClick={() => navigate("/userAdmin?appUserId=new")}>
-          Add User
-        </Button>
+         <Button onClick={() => navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=new`)}>
+           Add User
+         </Button>
       </Group>
       <Table>
         <Table.Thead>
@@ -92,14 +87,14 @@ function UserAdminPage() {
               <Table.Td>{user.email}</Table.Td>
               <Table.Td>{user.userGroupMembershipList.join(", ")}</Table.Td>
               <Table.Td>
-                <Button
-                  size="xs"
-                  onClick={() =>
-                    navigate(`/userAdmin?appUserId=${user.appUserId}`)
-                  }
-                >
-                  Edit
-                </Button>
+                 <Button
+                   size="xs"
+                   onClick={() =>
+                     navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=${user.appUserId}`)
+                   }
+                 >
+                   Edit
+                 </Button>
                 <Button
                   size="xs"
                   color="red"

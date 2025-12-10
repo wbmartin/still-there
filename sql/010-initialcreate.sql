@@ -10,20 +10,6 @@ GRANT USAGE ON SCHEMA public TO proto_app_svc_account;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO proto_app_svc_account;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public  TO proto_app_svc_account;
 
--- User grants table (system-wide, security_context = 0 for system grants)
---drop table user_grant;
-CREATE TABLE user_grant (
-    user_grant_id INTEGER PRIMARY KEY,
-    grant_short_code VARCHAR(25) NOT NULL UNIQUE,
-    grant_description TEXT,
-    security_context INTEGER NOT NULL,
-    create_ts NUMERIC(17,7) NOT NULL,
-    create_user_id INTEGER NOT NULL,
-    update_ts NUMERIC(17,7) NOT NULL,
-    update_user_id INTEGER NOT NULL,
-    delete_ts NUMERIC(17,7),
-    delete_user_id INTEGER
-);
 
 -- User groups table (per security context)
 CREATE TABLE user_group (

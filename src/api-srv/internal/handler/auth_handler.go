@@ -252,7 +252,26 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 			return
 		}
 
-		// Get user grants
+		// Issue updated JWT
+		jwt, sessionID, err := createJWTForUser(r.Context(), user, appServices, userGroupRepo)
+		if err != nil {
+			appServices.Logger.Error("JWFL", "Failed to create updated JWT: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, jwtClaims.Subject)
+			return
+		}
+
+		// Set updated JWT cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "auth",
+			Value:    jwt,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   3600, // 1 hour
+		})
+
+		// Get user grants for response
 		grantList, err := userRepo.GetUserGrantList(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
@@ -281,7 +300,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 			UserGrantShortCodeList: grantShortCodeList,
 		}
 
-		csrfToken := jwtClaims.SessionID[len(jwtClaims.SessionID)-3:]
+		csrfToken := sessionID[len(sessionID)-3:]
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
 		appServices.Logger.Info("RFSC", "Refresh successful for user: "+user.UserName)

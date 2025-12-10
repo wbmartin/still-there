@@ -3,9 +3,13 @@ import Login from './pages/login'
 import Dashboard from './pages/dashboard'
 import ExampleListPage from './pages/example-list-page'
 import ExampleEditPage from './pages/example-edit-page'
-import UserAdminPage from './pages/user-admin-page'
+import AppUserListPage from './pages/app-user-list-page'
+import AppUserEditPage from './pages/app-user-edit-page'
+import UserGroupListPage from './pages/user-group-list-page'
+import UserGroupEditPage from './pages/user-group-edit-page'
 
 import { useAuthStore } from './stores/auth-store'
+import { ROUTES } from './constants/routes'
 
 const router = createBrowserRouter([
   {
@@ -16,26 +20,38 @@ const router = createBrowserRouter([
         index: true,
         element: <Login />,
       },
-      {
-        path: 'login',
-        element: <Login />,
-      },
-      {
-        path: 'dashboard',
-        element: <Dashboard />,
-      },
-        {
-          path: 'exampleList',
-          element: <ExampleListPage />,
-        },
-        {
+       {
+         path: ROUTES.LOGIN,
+         element: <Login />,
+       },
+       {
+         path: ROUTES.DASHBOARD,
+         element: <Dashboard />,
+       },
+       {
+         path: ROUTES.EXAMPLE_LIST,
+         element: <ExampleListPage />,
+       },
+         {
            path: 'example',
            element: <ExampleEditPage />,
          },
-        {
-          path: 'userAdmin',
-          element: <UserAdminPage />,
-        },
+         {
+           path: ROUTES.APP_USER_LIST,
+           element: <AppUserListPage />,
+         },
+         {
+           path: ROUTES.APP_USER_EDIT,
+           element: <AppUserEditPage />,
+         },
+         {
+           path: ROUTES.USER_GROUP_LIST,
+           element: <UserGroupListPage />,
+         },
+         {
+           path: ROUTES.USER_GROUP_EDIT,
+           element: <UserGroupEditPage />,
+         },
     ],
   },
 ])
@@ -46,7 +62,7 @@ function AppLayout() {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate(`/${ROUTES.LOGIN}`);
   };
 
   return (
@@ -54,9 +70,10 @@ function AppLayout() {
       {authState === 'YES' && (
         <nav style={{ width: '200px', padding: '1rem', borderRight: '1px solid #ccc' }}>
           <ul style={{ listStyle: 'none', padding: 0 }}>
-            <li><Link to="/dashboard">Dashboard</Link></li>
-            <li><Link to="/exampleList">Examples</Link></li>
-            <li><Link to="/userAdmin">User Admin</Link></li>
+             <li><Link to={`/${ROUTES.DASHBOARD}`}>Dashboard</Link></li>
+             <li><Link to={`/${ROUTES.EXAMPLE_LIST}`}>Examples</Link></li>
+             <li><Link to={`/${ROUTES.APP_USER_LIST}`}>User Admin</Link></li>
+             <li><Link to={`/${ROUTES.USER_GROUP_LIST}`}>User Groups</Link></li>
             <li><button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer', textDecoration: 'underline' }}>Logout</button></li>
           </ul>
         </nav>

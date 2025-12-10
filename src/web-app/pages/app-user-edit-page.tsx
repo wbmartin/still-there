@@ -13,12 +13,13 @@ import { useUserStore } from "../stores/user-store";
 import { useUserGroupsStore } from "../stores/user-groups-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { ROUTES } from "../constants/routes";
 
 function UserEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
   const { createUser, updateUser, deleteUser } = useUserStore();
-  const { getUserGroupList, userGroups } = useUserGroupsStore();
+  const { readUserGroupList, userGroups } = useUserGroupsStore();
   const navigate = useNavigate();
 
   const id = searchParams.get("appUserId") || "";
@@ -43,7 +44,7 @@ function UserEditPage() {
   useEffect(() => {
     if (!hasFetched.current) {
       hasFetched.current = true;
-      getUserGroupList();
+      readUserGroupList();
       if (numericId && !isNew) {
         // Find user from store
         const users = useUserStore.getState().users;
@@ -65,7 +66,7 @@ function UserEditPage() {
         setUserLoading(false);
       }
     }
-  }, [numericId, isNew, getUserGroupList]);
+  }, [numericId, isNew, readUserGroupList]);
 
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
@@ -108,7 +109,7 @@ function UserEditPage() {
           withCloseButton: false,
         });
       }
-      navigate("/userAdmin");
+        navigate(`/${ROUTES.APP_USER_LIST}`);
     } catch (error) {
       console.error("Error saving user:", error);
       notifications.show({
@@ -136,7 +137,7 @@ function UserEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-        navigate("/userAdmin");
+        navigate(`/${ROUTES.APP_USER_LIST}`);
       } catch (error) {
         console.error("Error deleting user:", error);
         notifications.show({
@@ -238,12 +239,12 @@ function UserEditPage() {
               Delete
             </Button>
           )}
-          <Button
-            variant="outline"
-            onClick={() => navigate("/userAdmin")}
-          >
-            Cancel
-          </Button>
+           <Button
+             variant="outline"
+             onClick={() => navigate(`/${ROUTES.APP_USER_LIST}`)}
+           >
+             Cancel
+           </Button>
         </Group>
       </form>
       <DeleteConfirmModal

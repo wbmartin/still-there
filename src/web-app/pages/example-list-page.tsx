@@ -7,7 +7,7 @@ import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 
 function ExampleListPage() {
   const authState = useAuthGuard();
-  const { examples, loading, getExampleList, deleteExample } = useExamplesStore();
+  const { examples, loading, readExampleList, deleteExample } = useExamplesStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
@@ -18,9 +18,9 @@ function ExampleListPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      getExampleList();
+      readExampleList();
     }
-  }, [authState, getExampleList]);
+  }, [authState, readExampleList]);
 
   //============================^HOOOK LINE ^====================================
 
@@ -46,7 +46,7 @@ function ExampleListPage() {
       try {
         await deleteExample(deleteId);
         // List is updated locally, but refresh to ensure sync
-        await getExampleList();
+        await       readExampleList();
       } catch (error) {
         console.error("Error deleting example:", error);
         // Error is handled in store

@@ -26,17 +26,17 @@ func NewUserHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 	}
 }
 
-// GetUserList handles GET /userList
-func (h *UserHandler) GetUserList(w http.ResponseWriter, r *http.Request) {
+// ReadUserList handles GET /userList
+func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
-	logger.Info("UGS0", "GetUserList invoked")
+	logger.Info("ULS0", "ReadUserList invoked")
 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantAddUser) // Assuming admin grant
+	sec.CheckAuthorization(model.GrantUserCreate)
 
 	if !sec.CheckAllChecksComplete() {
 		return
@@ -44,18 +44,49 @@ func (h *UserHandler) GetUserList(w http.ResponseWriter, r *http.Request) {
 
 	jwtClaims := sec.GetClaims()
 
-	// Get users (filtered by security context)
-	users, err := h.userRepo.GetUserList(r.Context(), jwtClaims.SecurityContext)
+	// Read users (filtered by security context)
+	users, err := h.userRepo.ReadUserList(r.Context(), jwtClaims.SecurityContext)
 	if err != nil {
-		logger.Error("UGF0", "Failed to get users: "+err.Error())
+		logger.Error("ULF0", "Failed to read users: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve users", logger, jwtClaims.Subject)
 		return
 	}
 
-	logger.Debug("UGD0", "Users retrieved")
+	logger.Debug("ULD0", "Users read")
 	wrapper := model.DataWrapper{Data: users}
 	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("UGD1", "User list retrieval completed")
+	logger.Info("ULD1", "User list read completed")
+}
+
+// ReadGrantList handles GET /grantList
+func (h *UserHandler) ReadGrantList(w http.ResponseWriter, r *http.Request) {
+	logger := h.appsrv.Logger
+	logger.Info("GLS0", "ReadGrantList invoked")
+
+	// Security checks
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec.CheckJWT()
+	sec.CheckRateLimitAndUserBlock()
+	sec.CheckCSRF()
+	sec.CheckAuthorization(model.GrantUserCreate)
+
+	if !sec.CheckAllChecksComplete() {
+		return
+	}
+
+	// Convert GrantIDToShortCodeMap to array of objects
+	grantList := make([]map[string]interface{}, 0, len(model.GrantIDToShortCodeMap))
+	for id, text := range model.GrantIDToShortCodeMap {
+		grantList = append(grantList, map[string]interface{}{
+			"id":   id,
+			"text": text,
+		})
+	}
+
+	logger.Debug("GLD0", "Grant list read")
+	wrapper := model.DataWrapper{Data: grantList}
+	writeJSON(w, http.StatusOK, wrapper, logger)
+	logger.Info("GLD1", "Grant list read completed")
 }
 
 // CreateUser handles POST /user
@@ -68,7 +99,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantAddUser)
+	sec.CheckAuthorization(model.GrantUserCreate)
 
 	if !sec.CheckAllChecksComplete() {
 		return
@@ -134,7 +165,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantChangeOtherUserPassword) // Assuming change grant
+	sec.CheckAuthorization(model.GrantUserChangePassword) // Assuming change grant
 
 	if !sec.CheckAllChecksComplete() {
 		return
@@ -195,7 +226,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantBlockUser) // Assuming delete grant
+	sec.CheckAuthorization(model.GrantUserBlock) // Assuming delete grant
 
 	if !sec.CheckAllChecksComplete() {
 		return

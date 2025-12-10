@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Example, ApiExampleModel, ApiResponse } from "../types/example-type";
 import { apiRequest } from "../utils/api";
+import { API_ENDPOINTS } from "../constants/api";
 
 interface ExamplesState {
   examples: Example[];
@@ -11,7 +12,7 @@ interface ExamplesState {
   createExample: (data: Partial<Example>) => Promise<void>;
   updateExample: (id: number, data: Partial<Example>) => Promise<void>;
   deleteExample: (id: number) => Promise<void>;
-  getExampleList: () => Promise<void>;
+  readExampleList: () => Promise<void>;
   clearCache: () => void;
 }
 
@@ -21,14 +22,14 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
   loading: false,
   error: null,
   //============================^FUNCTION LINE ^============================
-  getExampleList: async () => {
+  readExampleList: async () => {
     // console.log("getExampleList called");
     const { maxUpdateTs } = get();
     set({ loading: true });
     try {
       if (maxUpdateTs === 0) {
         // Fetch all examples
-        const response = await apiRequest("/exampleList");
+        const response = await apiRequest(API_ENDPOINTS.EXAMPLE_LIST);
         if (!response.ok) throw new Error("Failed to fetch examples");
         const data: ApiResponse<ApiExampleModel[]> = await response.json();
         const examples = data.data.map((e) => ({
@@ -154,7 +155,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         exampleIntArray: data.exampleIntArray,
         exampleFloatArray: data.exampleFloatArray,
       };
-      const response = await apiRequest("/example", {
+      const response = await apiRequest(API_ENDPOINTS.EXAMPLE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -198,14 +199,14 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         exampleFloatArray: data.exampleFloatArray,
         updateTs: data.updateTs,
       };
-      const response = await apiRequest("/example", {
+      const response = await apiRequest(API_ENDPOINTS.EXAMPLE, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error("Failed to update example");
       // Optionally refetch or update local state
-      await get().getExampleList();
+      await get().readExampleList();
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
     }
@@ -217,7 +218,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       const state = get();
       const example = state.examples.find((ex) => ex.exampleId === id);
       if (!example) throw new Error("Example not found");
-      const response = await apiRequest(`/example?exampleId=${id}&updateTs=${example.updateTs}`, {
+      const response = await apiRequest(API_ENDPOINTS.EXAMPLE + `?exampleId=${id}&updateTs=${example.updateTs}`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete example");

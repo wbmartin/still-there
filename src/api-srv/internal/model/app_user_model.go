@@ -18,11 +18,3 @@ type AppUserModel struct {
 	DeleteTS                *float64 `json:"deleteTs,omitempty" db:"delete_ts"`
 	DeleteUserID            *int     `json:"deleteUserId,omitempty" db:"delete_user_id"`
 }
-
-// UserGrants maps grant short codes to their IDs for user-related operations
-var UserGrants = map[string]int{
-	"CHG_OWN_PW":        GrantChangeOwnPassword,
-	"ADD_USER":          GrantAddUser,
-	"BLOCK_USER":        GrantBlockUser,
-	"CHG_OTHER_USER_PW": GrantChangeOtherUserPassword,
-}
