@@ -49,7 +49,7 @@ func (s *UserGroupRepositoryTestSuite) TestNewUserGroupRepository() {
 	s.Equal(s.db, repo.db)
 }
 
-func (s *UserGroupRepositoryTestSuite) TestGetUserGroupList() {
+func (s *UserGroupRepositoryTestSuite) TestReadUserGroupList() {
 	// First, check what groups actually exist in the database
 	allGroups, err := s.db.Query(context.Background(), "SELECT user_group_id FROM user_group WHERE delete_user_id IS NULL ORDER BY user_group_id")
 	s.NoError(err)
@@ -70,7 +70,7 @@ func (s *UserGroupRepositoryTestSuite) TestGetUserGroupList() {
 	}
 
 	// Test retrieving existing groups
-	groups, err := s.repo.GetUserGroupList(context.Background(), existingGroupIDList)
+	groups, err := s.repo.ReadUserGroupListByIDList(context.Background(), existingGroupIDList)
 	s.NoError(err)
 	s.NotNil(groups)
 	s.Len(groups, len(existingGroupIDList))
@@ -88,25 +88,24 @@ func (s *UserGroupRepositoryTestSuite) TestGetUserGroupList() {
 	}
 }
 
-func (s *UserGroupRepositoryTestSuite) TestGetUserGroupListEmpty() {
-	// Test with empty slice
-	groups, err := s.repo.GetUserGroupList(context.Background(), []int{})
+func (s *UserGroupRepositoryTestSuite) TestReadUserGroupListByIDListEmpty() {
+	// Test with empty list
+	groups, err := s.repo.ReadUserGroupListByIDList(context.Background(), []int{})
 	s.NoError(err)
 	s.Equal(0, len(groups))
 	s.Equal([]*model.UserGroupModel{}, groups)
 }
 
-func (s *UserGroupRepositoryTestSuite) TestGetUserGroupListNonExistent() {
-	// Test with IDs that don't exist
-	groupIDList := []int{99999, 88888} // Non-existent group IDs
-
-	groups, err := s.repo.GetUserGroupList(context.Background(), groupIDList)
+func (s *UserGroupRepositoryTestSuite) TestReadUserGroupListByIDListNonExistent() {
+	// Test with non-existent IDs
+	groupIDList := []int{99999, 88888}
+	groups, err := s.repo.ReadUserGroupListByIDList(context.Background(), groupIDList)
 	s.NoError(err)
 	s.Equal(0, len(groups)) // Should return empty slice for non-existent groups
 }
 
-func (s *UserGroupRepositoryTestSuite) TestGetUserGroupListPartial() {
-	// First, check what groups actually exist
+func (s *UserGroupRepositoryTestSuite) TestReadUserGroupListByIDListPartial() {
+	// First, check what groups actually exist in the database
 	allGroups, err := s.db.Query(context.Background(), "SELECT user_group_id, group_name FROM user_group WHERE delete_user_id IS NULL ORDER BY user_group_id LIMIT 1")
 	s.NoError(err)
 	defer allGroups.Close()
@@ -117,15 +116,13 @@ func (s *UserGroupRepositoryTestSuite) TestGetUserGroupListPartial() {
 		err := allGroups.Scan(&existingID, &existingName)
 		s.NoError(err)
 	} else {
-		// No groups in database, skip this test
-		s.T().Skip("No user groups found in database - skipping partial test")
+		s.T().Skip("No user groups found in database - skipping test")
 		return
 	}
 
-	// Test with mix of existing and non-existing groups
-	groupIDList := []int{existingID, 99999} // One existing, one non-existing
-
-	groups, err := s.repo.GetUserGroupList(context.Background(), groupIDList)
+	// Test with mix of existing and non-existing IDs
+	groupIDList := []int{existingID, 99999}
+	groups, err := s.repo.ReadUserGroupListByIDList(context.Background(), groupIDList)
 	s.NoError(err)
 
 	// Should find only the existing group

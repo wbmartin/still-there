@@ -22,8 +22,8 @@ func NewExampleRepository(db *pgxpool.Pool) *ExampleRepository {
 	return &ExampleRepository{db: db}
 }
 
-// GetExample retrieves an example by ID and security context
-func (r *ExampleRepository) GetExample(ctx context.Context, exampleID int, securityContext int) (*model.ExampleModel, error) {
+// ReadExample retrieves an example by ID and security context
+func (r *ExampleRepository) ReadExample(ctx context.Context, exampleID int, securityContext int) (*model.ExampleModel, error) {
 	// First check if record exists (including deleted ones)
 	checkQuery := `
 		SELECT delete_user_id
@@ -179,7 +179,7 @@ func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, se
 	return exampleID, nil
 }
 
-// GetExampleList retrieves multiple examples by IDs and security context, or all if idList is empty
+// ReadExampleList retrieves multiple examples by IDs and security context, or all if idList is empty
 // If afterUpdateTs > 0, only returns examples with update_ts > afterUpdateTs
 func (r *ExampleRepository) ReadExampleList(ctx context.Context, idList []int, securityContext int, afterUpdateTs float64) ([]*model.ExampleModel, error) {
 	selectClause := `

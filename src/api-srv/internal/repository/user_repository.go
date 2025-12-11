@@ -21,8 +21,8 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-// GetUserByUserName retrieves a user by username
-func (r *UserRepository) GetUserByUserName(ctx context.Context, username string) (*model.AppUserModel, error) {
+// ReadUserByUserName retrieves a user by username
+func (r *UserRepository) ReadUserByUserName(ctx context.Context, username string) (*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
 		       security_context, user_group_membership_list, mfa_exempt,
@@ -51,8 +51,8 @@ func (r *UserRepository) GetUserByUserName(ctx context.Context, username string)
 	return &user, nil
 }
 
-// GetUserGrantList retrieves user grants by security context
-func (r *UserRepository) GetUserGrantList(ctx context.Context, userGroupIDs []int) (map[int][]int, error) {
+// ReadUserGrantList retrieves user grants by security context
+func (r *UserRepository) ReadUserGrantList(ctx context.Context, userGroupIDs []int) (map[int][]int, error) {
 	if len(userGroupIDs) == 0 {
 		return make(map[int][]int), nil
 	}

@@ -27,8 +27,8 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 
 		appServices.Logger.Debug("PRSE", "Auth request parsed for user: "+req.UserName)
 
-		// Get user from database
-		user, err := userRepo.GetUserByUserName(r.Context(), req.UserName)
+		// Read user from database
+		user, err := userRepo.ReadUserByUserName(r.Context(), req.UserName)
 		if err != nil {
 			appServices.Logger.Warn("USLK", "User lookup failed for user: "+req.UserName+", error: "+err.Error())
 			writeError(w, http.StatusUnauthorized, "Invalid credentials", appServices.Logger, "PreAuth")
@@ -97,8 +97,8 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 		// CSRF token is last 3 characters of session ID
 		csrfToken = sessionID[len(sessionID)-3:]
 
-		// Get user grants for response
-		grantList, err := userRepo.GetUserGrantList(r.Context(), user.UserGroupMembershipList)
+		// Read user grants for response
+		grantList, err := userRepo.ReadUserGrantList(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
@@ -146,7 +146,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 
 		appServices.Logger.Debug("A2PS", "Auth2 request parsed for token: "+req.TempToken[:8]+"...")
 
-		// Get username from temp token
+		// Read username from temp token
 		tempTokenKey := "TEMP_AUTH_" + req.TempToken
 		username, err := appServices.KV.Get(tempTokenKey)
 		if err != nil {
@@ -158,8 +158,8 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		// Delete temp token
 		appServices.KV.Set(tempTokenKey, "", "0s") // Expire immediately
 
-		// Get user
-		user, err := userRepo.GetUserByUserName(r.Context(), username)
+		// Read user
+		user, err := userRepo.ReadUserByUserName(r.Context(), username)
 		if err != nil {
 			appServices.Logger.Error("USLK", "User lookup failed during auth2 for user: "+username+", error: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
@@ -191,8 +191,8 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		// CSRF token is last 3 characters of session ID
 		csrfToken = sessionID[len(sessionID)-3:]
 
-		// Get user grants for response
-		grantList, err := userRepo.GetUserGrantList(r.Context(), user.UserGroupMembershipList)
+		// Read user grants for response
+		grantList, err := userRepo.ReadUserGrantList(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
@@ -244,8 +244,8 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 
 		jwtClaims := sec.GetClaims()
 
-		// Get user
-		user, err := userRepo.GetUserByUserName(r.Context(), jwtClaims.Subject)
+		// Read user
+		user, err := userRepo.ReadUserByUserName(r.Context(), jwtClaims.Subject)
 		if err != nil {
 			appServices.Logger.Error("USLK", "User lookup failed during refresh for user: "+jwtClaims.Subject+", error: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, jwtClaims.Subject)
@@ -271,8 +271,8 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 			MaxAge:   3600, // 1 hour
 		})
 
-		// Get user grants for response
-		grantList, err := userRepo.GetUserGrantList(r.Context(), user.UserGroupMembershipList)
+		// Read user grants for response
+		grantList, err := userRepo.ReadUserGrantList(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, jwtClaims.Subject)
@@ -330,8 +330,8 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 
 // createJWTForUser creates a JWT token for the authenticated user
 func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices *app_lib.AppServices, userGroupRepo *repository.UserGroupRepository) (string, string, error) {
-	// Get user grants
-	grants, err := userGroupRepo.GetUserGroupListByIDList(ctx, user.UserGroupMembershipList)
+	// Read user grants
+	grants, err := userGroupRepo.ReadUserGroupListByIDList(ctx, user.UserGroupMembershipList)
 	if err != nil {
 		return "", "", err
 	}

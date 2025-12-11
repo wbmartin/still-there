@@ -61,10 +61,10 @@ func (s *ExampleRepositoryTestSuite) TestCreateExample() {
 	s.Equal("RepoTest Example", created.ExampleText)
 }
 
-func (s *ExampleRepositoryTestSuite) TestGetExample() {
+func (s *ExampleRepositoryTestSuite) TestReadExample() {
 	// Create test data first
 	example := &model.ExampleModel{
-		ExampleText:     "RepoTest Get Example",
+		ExampleText:     "RepoTest Read Example",
 		SecurityContext: 1,
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
@@ -75,10 +75,10 @@ func (s *ExampleRepositoryTestSuite) TestGetExample() {
 	created, _ := s.repo.CreateExample(context.Background(), example)
 
 	// Test retrieval
-	retrieved, err := s.repo.GetExample(context.Background(), created.ExampleID, 1)
+	retrieved, err := s.repo.ReadExample(context.Background(), created.ExampleID, 1)
 	s.NoError(err)
 	s.Equal(created.ExampleID, retrieved.ExampleID)
-	s.Equal("RepoTest Get Example", retrieved.ExampleText)
+	s.Equal("RepoTest Read Example", retrieved.ExampleText)
 }
 
 func (s *ExampleRepositoryTestSuite) TestUpdateExample() {
@@ -103,7 +103,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExample() {
 	s.NoError(err)
 
 	// Verify update
-	updated, _ := s.repo.GetExample(context.Background(), created.ExampleID, 1)
+	updated, _ := s.repo.ReadExample(context.Background(), created.ExampleID, 1)
 	s.Equal("RepoTest Updated Example", updated.ExampleText)
 }
 
@@ -126,7 +126,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExample() {
 	s.Equal(created.ExampleID, deletedID)
 
 	// Verify deletion (soft delete) - should return ErrDeleted
-	_, err = s.repo.GetExample(context.Background(), created.ExampleID, 1)
+	_, err = s.repo.ReadExample(context.Background(), created.ExampleID, 1)
 	s.Error(err)
 	s.True(errors.Is(err, ErrDeleted))
 }
@@ -158,7 +158,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExampleList() {
 	s.NotZero(created[1].ExampleID)
 }
 
-func (s *ExampleRepositoryTestSuite) TestGetExampleList() {
+func (s *ExampleRepositoryTestSuite) TestReadExampleList() {
 	// Create test data
 	example1 := &model.ExampleModel{
 		ExampleText:     "RepoTest List Get 1",
@@ -182,7 +182,7 @@ func (s *ExampleRepositoryTestSuite) TestGetExampleList() {
 
 	// Test list retrieval
 	ids := []int{created1.ExampleID, created2.ExampleID}
-	retrieved, err := s.repo.GetExampleList(context.Background(), ids, 1, 0)
+	retrieved, err := s.repo.ReadExampleList(context.Background(), ids, 1, 0)
 	s.NoError(err)
 	s.Len(retrieved, 2)
 }

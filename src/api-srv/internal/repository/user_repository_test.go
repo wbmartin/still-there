@@ -50,9 +50,9 @@ func (s *UserRepositoryTestSuite) TestNewUserRepository() {
 	s.Equal(s.db, repo.db)
 }
 
-func (s *UserRepositoryTestSuite) TestGetUserByUserName() {
+func (s *UserRepositoryTestSuite) TestReadUserByUserName() {
 	// Test retrieving the admin user that should exist from initial data
-	user, err := s.repo.GetUserByUserName(context.Background(), "admin")
+	user, err := s.repo.ReadUserByUserName(context.Background(), "admin")
 	if err != nil {
 		// Admin user might not exist if database wasn't initialized
 		s.T().Skip("Admin user not found in database - skipping test")
@@ -73,15 +73,15 @@ func (s *UserRepositoryTestSuite) TestGetUserByUserName() {
 	s.Nil(user.DeleteUserID)
 }
 
-func (s *UserRepositoryTestSuite) TestGetUserByUserNameNotFound() {
+func (s *UserRepositoryTestSuite) TestReadUserByUserNameNotFound() {
 	// Test with non-existent username
-	user, err := s.repo.GetUserByUserName(context.Background(), "nonexistentuser")
+	user, err := s.repo.ReadUserByUserName(context.Background(), "nonexistentuser")
 	s.Error(err)
 	s.Nil(user)
 	s.Contains(err.Error(), "user not found")
 }
 
-func (s *UserRepositoryTestSuite) TestGetUserGrantList() {
+func (s *UserRepositoryTestSuite) TestReadUserGrantList() {
 	// First, check what groups actually exist
 	allGroups, err := s.db.Query(context.Background(), "SELECT user_group_id FROM user_group WHERE delete_user_id IS NULL ORDER BY user_group_id")
 	s.NoError(err)
@@ -102,7 +102,7 @@ func (s *UserRepositoryTestSuite) TestGetUserGrantList() {
 	}
 
 	// Test retrieving grants for existing groups
-	grants, err := s.repo.GetUserGrantList(context.Background(), existingGroupIDList)
+	grants, err := s.repo.ReadUserGrantList(context.Background(), existingGroupIDList)
 	s.NoError(err)
 	s.NotNil(grants)
 
@@ -114,17 +114,17 @@ func (s *UserRepositoryTestSuite) TestGetUserGrantList() {
 	s.True(totalGrants > 0, "Should have at least one grant")
 }
 
-func (s *UserRepositoryTestSuite) TestGetUserGrantsEmpty() {
+func (s *UserRepositoryTestSuite) TestReadUserGrantsEmpty() {
 	// Test with empty slice
-	grants, err := s.repo.GetUserGrantList(context.Background(), []int{})
+	grants, err := s.repo.ReadUserGrantList(context.Background(), []int{})
 	s.NoError(err)
 	s.NotNil(grants)
 	s.Equal(0, len(grants))
 }
 
-func (s *UserRepositoryTestSuite) TestGetUserGrantsNonExistent() {
+func (s *UserRepositoryTestSuite) TestReadUserGrantsNonExistent() {
 	// Test with non-existent group IDs
-	grants, err := s.repo.GetUserGrantList(context.Background(), []int{99999, 88888})
+	grants, err := s.repo.ReadUserGrantList(context.Background(), []int{99999, 88888})
 	s.NoError(err)
 	s.Equal(0, len(grants)) // Should return empty map for non-existent groups
 }

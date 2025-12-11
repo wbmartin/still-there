@@ -16,53 +16,53 @@ type UserGrantModelTestSuite struct {
 
 func (s *UserGrantModelTestSuite) TestGrantConstants() {
 	// Test that grant constants are defined and have expected values
-	s.Equal(1001, GrantExampleGet)
-	s.Equal(1002, GrantExampleAdd)
-	s.Equal(1003, GrantExampleChange)
+	s.Equal(1001, GrantExampleRead)
+	s.Equal(1002, GrantExampleCreate)
+	s.Equal(1003, GrantExampleUpdate)
 	s.Equal(1004, GrantExampleDelete)
 	s.Equal(8001, GrantChangeOwnPassword)
-	s.Equal(9001, GrantAddUser)
-	s.Equal(9002, GrantBlockUser)
-	s.Equal(9003, GrantChangeOtherUserPassword)
+	s.Equal(9001, GrantUserCreate)
+	s.Equal(9002, GrantUserBlock)
+	s.Equal(9003, GrantUserChangePassword)
 }
 
 func (s *UserGrantModelTestSuite) TestAllKnownGrantsMap() {
 	// Test that AllKnownGrants map contains all expected grants
 	expectedGrants := map[string]int{
-		"GET_EXAMPLE":       1001,
-		"ADD_EXAMPLE":       1002,
-		"CHG_EXAMPLE":       1003,
-		"DEL_EXAMPLE":       1004,
-		"CHG_OWN_PW":        8001,
-		"ADD_USER":          9001,
-		"BLOCK_USER":        9002,
-		"CHG_OTHER_USER_PW": 9003,
+		"READ_EXAMPLE":   1001,
+		"CREATE_EXAMPLE": 1002,
+		"UPDATE_EXAMPLE": 1003,
+		"DELETE_EXAMPLE": 1004,
+		"CHG_OWN_PW":     8001,
+		"CREATE_USER":    9001,
+		"BLOCK_USER":     9002,
+		"CHANGE_USER_PW": 9003,
 	}
 
 	s.Equal(expectedGrants, AllKnownGrants)
 
 	// Test that all expected keys exist
-	s.Contains(AllKnownGrants, "GET_EXAMPLE")
-	s.Contains(AllKnownGrants, "ADD_EXAMPLE")
-	s.Contains(AllKnownGrants, "CHG_EXAMPLE")
-	s.Contains(AllKnownGrants, "DEL_EXAMPLE")
+	s.Contains(AllKnownGrants, "READ_EXAMPLE")
+	s.Contains(AllKnownGrants, "CREATE_EXAMPLE")
+	s.Contains(AllKnownGrants, "UPDATE_EXAMPLE")
+	s.Contains(AllKnownGrants, "DELETE_EXAMPLE")
 	s.Contains(AllKnownGrants, "CHG_OWN_PW")
-	s.Contains(AllKnownGrants, "ADD_USER")
+	s.Contains(AllKnownGrants, "CREATE_USER")
 	s.Contains(AllKnownGrants, "BLOCK_USER")
-	s.Contains(AllKnownGrants, "CHG_OTHER_USER_PW")
+	s.Contains(AllKnownGrants, "CHANGE_USER_PW")
 }
 
 func (s *UserGrantModelTestSuite) TestGrantIDToShortCodeMap() {
 	// Test that GrantIDToShortCodeMap contains all expected mappings
 	expectedMappings := map[int]string{
-		1001: "GET_EXAMPLE",
-		1002: "ADD_EXAMPLE",
-		1003: "CHG_EXAMPLE",
-		1004: "DEL_EXAMPLE",
+		1001: "READ_EXAMPLE",
+		1002: "CREATE_EXAMPLE",
+		1003: "UPDATE_EXAMPLE",
+		1004: "DELETE_EXAMPLE",
 		8001: "CHG_OWN_PW",
-		9001: "ADD_USER",
+		9001: "CREATE_USER",
 		9002: "BLOCK_USER",
-		9003: "CHG_OTHER_USER_PW",
+		9003: "CHANGE_USER_PW",
 	}
 
 	s.Equal(expectedMappings, GrantIDToShortCodeMap)
@@ -81,7 +81,7 @@ func (s *UserGrantModelTestSuite) TestUserGrantModelJSON() {
 	// Test UserGrantModel JSON marshaling/unmarshaling
 	grant := UserGrantModel{
 		UserGrantID:      1001,
-		GrantShortCode:   "GET_EXAMPLE",
+		GrantShortCode:   "READ_EXAMPLE",
 		GrantDescription: "Retrieve examples",
 		SecurityContext:  0,
 		CreateTS:         1234567890.123,
@@ -94,7 +94,7 @@ func (s *UserGrantModelTestSuite) TestUserGrantModelJSON() {
 	data, err := json.Marshal(grant)
 	s.NoError(err)
 	s.Contains(string(data), `"user_grant_id":1001`)
-	s.Contains(string(data), `"grant_short_code":"GET_EXAMPLE"`)
+	s.Contains(string(data), `"grant_short_code":"READ_EXAMPLE"`)
 	s.Contains(string(data), `"grant_description":"Retrieve examples"`)
 
 	// Test unmarshaling

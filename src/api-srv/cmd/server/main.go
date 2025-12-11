@@ -93,7 +93,7 @@ func main() {
 	mux.HandleFunc("POST /logoff", logoffHandler)
 
 	// Example CRUD
-	mux.HandleFunc("GET /example", exampleHandler.GetExample)
+	mux.HandleFunc("GET /example", exampleHandler.ReadExample)
 	mux.HandleFunc("POST /example", exampleHandler.CreateExample)
 	mux.HandleFunc("PUT /example", exampleHandler.UpdateExample)
 	mux.HandleFunc("DELETE /example", exampleHandler.DeleteExample)

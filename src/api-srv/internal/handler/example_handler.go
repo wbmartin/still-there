@@ -28,10 +28,10 @@ func NewExampleHandler(appServices *app_lib.AppServices, exampleRepo *repository
 	}
 }
 
-// GetExample handles GET /example
-func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
+// ReadExample handles GET /example
+func (h *ExampleHandler) ReadExample(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
-	logger.Info("GTS0", "GetExample invoked")
+	logger.Info("GTS0", "ReadExample invoked")
 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
@@ -62,8 +62,8 @@ func (h *ExampleHandler) GetExample(w http.ResponseWriter, r *http.Request) {
 
 	// Caller information automatically added to log messages
 
-	// Get example
-	example, err := h.exampleRepo.GetExample(r.Context(), exampleID, jwtClaims.SecurityContext)
+	// Read example
+	example, err := h.exampleRepo.ReadExample(r.Context(), exampleID, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "Example not found", logger, jwtClaims.Subject)
@@ -282,7 +282,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 // ReadExampleList handles GET /exampleList?exampleIdList={comma-separated} (optional, if empty returns all)
 func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
-	logger.Info("GLS0", "GetExampleList invoked")
+	logger.Info("GLS0", "ReadExampleList invoked")
 	username := "PreAuth"
 
 	// Security checks
