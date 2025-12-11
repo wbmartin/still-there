@@ -1,8 +1,5 @@
 # React App
 
-- group admin page
-    - list group members
-    - add group member (maybe a modal)
 -several userAdmin page needs to map user groups  to group names, etc
 - add error boundary
 - lots of unknown users coming into the api server logs
@@ -20,8 +17,11 @@
 
 - user profile page with preferences page with items per page, modal user can change their own password.
 
+- Check on all repo functions, they should be receving the security context from users jwt claims.
+
 # API Server
 - TOTP implementation, open to do in auth_handler.go also lots of impacts to the react app. Needs to be part of the login flow, and also need to have a way to onboard users with TOTP, and reset TOTP for users that lost their device. Admin should be able to reset TOTP for users.
+- database change user_group -> app_user_group
 
 
 # Starting prompt

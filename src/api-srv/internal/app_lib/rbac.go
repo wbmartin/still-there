@@ -43,6 +43,7 @@ func (r *RBACManager) HasGrant(claims *Claims, grantID int, securityContext int)
 }
 
 // HasAnyGrantInContext checks if a user has any grants in a specific security context
+// WBM 2025.12.11 I don't think is used anywhere, but leaving it for now.
 func (r *RBACManager) HasAnyGrantInContext(claims *Claims, securityContext int) bool {
 	if claims == nil || claims.Grants == nil {
 		return false

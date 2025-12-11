@@ -14,9 +14,9 @@ export function DeleteConfirmModal({
   entityType,
 }: DeleteConfirmModalProps) {
   return (
-    <Modal opened={isOpen} onClose={onCancel} title="Confirm Delete" centered>
+    <Modal opened={isOpen} onClose={onCancel} title="Confirm Delete" centered size="sm">
       <Text>Are you sure you want to delete this {entityType}?</Text>
-      <Group justify="flex-end" mt="md">
+      <Group justify="center" mt="md" grow>
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>

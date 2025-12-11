@@ -7,6 +7,8 @@ import {
   Title,
   Group,
   MultiSelect,
+  List,
+  Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useUserGroupsStore } from "../stores/user-groups-store";
@@ -220,13 +222,20 @@ function UserGroupEditPage() {
       {/* User Management Section */}
       <div style={{ marginTop: "2rem" }}>
         <Title order={2} mb="md">Group Members</Title>
-        <div style={{ marginBottom: "1rem" }}>
-          {users.filter(u => u.userGroupMembershipList.includes(numericId || 0)).map(user => (
-            <div key={user.appUserId} style={{ display: "inline-block", margin: "0.25rem", padding: "0.5rem", border: "1px solid #ccc", borderRadius: "4px" }}>
-              {user.firstName} {user.lastName} ({user.userName})
-            </div>
-          ))}
-        </div>
+        {(() => {
+          const groupMembers = users.filter(u => u.userGroupMembershipList.includes(numericId || 0));
+          return groupMembers.length > 0 ? (
+            <List type="ordered" mb="md">
+              {groupMembers.map(user => (
+                <List.Item key={user.appUserId}>
+                  {user.firstName} {user.lastName} ({user.userName})
+                </List.Item>
+              ))}
+            </List>
+          ) : (
+            <Text c="dimmed" mb="md">No members</Text>
+          );
+        })()}
         <Group>
           <Button onClick={() => { setUserModalMode('add'); setUserModalOpen(true); }}>Add Users</Button>
           <Button color="orange" onClick={() => { setUserModalMode('remove'); setUserModalOpen(true); }}>Remove Users</Button>

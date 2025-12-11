@@ -1,4 +1,5 @@
 import { createBrowserRouter, RouterProvider, Outlet, Link, useNavigate } from 'react-router-dom'
+import { NavLink, Button, Stack } from '@mantine/core'
 import Login from './pages/login'
 import Dashboard from './pages/dashboard'
 import ExampleListPage from './pages/example-list-page'
@@ -66,21 +67,25 @@ function AppLayout() {
   };
 
   return (
-    <div style={{ display: 'flex' }}>
-      {authState === 'YES' && (
+    <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+      <div style={{ display: 'flex', maxWidth: '1024px', width: '100%' }}>
+        {authState === 'YES' && (
         <nav style={{ width: '200px', padding: '1rem', borderRight: '1px solid #ccc' }}>
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-             <li><Link to={`/${ROUTES.DASHBOARD}`}>Dashboard</Link></li>
-             <li><Link to={`/${ROUTES.EXAMPLE_LIST}`}>Examples</Link></li>
-             <li><Link to={`/${ROUTES.APP_USER_LIST}`}>User Admin</Link></li>
-             <li><Link to={`/${ROUTES.USER_GROUP_LIST}`}>User Groups</Link></li>
-            <li><button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer', textDecoration: 'underline' }}>Logout</button></li>
-          </ul>
+          <Stack gap="xs">
+            <NavLink component={Link} to={`/${ROUTES.DASHBOARD}`} label="Dashboard" />
+            <NavLink component={Link} to={`/${ROUTES.EXAMPLE_LIST}`} label="Examples" />
+            <NavLink component={Link} to={`/${ROUTES.APP_USER_LIST}`} label="User Admin" />
+            <NavLink component={Link} to={`/${ROUTES.USER_GROUP_LIST}`} label="User Groups" />
+            <Button variant="subtle" onClick={handleLogout} fullWidth style={{ justifyContent: 'flex-start' }}>
+              Logout
+            </Button>
+          </Stack>
         </nav>
-      )}
-      <main style={{ flex: 1, padding: '1rem' }}>
-        <Outlet />
-      </main>
+        )}
+        <main style={{ flex: 1, padding: '1rem' }}>
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }
