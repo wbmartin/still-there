@@ -9,7 +9,7 @@ import {
   MultiSelect,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useUserStore } from "../stores/user-store";
+import { useAppUserStore } from "../stores/app-user-store";
 import { useUserGroupsStore } from "../stores/user-groups-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
@@ -18,7 +18,7 @@ import { ROUTES } from "../constants/routes";
 function UserEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
-  const { createUser, updateUser, deleteUser } = useUserStore();
+  const { createUser, updateUser, deleteUser } = useAppUserStore();
   const { readUserGroupList, userGroups } = useUserGroupsStore();
   const navigate = useNavigate();
 
@@ -47,7 +47,7 @@ function UserEditPage() {
       readUserGroupList();
       if (numericId && !isNew) {
         // Find user from store
-        const users = useUserStore.getState().users;
+        const users = useAppUserStore.getState().users;
         const existingUser = users.find((u: any) => u.appUserId === numericId);
         if (existingUser) {
           setTimeout(() => {

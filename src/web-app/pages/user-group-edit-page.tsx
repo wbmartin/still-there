@@ -10,13 +10,16 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useUserGroupsStore } from "../stores/user-groups-store";
+import { useAppUserStore } from "../stores/app-user-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import AddRemoveUsersFromGroupModal from "../components/AddRemoveUsersFromGroupModal";
 
 function UserGroupEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
   const { createUserGroup, updateUserGroup, deleteUserGroup, readGrantList } = useUserGroupsStore();
+  const { users, readUserList, addUserListToGroup, removeUserListFromGroup } = useAppUserStore();
   const navigate = useNavigate();
 
   const userGroupId = searchParams.get("userGroupId") || "";
@@ -33,6 +36,8 @@ function UserGroupEditPage() {
 
   const hasFetched = useRef(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [userModalMode, setUserModalMode] = useState<'add' | 'remove'>('add');
 
   useEffect(() => {
     const fetchGrants = async () => {
@@ -59,8 +64,10 @@ function UserGroupEditPage() {
           updateTs: existingGroup.updateTs.toString(),
         });
       }
+      // Load users for the group management
+      readUserList();
     }
-  }, [numericId]);
+  }, [numericId, readUserList]);
 
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
@@ -144,6 +151,32 @@ function UserGroupEditPage() {
     setDeleteModalOpen(false);
   };
 
+  const handleUserModalConfirm = async (userIds: number[]) => {
+    if (!numericId) return;
+    try {
+      if (userModalMode === 'add') {
+        await addUserListToGroup(userIds, numericId);
+      } else {
+        await removeUserListFromGroup(userIds, numericId);
+      }
+      notifications.show({
+        title: "Success",
+        message: `Users ${userModalMode === 'add' ? 'added to' : 'removed from'} group successfully`,
+        color: "green",
+        autoClose: 3000,
+        withCloseButton: false,
+      });
+    } catch (error) {
+      console.error(`Error ${userModalMode}ing users:`, error);
+      notifications.show({
+        title: "Error",
+        message: `Failed to ${userModalMode} users`,
+        color: "red",
+        autoClose: 5000,
+      });
+    }
+  };
+
 
 
   return (
@@ -183,11 +216,35 @@ function UserGroupEditPage() {
            </Button>
         </Group>
       </form>
+
+      {/* User Management Section */}
+      <div style={{ marginTop: "2rem" }}>
+        <Title order={2} mb="md">Group Members</Title>
+        <div style={{ marginBottom: "1rem" }}>
+          {users.filter(u => u.userGroupMembershipList.includes(numericId || 0)).map(user => (
+            <div key={user.appUserId} style={{ display: "inline-block", margin: "0.25rem", padding: "0.5rem", border: "1px solid #ccc", borderRadius: "4px" }}>
+              {user.firstName} {user.lastName} ({user.userName})
+            </div>
+          ))}
+        </div>
+        <Group>
+          <Button onClick={() => { setUserModalMode('add'); setUserModalOpen(true); }}>Add Users</Button>
+          <Button color="orange" onClick={() => { setUserModalMode('remove'); setUserModalOpen(true); }}>Remove Users</Button>
+        </Group>
+      </div>
+
       <DeleteConfirmModal
         isOpen={deleteModalOpen}
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
         entityType="user group"
+      />
+      <AddRemoveUsersFromGroupModal
+        isOpen={userModalOpen}
+        onClose={() => setUserModalOpen(false)}
+        groupId={numericId}
+        mode={userModalMode}
+        onConfirm={handleUserModalConfirm}
       />
     </div>
   );

@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Table, Button, Title, Group, Pagination } from "@mantine/core";
-import { useUserStore } from "../stores/user-store";
+import { useAppUserStore } from "../stores/app-user-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
 
 function UserAdminPage() {
   const authState = useAuthGuard();
-  const { users, loading, readUserList, deleteUser } = useUserStore();
+  const { users, loading, readUserList, deleteUser } = useAppUserStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
