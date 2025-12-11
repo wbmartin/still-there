@@ -8,7 +8,7 @@ This document outlines the steps and key points for creating a new entity type i
 - Soft deletes: Set `delete_ts` instead of hard delete.
 - Grants: Create entity-specific grants in grants.go starting at appropriate numbers (e.g., 1001+ for typical new entities, 9000+ for user/security groups. each new entity should start with ###0 for READ, ###1 for CREATE, ###2 UPDATE, ###3 for DELETE so that the 10s place groups them together with room in between for additional grants). Use CRUD verbs: Read, Create, Update, Delete.
 - Separate list and edit pages for better UX and navigation.
-- **CRITICAL**: Always use query string parameters (e.g., `?entityId=123`) for edit pages instead of path parameters (e.g., `/entity/123`) to maintain URL flexibility and avoid changing route patterns. This ensures consistency and prevents routing issues.
+- **CRITICAL**: Always use query string parameters with entity-specific names (e.g., `?userId=123`, `?userGroupId=456`, `?exampleId=789`) for edit and delete operations instead of path parameters (e.g., `/entity/123`) to maintain URL flexibility and avoid changing route patterns. This ensures consistency and prevents routing issues. Do not use generic names like `?entityId=`; always use the specific entity name followed by `Id`.
 - Test CRUD operations thoroughly.
 
 ## Naming Conventions
@@ -71,7 +71,7 @@ This document outlines the steps and key points for creating a new entity type i
     - **Routes** (`constants/routes.ts`): Define route paths without leading `/` (e.g., `'appUserList'`).
     - **API Endpoints** (`constants/api.ts`): Define API paths (e.g., `'/userList'`).
 
-3. **Types** (`types/entity-type.ts`):
+3. **Types** (`types/entity-type.ts`, one file per entity):
     - `Entity` interface (camelCase).
     - `ApiEntityModel` for API responses.
     - Example: `example-type.ts`.
@@ -89,8 +89,8 @@ This document outlines the steps and key points for creating a new entity type i
    - Example: `app-user-list-page.tsx`, `app-user-edit-page.tsx`.
 
 6. **Routing** (`App.tsx`):
-   - `/entityList` → `EntityListPage`
-   - `/entityEdit?entityId=#` → `EntityEditPage` (use Query string parameters, DO NOT USE PATH PARAMS)
+    - `/entityList` → `EntityListPage`
+    - `/entityEdit?entityId=#` → `EntityEditPage` (use Query string parameters with entity-specific names like ?userId=, ?userGroupId=, etc., DO NOT USE PATH PARAMS)
    - Update nav links.
    - 
 

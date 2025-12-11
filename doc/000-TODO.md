@@ -17,5 +17,12 @@
 
 - page number on the user list page should be part of state so a refresh or link takes to same place.
 
+
+- user profile page with preferences page with items per page, modal user can change their own password.
+
 # API Server
 - TOTP implementation, open to do in auth_handler.go also lots of impacts to the react app. Needs to be part of the login flow, and also need to have a way to onboard users with TOTP, and reset TOTP for users that lost their device. Admin should be able to reset TOTP for users.
+
+
+# Starting prompt
+make sure you look at my styles and quirks in the instructions. we are building a template CRUD app in Go and React. in the doc file is an 811 file that describes how to construct a new entity, we're currently building the first entity, "example", and documenting what's important to facilitate future new entity create. the last thing you did was create a critque in doc/811.

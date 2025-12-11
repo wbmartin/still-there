@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { UserGroup, ApiUserGroupModel, ApiResponse } from "../types/user-type";
+import type { UserGroup, ApiUserGroupModel } from "../types/user-group-type";
+import type { ApiResponse } from "../types/user-type";
 import { apiRequest } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 
