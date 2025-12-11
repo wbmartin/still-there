@@ -21,7 +21,7 @@ SELECT
 FROM common_vars,
 (VALUES
     ('Basic User', ARRAY[1001, 1002, 1003, 1004, 8001, 9010], 1),
-    ('Admin', ARRAY[1001, 1002, 1003, 1004, 8001, 9001, 9002, 9003, 9010, 9011, 9012, 9013], 1)
+    ('Admin', ARRAY[1001, 1002, 1003, 1004, 8001, 9001, 9002, 9003, 9010, 9011, 9012, 9013, 9014, 9015], 1)
 ) AS data(group_name, user_grant_list, security_context);
 
 -- Insert admin user (password hash for 'admin123!')

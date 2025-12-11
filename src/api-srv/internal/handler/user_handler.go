@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
@@ -44,8 +45,23 @@ func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 
 	jwtClaims := sec.GetClaims()
 
-	// Read users (filtered by security context)
-	users, err := h.userRepo.ReadUserList(r.Context(), jwtClaims.SecurityContext)
+	// Parse optional userIdList query parameter
+	userIdListStr := r.URL.Query().Get("userIdList")
+	var idList []int
+	if userIdListStr != "" {
+		idStrs := strings.Split(userIdListStr, ",")
+		for _, idStr := range idStrs {
+			id, err := strconv.Atoi(strings.TrimSpace(idStr))
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "Invalid userId in userIdList", logger, jwtClaims.Subject)
+				return
+			}
+			idList = append(idList, id)
+		}
+	}
+
+	// Read users (filtered by security context and optional idList)
+	users, err := h.userRepo.ReadUserList(r.Context(), jwtClaims.SecurityContext, idList)
 	if err != nil {
 		logger.Error("ULF0", "Failed to read users: "+err.Error())
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve users", logger, jwtClaims.Subject)
@@ -275,4 +291,106 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, logger)
 	logger.Info("UDD0", "User deletion completed")
+}
+
+// AddUserListToGroupHandler handles POST /addUserListToGroup
+func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.Request) {
+	logger := h.appsrv.Logger
+	logger.Info("AUG0", "AddUserListToGroup invoked")
+
+	// Security checks
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec.CheckJWT()
+	sec.CheckRateLimitAndUserBlock()
+	sec.CheckCSRF()
+	sec.CheckAuthorization(model.GrantAddUserToGroup)
+
+	if !sec.CheckAllChecksComplete() {
+		return
+	}
+
+	jwtClaims := sec.GetClaims()
+
+	// Parse request
+	var req struct {
+		UserIds      []int     `json:"userIds"`
+		GroupId      int       `json:"groupId"`
+		UpdateTsList []float64 `json:"updateTsList"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger, jwtClaims.Subject)
+		return
+	}
+
+	if len(req.UserIds) == 0 || len(req.UpdateTsList) != len(req.UserIds) {
+		writeError(w, http.StatusBadRequest, "userIds and updateTsList must be provided and have matching lengths", logger, jwtClaims.Subject)
+		return
+	}
+
+	// Add users to group
+	updatedUsers, err := h.userRepo.AddUserListToGroup(r.Context(), req.UserIds, req.GroupId, req.UpdateTsList, jwtClaims.UserID, jwtClaims.SecurityContext)
+	if err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			writeError(w, http.StatusConflict, "Concurrent update detected", logger, jwtClaims.Subject)
+			return
+		}
+		logger.Error("AUGF0", "Failed to add users to group: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to add users to group", logger, jwtClaims.Subject)
+		return
+	}
+
+	logger.Info("AUGS0", "Users added to group successfully")
+	wrapper := model.DataWrapper{Data: updatedUsers}
+	writeJSON(w, http.StatusOK, wrapper, logger)
+}
+
+// RemoveUserListFromGroupHandler handles POST /removeUserListFromGroup
+func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *http.Request) {
+	logger := h.appsrv.Logger
+	logger.Info("RUG0", "RemoveUserListFromGroup invoked")
+
+	// Security checks
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec.CheckJWT()
+	sec.CheckRateLimitAndUserBlock()
+	sec.CheckCSRF()
+	sec.CheckAuthorization(model.GrantRemoveUserFromGroup)
+
+	if !sec.CheckAllChecksComplete() {
+		return
+	}
+
+	jwtClaims := sec.GetClaims()
+
+	// Parse request
+	var req struct {
+		UserIds      []int     `json:"userIds"`
+		GroupId      int       `json:"groupId"`
+		UpdateTsList []float64 `json:"updateTsList"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger, jwtClaims.Subject)
+		return
+	}
+
+	if len(req.UserIds) == 0 || len(req.UpdateTsList) != len(req.UserIds) {
+		writeError(w, http.StatusBadRequest, "userIds and updateTsList must be provided and have matching lengths", logger, jwtClaims.Subject)
+		return
+	}
+
+	// Remove users from group
+	updatedUsers, err := h.userRepo.RemoveUserListFromGroup(r.Context(), req.UserIds, req.GroupId, req.UpdateTsList, jwtClaims.UserID, jwtClaims.SecurityContext)
+	if err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			writeError(w, http.StatusConflict, "Concurrent update detected", logger, jwtClaims.Subject)
+			return
+		}
+		logger.Error("RUGF0", "Failed to remove users from group: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to remove users from group", logger, jwtClaims.Subject)
+		return
+	}
+
+	logger.Info("RUGS0", "Users removed from group successfully")
+	wrapper := model.DataWrapper{Data: updatedUsers}
+	writeJSON(w, http.StatusOK, wrapper, logger)
 }

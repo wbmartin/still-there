@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -138,18 +139,26 @@ func (r *UserRepository) UpdateUserPassword(ctx context.Context, userID int, new
 	return nil
 }
 
-// ReadUserList retrieves all users for a security context
-func (r *UserRepository) ReadUserList(ctx context.Context, securityContext int) ([]*model.AppUserModel, error) {
+// ReadUserList retrieves users for a security context, optionally filtered by idList
+func (r *UserRepository) ReadUserList(ctx context.Context, securityContext int, idList []int) ([]*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, first_name, last_name, email,
 		       security_context, user_group_membership_list, mfa_exempt,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
-		WHERE security_context = $1 AND delete_user_id IS NULL
-		ORDER BY user_name`
+		WHERE security_context = $1 AND delete_user_id IS NULL`
 
-	rows, err := r.db.Query(ctx, query, securityContext)
+	args := []interface{}{securityContext}
+
+	if len(idList) > 0 {
+		query += ` AND app_user_id = ANY($2)`
+		args = append(args, idList)
+	}
+
+	query += ` ORDER BY user_name`
+
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get users: %w", err)
 	}
@@ -235,6 +244,86 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userID int, securityCon
 	}
 
 	return userID, nil
+}
+
+// AddUserListToGroup adds multiple users to a group with optimistic locking
+func (r *UserRepository) AddUserListToGroup(ctx context.Context, userIds []int, groupId int, updateTsList []float64, updateUserId int, securityContext int) ([]*model.AppUserModel, error) {
+	if len(userIds) != len(updateTsList) {
+		return nil, fmt.Errorf("userIds and updateTsList must have the same length")
+	}
+
+	// Begin transaction
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Update each user (only if group not already in membership list)
+	for i, userId := range userIds {
+		result, err := tx.Exec(ctx, `
+			UPDATE app_user
+			SET user_group_membership_list = array_append(user_group_membership_list, $2),
+				update_ts = $3,
+				update_user_id = $4
+			WHERE app_user_id = $1 AND update_ts = $5 AND delete_user_id IS NULL AND $2 != ALL(user_group_membership_list)`,
+			userId, groupId, float64(time.Now().UnixNano())/1e9, updateUserId, updateTsList[i])
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to update user %d: %w", userId, err)
+		}
+		if result.RowsAffected() == 0 {
+			return nil, fmt.Errorf("user %d not found, already has group, or concurrent update", userId)
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Return updated users
+	return r.ReadUserList(ctx, securityContext, userIds)
+}
+
+// RemoveUserListFromGroup removes multiple users from a group with optimistic locking
+func (r *UserRepository) RemoveUserListFromGroup(ctx context.Context, userIds []int, groupId int, updateTsList []float64, updateUserId int, securityContext int) ([]*model.AppUserModel, error) {
+	if len(userIds) != len(updateTsList) {
+		return nil, fmt.Errorf("userIds and updateTsList must have the same length")
+	}
+
+	// Begin transaction
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Update each user
+	for i, userId := range userIds {
+		result, err := tx.Exec(ctx, `
+			UPDATE app_user
+			SET user_group_membership_list = array_remove(user_group_membership_list, $2),
+				update_ts = $3,
+				update_user_id = $4
+			WHERE app_user_id = $1 AND update_ts = $5 AND delete_user_id IS NULL`,
+			userId, groupId, float64(time.Now().UnixNano())/1e9, updateUserId, updateTsList[i])
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to update user %d: %w", userId, err)
+		}
+		if result.RowsAffected() == 0 {
+			return nil, fmt.Errorf("user %d not found or concurrent update", userId)
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Return updated users
+	return r.ReadUserList(ctx, securityContext, userIds)
 }
 
 // removeDuplicates removes duplicate integers from a slice

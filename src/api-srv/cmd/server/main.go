@@ -109,8 +109,9 @@ func main() {
 	mux.HandleFunc("POST /user", userHandler.CreateUser)
 	mux.HandleFunc("PUT /user", userHandler.UpdateUser)
 	mux.HandleFunc("DELETE /user", userHandler.DeleteUser)
+	mux.HandleFunc("POST /addUserListToGroup", userHandler.AddUserListToGroupHandler)
+	mux.HandleFunc("POST /removeUserListFromGroup", userHandler.RemoveUserListFromGroupHandler)
 
-	// Grant list
 	mux.HandleFunc("GET /grantList", userHandler.ReadGrantList)
 
 	// User groups
