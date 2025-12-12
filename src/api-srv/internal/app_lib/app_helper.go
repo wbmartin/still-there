@@ -89,9 +89,13 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}, logger ThisA
 }
 
 // WriteError writes an error response with logging
-func (ah *AppHelper) WriteError(w http.ResponseWriter, status int, message string) {
-	ah.appServices.Logger.Error("ERR", message, "username", ah.username)
-	response := map[string]string{"error": message}
+func (ah *AppHelper) WriteError(w http.ResponseWriter, status int, clientMsg string, code string, err error) {
+	internalMsg := clientMsg
+	if err != nil {
+		internalMsg = clientMsg + ": " + err.Error()
+	}
+	ah.appServices.Logger.Error(code, internalMsg, "username", ah.username)
+	response := map[string]string{"error": clientMsg}
 	writeJSON(w, status, response, ah.appServices.Logger)
 }
 

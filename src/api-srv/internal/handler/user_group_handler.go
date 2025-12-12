@@ -28,7 +28,7 @@ func NewUserGroupHandler(appServices *app_lib.AppServices, userGroupRepo *reposi
 // ReadUserGroupList handles GET /userGroupList
 func (h *UserGroupHandler) ReadUserGroupList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
-	logger.Info("UGGS0", "GetUserGroupList invoked")
+	logger.Info("URS0", "ReadUserGroupList invoked")
 
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
@@ -46,21 +46,20 @@ func (h *UserGroupHandler) ReadUserGroupList(w http.ResponseWriter, r *http.Requ
 	// Read user groups
 	groups, err := h.userGroupRepo.ReadUserGroupList(r.Context(), jwtClaims.SecurityContext)
 	if err != nil {
-		logger.Error("UGGF0", "Failed to get user groups: "+err.Error())
-		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve user groups")
+		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve user groups", "UGF0", err)
 		return
 	}
 
-	logger.Debug("UGGD0", "User groups retrieved")
+	logger.Debug("UGD0", "User groups retrieved")
 	wrapper := model.DataWrapper{Data: groups}
 	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("UGGD1", "User group list retrieval completed")
+	logger.Info("UGD1", "User group list retrieval completed")
 }
 
 // CreateUserGroup handles POST /userGroup
 func (h *UserGroupHandler) CreateUserGroup(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
-	logger.Info("UGCS0", "CreateUserGroup invoked")
+	logger.Info("UCS0", "CreateUserGroup invoked")
 
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
@@ -78,15 +77,15 @@ func (h *UserGroupHandler) CreateUserGroup(w http.ResponseWriter, r *http.Reques
 	// Parse request body
 	var group model.UserGroupModel
 	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body")
+		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "ERR", nil)
 		return
 	}
 
-	logger.Debug("UGCP0", "User group create request parsed")
+	logger.Debug("UCP0", "User group create request parsed")
 
 	// Validate required fields
 	if group.GroupName == "" {
-		app.WriteError(w, http.StatusBadRequest, "groupName is required")
+		app.WriteError(w, http.StatusBadRequest, "groupName is required", "ERR", nil)
 		return
 	}
 
@@ -101,21 +100,20 @@ func (h *UserGroupHandler) CreateUserGroup(w http.ResponseWriter, r *http.Reques
 	// Create user group
 	createdGroup, err := h.userGroupRepo.CreateUserGroup(r.Context(), &group)
 	if err != nil {
-		logger.Error("UGCF0", "Failed to create user group: "+err.Error())
-		app.WriteError(w, http.StatusInternalServerError, "Failed to create user group")
+		app.WriteError(w, http.StatusInternalServerError, "Failed to create user group", "UCF0", err)
 		return
 	}
 
-	logger.Debug("UGCD0", "User group created")
+	logger.Debug("UCD0", "User group created")
 	wrapper := model.DataWrapper{Data: createdGroup}
 	writeJSON(w, http.StatusCreated, wrapper, logger)
-	logger.Info("UGCD1", "User group creation completed")
+	logger.Info("UCD1", "User group creation completed")
 }
 
 // UpdateUserGroup handles PUT /userGroup
 func (h *UserGroupHandler) UpdateUserGroup(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
-	logger.Info("UGUS0", "UpdateUserGroup invoked")
+	logger.Info("UUS0", "UpdateUserGroup invoked")
 
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
@@ -133,15 +131,15 @@ func (h *UserGroupHandler) UpdateUserGroup(w http.ResponseWriter, r *http.Reques
 	// Parse request body
 	var group model.UserGroupModel
 	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body")
+		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "ERR", nil)
 		return
 	}
 
-	logger.Debug("UGUP0", "User group update request parsed")
+	logger.Debug("UUP0", "User group update request parsed")
 
 	// Validate required fields
 	if group.UserGroupID == 0 || group.GroupName == "" {
-		app.WriteError(w, http.StatusBadRequest, "userGroupId and groupName are required")
+		app.WriteError(w, http.StatusBadRequest, "userGroupId and groupName are required", "ERR", nil)
 		return
 	}
 
@@ -157,26 +155,25 @@ func (h *UserGroupHandler) UpdateUserGroup(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict, "User group was modified by another user")
+			app.WriteError(w, http.StatusConflict, "User group was modified by another user", "ERR", nil)
 		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, "User group not found")
+			app.WriteError(w, http.StatusNotFound, "User group not found", "ERR", nil)
 		default:
-			logger.Error("UGUF0", "Failed to update user group: "+err.Error())
-			app.WriteError(w, http.StatusInternalServerError, "Failed to update user group")
+			app.WriteError(w, http.StatusInternalServerError, "Failed to update user group", "UUF0", err)
 		}
 		return
 	}
 
-	logger.Debug("UGUD0", "User group updated")
+	logger.Debug("UUD0", "User group updated")
 	wrapper := model.DataWrapper{Data: group}
 	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("UGUD1", "User group update completed")
+	logger.Info("UUD1", "User group update completed")
 }
 
 // DeleteUserGroup handles DELETE /userGroup
 func (h *UserGroupHandler) DeleteUserGroup(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
-	logger.Info("UGDS0", "DeleteUserGroup invoked")
+	logger.Info("UDS0", "DeleteUserGroup invoked")
 
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
@@ -194,13 +191,13 @@ func (h *UserGroupHandler) DeleteUserGroup(w http.ResponseWriter, r *http.Reques
 	// Parse query parameters
 	groupID, err := GetIntFromQuery(r, "userGroupId")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error())
+		app.WriteError(w, http.StatusBadRequest, err.Error(), "ERR", nil)
 		return
 	}
 
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error())
+		app.WriteError(w, http.StatusBadRequest, err.Error(), "ERR", nil)
 		return
 	}
 
@@ -209,16 +206,15 @@ func (h *UserGroupHandler) DeleteUserGroup(w http.ResponseWriter, r *http.Reques
 	deletedID, err := h.userGroupRepo.DeleteUserGroup(r.Context(), groupID, jwtClaims.SecurityContext, updateTS, now, jwtClaims.UserID)
 	if err != nil {
 		if strings.Contains(err.Error(), "cannot delete group") {
-			app.WriteError(w, http.StatusConflict, err.Error())
+			app.WriteError(w, http.StatusConflict, err.Error(), "ERR", nil)
 		} else {
 			switch {
 			case errors.Is(err, repository.ErrConflict):
-				app.WriteError(w, http.StatusConflict, "User group was modified by another user")
+				app.WriteError(w, http.StatusConflict, "User group was modified by another user", "ERR", nil)
 			case errors.Is(err, repository.ErrNotFound):
-				app.WriteError(w, http.StatusNotFound, "User group not found")
+				app.WriteError(w, http.StatusNotFound, "User group not found", "ERR", nil)
 			default:
-				logger.Error("UGDF0", "Failed to delete user group: "+err.Error())
-				app.WriteError(w, http.StatusInternalServerError, "Failed to delete user group")
+				app.WriteError(w, http.StatusInternalServerError, "Failed to delete user group", "UDF0", err)
 			}
 		}
 		return
@@ -227,5 +223,5 @@ func (h *UserGroupHandler) DeleteUserGroup(w http.ResponseWriter, r *http.Reques
 	data := map[string]interface{}{"message": "User group deleted successfully", "userGroupId": deletedID}
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("UGDD0", "User group deletion completed")
+	logger.Info("UDD0", "User group deletion completed")
 }

@@ -17,7 +17,7 @@
 - page number on the user list page should be part of state so a refresh or link takes to same place.
 
 
-- user profile page with preferences page with items per page, modal user can change their own password.
+- user profile page with preferences page with items per page, modal user can change their own password.  The core functionalilty we need is to create an upload avatar button.  You've realized there will have to be an nginx server running on the server and we should use it to server static non sensitive files li
 
 - Check on all repo functions, they should be receving the security context from users jwt claims.
 
