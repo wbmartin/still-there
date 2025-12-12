@@ -142,7 +142,14 @@ func (r *UserGroupRepository) UpdateUserGroup(ctx context.Context, group *model.
 }
 
 // DeleteUserGroup soft deletes a user group if no users are assigned
-func (r *UserGroupRepository) DeleteUserGroup(ctx context.Context, groupID int, securityContext int, clientUpdateTS float64, deleteTS float64, deleteUserID int) (int, error) {
+func (r *UserGroupRepository) DeleteUserGroup(
+	ctx context.Context,
+	groupID int,
+	securityContext int,
+	clientUpdateTS float64,
+	deleteTS float64,
+	deleteUserID int,
+) (int, error) {
 	// Check if any users are assigned to this group
 	checkQuery := `
 		SELECT COUNT(*)

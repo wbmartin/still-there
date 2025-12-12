@@ -88,7 +88,15 @@ func CheckPasswordHash(password, encodedHash string) bool {
 }
 
 // GenerateJWT creates a new JWT token
-func GenerateJWT(username string, userID int, sessionID string, securityContext int, grants map[int][]int, jwtSecret string, expireHours int) (string, error) {
+func GenerateJWT(
+	username string,
+	userID int,
+	sessionID string,
+	securityContext int,
+	grants map[int][]int,
+	jwtSecret string,
+	expireHours int,
+) (string, error) {
 	now := time.Now()
 	claims := &Claims{
 		RegisteredClaims: jwt.RegisteredClaims{

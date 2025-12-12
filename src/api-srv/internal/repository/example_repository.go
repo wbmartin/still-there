@@ -23,7 +23,11 @@ func NewExampleRepository(db *pgxpool.Pool) *ExampleRepository {
 }
 
 // ReadExample retrieves an example by ID and security context
-func (r *ExampleRepository) ReadExample(ctx context.Context, exampleID int, securityContext int) (*model.ExampleModel, error) {
+func (r *ExampleRepository) ReadExample(
+	ctx context.Context,
+	exampleID int,
+	securityContext int,
+) (*model.ExampleModel, error) {
 	// First check if record exists (including deleted ones)
 	checkQuery := `
 		SELECT delete_user_id
@@ -32,7 +36,8 @@ func (r *ExampleRepository) ReadExample(ctx context.Context, exampleID int, secu
 
 	var deleteUserID *int
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, checkQuery, exampleID, securityContext).Scan(&deleteUserID)
+		return r.db.QueryRow(ctx, checkQuery,
+			exampleID, securityContext).Scan(&deleteUserID)
 	})
 
 	if err != nil {
@@ -73,18 +78,27 @@ func (r *ExampleRepository) ReadExample(ctx context.Context, exampleID int, secu
 }
 
 // CreateExample creates a new example
-func (r *ExampleRepository) CreateExample(ctx context.Context, example *model.ExampleModel) (*model.ExampleModel, error) {
+func (r *ExampleRepository) CreateExample(
+	ctx context.Context,
+	example *model.ExampleModel,
+) (*model.ExampleModel, error) {
 	query := `
-		INSERT INTO example (example_text, example_int, example_float, example_int_array, example_float_array,
-		                 security_context, create_ts, create_user_id, update_ts, update_user_id)
+		INSERT INTO example (
+			example_text, example_int, example_float, example_int_array,
+			example_float_array, security_context, create_ts, create_user_id,
+			update_ts, update_user_id
+		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING example_id`
 
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		return r.db.QueryRow(ctx, query,
-			example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
-			example.SecurityContext, example.CreateTS, example.CreateUserID, example.UpdateTS, example.UpdateUserID,
-		).Scan(&example.ExampleID)
+			&example.ExampleID, &example.ExampleText, &example.ExampleInt,
+			&example.ExampleFloat, &example.ExampleIntArray,
+			&example.ExampleFloatArray, &example.SecurityContext,
+			&example.CreateTS, &example.CreateUserID,
+			&example.UpdateTS, &example.UpdateUserID,
+		).Scan()
 	})
 
 	if err != nil {
@@ -95,21 +109,27 @@ func (r *ExampleRepository) CreateExample(ctx context.Context, example *model.Ex
 }
 
 // UpdateExample updates an existing example with optimistic locking
-func (r *ExampleRepository) UpdateExample(ctx context.Context, example *model.ExampleModel, originalUpdateTS float64) error {
+func (r *ExampleRepository) UpdateExample(
+	ctx context.Context,
+	example *model.ExampleModel,
+	originalUpdateTS float64,
+) error {
 	query := `
 		UPDATE example
-		SET example_text = $1, example_int = $2, example_float = $3, example_int_array = $4, example_float_array = $5,
+		SET example_text = $1, example_int = $2, example_float = $3,
+		    example_int_array = $4, example_float_array = $5,
 		    update_ts = $6, update_user_id = $7
-		WHERE example_id = $8 AND security_context = $9 AND update_ts = $10 AND delete_user_id IS NULL`
+		WHERE example_id = $8 AND security_context = $9 AND update_ts = $10
+		      AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		var execErr error
 		result, execErr = r.db.Exec(ctx, query,
 			example.ExampleText, example.ExampleInt, example.ExampleFloat,
-			example.ExampleIntArray, example.ExampleFloatArray, example.UpdateTS,
-			example.UpdateUserID, example.ExampleID, example.SecurityContext,
-			originalUpdateTS,
+			example.ExampleIntArray, example.ExampleFloatArray,
+			example.UpdateTS, example.UpdateUserID,
+			example.ExampleID, example.SecurityContext, originalUpdateTS,
 		)
 		return execErr
 	})
@@ -153,12 +173,14 @@ func (r *ExampleRepository) DeleteExample(
 	query := `
 		UPDATE example
 		SET delete_ts = $1, delete_user_id = $2
-		WHERE example_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+		WHERE example_id = $3 AND security_context = $4 AND update_ts = $5
+		      AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		var execErr error
-		result, execErr = r.db.Exec(ctx, query, deleteTS, deleteUserID, exampleID, securityContext, originalUpdateTS)
+		result, execErr = r.db.Exec(ctx, query,
+			deleteTS, deleteUserID, exampleID, securityContext, originalUpdateTS)
 		return execErr
 	})
 
@@ -190,10 +212,16 @@ func (r *ExampleRepository) DeleteExample(
 
 // ReadExampleList retrieves multiple examples by IDs and security context, or all if idList is empty
 // If afterUpdateTs > 0, only returns examples with update_ts > afterUpdateTs
-func (r *ExampleRepository) ReadExampleList(ctx context.Context, idList []int, securityContext int, afterUpdateTs float64) ([]*model.ExampleModel, error) {
+func (r *ExampleRepository) ReadExampleList(
+	ctx context.Context,
+	idList []int,
+	securityContext int,
+	afterUpdateTs float64,
+) ([]*model.ExampleModel, error) {
 	selectClause := `
-		SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
-		       security_context, create_ts, create_user_id, update_ts, update_user_id,
+		SELECT example_id, example_text, example_int, example_float,
+		       example_int_array, example_float_array, security_context,
+		       create_ts, create_user_id, update_ts, update_user_id
 		       delete_ts, delete_user_id
 		FROM example`
 	orderBy := ` ORDER BY example_id`
@@ -219,7 +247,8 @@ func (r *ExampleRepository) ReadExampleList(ctx context.Context, idList []int, s
 			argList[i+1] = id
 		}
 
-		whereClause = fmt.Sprintf(` WHERE example_id IN (%s) AND security_context = $1 AND delete_user_id IS NULL`,
+		whereClause = fmt.Sprintf(
+			` WHERE example_id IN (%s) AND security_context = $1 AND delete_user_id IS NULL`,
 			strings.Join(placeholderList, ","))
 	}
 
@@ -259,7 +288,10 @@ func (r *ExampleRepository) ReadExampleList(ctx context.Context, idList []int, s
 }
 
 // CreateExampleList creates multiple examples in a transaction
-func (r *ExampleRepository) CreateExampleList(ctx context.Context, exampleList []*model.ExampleModel) ([]*model.ExampleModel, error) {
+func (r *ExampleRepository) CreateExampleList(
+	ctx context.Context,
+	exampleList []*model.ExampleModel,
+) ([]*model.ExampleModel, error) {
 	if len(exampleList) == 0 {
 		return []*model.ExampleModel{}, nil
 	}
@@ -272,15 +304,20 @@ func (r *ExampleRepository) CreateExampleList(ctx context.Context, exampleList [
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO example (example_text, example_int, example_float, example_int_array, example_float_array,
-		                 security_context, create_ts, create_user_id, update_ts, update_user_id)
+		INSERT INTO example (
+			example_text, example_int, example_float, example_int_array,
+			example_float_array, security_context, create_ts, create_user_id,
+			update_ts, update_user_id
+		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING example_id`
 
 	for i, example := range exampleList {
 		err := tx.QueryRow(ctx, query,
-			example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
-			example.SecurityContext, example.CreateTS, example.CreateUserID, example.UpdateTS, example.UpdateUserID,
+			example.ExampleText, example.ExampleInt, example.ExampleFloat,
+			example.ExampleIntArray, example.ExampleFloatArray,
+			example.SecurityContext, example.CreateTS, example.CreateUserID,
+			example.UpdateTS, example.UpdateUserID,
 		).Scan(&exampleList[i].ExampleID)
 
 		if err != nil {
@@ -297,7 +334,11 @@ func (r *ExampleRepository) CreateExampleList(ctx context.Context, exampleList [
 }
 
 // UpdateExampleList updates multiple examples in a transaction
-func (r *ExampleRepository) UpdateExampleList(ctx context.Context, exampleList []*model.ExampleModel, originalUpdateTSList []float64) error {
+func (r *ExampleRepository) UpdateExampleList(
+	ctx context.Context,
+	exampleList []*model.ExampleModel,
+	originalUpdateTSList []float64,
+) error {
 	if len(exampleList) == 0 {
 		return nil
 	}

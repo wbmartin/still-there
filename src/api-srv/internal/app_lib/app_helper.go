@@ -89,7 +89,13 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}, logger ThisA
 }
 
 // WriteError writes an error response with logging
-func (ah *AppHelper) WriteError(w http.ResponseWriter, status int, clientMsg string, code string, err error) {
+func (ah *AppHelper) WriteError(
+	w http.ResponseWriter,
+	status int,
+	clientMsg string,
+	code string,
+	err error,
+) {
 	internalMsg := clientMsg
 	if err != nil {
 		internalMsg = clientMsg + ": " + err.Error()
@@ -172,7 +178,8 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 
 	count, err := sh.appServices.KV.Incr(shrmplKey, "1min")
 	if err != nil {
-		sh.appServices.Logger.Info("RLF0", "Rate limit check encountered KV error, failing open ("+shrmplKey+") "+err.Error())
+		sh.appServices.Logger.Info("RLF0",
+			"Rate limit check encountered KV error, failing open ("+shrmplKey+") "+err.Error())
 		// Fail open on shrmpl-kv errors
 		return sh
 	}

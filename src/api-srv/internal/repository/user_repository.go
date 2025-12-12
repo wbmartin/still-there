@@ -218,7 +218,14 @@ func (r *UserRepository) UpdateUser(ctx context.Context, user *model.AppUserMode
 }
 
 // DeleteUser soft deletes a user with optimistic locking
-func (r *UserRepository) DeleteUser(ctx context.Context, userID int, securityContext int, clientUpdateTS float64, deleteTS float64, deleteUserID int) (int, error) {
+func (r *UserRepository) DeleteUser(
+	ctx context.Context,
+	userID int,
+	securityContext int,
+	clientUpdateTS float64,
+	deleteTS float64,
+	deleteUserID int,
+) (int, error) {
 	query := `
 		UPDATE app_user
 		SET delete_ts = $1, delete_user_id = $2
@@ -247,7 +254,14 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userID int, securityCon
 }
 
 // AddUserListToGroup adds multiple users to a group with optimistic locking
-func (r *UserRepository) AddUserListToGroup(ctx context.Context, userIds []int, groupId int, updateTsList []float64, updateUserId int, securityContext int) ([]*model.AppUserModel, error) {
+func (r *UserRepository) AddUserListToGroup(
+	ctx context.Context,
+	userIds []int,
+	groupId int,
+	updateTsList []float64,
+	updateUserId int,
+	securityContext int,
+) ([]*model.AppUserModel, error) {
 	if len(userIds) != len(updateTsList) {
 		return nil, fmt.Errorf("userIds and updateTsList must have the same length")
 	}
@@ -287,7 +301,14 @@ func (r *UserRepository) AddUserListToGroup(ctx context.Context, userIds []int, 
 }
 
 // RemoveUserListFromGroup removes multiple users from a group with optimistic locking
-func (r *UserRepository) RemoveUserListFromGroup(ctx context.Context, userIds []int, groupId int, updateTsList []float64, updateUserId int, securityContext int) ([]*model.AppUserModel, error) {
+func (r *UserRepository) RemoveUserListFromGroup(
+	ctx context.Context,
+	userIds []int,
+	groupId int,
+	updateTsList []float64,
+	updateUserId int,
+	securityContext int,
+) ([]*model.AppUserModel, error) {
 	if len(userIds) != len(updateTsList) {
 		return nil, fmt.Errorf("userIds and updateTsList must have the same length")
 	}
