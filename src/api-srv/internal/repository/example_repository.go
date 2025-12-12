@@ -106,8 +106,10 @@ func (r *ExampleRepository) UpdateExample(ctx context.Context, example *model.Ex
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		var execErr error
 		result, execErr = r.db.Exec(ctx, query,
-			example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
-			example.UpdateTS, example.UpdateUserID, example.ExampleID, example.SecurityContext, originalUpdateTS,
+			example.ExampleText, example.ExampleInt, example.ExampleFloat,
+			example.ExampleIntArray, example.ExampleFloatArray, example.UpdateTS,
+			example.UpdateUserID, example.ExampleID, example.SecurityContext,
+			originalUpdateTS,
 		)
 		return execErr
 	})
@@ -140,7 +142,14 @@ func (r *ExampleRepository) UpdateExample(ctx context.Context, example *model.Ex
 }
 
 // DeleteExample soft deletes an example with optimistic locking
-func (r *ExampleRepository) DeleteExample(ctx context.Context, exampleID int, securityContext int, originalUpdateTS float64, deleteTS float64, deleteUserID int) (int, error) {
+func (r *ExampleRepository) DeleteExample(
+	ctx context.Context,
+	exampleID int,
+	securityContext int,
+	originalUpdateTS float64,
+	deleteTS float64,
+	deleteUserID int,
+) (int, error) {
 	query := `
 		UPDATE example
 		SET delete_ts = $1, delete_user_id = $2
@@ -328,7 +337,14 @@ func (r *ExampleRepository) UpdateExampleList(ctx context.Context, exampleList [
 }
 
 // DeleteExampleList deletes multiple examples in a transaction
-func (r *ExampleRepository) DeleteExampleList(ctx context.Context, idList []int, updateTimestampList []float64, securityContext int, deleteTS float64, deleteUserID int) ([]int, error) {
+func (r *ExampleRepository) DeleteExampleList(
+	ctx context.Context,
+	idList []int,
+	updateTimestampList []float64,
+	securityContext int,
+	deleteTS float64,
+	deleteUserID int,
+) ([]int, error) {
 	if len(idList) == 0 {
 		return []int{}, nil
 	}
