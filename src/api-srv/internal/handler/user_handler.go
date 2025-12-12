@@ -42,11 +42,12 @@ func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jwtClaims := sec.GetClaims()
+	username := sec.GetUsername()
 
 	// Parse optional userIdList query parameter
 	idList, err := GetCommaSeparatedIntListFromQuery(r, "userIdList")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
 		return
 	}
 
@@ -54,7 +55,7 @@ func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 	users, err := h.userRepo.ReadUserList(r.Context(), jwtClaims.SecurityContext, idList)
 	if err != nil {
 		logger.Error("ULF0", "Failed to read users: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to retrieve users", logger, jwtClaims.Subject)
+		writeError(w, http.StatusInternalServerError, "Failed to retrieve users", logger, username)
 		return
 	}
 
@@ -112,11 +113,12 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jwtClaims := sec.GetClaims()
+	username := sec.GetUsername()
 
 	// Parse request body
 	var user model.AppUserModel
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
 		return
 	}
 
@@ -124,7 +126,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if user.UserName == "" || user.FirstName == "" || user.LastName == "" || user.Email == "" {
-		writeError(w, http.StatusBadRequest, "userName, firstName, lastName, and email are required", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "userName, firstName, lastName, and email are required", logger, username)
 		return
 	}
 
@@ -141,7 +143,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		hashed, err := app_lib.HashPassword(user.PwHash)
 		if err != nil {
 			logger.Error("UCH0", "Failed to hash password: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Failed to process password", logger, jwtClaims.Subject)
+			writeError(w, http.StatusInternalServerError, "Failed to process password", logger, username)
 			return
 		}
 		user.PwHash = hashed
@@ -151,7 +153,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	createdUser, err := h.userRepo.CreateUser(r.Context(), &user)
 	if err != nil {
 		logger.Error("UCF0", "Failed to create user: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to create user", logger, jwtClaims.Subject)
+		writeError(w, http.StatusInternalServerError, "Failed to create user", logger, username)
 		return
 	}
 
@@ -178,11 +180,12 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jwtClaims := sec.GetClaims()
+	username := sec.GetUsername()
 
 	// Parse request body
 	var user model.AppUserModel
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
 		return
 	}
 
@@ -190,7 +193,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if user.AppUserID == 0 || user.UserName == "" {
-		writeError(w, http.StatusBadRequest, "appUserId and userName are required", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "appUserId and userName are required", logger, username)
 		return
 	}
 
@@ -206,12 +209,12 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			writeError(w, http.StatusConflict, "User was modified by another user", logger, jwtClaims.Subject)
+			writeError(w, http.StatusConflict, "User was modified by another user", logger, username)
 		case errors.Is(err, repository.ErrNotFound):
-			writeError(w, http.StatusNotFound, "User not found", logger, jwtClaims.Subject)
+			writeError(w, http.StatusNotFound, "User not found", logger, username)
 		default:
 			logger.Error("UUF0", "Failed to update user: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Failed to update user", logger, jwtClaims.Subject)
+			writeError(w, http.StatusInternalServerError, "Failed to update user", logger, username)
 		}
 		return
 	}
@@ -239,17 +242,18 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jwtClaims := sec.GetClaims()
+	username := sec.GetUsername()
 
 	// Parse query parameters
 	userID, err := GetIntFromQuery(r, "userId")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
 		return
 	}
 
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
 		return
 	}
 
@@ -259,12 +263,12 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			writeError(w, http.StatusConflict, "User was modified by another user", logger, jwtClaims.Subject)
+			writeError(w, http.StatusConflict, "User was modified by another user", logger, username)
 		case errors.Is(err, repository.ErrNotFound):
-			writeError(w, http.StatusNotFound, "User not found", logger, jwtClaims.Subject)
+			writeError(w, http.StatusNotFound, "User not found", logger, username)
 		default:
 			logger.Error("UDF0", "Failed to delete user: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Failed to delete user", logger, jwtClaims.Subject)
+			writeError(w, http.StatusInternalServerError, "Failed to delete user", logger, username)
 		}
 		return
 	}
@@ -292,6 +296,7 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 	}
 
 	jwtClaims := sec.GetClaims()
+	username := sec.GetUsername()
 
 	// Parse request
 	var req struct {
@@ -300,12 +305,12 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 		UpdateTsList []float64 `json:"updateTsList"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
 		return
 	}
 
 	if len(req.UserIds) == 0 || len(req.UpdateTsList) != len(req.UserIds) {
-		writeError(w, http.StatusBadRequest, "userIds and updateTsList must be provided and have matching lengths", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "userIds and updateTsList must be provided and have matching lengths", logger, username)
 		return
 	}
 
@@ -313,11 +318,11 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 	updatedUsers, err := h.userRepo.AddUserListToGroup(r.Context(), req.UserIds, req.GroupId, req.UpdateTsList, jwtClaims.UserID, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrConflict) {
-			writeError(w, http.StatusConflict, "Concurrent update detected", logger, jwtClaims.Subject)
+			writeError(w, http.StatusConflict, "Concurrent update detected", logger, username)
 			return
 		}
 		logger.Error("AUGF0", "Failed to add users to group: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to add users to group", logger, jwtClaims.Subject)
+		writeError(w, http.StatusInternalServerError, "Failed to add users to group", logger, username)
 		return
 	}
 
@@ -343,6 +348,7 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *h
 	}
 
 	jwtClaims := sec.GetClaims()
+	username := sec.GetUsername()
 
 	// Parse request
 	var req struct {
@@ -351,12 +357,12 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *h
 		UpdateTsList []float64 `json:"updateTsList"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
 		return
 	}
 
 	if len(req.UserIds) == 0 || len(req.UpdateTsList) != len(req.UserIds) {
-		writeError(w, http.StatusBadRequest, "userIds and updateTsList must be provided and have matching lengths", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "userIds and updateTsList must be provided and have matching lengths", logger, username)
 		return
 	}
 
@@ -364,11 +370,11 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *h
 	updatedUsers, err := h.userRepo.RemoveUserListFromGroup(r.Context(), req.UserIds, req.GroupId, req.UpdateTsList, jwtClaims.UserID, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrConflict) {
-			writeError(w, http.StatusConflict, "Concurrent update detected", logger, jwtClaims.Subject)
+			writeError(w, http.StatusConflict, "Concurrent update detected", logger, username)
 			return
 		}
 		logger.Error("RUGF0", "Failed to remove users from group: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to remove users from group", logger, jwtClaims.Subject)
+		writeError(w, http.StatusInternalServerError, "Failed to remove users from group", logger, username)
 		return
 	}
 

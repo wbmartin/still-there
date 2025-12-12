@@ -43,12 +43,13 @@ func (h *UserGroupHandler) ReadUserGroupList(w http.ResponseWriter, r *http.Requ
 	}
 
 	jwtClaims := sec.GetClaims()
+	username := sec.GetUsername()
 
 	// Read user groups
 	groups, err := h.userGroupRepo.ReadUserGroupList(r.Context(), jwtClaims.SecurityContext)
 	if err != nil {
 		logger.Error("UGGF0", "Failed to get user groups: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to retrieve user groups", logger, jwtClaims.Subject)
+		writeError(w, http.StatusInternalServerError, "Failed to retrieve user groups", logger, username)
 		return
 	}
 
@@ -75,11 +76,12 @@ func (h *UserGroupHandler) CreateUserGroup(w http.ResponseWriter, r *http.Reques
 	}
 
 	jwtClaims := sec.GetClaims()
+	username := sec.GetUsername()
 
 	// Parse request body
 	var group model.UserGroupModel
 	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
 		return
 	}
 
@@ -87,7 +89,7 @@ func (h *UserGroupHandler) CreateUserGroup(w http.ResponseWriter, r *http.Reques
 
 	// Validate required fields
 	if group.GroupName == "" {
-		writeError(w, http.StatusBadRequest, "groupName is required", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "groupName is required", logger, username)
 		return
 	}
 
@@ -103,7 +105,7 @@ func (h *UserGroupHandler) CreateUserGroup(w http.ResponseWriter, r *http.Reques
 	createdGroup, err := h.userGroupRepo.CreateUserGroup(r.Context(), &group)
 	if err != nil {
 		logger.Error("UGCF0", "Failed to create user group: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to create user group", logger, jwtClaims.Subject)
+		writeError(w, http.StatusInternalServerError, "Failed to create user group", logger, username)
 		return
 	}
 
@@ -130,11 +132,12 @@ func (h *UserGroupHandler) UpdateUserGroup(w http.ResponseWriter, r *http.Reques
 	}
 
 	jwtClaims := sec.GetClaims()
+	username := sec.GetUsername()
 
 	// Parse request body
 	var group model.UserGroupModel
 	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
 		return
 	}
 
@@ -142,7 +145,7 @@ func (h *UserGroupHandler) UpdateUserGroup(w http.ResponseWriter, r *http.Reques
 
 	// Validate required fields
 	if group.UserGroupID == 0 || group.GroupName == "" {
-		writeError(w, http.StatusBadRequest, "userGroupId and groupName are required", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, "userGroupId and groupName are required", logger, username)
 		return
 	}
 
@@ -158,12 +161,12 @@ func (h *UserGroupHandler) UpdateUserGroup(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			writeError(w, http.StatusConflict, "User group was modified by another user", logger, jwtClaims.Subject)
+			writeError(w, http.StatusConflict, "User group was modified by another user", logger, username)
 		case errors.Is(err, repository.ErrNotFound):
-			writeError(w, http.StatusNotFound, "User group not found", logger, jwtClaims.Subject)
+			writeError(w, http.StatusNotFound, "User group not found", logger, username)
 		default:
 			logger.Error("UGUF0", "Failed to update user group: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Failed to update user group", logger, jwtClaims.Subject)
+			writeError(w, http.StatusInternalServerError, "Failed to update user group", logger, username)
 		}
 		return
 	}
@@ -191,17 +194,18 @@ func (h *UserGroupHandler) DeleteUserGroup(w http.ResponseWriter, r *http.Reques
 	}
 
 	jwtClaims := sec.GetClaims()
+	username := sec.GetUsername()
 
 	// Parse query parameters
 	groupID, err := GetIntFromQuery(r, "userGroupId")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
 		return
 	}
 
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
 		return
 	}
 
@@ -210,16 +214,16 @@ func (h *UserGroupHandler) DeleteUserGroup(w http.ResponseWriter, r *http.Reques
 	deletedID, err := h.userGroupRepo.DeleteUserGroup(r.Context(), groupID, jwtClaims.SecurityContext, updateTS, now, jwtClaims.UserID)
 	if err != nil {
 		if strings.Contains(err.Error(), "cannot delete group") {
-			writeError(w, http.StatusConflict, err.Error(), logger, jwtClaims.Subject)
+			writeError(w, http.StatusConflict, err.Error(), logger, username)
 		} else {
 			switch {
 			case errors.Is(err, repository.ErrConflict):
-				writeError(w, http.StatusConflict, "User group was modified by another user", logger, jwtClaims.Subject)
+				writeError(w, http.StatusConflict, "User group was modified by another user", logger, username)
 			case errors.Is(err, repository.ErrNotFound):
-				writeError(w, http.StatusNotFound, "User group not found", logger, jwtClaims.Subject)
+				writeError(w, http.StatusNotFound, "User group not found", logger, username)
 			default:
 				logger.Error("UGDF0", "Failed to delete user group: "+err.Error())
-				writeError(w, http.StatusInternalServerError, "Failed to delete user group", logger, jwtClaims.Subject)
+				writeError(w, http.StatusInternalServerError, "Failed to delete user group", logger, username)
 			}
 		}
 		return

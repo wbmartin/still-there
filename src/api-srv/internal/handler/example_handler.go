@@ -92,11 +92,12 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jwtClaims := sec.GetClaims()
+	username := sec.GetUsername()
 
 	// Parse request body
 	var example model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&example); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, "PreAuth")
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
 		return
 	}
 
@@ -104,7 +105,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if example.ExampleText == "" {
-		writeError(w, http.StatusBadRequest, "example_text is required", logger, "PreAuth")
+		writeError(w, http.StatusBadRequest, "example_text is required", logger, username)
 		return
 	}
 
@@ -122,7 +123,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	createdExample, err := h.exampleRepo.CreateExample(r.Context(), &example)
 	if err != nil {
 		logger.Error("CRF0", "Failed to create example: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to create example", logger, "PreAuth")
+		writeError(w, http.StatusInternalServerError, "Failed to create example", logger, username)
 		return
 	}
 
@@ -149,15 +150,12 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jwtClaims := sec.GetClaims()
-	username := "PreAuth"
-	if jwtClaims != nil {
-		username = jwtClaims.Subject
-	}
+	username := sec.GetUsername()
 
 	// Parse request body
 	var example model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&example); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, "PreAuth")
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
 		return
 	}
 
@@ -183,14 +181,14 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			writeError(w, http.StatusConflict, "Example was modified by another user", logger, "PreAuth")
+			writeError(w, http.StatusConflict, "Example was modified by another user", logger, username)
 		case errors.Is(err, repository.ErrNotFound):
-			writeError(w, http.StatusNotFound, "Example not found", logger, "PreAuth")
+			writeError(w, http.StatusNotFound, "Example not found", logger, username)
 		case errors.Is(err, repository.ErrDeleted):
-			writeError(w, http.StatusGone, "Example has been deleted", logger, "PreAuth")
+			writeError(w, http.StatusGone, "Example has been deleted", logger, username)
 		default:
 			logger.Error("UPF0", "Failed to update example: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Failed to update example", logger, "PreAuth")
+			writeError(w, http.StatusInternalServerError, "Failed to update example", logger, username)
 		}
 		return
 	}
@@ -213,15 +211,12 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	sec.CheckCSRF()
 	sec.CheckAuthorization(model.GrantExampleDelete)
 
-	username := "PreAuth"
 	if !sec.CheckAllChecksComplete() {
 		return
 	}
 
 	jwtClaims := sec.GetClaims()
-	if jwtClaims != nil {
-		username = jwtClaims.Subject
-	}
+	username := sec.GetUsername()
 
 	// Parse query parameters
 	exampleID, err := GetIntFromQuery(r, "exampleId")
@@ -266,7 +261,6 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
 	logger.Info("RLS0", "ReadExampleList invoked")
-	username := "PreAuth"
 
 	// Security checks
 	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
@@ -280,9 +274,7 @@ func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request)
 	}
 
 	jwtClaims := sec.GetClaims()
-	if jwtClaims != nil {
-		username = jwtClaims.Subject
-	}
+	username := sec.GetUsername()
 
 	// Parse query parameters
 	idList, err := GetCommaSeparatedIntListFromQuery(r, "exampleIdList")
@@ -329,10 +321,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	jwtClaims := sec.GetClaims()
-	username := "PreAuth"
-	if jwtClaims != nil {
-		username = jwtClaims.Subject
-	}
+	username := sec.GetUsername()
 
 	// Parse request body
 	var exampleList []model.ExampleModel
@@ -405,20 +394,17 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	sec.CheckCSRF()
 	sec.CheckAuthorization(model.GrantExampleUpdate)
 
-	username := "PreAuth"
 	if !sec.CheckAllChecksComplete() {
 		return
 	}
 
 	jwtClaims := sec.GetClaims()
-	if jwtClaims != nil {
-		username = jwtClaims.Subject
-	}
+	username := sec.GetUsername()
 
 	// Parse request body
 	var exampleList []model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&exampleList); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, "PreAuth")
+		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
 		return
 	}
 
@@ -480,15 +466,12 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	sec.CheckCSRF()
 	sec.CheckAuthorization(model.GrantExampleDelete)
 
-	username := "PreAuth"
 	if !sec.CheckAllChecksComplete() {
 		return
 	}
 
 	jwtClaims := sec.GetClaims()
-	if jwtClaims != nil {
-		username = jwtClaims.Subject
-	}
+	username := sec.GetUsername()
 
 	// Parse query parameters
 	idList, err := GetCommaSeparatedIntListFromQuery(r, "exampleIdList")

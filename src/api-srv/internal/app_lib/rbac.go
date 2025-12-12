@@ -8,37 +8,39 @@ import (
 
 // RBACManager handles role-based access control operations
 type RBACManager struct {
-	logger ThisAppLoggerInterface
+	logger   ThisAppLoggerInterface
+	username string
 }
 
 // NewRBACManager creates a new RBAC manager
-func NewRBACManager(logger ThisAppLoggerInterface) *RBACManager {
+func NewRBACManager(logger ThisAppLoggerInterface, username string) *RBACManager {
 	return &RBACManager{
-		logger: logger,
+		logger:   logger,
+		username: username,
 	}
 }
 
 // HasGrant checks if a user has a specific grant in a security context
 func (r *RBACManager) HasGrant(claims *Claims, grantID int, securityContext int) bool {
 	if claims == nil || claims.Grants == nil {
-		r.logger.Debug("NCL0", "No claims or grants available")
+		r.logger.Debug("NCL0", "No claims or grants available", "username", r.username)
 		return false
 	}
 
 	contextGrants, exists := claims.Grants[securityContext]
 	if !exists {
-		r.logger.Debug("NCT0", fmt.Sprintf("No grants found for security context: %d", securityContext))
+		r.logger.Debug("NCT0", fmt.Sprintf("No grants found for security context: %d", securityContext), "username", r.username)
 		return false
 	}
 
 	for _, userGrantID := range contextGrants {
 		if userGrantID == grantID {
-			r.logger.Debug("RFD0", fmt.Sprintf("Grant found - ID: %d, context: %d", userGrantID, securityContext))
+			r.logger.Debug("RFD0", fmt.Sprintf("Grant found - ID: %d, context: %d", userGrantID, securityContext), "username", r.username)
 			return true
 		}
 	}
 
-	r.logger.Debug("RNF0", fmt.Sprintf("Grant not found - ID: %d, context: %d", grantID, securityContext))
+	r.logger.Debug("RNF0", fmt.Sprintf("Grant not found - ID: %d, context: %d", grantID, securityContext), "username", r.username)
 	return false
 }
 
@@ -67,7 +69,7 @@ func (r *RBACManager) ReadUserGrantsByContext(claims *Claims) map[int][]string {
 			if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
 				shortCodeList = append(shortCodeList, shortCode)
 			} else {
-				r.logger.Warn("UGT0", fmt.Sprintf("Unknown grant ID encountered: %d", grantID))
+				r.logger.Warn("UGT0", fmt.Sprintf("Unknown grant ID encountered: %d", grantID), "username", r.username)
 			}
 		}
 		result[securityContext] = shortCodeList

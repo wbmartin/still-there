@@ -17,6 +17,7 @@ type SecurityHelper struct {
 	appServices *AppServices
 	claims      *Claims
 	ctx         context.Context
+	username    string
 	blocked     bool
 	jwtChecked  bool
 	rateChecked bool
@@ -31,6 +32,7 @@ func NewSecurityHelper(w http.ResponseWriter, r *http.Request, appServices *AppS
 		r:           r,
 		w:           w,
 		appServices: appServices,
+		username:    "preauth",
 	}
 }
 
@@ -69,6 +71,11 @@ func (sh *SecurityHelper) GetClaims() *Claims {
 	return sh.claims
 }
 
+// GetUsername returns the username for logging (preauth or authenticated subject)
+func (sh *SecurityHelper) GetUsername() string {
+	return sh.username
+}
+
 // GetContext returns the current context
 func (sh *SecurityHelper) GetContext() context.Context {
 	return sh.ctx
@@ -102,6 +109,7 @@ func (sh *SecurityHelper) CheckJWT() *SecurityHelper {
 
 	sh.claims = claims
 	sh.ctx = context.WithValue(sh.r.Context(), "claims", claims)
+	sh.username = claims.Subject
 
 	return sh
 }
@@ -293,7 +301,7 @@ func (sh *SecurityHelper) CheckAuthorization(requiredGrantID int) *SecurityHelpe
 	}
 
 	if requiredGrantID > 0 {
-		rbac := NewRBACManager(sh.appServices.Logger)
+		rbac := NewRBACManager(sh.appServices.Logger, sh.username)
 		if !rbac.HasGrant(sh.claims, requiredGrantID, sh.claims.SecurityContext) {
 			sh.appServices.Logger.Warn("ATF0", fmt.Sprintf("Authorization failed - required grant: %d, security context: %d", requiredGrantID, sh.claims.SecurityContext))
 			sh.failAndRespond(http.StatusForbidden, fmt.Sprintf("Permission denied (grant %d required)", requiredGrantID))
@@ -315,7 +323,7 @@ func (sh *SecurityHelper) CheckTargetContextAuthorization(requiredGrantID int, t
 		return false
 	}
 
-	rbac := NewRBACManager(sh.appServices.Logger)
+	rbac := NewRBACManager(sh.appServices.Logger, sh.username)
 	if !rbac.HasGrant(sh.claims, requiredGrantID, targetSecurityContext) {
 		sh.appServices.Logger.Warn("TAF0", fmt.Sprintf("Target context authorization failed - required grant: %d, target context: %d", requiredGrantID, targetSecurityContext))
 		sh.failAndRespond(http.StatusForbidden, fmt.Sprintf("Permission denied (grant %d required in context %d)", requiredGrantID, targetSecurityContext))
