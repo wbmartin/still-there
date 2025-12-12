@@ -13,7 +13,8 @@ type RBACManager struct {
 }
 
 // NewRBACManager creates a new RBAC manager
-func NewRBACManager(logger ThisAppLoggerInterface, username string) *RBACManager {
+func NewRBACManager(logger ThisAppLoggerInterface,
+	username string) *RBACManager {
 	return &RBACManager{
 		logger:   logger,
 		username: username,
@@ -21,32 +22,44 @@ func NewRBACManager(logger ThisAppLoggerInterface, username string) *RBACManager
 }
 
 // HasGrant checks if a user has a specific grant in a security context
-func (r *RBACManager) HasGrant(claims *Claims, grantID int, securityContext int) bool {
+func (r *RBACManager) HasGrant(claims *Claims, grantID int,
+	securityContext int) bool {
 	if claims == nil || claims.Grants == nil {
-		r.logger.Debug("NCL0", "No claims or grants available", "username", r.username)
+		r.logger.Debug("NCL0", "No claims or grants available",
+			"username", r.username)
 		return false
 	}
 
 	contextGrants, exists := claims.Grants[securityContext]
 	if !exists {
-		r.logger.Debug("NCT0", fmt.Sprintf("No grants found for security context: %d", securityContext), "username", r.username)
+		r.logger.Debug("NCT0",
+			fmt.Sprintf("No grants found for security context: %d", securityContext),
+			"username", r.username)
 		return false
 	}
 
 	for _, userGrantID := range contextGrants {
 		if userGrantID == grantID {
-			r.logger.Debug("RFD0", fmt.Sprintf("Grant found - ID: %d, context: %d", userGrantID, securityContext), "username", r.username)
+			r.logger.Debug("RFD0",
+				fmt.Sprintf("Grant found - ID: %d, context: %d",
+					userGrantID, securityContext),
+				"username", r.username)
 			return true
 		}
 	}
 
-	r.logger.Debug("RNF0", fmt.Sprintf("Grant not found - ID: %d, context: %d", grantID, securityContext), "username", r.username)
+	r.logger.Debug("RNF0",
+		fmt.Sprintf("Grant not found - ID: %d, context: %d",
+			grantID, securityContext),
+		"username", r.username)
 	return false
 }
 
-// HasAnyGrantInContext checks if a user has any grants in a specific security context
+// HasAnyGrantInContext checks if a user has any grants
+// in a specific security context
 // WBM 2025.12.11 I don't think is used anywhere, but leaving it for now.
-func (r *RBACManager) HasAnyGrantInContext(claims *Claims, securityContext int) bool {
+func (r *RBACManager) HasAnyGrantInContext(claims *Claims,
+	securityContext int) bool {
 	if claims == nil || claims.Grants == nil {
 		return false
 	}
@@ -55,7 +68,8 @@ func (r *RBACManager) HasAnyGrantInContext(claims *Claims, securityContext int) 
 	return exists && len(contextGrants) > 0
 }
 
-// ReadUserGrantsByContext retrieves all grant short codes for a user by security context
+// ReadUserGrantsByContext retrieves all grant short codes for a user
+// by security context
 func (r *RBACManager) ReadUserGrantsByContext(claims *Claims) map[int][]string {
 	result := make(map[int][]string)
 
@@ -69,7 +83,9 @@ func (r *RBACManager) ReadUserGrantsByContext(claims *Claims) map[int][]string {
 			if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
 				shortCodeList = append(shortCodeList, shortCode)
 			} else {
-				r.logger.Warn("UGT0", fmt.Sprintf("Unknown grant ID encountered: %d", grantID), "username", r.username)
+				r.logger.Warn("UGT0",
+					fmt.Sprintf("Unknown grant ID encountered: %d", grantID),
+					"username", r.username)
 			}
 		}
 		result[securityContext] = shortCodeList
