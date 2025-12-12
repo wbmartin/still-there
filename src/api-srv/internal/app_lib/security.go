@@ -2,6 +2,7 @@ package app_lib
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -10,8 +11,8 @@ import (
 	"time"
 )
 
-// SecurityHelper encapsulates request-specific security checks and state
-type SecurityHelper struct {
+// AppHelper encapsulates request-specific security checks and state
+type AppHelper struct {
 	r           *http.Request
 	w           http.ResponseWriter
 	appServices *AppServices
@@ -26,9 +27,9 @@ type SecurityHelper struct {
 	authChecked bool
 }
 
-// NewSecurityHelper creates a new security helper
-func NewSecurityHelper(w http.ResponseWriter, r *http.Request, appServices *AppServices) *SecurityHelper {
-	return &SecurityHelper{
+// NewAppHelper creates a new app helper
+func NewAppHelper(w http.ResponseWriter, r *http.Request, appServices *AppServices) *AppHelper {
+	return &AppHelper{
 		r:           r,
 		w:           w,
 		appServices: appServices,
@@ -37,57 +38,75 @@ func NewSecurityHelper(w http.ResponseWriter, r *http.Request, appServices *AppS
 }
 
 // SkipJWT skips JWT validation
-func (sh *SecurityHelper) SkipJWT() *SecurityHelper {
+func (sh *AppHelper) SkipJWT() *AppHelper {
 	sh.jwtChecked = true
 	return sh
 }
 
 // SkipRateLimit skips rate limit check
-func (sh *SecurityHelper) SkipRateLimit() *SecurityHelper {
+func (sh *AppHelper) SkipRateLimit() *AppHelper {
 	sh.rateChecked = true
 	return sh
 }
 
 // SkipUserBlock skips user block check
-func (sh *SecurityHelper) SkipUserBlock() *SecurityHelper {
+func (sh *AppHelper) SkipUserBlock() *AppHelper {
 	sh.userChecked = true
 	return sh
 }
 
 // SkipCSRF skips CSRF check
-func (sh *SecurityHelper) SkipCSRF() *SecurityHelper {
+func (sh *AppHelper) SkipCSRF() *AppHelper {
 	sh.csrfChecked = true
 	return sh
 }
 
 // SkipAuthorization skips authorization check
-func (sh *SecurityHelper) SkipAuthorization() *SecurityHelper {
+func (sh *AppHelper) SkipAuthorization() *AppHelper {
 	sh.authChecked = true
 	return sh
 }
 
 // GetClaims returns the validated JWT claims
-func (sh *SecurityHelper) GetClaims() *Claims {
+func (sh *AppHelper) GetClaims() *Claims {
 	return sh.claims
 }
 
 // GetUsername returns the username for logging (preauth or authenticated subject)
-func (sh *SecurityHelper) GetUsername() string {
-	return sh.username
+func (ah *AppHelper) GetUsername() string {
+	return ah.username
+}
+
+// writeJSON writes a JSON response
+func writeJSON(w http.ResponseWriter, status int, data interface{}, logger ThisAppLoggerInterface) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		logger.Error("JEN0", "Failed to encode JSON response: "+err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+// WriteError writes an error response with logging
+func (ah *AppHelper) WriteError(w http.ResponseWriter, status int, message string) {
+	ah.appServices.Logger.Error("ERR", message, "username", ah.username)
+	response := map[string]string{"error": message}
+	writeJSON(w, status, response, ah.appServices.Logger)
 }
 
 // GetContext returns the current context
-func (sh *SecurityHelper) GetContext() context.Context {
+func (sh *AppHelper) GetContext() context.Context {
 	return sh.ctx
 }
 
 // CanProceed returns true if processing can continue
-func (sh *SecurityHelper) CanProceed() bool {
+func (sh *AppHelper) CanProceed() bool {
 	return !sh.blocked
 }
 
 // CheckJWT validates the JWT token
-func (sh *SecurityHelper) CheckJWT() *SecurityHelper {
+func (sh *AppHelper) CheckJWT() *AppHelper {
 	sh.jwtChecked = true
 	if sh.blocked {
 		return sh
@@ -115,7 +134,7 @@ func (sh *SecurityHelper) CheckJWT() *SecurityHelper {
 }
 
 // CheckRateLimit checks request rate limits
-func (sh *SecurityHelper) CheckRateLimit() *SecurityHelper {
+func (sh *AppHelper) CheckRateLimit() *AppHelper {
 	sh.rateChecked = true
 	if sh.blocked {
 		return sh
@@ -165,7 +184,7 @@ func (sh *SecurityHelper) CheckRateLimit() *SecurityHelper {
 }
 
 // CheckRateLimitAndUserBlock performs rate limit and user block checks in a single batch
-func (sh *SecurityHelper) CheckRateLimitAndUserBlock() *SecurityHelper {
+func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 	if sh.blocked {
 		return sh
 	}
@@ -227,7 +246,7 @@ func (sh *SecurityHelper) CheckRateLimitAndUserBlock() *SecurityHelper {
 }
 
 // CheckUserBlocked checks if the user is blocked
-func (sh *SecurityHelper) CheckUserBlocked() *SecurityHelper {
+func (sh *AppHelper) CheckUserBlocked() *AppHelper {
 	if sh.blocked || sh.claims == nil {
 		return sh
 	}
@@ -250,7 +269,7 @@ func (sh *SecurityHelper) CheckUserBlocked() *SecurityHelper {
 }
 
 // CheckCSRF validates the CSRF token
-func (sh *SecurityHelper) CheckCSRF() *SecurityHelper {
+func (sh *AppHelper) CheckCSRF() *AppHelper {
 	sh.csrfChecked = true
 	if sh.blocked {
 		return sh
@@ -289,7 +308,7 @@ func (sh *SecurityHelper) CheckCSRF() *SecurityHelper {
 }
 
 // CheckAuthorization checks if the user has the required grant
-func (sh *SecurityHelper) CheckAuthorization(requiredGrantID int) *SecurityHelper {
+func (sh *AppHelper) CheckAuthorization(requiredGrantID int) *AppHelper {
 	sh.authChecked = true
 	if sh.blocked {
 		return sh
@@ -313,7 +332,7 @@ func (sh *SecurityHelper) CheckAuthorization(requiredGrantID int) *SecurityHelpe
 }
 
 // CheckTargetContextAuthorization checks authorization for a specific target context
-func (sh *SecurityHelper) CheckTargetContextAuthorization(requiredGrantID int, targetSecurityContext int) bool {
+func (sh *AppHelper) CheckTargetContextAuthorization(requiredGrantID int, targetSecurityContext int) bool {
 	if sh.blocked || requiredGrantID == 0 {
 		return true
 	}
@@ -334,7 +353,7 @@ func (sh *SecurityHelper) CheckTargetContextAuthorization(requiredGrantID int, t
 }
 
 // CheckAllChecksComplete verifies all security checks have been performed
-func (sh *SecurityHelper) CheckAllChecksComplete() bool {
+func (sh *AppHelper) CheckAllChecksComplete() bool {
 	if sh.blocked {
 		return false
 	}
@@ -368,7 +387,7 @@ func (sh *SecurityHelper) CheckAllChecksComplete() bool {
 }
 
 // failAndRespond sends an error response and marks processing as blocked
-func (sh *SecurityHelper) failAndRespond(statusCode int, reason string) {
+func (sh *AppHelper) failAndRespond(statusCode int, reason string) {
 	if sh.blocked {
 		return
 	}

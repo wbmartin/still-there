@@ -32,22 +32,22 @@ func (h *ExampleHandler) ReadExample(w http.ResponseWriter, r *http.Request) {
 	logger.Info("RTS0", "ReadExample invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
-	sec.CheckJWT()
-	sec.CheckRateLimitAndUserBlock()
-	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleRead)
+	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app.CheckJWT()
+	app.CheckRateLimitAndUserBlock()
+	app.CheckCSRF()
+	app.CheckAuthorization(model.GrantExampleRead)
 
-	if !sec.CheckAllChecksComplete() {
+	if !app.CheckAllChecksComplete() {
 		return
 	}
 
-	jwtClaims := sec.GetClaims()
+	jwtClaims := app.GetClaims()
 
 	// Parse query parameters
 	exampleID, err := GetIntFromQuery(r, "exampleId")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
+		app.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -57,15 +57,15 @@ func (h *ExampleHandler) ReadExample(w http.ResponseWriter, r *http.Request) {
 	example, err := h.exampleRepo.ReadExample(r.Context(), exampleID, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "Example not found", logger, jwtClaims.Subject)
+			app.WriteError(w, http.StatusNotFound, "Example not found")
 			return
 		}
 		if errors.Is(err, repository.ErrDeleted) {
-			writeError(w, http.StatusGone, "Example has been deleted", logger, jwtClaims.Subject)
+			app.WriteError(w, http.StatusGone, "Example has been deleted")
 			return
 		}
 		logger.Error("GTF0", "Failed to get example: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to retrieve example", logger, jwtClaims.Subject)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve example")
 		return
 	}
 
@@ -81,23 +81,22 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	logger.Info("CRS0", "CreateExample invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
-	sec.CheckJWT()
-	sec.CheckRateLimitAndUserBlock()
-	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleCreate)
+	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app.CheckJWT()
+	app.CheckRateLimitAndUserBlock()
+	app.CheckCSRF()
+	app.CheckAuthorization(model.GrantExampleCreate)
 
-	if !sec.CheckAllChecksComplete() {
+	if !app.CheckAllChecksComplete() {
 		return
 	}
 
-	jwtClaims := sec.GetClaims()
-	username := sec.GetUsername()
+	jwtClaims := app.GetClaims()
 
 	// Parse request body
 	var example model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&example); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
+		app.WriteError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
@@ -105,7 +104,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if example.ExampleText == "" {
-		writeError(w, http.StatusBadRequest, "example_text is required", logger, username)
+		app.WriteError(w, http.StatusBadRequest, "example_text is required")
 		return
 	}
 
@@ -123,7 +122,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	createdExample, err := h.exampleRepo.CreateExample(r.Context(), &example)
 	if err != nil {
 		logger.Error("CRF0", "Failed to create example: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to create example", logger, username)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to create example")
 		return
 	}
 
@@ -139,23 +138,22 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	logger.Info("UPS0", "UpdateExample invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
-	sec.CheckJWT()
-	sec.CheckRateLimitAndUserBlock()
-	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleUpdate)
+	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app.CheckJWT()
+	app.CheckRateLimitAndUserBlock()
+	app.CheckCSRF()
+	app.CheckAuthorization(model.GrantExampleUpdate)
 
-	if !sec.CheckAllChecksComplete() {
+	if !app.CheckAllChecksComplete() {
 		return
 	}
 
-	jwtClaims := sec.GetClaims()
-	username := sec.GetUsername()
+	jwtClaims := app.GetClaims()
 
 	// Parse request body
 	var example model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&example); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
+		app.WriteError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
@@ -163,7 +161,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if example.ExampleID == 0 || example.ExampleText == "" {
-		writeError(w, http.StatusBadRequest, "example_id and example_text are required", logger, username)
+		app.WriteError(w, http.StatusBadRequest, "example_id and example_text are required")
 		return
 	}
 
@@ -181,14 +179,14 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			writeError(w, http.StatusConflict, "Example was modified by another user", logger, username)
+			app.WriteError(w, http.StatusConflict, "Example was modified by another user")
 		case errors.Is(err, repository.ErrNotFound):
-			writeError(w, http.StatusNotFound, "Example not found", logger, username)
+			app.WriteError(w, http.StatusNotFound, "Example not found")
 		case errors.Is(err, repository.ErrDeleted):
-			writeError(w, http.StatusGone, "Example has been deleted", logger, username)
+			app.WriteError(w, http.StatusGone, "Example has been deleted")
 		default:
 			logger.Error("UPF0", "Failed to update example: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Failed to update example", logger, username)
+			app.WriteError(w, http.StatusInternalServerError, "Failed to update example")
 		}
 		return
 	}
@@ -205,29 +203,28 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	logger.Info("DES0", "DeleteExample invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
-	sec.CheckJWT()
-	sec.CheckRateLimitAndUserBlock()
-	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleDelete)
+	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app.CheckJWT()
+	app.CheckRateLimitAndUserBlock()
+	app.CheckCSRF()
+	app.CheckAuthorization(model.GrantExampleDelete)
 
-	if !sec.CheckAllChecksComplete() {
+	if !app.CheckAllChecksComplete() {
 		return
 	}
 
-	jwtClaims := sec.GetClaims()
-	username := sec.GetUsername()
+	jwtClaims := app.GetClaims()
 
 	// Parse query parameters
 	exampleID, err := GetIntFromQuery(r, "exampleId")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
+		app.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
+		app.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -239,14 +236,14 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			writeError(w, http.StatusConflict, "Example was modified by another user", logger, username)
+			app.WriteError(w, http.StatusConflict, "Example was modified by another user")
 		case errors.Is(err, repository.ErrNotFound):
-			writeError(w, http.StatusNotFound, "Example not found", logger, username)
+			app.WriteError(w, http.StatusNotFound, "Example not found")
 		case errors.Is(err, repository.ErrDeleted):
-			writeError(w, http.StatusGone, "Example has been deleted", logger, username)
+			app.WriteError(w, http.StatusGone, "Example has been deleted")
 		default:
 			logger.Error("DLF0", "Failed to delete example: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Failed to delete example", logger, username)
+			app.WriteError(w, http.StatusInternalServerError, "Failed to delete example")
 		}
 		return
 	}
@@ -263,29 +260,28 @@ func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request)
 	logger.Info("RLS0", "ReadExampleList invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
-	sec.CheckJWT()
-	sec.CheckRateLimitAndUserBlock()
-	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleRead)
+	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app.CheckJWT()
+	app.CheckRateLimitAndUserBlock()
+	app.CheckCSRF()
+	app.CheckAuthorization(model.GrantExampleRead)
 
-	if !sec.CheckAllChecksComplete() {
+	if !app.CheckAllChecksComplete() {
 		return
 	}
 
-	jwtClaims := sec.GetClaims()
-	username := sec.GetUsername()
+	jwtClaims := app.GetClaims()
 
 	// Parse query parameters
 	idList, err := GetCommaSeparatedIntListFromQuery(r, "exampleIdList")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
+		app.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	afterUpdateTs, err := GetOptionalFloatFromQuery(r, "afterUpdateTs")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
+		app.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -293,7 +289,7 @@ func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request)
 	examples, err := h.exampleRepo.ReadExampleList(r.Context(), idList, jwtClaims.SecurityContext, afterUpdateTs)
 	if err != nil {
 		logger.Error("LIF0", "Failed to get examples: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to retrieve examples", logger, username)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve examples")
 		return
 	}
 
@@ -310,28 +306,27 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	logger.Info("CLS0", "CreateExampleList invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
-	sec.CheckJWT()
-	sec.CheckRateLimitAndUserBlock()
-	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleCreate)
+	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app.CheckJWT()
+	app.CheckRateLimitAndUserBlock()
+	app.CheckCSRF()
+	app.CheckAuthorization(model.GrantExampleCreate)
 
-	if !sec.CheckAllChecksComplete() {
+	if !app.CheckAllChecksComplete() {
 		return
 	}
 
-	jwtClaims := sec.GetClaims()
-	username := sec.GetUsername()
+	jwtClaims := app.GetClaims()
 
 	// Parse request body
 	var exampleList []model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&exampleList); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
+		app.WriteError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	if len(exampleList) == 0 {
-		writeError(w, http.StatusBadRequest, "At least one example required", logger, username)
+		app.WriteError(w, http.StatusBadRequest, "At least one example required")
 		return
 	}
 
@@ -339,11 +334,11 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	userSecurityContext := jwtClaims.SecurityContext
 	for i, example := range exampleList {
 		if example.SecurityContext != userSecurityContext {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), logger, username)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i))
 			return
 		}
 		if example.ExampleText == "" {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d missing example_text", i), logger, username)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d missing example_text", i))
 			return
 		}
 	}
@@ -371,7 +366,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	createdExamples, err := h.exampleRepo.CreateExampleList(r.Context(), examplePtrList)
 	if err != nil {
 		logger.Error("BCF0", "Failed to create examples: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to create examples", logger, username)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to create examples")
 		return
 	}
 
@@ -388,28 +383,27 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	logger.Info("ULS0", "UpdateExampleList invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
-	sec.CheckJWT()
-	sec.CheckRateLimitAndUserBlock()
-	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleUpdate)
+	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app.CheckJWT()
+	app.CheckRateLimitAndUserBlock()
+	app.CheckCSRF()
+	app.CheckAuthorization(model.GrantExampleUpdate)
 
-	if !sec.CheckAllChecksComplete() {
+	if !app.CheckAllChecksComplete() {
 		return
 	}
 
-	jwtClaims := sec.GetClaims()
-	username := sec.GetUsername()
+	jwtClaims := app.GetClaims()
 
 	// Parse request body
 	var exampleList []model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&exampleList); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", logger, username)
+		app.WriteError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	if len(exampleList) == 0 {
-		writeError(w, http.StatusBadRequest, "At least one example required", logger, username)
+		app.WriteError(w, http.StatusBadRequest, "At least one example required")
 		return
 	}
 
@@ -423,11 +417,11 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 		examplePtrList[i] = &exampleList[i]
 		originalUpdateTSList[i] = exampleList[i].UpdateTS
 		if examplePtrList[i].SecurityContext != jwtClaims.SecurityContext {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), logger, username)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i))
 			return
 		}
 		if examplePtrList[i].ExampleID == 0 {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Example %d missing example_id", i), logger, username)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d missing example_id", i))
 			return
 		}
 		exampleList[i].UpdateTS = now
@@ -438,11 +432,11 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	err := h.exampleRepo.UpdateExampleList(r.Context(), examplePtrList, originalUpdateTSList)
 	if err != nil {
 		if errors.Is(err, repository.ErrExpectationFailed) {
-			writeError(w, http.StatusExpectationFailed, "One or more examples could not be updated due to concurrent modifications", logger, username)
+			app.WriteError(w, http.StatusExpectationFailed, "One or more examples could not be updated due to concurrent modifications")
 			return
 		}
 		logger.Error("BUF0", "Failed to update examples: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to update examples", logger, username)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to update examples")
 		return
 	}
 
@@ -460,39 +454,38 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	logger.Info("DLS0", "DeleteExampleList invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
-	sec.CheckJWT()
-	sec.CheckRateLimitAndUserBlock()
-	sec.CheckCSRF()
-	sec.CheckAuthorization(model.GrantExampleDelete)
+	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app.CheckJWT()
+	app.CheckRateLimitAndUserBlock()
+	app.CheckCSRF()
+	app.CheckAuthorization(model.GrantExampleDelete)
 
-	if !sec.CheckAllChecksComplete() {
+	if !app.CheckAllChecksComplete() {
 		return
 	}
 
-	jwtClaims := sec.GetClaims()
-	username := sec.GetUsername()
+	jwtClaims := app.GetClaims()
 
 	// Parse query parameters
 	idList, err := GetCommaSeparatedIntListFromQuery(r, "exampleIdList")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
+		app.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	updateTimestampList, err := GetCommaSeparatedFloats(r, "updateTs")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
+		app.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if len(idList) != len(updateTimestampList) {
-		writeError(w, http.StatusBadRequest, "exampleIdList and updateTs must have the same number of values", logger, username)
+		app.WriteError(w, http.StatusBadRequest, "exampleIdList and updateTs must have the same number of values")
 		return
 	}
 
 	if len(idList) == 0 {
-		writeError(w, http.StatusBadRequest, "At least one id required", logger, username)
+		app.WriteError(w, http.StatusBadRequest, "At least one id required")
 		return
 	}
 
@@ -503,7 +496,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	deletedIDList, err := h.exampleRepo.DeleteExampleList(r.Context(), idList, updateTimestampList, jwtClaims.SecurityContext, now, jwtClaims.UserID)
 	if err != nil {
 		logger.Error("BDF0", "Failed to delete examples: "+err.Error())
-		writeError(w, http.StatusInternalServerError, "Failed to delete examples", logger, username)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to delete examples")
 		return
 	}
 

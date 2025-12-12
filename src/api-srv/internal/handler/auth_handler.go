@@ -232,17 +232,17 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		appServices.Logger.Info("RFST", "Refresh request started")
 
 		// Security checks
-		sec := app_lib.NewSecurityHelper(w, r, appServices)
-		sec.CheckJWT()
-		sec.CheckRateLimitAndUserBlock()
-		sec.SkipCSRF()          // CSRF not required for read-only refresh
-		sec.SkipAuthorization() // Authorization not required for token refresh
+		app := app_lib.NewAppHelper(w, r, appServices)
+		app.CheckJWT()
+		app.CheckRateLimitAndUserBlock()
+		app.SkipCSRF()          // CSRF not required for read-only refresh
+		app.SkipAuthorization() // Authorization not required for token refresh
 
-		if !sec.CheckAllChecksComplete() {
+		if !app.CheckAllChecksComplete() {
 			return
 		}
 
-		jwtClaims := sec.GetClaims()
+		jwtClaims := app.GetClaims()
 
 		// Read user
 		user, err := userRepo.ReadUserByUserName(r.Context(), jwtClaims.Subject)
