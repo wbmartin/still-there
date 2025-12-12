@@ -19,7 +19,9 @@ func NewUserGrantRepository(db *pgxpool.Pool) *UserGrantRepository {
 }
 
 // ReadUserGrantList retrieves user grants by IDs
-func (r *UserGrantRepository) ReadUserGrantList(ctx context.Context, grantIDs []int) ([]*model.UserGrantModel, error) {
+func (r *UserGrantRepository) ReadUserGrantList(
+	ctx context.Context, grantIDs []int,
+) ([]*model.UserGrantModel, error) {
 	if len(grantIDs) == 0 {
 		return []*model.UserGrantModel{}, nil
 	}
@@ -41,9 +43,10 @@ func (r *UserGrantRepository) ReadUserGrantList(ctx context.Context, grantIDs []
 	for rowList.Next() {
 		var grant model.UserGrantModel
 		err := rowList.Scan(
-			&grant.UserGrantID, &grant.GrantShortCode, &grant.GrantDescription, &grant.SecurityContext,
-			&grant.CreateTS, &grant.CreateUserID, &grant.UpdateTS, &grant.UpdateUserID,
-			&grant.DeleteTS, &grant.DeleteUserID,
+			&grant.UserGrantID, &grant.GrantShortCode,
+			&grant.GrantDescription, &grant.SecurityContext,
+			&grant.CreateTS, &grant.CreateUserID, &grant.UpdateTS,
+			&grant.UpdateUserID, &grant.DeleteTS, &grant.DeleteUserID,
 		)
 		if err != nil {
 			return nil, err

@@ -46,7 +46,9 @@ func isRetryableError(err error) bool {
 }
 
 // ExecuteWithRetry executes a database operation with exponential backoff retry
-func ExecuteWithRetry(ctx context.Context, config RetryConfig, operation func() error) error {
+func ExecuteWithRetry(
+	ctx context.Context, config RetryConfig, operation func() error,
+) error {
 	backoffStrategy := backoff.WithMaxRetries(
 		backoff.NewExponentialBackOff(
 			backoff.WithInitialInterval(config.InitialInterval),

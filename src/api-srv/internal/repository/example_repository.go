@@ -54,8 +54,9 @@ func (r *ExampleRepository) ReadExample(
 
 	// Record exists and is not deleted, retrieve full data
 	query := `
-		SELECT example_id, example_text, example_int, example_float, example_int_array, example_float_array,
-		       security_context, create_ts, create_user_id, update_ts, update_user_id,
+		SELECT example_id, example_text, example_int, example_float,
+		       example_int_array, example_float_array, security_context,
+		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM example
 		WHERE example_id = $1 AND security_context = $2 AND delete_user_id IS NULL`
@@ -93,11 +94,12 @@ func (r *ExampleRepository) CreateExample(
 
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		return r.db.QueryRow(ctx, query,
-			&example.ExampleID, &example.ExampleText, &example.ExampleInt,
-			&example.ExampleFloat, &example.ExampleIntArray,
-			&example.ExampleFloatArray, &example.SecurityContext,
-			&example.CreateTS, &example.CreateUserID,
-			&example.UpdateTS, &example.UpdateUserID,
+			&example.ExampleID, &example.ExampleText,
+			&example.ExampleInt, &example.ExampleFloat,
+			&example.ExampleIntArray, &example.ExampleFloatArray,
+			&example.SecurityContext, &example.CreateTS,
+			&example.CreateUserID, &example.UpdateTS,
+			&example.UpdateUserID,
 		).Scan()
 	})
 
@@ -141,9 +143,11 @@ func (r *ExampleRepository) UpdateExample(
 	if result.RowsAffected() == 0 {
 		// Assess the state of the example
 		var deleteUserID *int
-		checkQuery := `SELECT delete_user_id FROM example WHERE example_id = $1 AND security_context = $2`
+		checkQuery := `SELECT delete_user_id FROM example
+			WHERE example_id = $1 AND security_context = $2`
 		err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx, checkQuery, example.ExampleID, example.SecurityContext).Scan(&deleteUserID)
+			return r.db.QueryRow(ctx, checkQuery,
+				example.ExampleID, example.SecurityContext).Scan(&deleteUserID)
 		})
 		if err != nil {
 			if err == pgx.ErrNoRows {
@@ -190,9 +194,11 @@ func (r *ExampleRepository) DeleteExample(
 
 	if result.RowsAffected() == 0 {
 		var deleteUserIDCheck *int
-		checkQuery := `SELECT delete_user_id FROM example WHERE example_id = $1 AND security_context = $2`
+		checkQuery := `SELECT delete_user_id FROM example
+			WHERE example_id = $1 AND security_context = $2`
 		err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx, checkQuery, exampleID, securityContext).Scan(&deleteUserIDCheck)
+			return r.db.QueryRow(ctx, checkQuery,
+				exampleID, securityContext).Scan(&deleteUserIDCheck)
 		})
 		if err != nil {
 			if err == pgx.ErrNoRows {
@@ -210,7 +216,8 @@ func (r *ExampleRepository) DeleteExample(
 	return exampleID, nil
 }
 
-// ReadExampleList retrieves multiple examples by IDs and security context, or all if idList is empty
+// ReadExampleList retrieves multiple examples by IDs and security context,
+// or all if idList is empty
 // If afterUpdateTs > 0, only returns examples with update_ts > afterUpdateTs
 func (r *ExampleRepository) ReadExampleList(
 	ctx context.Context,

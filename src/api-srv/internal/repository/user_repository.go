@@ -23,7 +23,9 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 }
 
 // ReadUserByUserName retrieves a user by username
-func (r *UserRepository) ReadUserByUserName(ctx context.Context, username string) (*model.AppUserModel, error) {
+func (r *UserRepository) ReadUserByUserName(
+	ctx context.Context, username string,
+) (*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
 		       security_context, user_group_membership_list, mfa_exempt,
@@ -34,12 +36,12 @@ func (r *UserRepository) ReadUserByUserName(ctx context.Context, username string
 
 	var user model.AppUserModel
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, query, username).Scan(
-			&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName, &user.LastName, &user.Email,
-			&user.SecurityContext, &user.UserGroupMembershipList, &user.MFAExempt,
-			&user.CreateTS, &user.CreateUserID, &user.UpdateTS, &user.UpdateUserID,
-			&user.DeleteTS, &user.DeleteUserID,
-		)
+		return r.db.QueryRow(ctx, query,
+			&user.AppUserID, &user.UserName, &user.FirstName,
+			&user.LastName, &user.Email, &user.SecurityContext,
+			&user.CreateTS, &user.CreateUserID, &user.UpdateTS,
+			&user.UpdateUserID,
+		).Scan()
 	})
 
 	if err != nil {
@@ -53,7 +55,9 @@ func (r *UserRepository) ReadUserByUserName(ctx context.Context, username string
 }
 
 // ReadUserGrantList retrieves user grants by security context
-func (r *UserRepository) ReadUserGrantList(ctx context.Context, userGroupIDs []int) (map[int][]int, error) {
+func (r *UserRepository) ReadUserGrantList(
+	ctx context.Context, userGroupIDs []int,
+) (map[int][]int, error) {
 	if len(userGroupIDs) == 0 {
 		return make(map[int][]int), nil
 	}
@@ -95,7 +99,9 @@ func (r *UserRepository) ReadUserGrantList(ctx context.Context, userGroupIDs []i
 }
 
 // CreateUser creates a new user
-func (r *UserRepository) CreateUser(ctx context.Context, user *model.AppUserModel) (*model.AppUserModel, error) {
+func (r *UserRepository) CreateUser(
+	ctx context.Context, user *model.AppUserModel,
+) (*model.AppUserModel, error) {
 	if !regexp.MustCompile(`^[a-zA-Z0-9-]+$`).MatchString(user.UserName) {
 		return nil, fmt.Errorf("username must contain only alphanumeric characters")
 	}
@@ -121,13 +127,17 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *model.AppUserMode
 }
 
 // UpdateUserPassword updates a user's password
-func (r *UserRepository) UpdateUserPassword(ctx context.Context, userID int, newPasswordHash string, updateTS float64, updateUserID int) error {
+func (r *UserRepository) UpdateUserPassword(
+	ctx context.Context, userID int, newPasswordHash string,
+	updateTS float64, updateUserID int,
+) error {
 	query := `
 		UPDATE app_user
 		SET pw_hash = $1, update_ts = $2, update_user_id = $3
 		WHERE app_user_id = $4 AND delete_user_id IS NULL`
 
-	result, err := r.db.Exec(ctx, query, newPasswordHash, updateTS, updateUserID, userID)
+	result, err := r.db.Exec(ctx, query,
+		newPasswordHash, updateTS, updateUserID, userID)
 	if err != nil {
 		return fmt.Errorf("failed to update user password: %w", err)
 	}
@@ -139,8 +149,11 @@ func (r *UserRepository) UpdateUserPassword(ctx context.Context, userID int, new
 	return nil
 }
 
-// ReadUserList retrieves users for a security context, optionally filtered by idList
-func (r *UserRepository) ReadUserList(ctx context.Context, securityContext int, idList []int) ([]*model.AppUserModel, error) {
+// ReadUserList retrieves users for a security context,
+// optionally filtered by idList
+func (r *UserRepository) ReadUserList(
+	ctx context.Context, securityContext int, idList []int,
+) ([]*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, first_name, last_name, email,
 		       security_context, user_group_membership_list, mfa_exempt,
@@ -183,7 +196,9 @@ func (r *UserRepository) ReadUserList(ctx context.Context, securityContext int, 
 }
 
 // UpdateUser updates a user with optimistic locking
-func (r *UserRepository) UpdateUser(ctx context.Context, user *model.AppUserModel, clientUpdateTS float64) error {
+func (r *UserRepository) UpdateUser(
+	ctx context.Context, user *model.AppUserModel, clientUpdateTS float64,
+) error {
 	query := `
 		UPDATE app_user
 		SET user_name = $1, first_name = $2, last_name = $3, email = $4,
@@ -203,7 +218,8 @@ func (r *UserRepository) UpdateUser(ctx context.Context, user *model.AppUserMode
 	if result.RowsAffected() == 0 {
 		// Check if user exists
 		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user WHERE app_user_id = $1 AND delete_user_id IS NULL)`
+		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user
+			WHERE app_user_id = $1 AND delete_user_id IS NULL)`
 		err = r.db.QueryRow(ctx, checkQuery, user.AppUserID).Scan(&exists)
 		if err != nil {
 			return fmt.Errorf("failed to check user existence: %w", err)

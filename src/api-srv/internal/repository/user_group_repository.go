@@ -20,7 +20,9 @@ func NewUserGroupRepository(db *pgxpool.Pool) *UserGroupRepository {
 }
 
 // ReadUserGroupListByIDList retrieves user groups by IDs
-func (r *UserGroupRepository) ReadUserGroupListByIDList(ctx context.Context, groupIDs []int) ([]*model.UserGroupModel, error) {
+func (r *UserGroupRepository) ReadUserGroupListByIDList(
+	ctx context.Context, groupIDs []int,
+) ([]*model.UserGroupModel, error) {
 	if len(groupIDs) == 0 {
 		return []*model.UserGroupModel{}, nil
 	}
@@ -42,9 +44,10 @@ func (r *UserGroupRepository) ReadUserGroupListByIDList(ctx context.Context, gro
 	for rowList.Next() {
 		var group model.UserGroupModel
 		err := rowList.Scan(
-			&group.UserGroupID, &group.GroupName, &group.UserGrantList, &group.SecurityContext,
-			&group.CreateTS, &group.CreateUserID, &group.UpdateTS, &group.UpdateUserID,
-			&group.DeleteTS, &group.DeleteUserID,
+			&group.UserGroupID, &group.GroupName, &group.UserGrantList,
+			&group.SecurityContext, &group.CreateTS, &group.CreateUserID,
+			&group.UpdateTS, &group.UpdateUserID, &group.DeleteTS,
+			&group.DeleteUserID,
 		)
 		if err != nil {
 			return nil, err
@@ -56,7 +59,9 @@ func (r *UserGroupRepository) ReadUserGroupListByIDList(ctx context.Context, gro
 }
 
 // ReadUserGroupList retrieves all user groups for a security context
-func (r *UserGroupRepository) ReadUserGroupList(ctx context.Context, securityContext int) ([]*model.UserGroupModel, error) {
+func (r *UserGroupRepository) ReadUserGroupList(
+	ctx context.Context, securityContext int,
+) ([]*model.UserGroupModel, error) {
 	query := `
 		SELECT user_group_id, group_name, user_grant_list, security_context,
 		       create_ts, create_user_id, update_ts, update_user_id,
@@ -89,7 +94,9 @@ func (r *UserGroupRepository) ReadUserGroupList(ctx context.Context, securityCon
 }
 
 // CreateUserGroup creates a new user group
-func (r *UserGroupRepository) CreateUserGroup(ctx context.Context, group *model.UserGroupModel) (*model.UserGroupModel, error) {
+func (r *UserGroupRepository) CreateUserGroup(
+	ctx context.Context, group *model.UserGroupModel,
+) (*model.UserGroupModel, error) {
 	query := `
 		INSERT INTO user_group (group_name, user_grant_list, security_context,
 		                        create_ts, create_user_id, update_ts, update_user_id)
@@ -99,7 +106,8 @@ func (r *UserGroupRepository) CreateUserGroup(ctx context.Context, group *model.
 	var newID int
 	err := r.db.QueryRow(ctx, query,
 		group.GroupName, group.UserGrantList, group.SecurityContext,
-		group.CreateTS, group.CreateUserID, group.UpdateTS, group.UpdateUserID).Scan(&newID)
+		group.CreateTS, group.CreateUserID, group.UpdateTS,
+		group.UpdateUserID).Scan(&newID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user group: %w", err)
 	}
@@ -109,7 +117,9 @@ func (r *UserGroupRepository) CreateUserGroup(ctx context.Context, group *model.
 }
 
 // UpdateUserGroup updates a user group with optimistic locking
-func (r *UserGroupRepository) UpdateUserGroup(ctx context.Context, group *model.UserGroupModel, clientUpdateTS float64) error {
+func (r *UserGroupRepository) UpdateUserGroup(
+	ctx context.Context, group *model.UserGroupModel, clientUpdateTS float64,
+) error {
 	query := `
 		UPDATE user_group
 		SET group_name = $1, user_grant_list = $2,
@@ -127,7 +137,8 @@ func (r *UserGroupRepository) UpdateUserGroup(ctx context.Context, group *model.
 	if result.RowsAffected() == 0 {
 		// Check if group exists
 		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM user_group WHERE user_group_id = $1 AND delete_user_id IS NULL)`
+		checkQuery := `SELECT EXISTS(SELECT 1 FROM user_group
+			WHERE user_group_id = $1 AND delete_user_id IS NULL)`
 		err = r.db.QueryRow(ctx, checkQuery, group.UserGroupID).Scan(&exists)
 		if err != nil {
 			return fmt.Errorf("failed to check user group existence: %w", err)
