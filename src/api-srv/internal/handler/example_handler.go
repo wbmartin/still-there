@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
@@ -286,23 +285,16 @@ func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Parse query parameters
-	exampleIdListStr := r.URL.Query().Get("exampleIdList")
-	afterUpdateTsStr := r.URL.Query().Get("afterUpdateTs")
-
-	idList, err := ParseCommaSeparatedInts(exampleIdListStr)
+	idList, err := GetCommaSeparatedIntListFromQuery(r, "exampleIdList")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid id in exampleIdList parameter", logger, username)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
 		return
 	}
 
-	var afterUpdateTs float64
-	if afterUpdateTsStr != "" {
-		var err error
-		afterUpdateTs, err = strconv.ParseFloat(afterUpdateTsStr, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid afterUpdateTs parameter", logger, username)
-			return
-		}
+	afterUpdateTs, err := GetOptionalFloatFromQuery(r, "afterUpdateTs")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
+		return
 	}
 
 	// If idList is empty, ReadExampleList returns all or filtered by afterUpdateTs
@@ -499,26 +491,15 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Parse query parameters
-	exampleIdListStr := r.URL.Query().Get("exampleIdList")
-	updateTsStr := r.URL.Query().Get("updateTs")
-	if exampleIdListStr == "" {
-		writeError(w, http.StatusBadRequest, "exampleIdList parameter is required", logger, username)
-		return
-	}
-	if updateTsStr == "" {
-		writeError(w, http.StatusBadRequest, "updateTs parameter is required", logger, username)
+	idList, err := GetCommaSeparatedIntListFromQuery(r, "exampleIdList")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
 		return
 	}
 
-	idList, err := ParseCommaSeparatedInts(exampleIdListStr)
+	updateTimestampList, err := GetCommaSeparatedFloats(r, "updateTs")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid id in exampleIdList parameter", logger, username)
-		return
-	}
-
-	updateTimestampList, err := ParseCommaSeparatedFloats(updateTsStr)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid updateTs value", logger, username)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
 		return
 	}
 

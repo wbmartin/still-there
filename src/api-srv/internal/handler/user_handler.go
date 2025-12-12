@@ -44,10 +44,9 @@ func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 	jwtClaims := sec.GetClaims()
 
 	// Parse optional userIdList query parameter
-	userIdListStr := r.URL.Query().Get("userIdList")
-	idList, err := ParseCommaSeparatedInts(userIdListStr)
+	idList, err := GetCommaSeparatedIntListFromQuery(r, "userIdList")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid userId in userIdList", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
 		return
 	}
 
