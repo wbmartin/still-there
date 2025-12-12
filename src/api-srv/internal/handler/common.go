@@ -12,7 +12,8 @@ import (
 )
 
 // writeJSON writes a JSON response
-func writeJSON(w http.ResponseWriter, status int, data interface{}, logger app_lib.ThisAppLoggerInterface) {
+func writeJSON(w http.ResponseWriter, status int, data interface{},
+	logger app_lib.ThisAppLoggerInterface) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
@@ -23,13 +24,15 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}, logger app_l
 }
 
 // writeError writes an error response
-func writeError(w http.ResponseWriter, status int, message string, logger app_lib.ThisAppLoggerInterface, username string) {
+func writeError(w http.ResponseWriter, status int, message string,
+	logger app_lib.ThisAppLoggerInterface, username string) {
 	logger.Error("ERR", message, "username", username)
 	response := map[string]string{"error": message}
 	writeJSON(w, status, response, logger)
 }
 
-// ParseCommaSeparatedInts parses a comma-separated string of integers into a slice of ints
+// ParseCommaSeparatedInts parses a comma-separated string of integers
+// into a slice of ints
 func ParseCommaSeparatedInts(s string) ([]int, error) {
 	if s == "" {
 		return []int{}, nil
@@ -46,7 +49,8 @@ func ParseCommaSeparatedInts(s string) ([]int, error) {
 	return idList, nil
 }
 
-// ParseCommaSeparatedFloats parses a comma-separated string of floats into a slice of float64
+// ParseCommaSeparatedFloats parses a comma-separated string of floats
+// into a slice of float64
 func ParseCommaSeparatedFloats(s string) ([]float64, error) {
 	if s == "" {
 		return []float64{}, nil
@@ -95,7 +99,8 @@ func GetFloatFromQuery(r *http.Request, key string) (float64, error) {
 	return num, nil
 }
 
-// GetStringFromQuery safely retrieves a string from query parameters (max 255 chars)
+// GetStringFromQuery safely retrieves a string from query parameters
+// (max 255 chars)
 func GetStringFromQuery(r *http.Request, key string) (string, error) {
 	val := r.URL.Query().Get(key)
 	if val == "" {
@@ -107,7 +112,8 @@ func GetStringFromQuery(r *http.Request, key string) (string, error) {
 	return val, nil
 }
 
-// GetOptionalStringFromQuery safely retrieves an optional string from query parameters (max 255 chars if present)
+// GetOptionalStringFromQuery safely retrieves an optional string
+// from query parameters (max 255 chars if present)
 func GetOptionalStringFromQuery(r *http.Request, key string) (string, error) {
 	val := r.URL.Query().Get(key)
 	if val == "" {
@@ -119,8 +125,10 @@ func GetOptionalStringFromQuery(r *http.Request, key string) (string, error) {
 	return val, nil
 }
 
-// GetCommaSeparatedIntListFromQuery parses a comma-separated list of integers from query parameters (optional, returns empty slice if missing)
-func GetCommaSeparatedIntListFromQuery(r *http.Request, key string) ([]int, error) {
+// GetCommaSeparatedIntListFromQuery parses a comma-separated list of integers
+// from query parameters (optional, returns empty slice if missing)
+func GetCommaSeparatedIntListFromQuery(r *http.Request,
+	key string) ([]int, error) {
 	str, err := GetOptionalStringFromQuery(r, key)
 	if err != nil {
 		return nil, err
@@ -128,7 +136,8 @@ func GetCommaSeparatedIntListFromQuery(r *http.Request, key string) ([]int, erro
 	return ParseCommaSeparatedInts(str)
 }
 
-// GetCommaSeparatedFloats parses a comma-separated list of floats from query parameters (optional, returns empty slice if missing)
+// GetCommaSeparatedFloats parses a comma-separated list of floats
+// from query parameters (optional, returns empty slice if missing)
 func GetCommaSeparatedFloats(r *http.Request, key string) ([]float64, error) {
 	str, err := GetOptionalStringFromQuery(r, key)
 	if err != nil {
@@ -137,7 +146,8 @@ func GetCommaSeparatedFloats(r *http.Request, key string) ([]float64, error) {
 	return ParseCommaSeparatedFloats(str)
 }
 
-// GetOptionalFloatFromQuery safely parses an optional float from query parameters (max 20 chars if present)
+// GetOptionalFloatFromQuery safely parses an optional float
+// from query parameters (max 20 chars if present)
 func GetOptionalFloatFromQuery(r *http.Request, key string) (float64, error) {
 	str, err := GetOptionalStringFromQuery(r, key)
 	if err != nil {
@@ -153,7 +163,8 @@ func GetOptionalFloatFromQuery(r *http.Request, key string) (float64, error) {
 	return num, nil
 }
 
-// CurrentTimestamp returns the current timestamp as a float64 (seconds since Unix epoch with nanosecond precision)
+// CurrentTimestamp returns the current timestamp as a float64
+// (seconds since Unix epoch with nanosecond precision)
 func CurrentTimestamp() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }

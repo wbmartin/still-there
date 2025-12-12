@@ -7,6 +7,8 @@
     "doc/903-roles-and-goals.md",
     "doc/904-python-guidance.md",
     "doc/905-config-guidance.md",
-    "doc/906-git.md"
+    "doc/906-git.md",
+    "doc/907-security-guidelines.md",
+    "doc/908-api-guidelines.md"
   ]
 }

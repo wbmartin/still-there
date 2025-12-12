@@ -17,7 +17,8 @@ type Claims struct {
 	UserID          int           `json:"uid"`
 	SessionID       string        `json:"ses"`
 	SecurityContext int           `json:"sctx"`
-	Grants          map[int][]int `json:"grants"` // map[security_context][]grant_id
+	Grants          map[int][]int `json:"grants"`
+	// map[security_context][]grant_id
 }
 
 // Argon2id parameters (OWASP recommended)
@@ -38,7 +39,8 @@ func HashPassword(password string) (string, error) {
 	}
 
 	// Hash password
-	hash := argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+	hash := argon2.IDKey([]byte(password), salt, argon2Time,
+		argon2Memory, argon2Threads, argon2KeyLen)
 
 	// Encode as base64 for storage
 	saltB64 := base64.RawStdEncoding.EncodeToString(salt)
@@ -71,7 +73,8 @@ func CheckPasswordHash(password, encodedHash string) bool {
 
 	// Extract parameters from the format
 	// For now, assume fixed parameters as defined in HashPassword
-	hash := argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+	hash := argon2.IDKey([]byte(password), salt, argon2Time,
+		argon2Memory, argon2Threads, argon2KeyLen)
 
 	// Compare hashes
 	if len(hash) != len(expectedHash) {
@@ -100,9 +103,10 @@ func GenerateJWT(
 	now := time.Now()
 	claims := &Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "proto-go-app",
-			Subject:   username,
-			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour * time.Duration(expireHours))),
+			Issuer:  "proto-go-app",
+			Subject: username,
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour *
+				time.Duration(expireHours))),
 			NotBefore: jwt.NewNumericDate(now),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ID:        fmt.Sprintf("%d", now.UnixNano()),
@@ -124,12 +128,13 @@ func GenerateJWT(
 
 // ValidateJWT validates and parses a JWT token
 func ValidateJWT(tokenString, jwtSecret string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte(jwtSecret), nil
-	})
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{},
+		func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			return []byte(jwtSecret), nil
+		})
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse JWT: %w", err)

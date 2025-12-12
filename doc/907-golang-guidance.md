@@ -1,0 +1,1 @@
+- For golang code you generate, break long lines around 80 characters.

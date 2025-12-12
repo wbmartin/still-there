@@ -28,7 +28,8 @@ type KV struct {
 	mu             sync.Mutex
 }
 
-// parseHostPort parses a "host:port" string into separate host and port components
+// parseHostPort parses a "host:port" string into separate
+// host and port components
 func parseHostPort(hostPort string) (string, string, error) {
 	host, port, err := net.SplitHostPort(hostPort)
 	if err != nil {

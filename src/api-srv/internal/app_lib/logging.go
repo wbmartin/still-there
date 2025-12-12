@@ -28,13 +28,15 @@ type Logger struct {
 
 // NewLogger creates a logger that uses shrmpl-log
 func NewLogger(config *Config) *Logger {
-	fmt.Fprintf(os.Stderr, "DEBUG: Creating shrmpl-log client for %s\n", config.LogReceiverHostPort)
+	fmt.Fprintf(os.Stderr, "DEBUG: Creating shrmpl-log client for %s\n",
+		config.LogReceiverHostPort)
 	// Create shrmpl-log client internally
 	shrmplLogClient, err := NewShrmplLogClient(config.LogReceiverHostPort)
 	if err != nil {
 		// If we can't create the client, we'll log to console and continue
 		// The Log method will handle the case where shrmplLogClient is nil
-		fmt.Fprintf(os.Stderr, "Failed to create shrmpl-log client: %s\n", err.Error())
+		fmt.Fprintf(os.Stderr, "Failed to create shrmpl-log client: %s\n",
+			err.Error())
 		return &Logger{
 			shrmplLogClient: nil,
 			service:         config.ServerName,
@@ -60,7 +62,8 @@ func NewLogger(config *Config) *Logger {
 }
 
 // log sends a log message to shrmpl-log with caller information
-func (l *Logger) log(level string, code string, message string, keyvals ...interface{}) {
+func (l *Logger) log(level string, code string, message string,
+	keyvals ...interface{}) {
 	// Parse key-value pairs for username
 	username := "unknown"
 	for i := 0; i < len(keyvals); i += 2 {
@@ -74,7 +77,8 @@ func (l *Logger) log(level string, code string, message string, keyvals ...inter
 	// Format message with username
 	formattedMsg := fmt.Sprintf("[%s] %s", username, message)
 
-	// Add caller information (skip 2 frames: log() -> Debug/Info/Warn/Error() -> caller)
+	// Add caller information (skip 2 frames: log() -> Debug/Info/Warn/Error()
+	// -> caller)
 	_, file, line, ok := runtime.Caller(2)
 	callerInfo := ""
 	if ok {
@@ -100,9 +104,12 @@ func (l *Logger) log(level string, code string, message string, keyvals ...inter
 
 	// Send to shrmpl-log
 	if l.shrmplLogClient != nil {
-		// fmt.Fprintf(os.Stderr, "DEBUG: Sending log to shrmpl-log: [%s] %s\n", level, fullMessage)
-		if err := l.shrmplLogClient.Log(level, l.service, "0000", fullMessage); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: Failed to send log to shrmpl-log: %s\n", err.Error())
+		// fmt.Fprintf(os.Stderr, "DEBUG: Sending log to shrmpl-log: [%s] %s\n",
+		//	level, fullMessage)
+		if err := l.shrmplLogClient.Log(level, l.service, "0000",
+			fullMessage); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Failed to send log to shrmpl-log: %s\n",
+				err.Error())
 			l.shrmplLogClient.Close()
 			l.shrmplLogClient = nil
 		}
@@ -193,7 +200,8 @@ func (c *ShrmplLogClient) Log(level, host, code, message string) error {
 	paddedCode := fmt.Sprintf("%-4s", code[:4])
 	msgLen := fmt.Sprintf("%04d", len(message))
 
-	logLine := fmt.Sprintf("%s %s %s %s: %s\n", paddedLevel, paddedHost, paddedCode, msgLen, message)
+	logLine := fmt.Sprintf("%s %s %s %s: %s\n", paddedLevel, paddedHost,
+		paddedCode, msgLen, message)
 
 	_, err := c.conn.Write([]byte(logLine))
 	return err
