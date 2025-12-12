@@ -12,7 +12,10 @@ interface AppUserState {
 	updateUser: (id: number, data: Partial<User>) => Promise<void>;
 	deleteUser: (id: number) => Promise<void>;
 	addUserListToGroup: (userIds: number[], groupId: number) => Promise<void>;
-	removeUserListFromGroup: (userIds: number[], groupId: number) => Promise<void>;
+	removeUserListFromGroup: (
+		userIds: number[],
+		groupId: number,
+	) => Promise<void>;
 	clearCache: () => void;
 }
 
@@ -114,10 +117,14 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!response.ok) throw new Error("Failed to update user");
+      if (!response.ok) {
+        throw new Error("Failed to update user");
+      }
       // Update local state
       set((state) => ({
-        users: state.users.map((u: any) => (u.appUserId === id ? { ...u, ...data } : u)),
+        users: state.users.map(
+          (u: any) => (u.appUserId === id ? { ...u, ...data } : u),
+        ),
       }));
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
@@ -184,12 +191,16 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
       // Get current updateTs for each user
       const state = get();
       const updateTsList = userIds.map(id => {
-        const user = state.users.find(u => u.appUserId === id);
+        const user = state.users.find(
+          u => u.appUserId === id,
+        );
         if (!user) throw new Error(`User ${id} not found in cache`);
         return user.updateTs;
       });
 
-      const response = await apiRequest(API_ENDPOINTS.REMOVE_USER_LIST_FROM_GROUP, {
+      const response = await apiRequest(
+        API_ENDPOINTS.REMOVE_USER_LIST_FROM_GROUP,
+        {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userIds, groupId, updateTsList }),

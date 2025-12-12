@@ -16,7 +16,12 @@ import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 function ExampleEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
-  const { getExample, createExample, updateExample, deleteExample } = useExamplesStore();
+  const {
+    getExample,
+    createExample,
+    updateExample,
+    deleteExample,
+  } = useExamplesStore();
   const navigate = useNavigate();
 
   const id = searchParams.get("exampleId") || "";
@@ -32,7 +37,9 @@ function ExampleEditPage() {
   });
 
   const isNew = id === "new";
-  const [exampleLoading, setExampleLoading] = useState(!isNew && numericId !== null);
+  const [exampleLoading, setExampleLoading] = useState(
+    !isNew && numericId !== null,
+  );
   const hasFetched = useRef(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -72,9 +79,14 @@ function ExampleEditPage() {
           setExampleLoading(false);
         });
     }
-  }, [numericId, isNew, getExample]);
+  }, [
+    numericId,
+    isNew,
+    getExample,
+  ]);
 
-  //============================^HOOOK LINE ^====================================
+  //============================^HOOOK LINE ^====================
+  //================================================================
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
   }

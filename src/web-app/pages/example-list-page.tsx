@@ -7,7 +7,12 @@ import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 
 function ExampleListPage() {
   const authState = useAuthGuard();
-  const { examples, loading, readExampleList, deleteExample } = useExamplesStore();
+  const {
+    examples,
+    loading,
+    readExampleList,
+    deleteExample,
+  } = useExamplesStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
@@ -22,7 +27,8 @@ function ExampleListPage() {
     }
   }, [authState, readExampleList]);
 
-  //============================^HOOOK LINE ^====================================
+  //============================^HOOOK LINE ^====================
+  //================================================================
 
   if (authState !== "YES") {
     return <div>Loading...</div>;

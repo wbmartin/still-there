@@ -12,7 +12,11 @@ export const clearCsrfToken = (): void => {
   csrfToken = null;
 };
 
-const apiRequest = async (url: string, options: RequestInit = {}, csrfToken?: string) => {
+const apiRequest = async (
+  url: string,
+  options: RequestInit = {},
+  csrfToken?: string,
+) => {
   const headers = new Headers(options.headers);
   const token = csrfToken || getCsrfToken();
   if (token) {

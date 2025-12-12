@@ -10,7 +10,9 @@ interface UserGroupsState {
   error: string | null;
   readUserGroupList: () => Promise<void>;
   readGrantList: () => Promise<{ id: number; text: string }[]>;
-  createUserGroup: (data: { groupName: string; userGrantList: number[] }) => Promise<void>;
+  createUserGroup: (
+    data: { groupName: string; userGrantList: number[] },
+  ) => Promise<void>;
   updateUserGroup: (id: number, data: Partial<UserGroup>) => Promise<void>;
   deleteUserGroup: (id: number) => Promise<void>;
   clearCache: () => void;
@@ -42,9 +44,12 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       set({ loading: false, error: errorMessage });
     }
-  },
-  //============================^FUNCTION LINE ^============================
-  createUserGroup: async (data: { groupName: string; userGrantList: number[] }) => {
+   },
+   //============================^FUNCTION LINE ^================
+   //================================================================
+   createUserGroup: async (
+     data: { groupName: string; userGrantList: number[] },
+   ) => {
     set({ error: null });
     try {
       const response = await apiRequest(API_ENDPOINTS.USER_GROUP, {
@@ -78,10 +83,14 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!response.ok) throw new Error("Failed to update user group");
+      if (!response.ok) {
+        throw new Error("Failed to update user group");
+      }
       // Update local state
       set((state) => ({
-        userGroups: state.userGroups.map((g: any) => (g.userGroupId === id ? { ...g, ...data } : g)),
+        userGroups: state.userGroups.map(
+          (g: any) => (g.userGroupId === id ? { ...g, ...data } : g),
+        ),
       }));
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
@@ -107,9 +116,12 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
       throw err;
     }
   },
-  //============================^FUNCTION LINE ^============================
+  //============================^FUNCTION LINE ^================
+  //================================================================
   readGrantList: async () => {
-      const response = await apiRequest(API_ENDPOINTS.GRANT_LIST);
+      const response = await apiRequest(
+        API_ENDPOINTS.GRANT_LIST,
+      );
     if (!response.ok) throw new Error("Failed to fetch grant list");
     const data: { data: { id: number; text: string }[] } = await response.json();
     return data.data;

@@ -20,8 +20,18 @@ import AddRemoveUsersFromGroupModal from "../components/AddRemoveUsersFromGroupM
 function UserGroupEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
-  const { createUserGroup, updateUserGroup, deleteUserGroup, readGrantList } = useUserGroupsStore();
-  const { users, readUserList, addUserListToGroup, removeUserListFromGroup } = useAppUserStore();
+  const {
+    createUserGroup,
+    updateUserGroup,
+    deleteUserGroup,
+    readGrantList,
+  } = useUserGroupsStore();
+  const {
+    users,
+    readUserList,
+    addUserListToGroup,
+    removeUserListFromGroup,
+  } = useAppUserStore();
   const navigate = useNavigate();
 
   const userGroupId = searchParams.get("userGroupId") || "";
@@ -212,7 +222,9 @@ function UserGroupEditPage() {
           </Button>
            <Button
              variant="outline"
-             onClick={() => navigate(`/${ROUTES.USER_GROUP_LIST}`)}
+              onClick={() =>
+                navigate(`/${ROUTES.USER_GROUP_LIST}`)
+              }
            >
              Cancel
            </Button>
@@ -223,7 +235,9 @@ function UserGroupEditPage() {
       <div style={{ marginTop: "2rem" }}>
         <Title order={2} mb="md">Group Members</Title>
         {(() => {
-          const groupMembers = users.filter(u => u.userGroupMembershipList.includes(numericId || 0));
+          const groupMembers = users.filter(
+            u => u.userGroupMembershipList.includes(numericId || 0),
+          );
           return groupMembers.length > 0 ? (
             <List type="ordered" mb="md">
               {groupMembers.map(user => (

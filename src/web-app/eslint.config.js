@@ -19,5 +19,8 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      'max-len': ['error', { code: 80, ignoreUrls: true, ignoreStrings: true, ignoreTemplateLiterals: true }],
+    },
   },
 ])

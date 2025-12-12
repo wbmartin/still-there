@@ -8,7 +8,12 @@ import { ROUTES } from "../constants/routes";
 
 function UserGroupAdminPage() {
   const authState = useAuthGuard();
-  const { userGroups, loading, readUserGroupList, deleteUserGroup } = useUserGroupsStore();
+  const {
+    userGroups,
+    loading,
+    readUserGroupList,
+    deleteUserGroup,
+  } = useUserGroupsStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;

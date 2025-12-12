@@ -10,7 +10,13 @@ interface AddRemoveUsersFromGroupModalProps {
   onConfirm: (userIds: number[]) => void;
 }
 
-function AddRemoveUsersFromGroupModal({ isOpen, onClose, groupId, mode, onConfirm }: AddRemoveUsersFromGroupModalProps) {
+function AddRemoveUsersFromGroupModal({
+  isOpen,
+  onClose,
+  groupId,
+  mode,
+  onConfirm,
+}: AddRemoveUsersFromGroupModalProps) {
   const { users, readUserList } = useAppUserStore();
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
@@ -63,7 +69,11 @@ function AddRemoveUsersFromGroupModal({ isOpen, onClose, groupId, mode, onConfir
       />
       <Group justify="flex-end">
         <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button onClick={handleConfirm} loading={loading} disabled={selectedUsers.length === 0}>
+        <Button
+          onClick={handleConfirm}
+          loading={loading}
+          disabled={selectedUsers.length === 0}
+        >
           {mode === 'add' ? "Add Users" : "Remove Users"}
         </Button>
       </Group>

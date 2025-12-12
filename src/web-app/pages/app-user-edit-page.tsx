@@ -220,7 +220,10 @@ function UserEditPage() {
           data={groupOptions}
           value={formData.userGroupMembershipList.map(String)}
           onChange={(values) =>
-            setFormData({ ...formData, userGroupMembershipList: values.map(Number) })
+            setFormData({
+              ...formData,
+              userGroupMembershipList: values.map(Number),
+            })
           }
           mb="md"
         />
