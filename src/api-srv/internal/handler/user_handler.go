@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
@@ -129,7 +128,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set security context and creation metadata
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 	user.SecurityContext = jwtClaims.SecurityContext
 	user.CreateTS = now
 	user.CreateUserID = jwtClaims.UserID
@@ -196,7 +195,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Set update metadata
 	clientUpdateTS := user.UpdateTS
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 	user.SecurityContext = jwtClaims.SecurityContext
 	user.UpdateTS = now
 	user.UpdateUserID = jwtClaims.UserID
@@ -254,7 +253,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete user with optimistic locking
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 	deletedID, err := h.userRepo.DeleteUser(r.Context(), userID, jwtClaims.SecurityContext, updateTS, now, jwtClaims.UserID)
 	if err != nil {
 		switch {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
@@ -109,7 +108,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set security context and creation metadata
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 	example.SecurityContext = jwtClaims.SecurityContext
 	example.CreateTS = now
 	example.CreateUserID = jwtClaims.UserID
@@ -167,7 +166,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 
 	// Set security context and update metadata
 	clientUpdateTS := example.UpdateTS
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 	example.SecurityContext = jwtClaims.SecurityContext
 	example.UpdateTS = now
 	example.UpdateUserID = jwtClaims.UserID
@@ -231,7 +230,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	// Caller information automatically added to log messages
 
 	// Delete example with optimistic locking
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 	deletedID, err := h.exampleRepo.DeleteExample(r.Context(), exampleID, jwtClaims.SecurityContext, updateTS, now, jwtClaims.UserID)
 	if err != nil {
 		switch {
@@ -350,7 +349,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Generate timestamps once
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 	createTS := now
 	updateTS := now
 
@@ -408,7 +407,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Generate update timestamp
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 
 	// Collect original update timestamps, validate, and set new values
 	originalUpdateTSList := make([]float64, len(exampleList))
@@ -490,7 +489,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Generate delete timestamp
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 
 	// Delete in transaction
 	deletedIDList, err := h.exampleRepo.DeleteExampleList(r.Context(), idList, updateTimestampList, jwtClaims.SecurityContext, now, jwtClaims.UserID)

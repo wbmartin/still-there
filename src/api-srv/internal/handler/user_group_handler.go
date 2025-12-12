@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
@@ -92,7 +91,7 @@ func (h *UserGroupHandler) CreateUserGroup(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Set creation and update metadata
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 	group.SecurityContext = jwtClaims.SecurityContext
 	group.CreateTS = now
 	group.CreateUserID = jwtClaims.UserID
@@ -148,7 +147,7 @@ func (h *UserGroupHandler) UpdateUserGroup(w http.ResponseWriter, r *http.Reques
 
 	// Set update metadata
 	clientUpdateTS := group.UpdateTS
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 	group.SecurityContext = jwtClaims.SecurityContext
 	group.UpdateTS = now
 	group.UpdateUserID = jwtClaims.UserID
@@ -206,7 +205,7 @@ func (h *UserGroupHandler) DeleteUserGroup(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Delete user group with optimistic locking and assignment check
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := CurrentTimestamp()
 	deletedID, err := h.userGroupRepo.DeleteUserGroup(r.Context(), groupID, jwtClaims.SecurityContext, updateTS, now, jwtClaims.UserID)
 	if err != nil {
 		if strings.Contains(err.Error(), "cannot delete group") {
