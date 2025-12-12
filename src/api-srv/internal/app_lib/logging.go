@@ -72,7 +72,7 @@ func (l *Logger) log(level string, code string, message string, keyvals ...inter
 	}
 
 	// Format message with username
-	formattedMsg := fmt.Sprintf("[%s] %s: %s", username, l.service, message)
+	formattedMsg := fmt.Sprintf("[%s] %s", username, message)
 
 	// Add caller information (skip 2 frames: log() -> Debug/Info/Warn/Error() -> caller)
 	_, file, line, ok := runtime.Caller(2)
