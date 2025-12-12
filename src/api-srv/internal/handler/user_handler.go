@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
@@ -33,7 +31,7 @@ func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 	logger.Info("ULS0", "ReadUserList invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -47,17 +45,10 @@ func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 
 	// Parse optional userIdList query parameter
 	userIdListStr := r.URL.Query().Get("userIdList")
-	var idList []int
-	if userIdListStr != "" {
-		idStrs := strings.Split(userIdListStr, ",")
-		for _, idStr := range idStrs {
-			id, err := strconv.Atoi(strings.TrimSpace(idStr))
-			if err != nil {
-				writeError(w, http.StatusBadRequest, "Invalid userId in userIdList", logger, jwtClaims.Subject)
-				return
-			}
-			idList = append(idList, id)
-		}
+	idList, err := ParseCommaSeparatedInts(userIdListStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid userId in userIdList", logger, jwtClaims.Subject)
+		return
 	}
 
 	// Read users (filtered by security context and optional idList)
@@ -77,10 +68,10 @@ func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 // ReadGrantList handles GET /grantList
 func (h *UserHandler) ReadGrantList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
-	logger.Info("GLS0", "ReadGrantList invoked")
+	logger.Info("RLS0", "ReadGrantList invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -111,7 +102,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	logger.Info("UCS0", "CreateUser invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -177,7 +168,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	logger.Info("UUS0", "UpdateUser invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -238,7 +229,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	logger.Info("UDS0", "DeleteUser invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -251,23 +242,15 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	jwtClaims := sec.GetClaims()
 
 	// Parse query parameters
-	userIDStr := r.URL.Query().Get("userId")
-	updateTSStr := r.URL.Query().Get("updateTs")
-
-	if userIDStr == "" || updateTSStr == "" {
-		writeError(w, http.StatusBadRequest, "userId and updateTs are required", logger, jwtClaims.Subject)
+	userID, err := GetIntFromQuery(r, "userId")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
 		return
 	}
 
-	userID, err := strconv.Atoi(userIDStr)
+	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid userId", logger, jwtClaims.Subject)
-		return
-	}
-
-	updateTS, err := strconv.ParseFloat(updateTSStr, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid updateTs", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
 		return
 	}
 
@@ -299,7 +282,7 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 	logger.Info("AUG0", "AddUserListToGroup invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -350,7 +333,7 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *h
 	logger.Info("RUG0", "RemoveUserListFromGroup invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()

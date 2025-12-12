@@ -232,7 +232,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		appServices.Logger.Info("RFST", "Refresh request started")
 
 		// Security checks
-		sec := app_lib.NewSecurityHelper(w, r, appServices.KV, appServices.Config, appServices.Logger)
+		sec := app_lib.NewSecurityHelper(w, r, appServices)
 		sec.CheckJWT()
 		sec.CheckRateLimitAndUserBlock()
 		sec.SkipCSRF()          // CSRF not required for read-only refresh

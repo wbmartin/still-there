@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
@@ -31,10 +30,10 @@ func NewExampleHandler(appServices *app_lib.AppServices, exampleRepo *repository
 // ReadExample handles GET /example
 func (h *ExampleHandler) ReadExample(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
-	logger.Info("GTS0", "ReadExample invoked")
+	logger.Info("RTS0", "ReadExample invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -47,16 +46,9 @@ func (h *ExampleHandler) ReadExample(w http.ResponseWriter, r *http.Request) {
 	jwtClaims := sec.GetClaims()
 
 	// Parse query parameters
-	exampleIDStr := r.URL.Query().Get("exampleId")
-
-	if exampleIDStr == "" {
-		writeError(w, http.StatusBadRequest, "exampleId is required", logger, jwtClaims.Subject)
-		return
-	}
-
-	exampleID, err := strconv.Atoi(exampleIDStr)
+	exampleID, err := GetIntFromQuery(r, "exampleId")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid exampleId", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
 		return
 	}
 
@@ -90,7 +82,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	logger.Info("CRS0", "CreateExample invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -147,7 +139,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	logger.Info("UPS0", "UpdateExample invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -216,7 +208,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	logger.Info("DES0", "DeleteExample invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -233,23 +225,15 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse query parameters
-	exampleIDStr := r.URL.Query().Get("exampleId")
-	updateTSStr := r.URL.Query().Get("updateTs")
-
-	if exampleIDStr == "" || updateTSStr == "" {
-		writeError(w, http.StatusBadRequest, "exampleId and updateTs are required", logger, username)
+	exampleID, err := GetIntFromQuery(r, "exampleId")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
 		return
 	}
 
-	exampleID, err := strconv.Atoi(exampleIDStr)
+	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid exampleId", logger, username)
-		return
-	}
-
-	updateTS, err := strconv.ParseFloat(updateTSStr, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid updateTs", logger, username)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, username)
 		return
 	}
 
@@ -282,11 +266,11 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 // ReadExampleList handles GET /exampleList?exampleIdList={comma-separated} (optional, if empty returns all)
 func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
-	logger.Info("GLS0", "ReadExampleList invoked")
+	logger.Info("RLS0", "ReadExampleList invoked")
 	username := "PreAuth"
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -305,18 +289,10 @@ func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request)
 	exampleIdListStr := r.URL.Query().Get("exampleIdList")
 	afterUpdateTsStr := r.URL.Query().Get("afterUpdateTs")
 
-	var idList []int
-	if exampleIdListStr != "" {
-		idStrList := strings.Split(exampleIdListStr, ",")
-		idList = make([]int, 0, len(idStrList))
-		for _, idStr := range idStrList {
-			id, err := strconv.Atoi(idStr)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, "Invalid id in exampleIdList parameter", logger, username)
-				return
-			}
-			idList = append(idList, id)
-		}
+	idList, err := ParseCommaSeparatedInts(exampleIdListStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid id in exampleIdList parameter", logger, username)
+		return
 	}
 
 	var afterUpdateTs float64
@@ -350,7 +326,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	logger.Info("CLS0", "CreateExampleList invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -431,7 +407,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	logger.Info("ULS0", "UpdateExampleList invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -506,7 +482,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	logger.Info("DLS0", "DeleteExampleList invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -534,29 +510,21 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	idStrList := strings.Split(exampleIdListStr, ",")
-	updateTsStrList := strings.Split(updateTsStr, ",")
-	if len(idStrList) != len(updateTsStrList) {
-		writeError(w, http.StatusBadRequest, "exampleIdList and updateTs must have the same number of values", logger, username)
+	idList, err := ParseCommaSeparatedInts(exampleIdListStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid id in exampleIdList parameter", logger, username)
 		return
 	}
 
-	idList := make([]int, 0, len(idStrList))
-	updateTimestampList := make([]float64, 0, len(updateTsStrList))
-	for i, idStr := range idStrList {
-		id, err := strconv.Atoi(strings.TrimSpace(idStr))
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid id in exampleIdList parameter", logger, username)
-			return
-		}
-		idList = append(idList, id)
+	updateTimestampList, err := ParseCommaSeparatedFloats(updateTsStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid updateTs value", logger, username)
+		return
+	}
 
-		ts, err := strconv.ParseFloat(strings.TrimSpace(updateTsStrList[i]), 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid updateTs value", logger, username)
-			return
-		}
-		updateTimestampList = append(updateTimestampList, ts)
+	if len(idList) != len(updateTimestampList) {
+		writeError(w, http.StatusBadRequest, "exampleIdList and updateTs must have the same number of values", logger, username)
+		return
 	}
 
 	if len(idList) == 0 {

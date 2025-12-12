@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -33,7 +32,7 @@ func (h *UserGroupHandler) ReadUserGroupList(w http.ResponseWriter, r *http.Requ
 	logger.Info("UGGS0", "GetUserGroupList invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -65,7 +64,7 @@ func (h *UserGroupHandler) CreateUserGroup(w http.ResponseWriter, r *http.Reques
 	logger.Info("UGCS0", "CreateUserGroup invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -120,7 +119,7 @@ func (h *UserGroupHandler) UpdateUserGroup(w http.ResponseWriter, r *http.Reques
 	logger.Info("UGUS0", "UpdateUserGroup invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -181,7 +180,7 @@ func (h *UserGroupHandler) DeleteUserGroup(w http.ResponseWriter, r *http.Reques
 	logger.Info("UGDS0", "DeleteUserGroup invoked")
 
 	// Security checks
-	sec := app_lib.NewSecurityHelper(w, r, h.appsrv.KV, h.appsrv.Config, logger)
+	sec := app_lib.NewSecurityHelper(w, r, h.appsrv)
 	sec.CheckJWT()
 	sec.CheckRateLimitAndUserBlock()
 	sec.CheckCSRF()
@@ -194,23 +193,15 @@ func (h *UserGroupHandler) DeleteUserGroup(w http.ResponseWriter, r *http.Reques
 	jwtClaims := sec.GetClaims()
 
 	// Parse query parameters
-	groupIDStr := r.URL.Query().Get("userGroupId")
-	updateTSStr := r.URL.Query().Get("updateTs")
-
-	if groupIDStr == "" || updateTSStr == "" {
-		writeError(w, http.StatusBadRequest, "userGroupId and updateTs are required", logger, jwtClaims.Subject)
+	groupID, err := GetIntFromQuery(r, "userGroupId")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
 		return
 	}
 
-	groupID, err := strconv.Atoi(groupIDStr)
+	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid userGroupId", logger, jwtClaims.Subject)
-		return
-	}
-
-	updateTS, err := strconv.ParseFloat(updateTSStr, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid updateTs", logger, jwtClaims.Subject)
+		writeError(w, http.StatusBadRequest, err.Error(), logger, jwtClaims.Subject)
 		return
 	}
 

@@ -14,9 +14,7 @@ import (
 type SecurityHelper struct {
 	r           *http.Request
 	w           http.ResponseWriter
-	kv          ThisAppKVInterface
-	config      *Config
-	logger      ThisAppLoggerInterface
+	appServices *AppServices
 	claims      *Claims
 	ctx         context.Context
 	blocked     bool
@@ -28,13 +26,11 @@ type SecurityHelper struct {
 }
 
 // NewSecurityHelper creates a new security helper
-func NewSecurityHelper(w http.ResponseWriter, r *http.Request, kv ThisAppKVInterface, config *Config, logger ThisAppLoggerInterface) *SecurityHelper {
+func NewSecurityHelper(w http.ResponseWriter, r *http.Request, appServices *AppServices) *SecurityHelper {
 	return &SecurityHelper{
-		r:      r,
-		w:      w,
-		kv:     kv,
-		config: config,
-		logger: logger,
+		r:           r,
+		w:           w,
+		appServices: appServices,
 	}
 }
 
@@ -97,9 +93,9 @@ func (sh *SecurityHelper) CheckJWT() *SecurityHelper {
 	}
 
 	tokenString := cookie.Value
-	claims, err := ValidateJWT(tokenString, sh.config.JWTSecret)
+	claims, err := ValidateJWT(tokenString, sh.appServices.Config.JWTSecret)
 	if err != nil {
-		sh.logger.Warn("JWF0", "JWT validation failed: "+err.Error())
+		sh.appServices.Logger.Warn("JWF0", "JWT validation failed: "+err.Error())
 		sh.failAndRespond(http.StatusUnauthorized, "Invalid authentication token")
 		return sh
 	}
@@ -121,10 +117,10 @@ func (sh *SecurityHelper) CheckRateLimit() *SecurityHelper {
 	var keyIdentifier string
 
 	if sh.claims != nil {
-		limit = sh.config.MaxUserReqPerMin
+		limit = sh.appServices.Config.MaxUserReqPerMin
 		keyIdentifier = sh.claims.Subject
 	} else {
-		limit = sh.config.MaxUnauthReqPerMin
+		limit = sh.appServices.Config.MaxUnauthReqPerMin
 		// Get client IP
 		ip, _, err := net.SplitHostPort(sh.r.RemoteAddr)
 		if err != nil {
@@ -143,20 +139,20 @@ func (sh *SecurityHelper) CheckRateLimit() *SecurityHelper {
 	currentMinute := time.Now().Minute()
 	shrmplKey := fmt.Sprintf("RPM*%s*%d", keyIdentifier, currentMinute)
 
-	count, err := sh.kv.Incr(shrmplKey, "1min")
+	count, err := sh.appServices.KV.Incr(shrmplKey, "1min")
 	if err != nil {
-		sh.logger.Info("RLF0", "Rate limit check encountered KV error, failing open ("+shrmplKey+") "+err.Error())
+		sh.appServices.Logger.Info("RLF0", "Rate limit check encountered KV error, failing open ("+shrmplKey+") "+err.Error())
 		// Fail open on shrmpl-kv errors
 		return sh
 	}
 
 	if count > limit {
-		sh.logger.Warn("RLE0", fmt.Sprintf("Rate limit exceeded - key: %s, count: %d, limit: %d", shrmplKey, count, limit))
+		sh.appServices.Logger.Warn("RLE0", fmt.Sprintf("Rate limit exceeded - key: %s, count: %d, limit: %d", shrmplKey, count, limit))
 		sh.failAndRespond(http.StatusTooManyRequests, "Rate limit exceeded")
 		return sh
 	}
 
-	sh.logger.Debug("RLP0", fmt.Sprintf("Rate limit check passed - key: %s, count: %d, limit: %d", shrmplKey, count, limit))
+	sh.appServices.Logger.Debug("RLP0", fmt.Sprintf("Rate limit check passed - key: %s, count: %d, limit: %d", shrmplKey, count, limit))
 	return sh
 }
 
@@ -185,9 +181,9 @@ func (sh *SecurityHelper) CheckRateLimitAndUserBlock() *SecurityHelper {
 	}
 
 	// Execute batch
-	results, err := sh.kv.Batch(commands)
+	results, err := sh.appServices.KV.Batch(commands)
 	if err != nil {
-		sh.logger.Info("RLF0", "Batch check failed, failing open: "+err.Error())
+		sh.appServices.Logger.Info("RLF0", "Batch check failed, failing open: "+err.Error())
 		// Fail open on errors
 		return sh
 	}
@@ -195,23 +191,23 @@ func (sh *SecurityHelper) CheckRateLimitAndUserBlock() *SecurityHelper {
 	// Parse results
 	rateCount, err := strconv.Atoi(results[0])
 	if err != nil {
-		sh.logger.Warn("RLF0", "Invalid rate count: "+results[0])
+		sh.appServices.Logger.Warn("RLF0", "Invalid rate count: "+results[0])
 		return sh
 	}
 
 	limit := 100 // Example limit
 	if rateCount > limit {
-		sh.logger.Warn("RLE0", fmt.Sprintf("Rate limit exceeded - key: %s, count: %d, limit: %d", rateKey, rateCount, limit))
+		sh.appServices.Logger.Warn("RLE0", fmt.Sprintf("Rate limit exceeded - key: %s, count: %d, limit: %d", rateKey, rateCount, limit))
 		sh.failAndRespond(http.StatusTooManyRequests, "Rate limit exceeded")
 		return sh
 	}
 
-	sh.logger.Debug("RLP0", fmt.Sprintf("Rate limit check passed - key: %s, count: %d, limit: %d", rateKey, rateCount, limit))
+	sh.appServices.Logger.Debug("RLP0", fmt.Sprintf("Rate limit check passed - key: %s, count: %d, limit: %d", rateKey, rateCount, limit))
 	// Check block if applicable
 	if len(results) > 1 {
 		blockedValue := results[1]
 		if blockedValue != "" && blockedValue != "*KEY NOT FOUND*" {
-			sh.logger.Warn("UBK0", "User is blocked: "+sh.claims.Subject)
+			sh.appServices.Logger.Warn("UBK0", "User is blocked: "+sh.claims.Subject)
 			sh.failAndRespond(http.StatusForbidden, "User account is blocked")
 			return sh
 		}
@@ -229,15 +225,15 @@ func (sh *SecurityHelper) CheckUserBlocked() *SecurityHelper {
 	}
 
 	blockedKey := "BLOCKED*" + sh.claims.Subject
-	blockedValue, err := sh.kv.Get(blockedKey)
+	blockedValue, err := sh.appServices.KV.Get(blockedKey)
 	if err != nil {
-		sh.logger.Warn("UBK0", "Failed to check blocked status: "+err.Error())
+		sh.appServices.Logger.Warn("UBK0", "Failed to check blocked status: "+err.Error())
 		return sh
 	}
 
 	if blockedValue != "" && blockedValue != "*KEY NOT FOUND*" {
 		// Key exists, user is blocked
-		sh.logger.Warn("UBK0", "User is blocked: "+sh.claims.Subject)
+		sh.appServices.Logger.Warn("UBK0", "User is blocked: "+sh.claims.Subject)
 		sh.failAndRespond(http.StatusForbidden, "User account is blocked")
 		return sh
 	}
@@ -276,7 +272,7 @@ func (sh *SecurityHelper) CheckCSRF() *SecurityHelper {
 
 	expectedToken := sh.claims.SessionID[len(sh.claims.SessionID)-3:]
 	if csrfToken != expectedToken {
-		sh.logger.Warn("CSM0", "CSRF token mismatch - received: "+csrfToken+", expected: "+expectedToken)
+		sh.appServices.Logger.Warn("CSM0", "CSRF token mismatch - received: "+csrfToken+", expected: "+expectedToken)
 		sh.failAndRespond(http.StatusForbidden, "CSRF validation failed")
 		return sh
 	}
@@ -297,9 +293,9 @@ func (sh *SecurityHelper) CheckAuthorization(requiredGrantID int) *SecurityHelpe
 	}
 
 	if requiredGrantID > 0 {
-		rbac := NewRBACManager(sh.logger)
+		rbac := NewRBACManager(sh.appServices.Logger)
 		if !rbac.HasGrant(sh.claims, requiredGrantID, sh.claims.SecurityContext) {
-			sh.logger.Warn("ATF0", fmt.Sprintf("Authorization failed - required grant: %d, security context: %d", requiredGrantID, sh.claims.SecurityContext))
+			sh.appServices.Logger.Warn("ATF0", fmt.Sprintf("Authorization failed - required grant: %d, security context: %d", requiredGrantID, sh.claims.SecurityContext))
 			sh.failAndRespond(http.StatusForbidden, fmt.Sprintf("Permission denied (grant %d required)", requiredGrantID))
 			return sh
 		}
@@ -319,9 +315,9 @@ func (sh *SecurityHelper) CheckTargetContextAuthorization(requiredGrantID int, t
 		return false
 	}
 
-	rbac := NewRBACManager(sh.logger)
+	rbac := NewRBACManager(sh.appServices.Logger)
 	if !rbac.HasGrant(sh.claims, requiredGrantID, targetSecurityContext) {
-		sh.logger.Warn("TAF0", fmt.Sprintf("Target context authorization failed - required grant: %d, target context: %d", requiredGrantID, targetSecurityContext))
+		sh.appServices.Logger.Warn("TAF0", fmt.Sprintf("Target context authorization failed - required grant: %d, target context: %d", requiredGrantID, targetSecurityContext))
 		sh.failAndRespond(http.StatusForbidden, fmt.Sprintf("Permission denied (grant %d required in context %d)", requiredGrantID, targetSecurityContext))
 		return false
 	}
@@ -370,7 +366,7 @@ func (sh *SecurityHelper) failAndRespond(statusCode int, reason string) {
 	}
 
 	sh.blocked = true
-	sh.logger.Warn("CHF0", fmt.Sprintf("Security check failed - status: %d, reason: %s", statusCode, reason))
+	sh.appServices.Logger.Warn("CHF0", fmt.Sprintf("Security check failed - status: %d, reason: %s", statusCode, reason))
 
 	http.Error(sh.w, reason, statusCode)
 }

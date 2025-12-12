@@ -33,12 +33,12 @@ func (r *RBACManager) HasGrant(claims *Claims, grantID int, securityContext int)
 
 	for _, userGrantID := range contextGrants {
 		if userGrantID == grantID {
-			r.logger.Debug("GFD0", fmt.Sprintf("Grant found - ID: %d, context: %d", userGrantID, securityContext))
+			r.logger.Debug("RFD0", fmt.Sprintf("Grant found - ID: %d, context: %d", userGrantID, securityContext))
 			return true
 		}
 	}
 
-	r.logger.Debug("GNF0", fmt.Sprintf("Grant not found - ID: %d, context: %d", grantID, securityContext))
+	r.logger.Debug("RNF0", fmt.Sprintf("Grant not found - ID: %d, context: %d", grantID, securityContext))
 	return false
 }
 
