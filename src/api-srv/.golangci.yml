@@ -1,0 +1,10 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - lll  # Line length linter
+
+linters-settings:
+  lll:
+    line-length: 80  # Enforce 80 character line length
