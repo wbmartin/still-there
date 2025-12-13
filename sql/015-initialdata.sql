@@ -23,6 +23,21 @@ VALUES
      EXTRACT(EPOCH FROM NOW()),
      0);
 
+     INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context, user_group_membership_list, mfa_exempt, create_ts, create_user_id, update_ts, update_user_id)
+     VALUES
+         ('basic',
+          '$argon2id$v=19$m=65536,t=3,p=4$kxssq7+N6Of3OSiUThJgrw$S+uHFwjOhp8daiHCYhyto7whkrDjDr2TD0+Y6Cq1kd4', -- Argon2id hash for 'basic123!'
+          'Basic',
+          'User',
+          'basic@example.com',
+          1,
+          ARRAY[1], -- Basic User group
+          TRUE,    -- Not MFA exempt
+          EXTRACT(EPOCH FROM NOW()),
+          0,
+          EXTRACT(EPOCH FROM NOW()),
+          0);
+
 -- Insert example data
 INSERT INTO example (example_text, example_int, example_float, example_int_array, example_float_array, security_context, create_ts, create_user_id, update_ts, update_user_id)
 SELECT

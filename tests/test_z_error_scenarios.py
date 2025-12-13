@@ -28,8 +28,8 @@ class TestErrorScenarios:
         test_client.csrf_token = None
 
         response = test_client.make_request("POST", "/example", json={
-            "example_text": "Test",
-            "security_context": 1
+            "exampleText": "Test",
+            "securityContext": 1
         })
         assert response.status_code == 403
 
@@ -43,8 +43,8 @@ class TestErrorScenarios:
         test_client.csrf_token = "invalid-csrf-token"
 
         response = test_client.make_request("POST", "/example", json={
-            "example_text": "Test",
-            "security_context": 1
+            "exampleText": "Test",
+            "securityContext": 1
         })
         assert response.status_code == 403
 
@@ -55,21 +55,21 @@ class TestErrorScenarios:
         """Test that concurrent updates with stale timestamps return 409"""
         # Create an example
         response = test_client.make_request("POST", "/example", json={
-            "example_text": "Locking Test",
-            "security_context": 1
+            "exampleText": "Test",
+            "securityContext": 1
         })
         assert response.status_code == 201
         example = response.json()["data"]
-        test_client.track_example(example["example_id"], example["update_ts"])
+        test_client.track_example(example["exampleId"], example["updateTs"])
 
         # Use stale timestamp (simulate concurrent modification)
-        stale_timestamp = example["update_ts"] - 1.0
+        stale_timestamp = example["updateTs"] - 1.0
 
         response = test_client.make_request("PUT", "/example", json={
-            "example_id": example["example_id"],
-            "example_text": "Updated Text",
-            "security_context": 1,
-            "update_ts": stale_timestamp
+            "exampleId": example["exampleId"],
+            "exampleText": "Updated Text",
+            "securityContext": 1,
+            "updateTs": stale_timestamp
         })
         assert response.status_code == 409
 
@@ -82,21 +82,21 @@ class TestErrorScenarios:
         """Test that accessing soft-deleted resources returns 410"""
         # Create and then delete an example
         response = test_client.make_request("POST", "/example", json={
-            "example_text": "Delete Test",
-            "security_context": 1
+            "exampleText": "Delete Test",
+            "securityContext": 1
         })
         assert response.status_code == 201
         example = response.json()["data"]
 
         # Delete the example
         response = test_client.make_request("DELETE", "/example", params={
-            "exampleId": example["example_id"],
-            "updateTs": f"{example['update_ts']:.7f}"
+            "exampleId": example["exampleId"],
+            "updateTs": f"{example['updateTs']:.7f}"
         })
         assert response.status_code == 200
 
         # Try to access the deleted example
-        response = test_client.make_request("GET", "/example", params={"exampleId": example["example_id"]})
+        response = test_client.make_request("GET", "/example", params={"exampleId": example["exampleId"]})
         assert response.status_code == 410
 
     def test_invalid_request_body_returns_400(self, test_client):
@@ -134,17 +134,17 @@ class TestErrorScenarios:
         examples = []
         for i in range(2):
             response = test_client.make_request("POST", "/example", json={
-                "example_text": f"Bulk Delete Test {i}",
-                "security_context": 1
+                "exampleText": f"Bulk Delete Test {i}",
+                "securityContext": 1
             })
             assert response.status_code == 201
             example = response.json()["data"]
             examples.append(example)
-            test_client.track_example(example["example_id"], example["update_ts"])
+            test_client.track_example(example["exampleId"], example["updateTs"])
 
         # Attempt bulk delete with stale timestamps
-        ids = [str(ex["example_id"]) for ex in examples]
-        stale_timestamps = [f"{ex['update_ts'] - 1.0:.7f}" for ex in examples]
+        ids = [str(ex["exampleId"]) for ex in examples]
+        stale_timestamps = [f"{ex['updateTs'] - 1.0:.7f}" for ex in examples]
 
         response = test_client.make_request("DELETE", "/exampleList", params={
             "exampleIdList": ",".join(ids),

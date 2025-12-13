@@ -165,6 +165,11 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 		return sh
 	}
 
+	// Exempt admin user from rate limiting
+	if sh.claims != nil && sh.claims.Subject == "admin" {
+		return sh
+	}
+
 	var limit int
 	var keyIdentifier string
 
@@ -218,6 +223,13 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 // in a single batch
 func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 	if sh.blocked {
+		return sh
+	}
+
+	// Exempt admin user from rate limiting
+	if sh.claims != nil && sh.claims.Subject == "admin" {
+		sh.rateChecked = true
+		sh.userChecked = true
 		return sh
 	}
 

@@ -44,8 +44,8 @@ class TestClient:
             # MFA required, complete 2FA
             temp_token = data["temp_token"]
             response = self.session.post(f"{self.base_url}/auth2", json={
-                "temp_token": temp_token,
-                "totp_code": "123456"  # Placeholder TOTP code
+                "tempToken": temp_token,
+                "totp": "123456"  # Placeholder TOTP code
             })
             response.raise_for_status()
             data = response.json()

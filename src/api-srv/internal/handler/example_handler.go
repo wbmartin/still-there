@@ -497,7 +497,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Return success
-	data := map[string]interface{}{"message": "Examples deleted successfully", "example_ids": deletedIDList}
+	data := map[string]interface{}{"message": "Examples deleted successfully", "exampleIdList": deletedIDList}
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, logger)
 

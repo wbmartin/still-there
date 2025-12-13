@@ -16,26 +16,26 @@ class TestExampleCRUD:
     def test_create_example(self):
         """Test creating a new example"""
         example_data = {
-            "example_text": "Integration Test Example",
-            "example_int": 42,
-            "example_float": 3.14159,
-            "example_int_array": [1, 2, 3],
-            "example_float_array": [1.1, 2.2, 3.3],
-            "security_context": 1
+            "exampleText": "Integration Test Example",
+            "exampleInt": 42,
+            "exampleFloat": 3.14159,
+            "exampleIntArray": [1, 2, 3],
+            "exampleFloatArray": [1.1, 2.2, 3.3],
+            "securityContext": 1
         }
 
         response = self.client.make_request("POST", "/example", json=example_data)
         assert response.status_code == 201
 
         data = response.json()["data"]
-        assert "example_id" in data
-        assert data["example_text"] == "Integration Test Example"
-        assert data["example_int"] == 42
+        assert "exampleId" in data
+        assert data["exampleText"] == "Integration Test Example"
+        assert data["exampleInt"] == 42
 
         # Store ID and timestamp for subsequent tests and cleanup
-        self.example_id = data["example_id"]
+        self.example_id = data["exampleId"]
         self.__class__.example_id = self.example_id
-        self.client.track_example(self.example_id, data["update_ts"])
+        self.client.track_example(self.example_id, data["updateTs"])
 
     def test_get_example(self):
         """Test retrieving the created example"""
@@ -46,9 +46,9 @@ class TestExampleCRUD:
         assert response.status_code == 200
 
         data = response.json()["data"]
-        assert data["example_id"] == self.example_id
-        assert data["example_text"] == "Integration Test Example"
-        assert data["example_int"] == 42
+        assert data["exampleId"] == self.example_id
+        assert data["exampleText"] == "Integration Test Example"
+        assert data["exampleInt"] == 42
 
     def test_update_example(self):
         """Test updating the example"""
@@ -58,17 +58,17 @@ class TestExampleCRUD:
         response = self.client.make_request("GET", "/example",
             params={"exampleId": self.example_id})
         assert response.status_code == 200
-        current_update_ts = response.json()["data"]["update_ts"]
+        current_update_ts = response.json()["data"]["updateTs"]
 
         update_data = {
-            "example_id": self.example_id,
-            "example_text": "Updated Integration Test Example",
-            "example_int": 43,
-            "example_float": 3.14159,
-            "example_int_array": [1, 2, 3, 4],
-            "example_float_array": [1.1, 2.2, 3.3, 4.4],
-            "update_ts": current_update_ts,
-            "security_context": 1
+            "exampleId": self.example_id,
+            "exampleText": "Updated Integration Test Example",
+            "exampleInt": 43,
+            "exampleFloat": 3.14159,
+            "exampleIntArray": [1, 2, 3, 4],
+            "exampleFloatArray": [1.1, 2.2, 3.3, 4.4],
+            "updateTs": current_update_ts,
+            "securityContext": 1
         }
 
         response = self.client.make_request("PUT", "/example", json=update_data)
@@ -80,9 +80,9 @@ class TestExampleCRUD:
         assert response.status_code == 200
 
         data = response.json()["data"]
-        assert data["example_text"] == "Updated Integration Test Example"
-        assert data["example_int"] == 43
-        assert data["example_int_array"] == [1, 2, 3, 4]
+        assert data["exampleText"] == "Updated Integration Test Example"
+        assert data["exampleInt"] == 43
+        assert data["exampleIntArray"] == [1, 2, 3, 4]
 
     def test_delete_example(self):
         """Test deleting the example"""
@@ -92,7 +92,7 @@ class TestExampleCRUD:
         response = self.client.make_request("GET", "/example",
             params={"exampleId": self.example_id})
         assert response.status_code == 200
-        update_ts = response.json()["data"]["update_ts"]
+        update_ts = response.json()["data"]["updateTs"]
 
         response = self.client.make_request("DELETE", "/example",
             params={
@@ -114,14 +114,14 @@ class TestExampleCRUD:
         # Create multiple examples
         examples = [
             {
-                "example_text": "Bulk Test Example 1",
-                "example_int": 100,
-                "security_context": 1
+                "exampleText": "Bulk Test Example 1",
+                "exampleInt": 100,
+                "securityContext": 1
             },
             {
-                "example_text": "Bulk Test Example 2",
-                "example_int": 200,
-                "security_context": 1
+                "exampleText": "Bulk Test Example 2",
+                "exampleInt": 200,
+                "securityContext": 1
             }
         ]
 
@@ -134,25 +134,25 @@ class TestExampleCRUD:
         example_ids = []
         update_timestamps = []
         for ex in created_data:
-            example_ids.append(ex["example_id"])
-            update_timestamps.append(ex["update_ts"])
-            self.client.track_example(ex["example_id"], ex["update_ts"])
+            example_ids.append(ex["exampleId"])
+            update_timestamps.append(ex["updateTs"])
+            self.client.track_example(ex["exampleId"], ex["updateTs"])
 
         # Update them
         updates = [
             {
-                "example_id": example_ids[0],
-                "example_text": "Updated Bulk Test Example 1",
-                "example_int": 101,
-                "update_ts": update_timestamps[0],
-                "security_context": 1
+                "exampleId": example_ids[0],
+                "exampleText": "Updated Bulk Test Example 1",
+                "exampleInt": 101,
+                "updateTs": update_timestamps[0],
+                "securityContext": 1
             },
             {
-                "example_id": example_ids[1],
-                "example_text": "Updated Bulk Test Example 2",
-                "example_int": 201,
-                "update_ts": update_timestamps[1],
-                "security_context": 1
+                "exampleId": example_ids[1],
+                "exampleText": "Updated Bulk Test Example 2",
+                "exampleInt": 201,
+                "updateTs": update_timestamps[1],
+                "securityContext": 1
             }
         ]
 
@@ -168,12 +168,12 @@ class TestExampleCRUD:
         assert len(retrieved_data) == 2
 
         for ex in retrieved_data:
-            if ex["example_id"] == example_ids[0]:
-                assert ex["example_text"] == "Updated Bulk Test Example 1"
-                assert ex["example_int"] == 101
-            elif ex["example_id"] == example_ids[1]:
-                assert ex["example_text"] == "Updated Bulk Test Example 2"
-                assert ex["example_int"] == 201
+            if ex["exampleId"] == example_ids[0]:
+                assert ex["exampleText"] == "Updated Bulk Test Example 1"
+                assert ex["exampleInt"] == 101
+            elif ex["exampleId"] == example_ids[1]:
+                assert ex["exampleText"] == "Updated Bulk Test Example 2"
+                assert ex["exampleInt"] == 201
 
         # Delete them (cleanup is handled by fixture)
         response = self.client.make_request("DELETE", "/exampleList",
@@ -191,9 +191,9 @@ class TestExampleCRUD:
 
         # Try to update non-existent example
         update_data = {
-            "example_id": 99999,
-            "example_text": "This should fail",
-            "security_context": 1
+            "exampleId": 99999,
+            "exampleText": "This should fail",
+            "securityContext": 1
         }
         response = self.client.make_request("PUT", "/example", json=update_data)
         assert response.status_code == 404
@@ -205,8 +205,8 @@ class TestExampleCRUD:
 
         # Try to create example with missing required field
         invalid_data = {
-            "example_int": 42,
-            "security_context": 1
+            "exampleInt": 42,
+            "securityContext": 1
         }
         response = self.client.make_request("POST", "/example", json=invalid_data)
         assert response.status_code == 400
