@@ -4,6 +4,7 @@ import requests
 import time
 import warnings
 import urllib3
+import psycopg2
 from typing import Dict, Optional, List, Tuple
 
 # Suppress SSL warnings for local development
@@ -31,7 +32,7 @@ class TestClient:
         """Authenticate and store JWT/CSRF tokens"""
         # Initial auth request
         response = self.session.post(f"{self.base_url}/auth", json={
-            "user_name": username,
+            "userName": username,
             "password": password
         })
         response.raise_for_status()
@@ -59,7 +60,7 @@ class TestClient:
                 auth_part = cookie_header.split('auth=')[1].split(';')[0]
                 self.jwt_token = auth_part
 
-        self.csrf_token = data.get("csrf_token")
+        self.csrf_token = data.get("csrfToken")
 
         # Set the auth cookie in the session for future requests
         if self.jwt_token:

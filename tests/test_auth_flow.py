@@ -18,10 +18,10 @@ class TestAuthentication:
 
         # Verify user data
         user = response["user"]
-        assert user["user_name"] == "admin"
-        assert user["first_name"] == "System"
-        assert user["last_name"] == "Administrator"
-        assert user["security_context"] == 1
+        assert user["userName"] == "admin"
+        assert user["firstName"] == "System"
+        assert user["lastName"] == "Administrator2"
+        assert user["securityContext"] == 1
 
     def test_invalid_credentials(self):
         """Test authentication with invalid credentials"""
