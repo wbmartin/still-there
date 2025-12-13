@@ -4,6 +4,7 @@ import { Table, Button, Title, Group, Pagination } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { ROUTES } from "../constants/routes";
 
 function ExampleListPage() {
   const authState = useAuthGuard();
@@ -28,7 +29,6 @@ function ExampleListPage() {
   }, [authState, readExampleList]);
 
   //============================^HOOOK LINE ^====================
-  //================================================================
 
   if (authState !== "YES") {
     return <div>Loading...</div>;
@@ -71,7 +71,7 @@ function ExampleListPage() {
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
         <Title order={1}>Examples</Title>
-        <Button onClick={() => navigate("/example?exampleId=new")}>
+        <Button onClick={() => navigate(`/${ROUTES.EXAMPLE_EDIT}?exampleId=new`)}>
           Add Example
         </Button>
       </Group>
@@ -96,7 +96,7 @@ function ExampleListPage() {
                  <Button
                    size="xs"
                    onClick={() =>
-                     navigate(`/example?exampleId=${example.exampleId}`)
+                      navigate(`/${ROUTES.EXAMPLE_EDIT}?exampleId=${example.exampleId}`)
                    }
                  >
                    Edit

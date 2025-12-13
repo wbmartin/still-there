@@ -37,3 +37,25 @@ export interface ApiResponse<T> {
 export interface UserListResponse {
   users: User[];
 }
+
+export interface UserFormData {
+  userName: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  userGroupMembershipList: number[];
+  mfaExempt: boolean;
+  pwHash: string;
+  updateTs: string;
+}
+
+export const defaultUserFormData: UserFormData = {
+  userName: "",
+  firstName: "",
+  lastName: "",
+  email: "",
+  userGroupMembershipList: [],
+  mfaExempt: false,
+  pwHash: "",
+  updateTs: "",
+};

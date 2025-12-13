@@ -24,3 +24,15 @@ export interface ApiUserGroupModel {
   deleteTs?: number;
   deleteUserId?: number;
 }
+
+export interface UserGroupFormData {
+  groupName: string;
+  userGrantList: number[];
+  updateTs: string;
+}
+
+export const defaultUserGroupFormData: UserGroupFormData = {
+  groupName: "",
+  userGrantList: [],
+  updateTs: "",
+};

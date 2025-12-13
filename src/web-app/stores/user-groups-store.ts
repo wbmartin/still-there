@@ -46,7 +46,6 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
     }
    },
    //============================^FUNCTION LINE ^================
-   //================================================================
    createUserGroup: async (
      data: { groupName: string; userGrantList: number[] },
    ) => {
@@ -117,7 +116,6 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
     }
   },
   //============================^FUNCTION LINE ^================
-  //================================================================
   readGrantList: async () => {
       const response = await apiRequest(
         API_ENDPOINTS.GRANT_LIST,

@@ -14,6 +14,8 @@ import { useUserGroupsStore } from "../stores/user-groups-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
+import type { UserFormData } from "../types/user-type";
+import { defaultUserFormData } from "../types/user-type";
 
 function UserEditPage() {
   const authState = useAuthGuard();
@@ -25,16 +27,7 @@ function UserEditPage() {
   const id = searchParams.get("appUserId") || "";
   const numericId = isNaN(Number(id)) ? null : Number(id);
 
-  const [formData, setFormData] = useState({
-    userName: "",
-    firstName: "",
-    lastName: "",
-    email: "",
-    userGroupMembershipList: [] as number[],
-    mfaExempt: false,
-    pwHash: "",
-    updateTs: "",
-  });
+  const [formData, setFormData] = useState<UserFormData>(defaultUserFormData);
 
   const isNew = id === "new";
   const [userLoading, setUserLoading] = useState(!isNew && numericId !== null);
@@ -67,6 +60,8 @@ function UserEditPage() {
       }
     }
   }, [numericId, isNew, readUserGroupList]);
+
+  //============================^HOOOK LINE ^====================
 
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
@@ -109,7 +104,7 @@ function UserEditPage() {
           withCloseButton: false,
         });
       }
-        navigate(`/${ROUTES.APP_USER_LIST}`);
+      navigate(`/${ROUTES.APP_USER_LIST}`);
     } catch (error) {
       console.error("Error saving user:", error);
       notifications.show({
@@ -197,9 +192,7 @@ function UserEditPage() {
         <TextInput
           label="Email"
           value={formData.email}
-          onChange={(e) =>
-            setFormData({ ...formData, email: e.target.value })
-          }
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           required
           mb="md"
         />
@@ -242,12 +235,12 @@ function UserEditPage() {
               Delete
             </Button>
           )}
-           <Button
-             variant="outline"
-             onClick={() => navigate(`/${ROUTES.APP_USER_LIST}`)}
-           >
-             Cancel
-           </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate(`/${ROUTES.APP_USER_LIST}`)}
+          >
+            Cancel
+          </Button>
         </Group>
       </form>
       <DeleteConfirmModal

@@ -9,9 +9,12 @@ import {
   Group,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { ROUTES } from "../constants/routes";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import type { ExampleFormData } from "../types/example-type";
+import { defaultExampleFormData } from "../types/example-type";
 
 function ExampleEditPage() {
   const authState = useAuthGuard();
@@ -27,14 +30,7 @@ function ExampleEditPage() {
   const id = searchParams.get("exampleId") || "";
   const numericId = isNaN(Number(id)) ? null : Number(id);
 
-  const [formData, setFormData] = useState({
-    exampleText: "",
-    exampleInt: "",
-    exampleFloat: "",
-    exampleIntArray: "",
-    exampleFloatArray: "",
-    updateTs: "",
-  });
+  const [formData, setFormData] = useState<ExampleFormData>(defaultExampleFormData);
 
   const isNew = id === "new";
   const [exampleLoading, setExampleLoading] = useState(
@@ -86,7 +82,6 @@ function ExampleEditPage() {
   ]);
 
   //============================^HOOOK LINE ^====================
-  //================================================================
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
   }
@@ -160,7 +155,7 @@ function ExampleEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-        navigate("/exampleList");
+        navigate(`/${ROUTES.EXAMPLE_LIST}`);
       } catch (error) {
         console.error("Error deleting example:", error);
         notifications.show({

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../stores/auth-store";
+import { ROUTES } from "../constants/routes";
 
 const useAuthGuard = () => {
   const { authState } = useAuthStore();
@@ -15,7 +16,7 @@ const useAuthGuard = () => {
       // Save destination
       const currentPath = location.pathname + location.search;
       useAuthStore.setState({ postAuthDestination: currentPath });
-      navigate("/login");
+      navigate(`/${ROUTES.LOGIN}`);
     }
   }, [authState, navigate, location]);
 

@@ -55,7 +55,12 @@ function AddRemoveUsersFromGroupModal({
   };
 
   return (
-    <Modal opened={isOpen} onClose={onClose} title={mode === 'add' ? "Add Users to Group" : "Remove Users from Group"} size="lg">
+    <Modal
+      opened={isOpen}
+      onClose={onClose}
+      title={mode === 'add' ? "Add Users to Group" : "Remove Users from Group"}
+      size="lg"
+    >
       <Title order={4} mb="md">
         {mode === 'add' ? "Select users to add:" : "Select users to remove:"}
       </Title>

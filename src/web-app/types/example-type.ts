@@ -39,6 +39,24 @@ export interface ExampleListResponse {
   examples: Example[];
 }
 
+export interface ExampleFormData {
+  exampleText: string;
+  exampleInt: string;
+  exampleFloat: string;
+  exampleIntArray: string;
+  exampleFloatArray: string;
+  updateTs: string;
+}
+
+export const defaultExampleFormData: ExampleFormData = {
+  exampleText: "",
+  exampleInt: "",
+  exampleFloat: "",
+  exampleIntArray: "",
+  exampleFloatArray: "",
+  updateTs: "",
+};
+
 export const shellExample: Example = {
   exampleId: 0,
   exampleText: "",

@@ -16,6 +16,8 @@ import { useAppUserStore } from "../stores/app-user-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import AddRemoveUsersFromGroupModal from "../components/AddRemoveUsersFromGroupModal";
+import type { UserGroupFormData } from "../types/user-group-type";
+import { defaultUserGroupFormData } from "../types/user-group-type";
 
 function UserGroupEditPage() {
   const authState = useAuthGuard();
@@ -38,11 +40,7 @@ function UserGroupEditPage() {
   const isNew = userGroupId === "new";
   const numericId = isNaN(Number(userGroupId)) ? null : Number(userGroupId);
 
-  const [formData, setFormData] = useState({
-    groupName: "",
-    userGrantList: [] as number[],
-    updateTs: "",
-  });
+  const [formData, setFormData] = useState<UserGroupFormData>(defaultUserGroupFormData);
 
   const [grants, setGrants] = useState<{ id: number; text: string }[]>([]);
 

@@ -16,7 +16,6 @@ function Dashboard() {
   }, [authState, readExampleList]);
 
   //============================^HOOOK LINE ^====================
-  //================================================================
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
   }
