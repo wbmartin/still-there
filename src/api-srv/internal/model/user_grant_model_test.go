@@ -29,14 +29,20 @@ func (s *UserGrantModelTestSuite) TestGrantConstants() {
 func (s *UserGrantModelTestSuite) TestAllKnownGrantsMap() {
 	// Test that AllKnownGrants map contains all expected grants
 	expectedGrants := map[string]int{
-		"READ_EXAMPLE":   1001,
-		"CREATE_EXAMPLE": 1002,
-		"UPDATE_EXAMPLE": 1003,
-		"DELETE_EXAMPLE": 1004,
-		"CHG_OWN_PW":     8001,
-		"CREATE_USER":    9001,
-		"BLOCK_USER":     9002,
-		"CHANGE_USER_PW": 9003,
+		"READ_EXAMPLE":           1001,
+		"CREATE_EXAMPLE":         1002,
+		"UPDATE_EXAMPLE":         1003,
+		"DELETE_EXAMPLE":         1004,
+		"CHG_OWN_PW":             8001,
+		"CREATE_USER":            9001,
+		"BLOCK_USER":             9002,
+		"CHANGE_USER_PW":         9003,
+		"READ_USER_GROUP":        9010,
+		"CREATE_USER_GROUP":      9011,
+		"UPDATE_USER_GROUP":      9012,
+		"DELETE_USER_GROUP":      9013,
+		"ADD_USER_TO_GROUP":      9014,
+		"REMOVE_USER_FROM_GROUP": 9015,
 	}
 
 	s.Equal(expectedGrants, AllKnownGrants)
@@ -63,6 +69,12 @@ func (s *UserGrantModelTestSuite) TestGrantIDToShortCodeMap() {
 		9001: "CREATE_USER",
 		9002: "BLOCK_USER",
 		9003: "CHANGE_USER_PW",
+		9010: "READ_USER_GROUP",
+		9011: "CREATE_USER_GROUP",
+		9012: "UPDATE_USER_GROUP",
+		9013: "DELETE_USER_GROUP",
+		9014: "ADD_USER_TO_GROUP",
+		9015: "REMOVE_USER_FROM_GROUP",
 	}
 
 	s.Equal(expectedMappings, GrantIDToShortCodeMap)

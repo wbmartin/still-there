@@ -94,13 +94,11 @@ func (r *ExampleRepository) CreateExample(
 
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		return r.db.QueryRow(ctx, query,
-			&example.ExampleID, &example.ExampleText,
-			&example.ExampleInt, &example.ExampleFloat,
-			&example.ExampleIntArray, &example.ExampleFloatArray,
-			&example.SecurityContext, &example.CreateTS,
-			&example.CreateUserID, &example.UpdateTS,
-			&example.UpdateUserID,
-		).Scan()
+			example.ExampleText, example.ExampleInt, example.ExampleFloat,
+			example.ExampleIntArray, example.ExampleFloatArray,
+			example.SecurityContext, example.CreateTS, example.CreateUserID,
+			example.UpdateTS, example.UpdateUserID,
+		).Scan(&example.ExampleID)
 	})
 
 	if err != nil {
@@ -228,7 +226,7 @@ func (r *ExampleRepository) ReadExampleList(
 	selectClause := `
 		SELECT example_id, example_text, example_int, example_float,
 		       example_int_array, example_float_array, security_context,
-		       create_ts, create_user_id, update_ts, update_user_id
+		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM example`
 	orderBy := ` ORDER BY example_id`

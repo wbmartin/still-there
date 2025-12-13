@@ -1,8 +1,7 @@
 # React App
 
-- You are in the middle of a code review, starting at the top of the project and working your way down. you should resume at example_handler.go.
-
--several userAdmin page needs to map user groups  to group names, etc
+- several userAdmin page needs to map user groups  to group names, etc
+- table sorting
 - add error boundary
 - lots of unknown users coming into the api server logs
 - need to add MFA onboarding for users, reset for admin

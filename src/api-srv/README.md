@@ -216,7 +216,6 @@ internal/
 └── repository/             # Data access layer
     ├── user_repository.go
     ├── user_group_repository.go
-    ├── user_grant_repository.go
     └── example_repository.go
 ```
 

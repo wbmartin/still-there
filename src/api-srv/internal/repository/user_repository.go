@@ -36,12 +36,14 @@ func (r *UserRepository) ReadUserByUserName(
 
 	var user model.AppUserModel
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, query,
-			&user.AppUserID, &user.UserName, &user.FirstName,
+		row := r.db.QueryRow(ctx, query, username)
+		return row.Scan(
+			&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName,
 			&user.LastName, &user.Email, &user.SecurityContext,
+			&user.UserGroupMembershipList, &user.MFAExempt,
 			&user.CreateTS, &user.CreateUserID, &user.UpdateTS,
-			&user.UpdateUserID,
-		).Scan()
+			&user.UpdateUserID, &user.DeleteTS, &user.DeleteUserID,
+		)
 	})
 
 	if err != nil {

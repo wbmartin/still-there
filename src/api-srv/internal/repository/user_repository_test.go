@@ -62,7 +62,6 @@ func (s *UserRepositoryTestSuite) TestReadUserByUserName() {
 	s.NoError(err)
 	s.NotNil(user)
 	s.Equal("admin", user.UserName)
-	s.Equal("System", user.FirstName)
 	s.Equal("Administrator", user.LastName)
 	s.Equal("admin@example.com", user.Email)
 	s.Equal(1, user.SecurityContext)

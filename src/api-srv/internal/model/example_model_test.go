@@ -35,27 +35,27 @@ func (s *ExampleModelTestSuite) TestExampleModelJSONMarshal() {
 
 	// Verify key fields are present
 	jsonStr := string(data)
-	s.Contains(jsonStr, `"example_id":1`)
-	s.Contains(jsonStr, `"example_text":"Test Example"`)
-	s.Contains(jsonStr, `"example_int":42`)
-	s.Contains(jsonStr, `"example_float":3.14`)
-	s.Contains(jsonStr, `"example_int_array":[1,2,3]`)
-	s.Contains(jsonStr, `"security_context":1`)
+	s.Contains(jsonStr, `"exampleId":1`)
+	s.Contains(jsonStr, `"exampleText":"Test Example"`)
+	s.Contains(jsonStr, `"exampleInt":42`)
+	s.Contains(jsonStr, `"exampleFloat":3.14`)
+	s.Contains(jsonStr, `"exampleIntArray":[1,2,3]`)
+	s.Contains(jsonStr, `"securityContext":1`)
 }
 
 func (s *ExampleModelTestSuite) TestExampleModelJSONUnmarshal() {
 	jsonData := `{
-		"example_id": 1,
-		"example_text": "Test Example",
-		"example_int": 42,
-		"example_float": 3.14,
-		"example_int_array": [1, 2, 3],
-		"example_float_array": [1.1, 2.2, 3.3],
-		"security_context": 1,
-		"create_ts": 1234567890.123,
-		"create_user_id": 1,
-		"update_ts": 1234567890.456,
-		"update_user_id": 1
+		"exampleId": 1,
+		"exampleText": "Test Example",
+		"exampleInt": 42,
+		"exampleFloat": 3.14,
+		"exampleIntArray": [1, 2, 3],
+		"exampleFloatArray": [1.1, 2.2, 3.3],
+		"securityContext": 1,
+		"createTs": 1234567890.123,
+		"createUserId": 1,
+		"updateTs": 1234567890.456,
+		"updateUserId": 1
 	}`
 
 	var example ExampleModel
@@ -80,12 +80,12 @@ func (s *ExampleModelTestSuite) TestExampleModelJSONUnmarshal() {
 func (s *ExampleModelTestSuite) TestExampleModelOptionalFields() {
 	// Test with null/empty optional fields
 	jsonData := `{
-		"example_text": "Minimal Example",
-		"security_context": 1,
-		"create_ts": 1234567890.123,
-		"create_user_id": 1,
-		"update_ts": 1234567890.456,
-		"update_user_id": 1
+		"exampleText": "Minimal Example",
+		"securityContext": 1,
+		"createTs": 1234567890.123,
+		"createUserId": 1,
+		"updateTs": 1234567890.456,
+		"updateUserId": 1
 	}`
 
 	var example ExampleModel
@@ -130,6 +130,6 @@ func (s *ExampleModelTestSuite) TestExampleModelWithDeleteFields() {
 	s.NoError(err)
 
 	jsonStr := string(data)
-	s.Contains(jsonStr, `"delete_ts":1234567891.789`)
-	s.Contains(jsonStr, `"delete_user_id":2`)
+	s.Contains(jsonStr, `"deleteTs":1234567891.789`)
+	s.Contains(jsonStr, `"deleteUserId":2`)
 }
