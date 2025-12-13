@@ -81,7 +81,7 @@ function UserGroupAdminPage() {
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {paginatedGroups.map((group: UserGroup) => (
+          {paginatedGroupList.map((group: UserGroup) => (
             <Table.Tr key={group.userGroupId}>
               <Table.Td>{group.userGroupId}</Table.Td>
               <Table.Td>{group.groupName}</Table.Td>

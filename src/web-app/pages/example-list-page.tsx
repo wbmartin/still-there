@@ -86,7 +86,7 @@ function ExampleListPage() {
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {paginatedExamples.map((example) => (
+          {paginatedExampleList.map((example) => (
             <Table.Tr key={example.exampleId}>
               <Table.Td>{example.exampleId}</Table.Td>
               <Table.Td>{example.exampleText}</Table.Td>

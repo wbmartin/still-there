@@ -50,7 +50,8 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
 
       // Update maxAppUserUpdateTs only for non-ID-specific fetches
       if (!idList || idList.length === 0) {
-        const newMax = users.length > 0 ? Math.max(...users.map(u => u.updateTs)) : 0;
+        const newMax =
+          users.length > 0 ? Math.max(...users.map(u => u.updateTs)) : 0;
         set({ userList: users, maxAppUserUpdateTs: newMax });
       }
 		} catch (err: unknown) {

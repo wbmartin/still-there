@@ -24,8 +24,12 @@ function UserGroupEditPage() {
   const [searchParams] = useSearchParams();
   const { createUserGroup, updateUserGroup, deleteUserGroup, readGrantList } =
     useUserGroupsStore();
-  const { userList, readUserList, addUserListToGroup, removeUserListFromGroup } =
-    useAppUserStore();
+  const {
+    userList,
+    readUserList,
+    addUserListToGroup,
+    removeUserListFromGroup,
+  } = useAppUserStore();
   const navigate = useNavigate();
 
   const userGroupId = searchParams.get("userGroupId") || "";
@@ -232,9 +236,9 @@ function UserGroupEditPage() {
           const groupMemberList = userList.filter((u) =>
             u.userGroupMembershipList.includes(numericId || 0),
           );
-          return groupMembers.length > 0 ? (
+          return groupMemberList.length > 0 ? (
             <List type="ordered" mb="md">
-              {groupMembers.map((user) => (
+              {groupMemberList.map((user) => (
                 <List.Item key={user.appUserId}>
                   {user.firstName} {user.lastName} ({user.userName})
                 </List.Item>

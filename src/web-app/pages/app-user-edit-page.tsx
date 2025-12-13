@@ -14,13 +14,14 @@ import { useUserGroupsStore } from "../stores/user-groups-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
-import type { UserFormData, User } from "../types/user-type";
+import type { UserFormData } from "../types/user-type";
 import { defaultUserFormData } from "../types/user-type";
 
 function UserEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
-  const { readUserById, createUser, updateUser, deleteUser } = useAppUserStore();
+  const { readUserById, createUser, updateUser, deleteUser } =
+    useAppUserStore();
   const { readUserGroupList, userGroupList } = useUserGroupsStore();
   const navigate = useNavigate();
 

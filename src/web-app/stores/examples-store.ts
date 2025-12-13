@@ -49,7 +49,11 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
           examples.length > 0
             ? Math.max(...examples.map((e) => e.updateTs))
             : 0;
-        set({ exampleList: examples, maxExampleUpdateTs: newMaxExampleUpdateTs, loading: false });
+        set({
+          exampleList: examples,
+          maxExampleUpdateTs: newMaxExampleUpdateTs,
+          loading: false,
+        });
       } else {
         // Fetch updates
         const response = await apiRequest(`/exampleList?afterUpdateTs=${maxExampleUpdateTs}`);

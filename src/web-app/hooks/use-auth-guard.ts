@@ -16,7 +16,7 @@ const useAuthGuard = () => {
       // Save destination
       const currentPath = location.pathname + location.search;
       useAuthStore.setState({ postAuthDestination: currentPath });
-      navigate(`/${ROUTES.LOGIN}`);
+      void navigate(`/${ROUTES.LOGIN}`);
     }
   }, [authState, navigate, location]);
 

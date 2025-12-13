@@ -63,7 +63,7 @@ function AppLayout() {
 
   const handleLogout = async () => {
     await logout();
-    navigate(`/${ROUTES.LOGIN}`);
+    void navigate(`/${ROUTES.LOGIN}`);
   };
 
   return (
