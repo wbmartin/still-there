@@ -9,12 +9,8 @@ import type { UserGroup } from "../types/user-group-type";
 
 function UserGroupAdminPage() {
   const authState = useAuthGuard();
-  const {
-    userGroups,
-    loading,
-    readUserGroupList,
-    deleteUserGroup,
-  } = useUserGroupsStore();
+  const { userGroups, loading, readUserGroupList, deleteUserGroup } =
+    useUserGroupsStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
@@ -29,11 +25,11 @@ function UserGroupAdminPage() {
     }
   }, [authState, readUserGroupList]);
 
+  //============================^HOOOK LINE ^====================
+
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
   }
-
-
 
   if (loading) return <div>Loading...</div>;
 
@@ -69,7 +65,9 @@ function UserGroupAdminPage() {
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
         <Title order={1}>User Group Admin</Title>
-        <Button onClick={() => navigate(`/${ROUTES.USER_GROUP_EDIT}?userGroupId=new`)}>
+        <Button
+          onClick={() => navigate(`/${ROUTES.USER_GROUP_EDIT}?userGroupId=new`)}
+        >
           Add User Group
         </Button>
       </Group>
@@ -89,14 +87,16 @@ function UserGroupAdminPage() {
               <Table.Td>{group.groupName}</Table.Td>
               <Table.Td>{group.userGrantList.join(", ")}</Table.Td>
               <Table.Td>
-                 <Button
-                   size="xs"
-                   onClick={() =>
-                     navigate(`/${ROUTES.USER_GROUP_EDIT}?userGroupId=${group.userGroupId}`)
-                   }
-                 >
-                   Edit
-                 </Button>
+                <Button
+                  size="xs"
+                  onClick={() =>
+                    navigate(
+                      `/${ROUTES.USER_GROUP_EDIT}?userGroupId=${group.userGroupId}`,
+                    )
+                  }
+                >
+                  Edit
+                </Button>
                 <Button
                   size="xs"
                   color="red"

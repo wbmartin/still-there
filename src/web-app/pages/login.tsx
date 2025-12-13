@@ -35,6 +35,8 @@ function Login() {
     }
   }, [authState, postAuthDestination, navigate]);
 
+  //============================^HOOOK LINE ^====================
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await authenticateWithUsernamePassword(username, password);

@@ -354,9 +354,7 @@ func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices
 	// Build grants map by security context
 	grantsMap := make(map[int][]int)
 	for _, group := range grants {
-		for _, grantID := range group.UserGrantList {
-			grantsMap[group.SecurityContext] = append(grantsMap[group.SecurityContext], grantID)
-		}
+		grantsMap[group.SecurityContext] = append(grantsMap[group.SecurityContext], group.UserGrantList...)
 	}
 
 	// Generate session ID

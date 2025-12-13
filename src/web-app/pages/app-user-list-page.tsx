@@ -23,6 +23,7 @@ function UserAdminPage() {
       readUserList();
     }
   }, [authState, readUserList]);
+  //============================^HOOOK LINE ^====================
 
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
@@ -58,15 +59,15 @@ function UserAdminPage() {
     setDeleteId(null);
   };
 
-
-
   return (
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
         <Title order={1}>User Admin</Title>
-         <Button onClick={() => navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=new`)}>
-           Add User
-         </Button>
+        <Button
+          onClick={() => navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=new`)}
+        >
+          Add User
+        </Button>
       </Group>
       <Table>
         <Table.Thead>
@@ -84,18 +85,22 @@ function UserAdminPage() {
             <Table.Tr key={user.appUserId}>
               <Table.Td>{user.appUserId}</Table.Td>
               <Table.Td>{user.userName}</Table.Td>
-              <Table.Td>{user.firstName} {user.lastName}</Table.Td>
+              <Table.Td>
+                {user.firstName} {user.lastName}
+              </Table.Td>
               <Table.Td>{user.email}</Table.Td>
               <Table.Td>{user.userGroupMembershipList.join(", ")}</Table.Td>
               <Table.Td>
-                 <Button
-                   size="xs"
-                   onClick={() =>
-                     navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=${user.appUserId}`)
-                   }
-                 >
-                   Edit
-                 </Button>
+                <Button
+                  size="xs"
+                  onClick={() =>
+                    navigate(
+                      `/${ROUTES.APP_USER_EDIT}?appUserId=${user.appUserId}`,
+                    )
+                  }
+                >
+                  Edit
+                </Button>
                 <Button
                   size="xs"
                   color="red"
