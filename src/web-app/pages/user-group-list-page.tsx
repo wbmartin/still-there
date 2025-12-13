@@ -33,7 +33,7 @@ function UserGroupAdminPage() {
 
   if (loading) return <div>Loading...</div>;
 
-  const totalPages = Math.ceil(userGroupList.length / itemsPerPage);
+  const totalPageCount = Math.ceil(userGroupList.length / itemsPerPage);
   const paginatedGroupList = userGroupList.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
@@ -110,9 +110,9 @@ function UserGroupAdminPage() {
           ))}
         </Table.Tbody>
       </Table>
-      {totalPages > 1 && (
+      {totalPageCount > 1 && (
         <Group justify="center" mt="lg">
-          <Pagination total={totalPages} value={page} onChange={setPage} />
+          <Pagination total={totalPageCount} value={page} onChange={setPage} />
         </Group>
       )}
       <DeleteConfirmModal
