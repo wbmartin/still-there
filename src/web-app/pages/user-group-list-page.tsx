@@ -9,7 +9,7 @@ import type { UserGroup } from "../types/user-group-type";
 
 function UserGroupAdminPage() {
   const authState = useAuthGuard();
-  const { userGroups, loading, readUserGroupList, deleteUserGroup } =
+  const { userGroupList, loading, readUserGroupList, deleteUserGroup } =
     useUserGroupsStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -33,8 +33,8 @@ function UserGroupAdminPage() {
 
   if (loading) return <div>Loading...</div>;
 
-  const totalPages = Math.ceil(userGroups.length / itemsPerPage);
-  const paginatedGroups = userGroups.slice(
+  const totalPages = Math.ceil(userGroupList.length / itemsPerPage);
+  const paginatedGroupList = userGroupList.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
   );

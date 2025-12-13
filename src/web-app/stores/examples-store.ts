@@ -4,8 +4,8 @@ import { apiRequest } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 
 interface ExamplesState {
-  examples: Example[];
-  maxExamplesUpdateTs: number;
+  exampleList: Example[];
+  maxExampleUpdateTs: number;
   loading: boolean;
   error: string | null;
   readExampleById: (id: number) => Promise<Example | null>;
@@ -17,17 +17,17 @@ interface ExamplesState {
 }
 
 export const useExamplesStore = create<ExamplesState>((set, get) => ({
-  examples: [],
-  maxExamplesUpdateTs: 0,
+  exampleList: [],
+  maxExampleUpdateTs: 0,
   loading: false,
   error: null,
   //============================^FUNCTION LINE ^============================
   readExampleList: async () => {
     // console.log("getExampleList called");
-    const { maxExamplesUpdateTs } = get();
+    const { maxExampleUpdateTs } = get();
     set({ loading: true });
     try {
-      if (maxExamplesUpdateTs === 0) {
+      if (maxExampleUpdateTs === 0) {
         // Fetch all examples
         const response = await apiRequest(API_ENDPOINTS.EXAMPLE_LIST);
         if (!response.ok) throw new Error("Failed to fetch examples");
@@ -45,17 +45,17 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
           updateTs: e.updateTs,
           updateUserId: e.updateUserId,
         }));
-        const newMaxExamplesUpdateTs =
+        const newMaxExampleUpdateTs =
           examples.length > 0
             ? Math.max(...examples.map((e) => e.updateTs))
             : 0;
-        set({ examples, maxExamplesUpdateTs: newMaxExamplesUpdateTs, loading: false });
+        set({ exampleList: examples, maxExampleUpdateTs: newMaxExampleUpdateTs, loading: false });
       } else {
         // Fetch updates
-        const response = await apiRequest(`/exampleList?afterUpdateTs=${maxExamplesUpdateTs}`);
+        const response = await apiRequest(`/exampleList?afterUpdateTs=${maxExampleUpdateTs}`);
         if (!response.ok) throw new Error("Failed to sync examples");
         const data = await response.json() as ApiResponse<ApiExampleModel[]>;
-        const newExamples = data.data.map((e) => ({
+        const newExampleList = data.data.map((e) => ({
           exampleId: e.exampleId,
           exampleText: e.exampleText,
           exampleInt: e.exampleInt,
@@ -68,26 +68,26 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
           updateTs: e.updateTs,
           updateUserId: e.updateUserId,
         }));
-        if (newExamples.length > 0) {
+        if (newExampleList.length > 0) {
           set((state) => {
-            const updatedExamples = [...state.examples];
-            newExamples.forEach((newEx) => {
-              const index = updatedExamples.findIndex(
+            const updatedExampleList = [...state.exampleList];
+            newExampleList.forEach((newEx) => {
+              const index = updatedExampleList.findIndex(
                 (ex) => ex.exampleId === newEx.exampleId,
               );
               if (index >= 0) {
-                updatedExamples[index] = newEx;
+                updatedExampleList[index] = newEx;
               } else {
-                updatedExamples.push(newEx);
+                updatedExampleList.push(newEx);
               }
             });
             const newMaxUpdateTs = Math.max(
-              state.maxUpdateTs,
-              ...newExamples.map((e) => e.updateTs),
+              state.maxExampleUpdateTs,
+              ...newExampleList.map((e) => e.updateTs),
             );
             return {
-              examples: updatedExamples,
-              maxUpdateTs: newMaxUpdateTs,
+              exampleList: updatedExampleList,
+              maxExampleUpdateTs: newMaxUpdateTs,
               loading: false,
             };
           });
@@ -128,13 +128,13 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       };
       // Update cached examples list if this item exists
       set((state) => {
-        const index = state.examples.findIndex(
+        const index = state.exampleList.findIndex(
           (e) => e.exampleId === example.exampleId,
         );
         if (index >= 0) {
-          const updatedExamples = [...state.examples];
-          updatedExamples[index] = example;
-          return { examples: updatedExamples };
+          const updatedExampleList = [...state.exampleList];
+          updatedExampleList[index] = example;
+          return { exampleList: updatedExampleList };
         }
         return state;
       });
@@ -177,7 +177,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         updateUserId: apiExample.updateUserId,
       };
       set((state) => ({
-        examples: [...state.examples, newExample],
+        exampleList: [...state.exampleList, newExample],
         maxUpdateTs: Math.max(state.maxUpdateTs, newExample.updateTs),
       }));
     } catch (err: unknown) {
@@ -216,7 +216,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
     set({ error: null });
     try {
       const state = get();
-      const example = state.examples.find((ex) => ex.exampleId === id);
+      const example = state.exampleList.find((ex) => ex.exampleId === id);
       if (!example) throw new Error("Example not found");
       const response = await apiRequest(API_ENDPOINTS.EXAMPLE + `?exampleId=${id}&updateTs=${example.updateTs}`, {
         method: "DELETE",
@@ -224,7 +224,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       if (!response.ok) throw new Error("Failed to delete example");
       // Remove from local state
       set((state) => ({
-        examples: state.examples.filter((ex) => ex.exampleId !== id),
+        exampleList: state.exampleList.filter((ex) => ex.exampleId !== id),
       }));
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
@@ -233,6 +233,6 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
   },
   //============================^FUNCTION LINE ^============================
   clearCache: () => {
-    set({ examples: [], maxExamplesUpdateTs: 0 });
+    set({ exampleList: [], maxExampleUpdateTs: 0 });
   },
 }));

@@ -10,7 +10,7 @@ import type { User } from "../types/user-type";
 
 function UserAdminPage() {
   const authState = useAuthGuard();
-  const { users, loading, readUserList, deleteUser } = useAppUserStore();
+  const { userList, loading, readUserList, deleteUser } = useAppUserStore();
   const { getGroupName, readUserGroupList } = useUserGroupsStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -34,8 +34,8 @@ function UserAdminPage() {
 
   if (loading) return <div>Loading...</div>;
 
-  const totalPages = Math.ceil(users.length / itemsPerPage);
-  const paginatedUsers = users.slice(
+  const totalPages = Math.ceil(userList.length / itemsPerPage);
+  const paginatedUserList = userList.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
   );
@@ -84,7 +84,7 @@ function UserAdminPage() {
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {paginatedUsers.map((user: User) => (
+          {paginatedUserList.map((user: User) => (
             <Table.Tr key={user.appUserId}>
               <Table.Td>{user.appUserId}</Table.Td>
               <Table.Td>{user.userName}</Table.Td>

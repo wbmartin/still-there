@@ -5,7 +5,7 @@ import { apiRequest } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 
 interface UserGroupsState {
-  userGroups: UserGroup[];
+  userGroupList: UserGroup[];
   groupIdToName: Map<number, string>;
   maxUserGroupUpdateTs: number;
   loading: boolean;
@@ -29,7 +29,7 @@ const rebuildGroupMap = (groups: UserGroup[]) => {
 };
 
 export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
-  userGroups: [],
+  userGroupList: [],
   groupIdToName: new Map<number, string>(),
   maxUserGroupUpdateTs: 0,
   loading: false,
@@ -42,7 +42,7 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
       const response = await apiRequest(API_ENDPOINTS.USER_GROUP_LIST);
       if (!response.ok) throw new Error("Failed to fetch user groups");
 			const data = await response.json() as ApiResponse<ApiUserGroupModel[]>;
-      const userGroups = data.data.map((g) => ({
+      const userGroupList = data.data.map((g) => ({
         userGroupId: g.userGroupId,
         groupName: g.groupName,
         userGrantList: g.userGrantList,
@@ -52,9 +52,9 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
         updateTs: g.updateTs,
         updateUserId: g.updateUserId,
       }));
-      const groupIdToName = rebuildGroupMap(userGroups);
-      const maxUserGroupUpdateTs = userGroups.length > 0 ? Math.max(...userGroups.map(g => g.updateTs)) : 0;
-      set({ userGroups, groupIdToName, maxUserGroupUpdateTs, loading: false });
+      const groupIdToName = rebuildGroupMap(userGroupList);
+      const maxUserGroupUpdateTs = userGroupList.length > 0 ? Math.max(...userGroupList.map(g => g.updateTs)) : 0;
+      set({ userGroupList, groupIdToName, maxUserGroupUpdateTs, loading: false });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       set({ loading: false, error: errorMessage });
@@ -80,11 +80,11 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
     }
   },
   //============================^FUNCTION LINE ^============================
-  updateUserGroup: async (id: number, data: Partial<UserGroup>) => {
-    set({ error: null });
-    try {
-      const state = get();
-      const group = state.userGroups.find((g) => g.userGroupId === id);
+   updateUserGroup: async (id: number, data: Partial<UserGroup>) => {
+     set({ error: null });
+     try {
+       const state = get();
+       const group = state.userGroupList.find((g) => g.userGroupId === id);
       if (!group) throw new Error("User group not found");
       const body = {
         userGroupId: id,
@@ -101,36 +101,36 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
         throw new Error("Failed to update user group");
       }
        // Update local state
-       set((state) => {
-         const updatedGroups = state.userGroups.map(
-           (g: UserGroup) => (g.userGroupId === id ? { ...g, ...data } : g),
-         );
-         const groupIdToName = rebuildGroupMap(updatedGroups);
-         return { userGroups: updatedGroups, groupIdToName };
-       });
+        set((state) => {
+          const updatedGroupList = state.userGroupList.map(
+            (g: UserGroup) => (g.userGroupId === id ? { ...g, ...data } : g),
+          );
+          const groupIdToName = rebuildGroupMap(updatedGroupList);
+          return { userGroupList: updatedGroupList, groupIdToName };
+        });
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
     }
   },
   //============================^FUNCTION LINE ^============================
-  deleteUserGroup: async (id: number) => {
-    set({ error: null });
-    try {
-      const state = get();
-      const group = state.userGroups.find((g) => g.userGroupId === id);
+   deleteUserGroup: async (id: number) => {
+     set({ error: null });
+     try {
+       const state = get();
+       const group = state.userGroupList.find((g) => g.userGroupId === id);
       if (!group) throw new Error("User group not found");
       const response = await apiRequest(API_ENDPOINTS.USER_GROUP + `?userGroupId=${id}&updateTs=${group.updateTs}`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete user group");
        // Remove from local state
-       set((state) => {
-         const updatedGroups = state.userGroups.filter(
-           (g: UserGroup) => g.userGroupId !== id,
-         );
-         const groupIdToName = rebuildGroupMap(updatedGroups);
-         return { userGroups: updatedGroups, groupIdToName };
-       });
+        set((state) => {
+          const updatedGroupList = state.userGroupList.filter(
+            (g: UserGroup) => g.userGroupId !== id,
+          );
+          const groupIdToName = rebuildGroupMap(updatedGroupList);
+          return { userGroupList: updatedGroupList, groupIdToName };
+        });
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
       throw err;
@@ -147,6 +147,6 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
   },
   //============================^FUNCTION LINE ^============================
   clearCache: () => {
-    set({ userGroups: [], groupIdToName: new Map<number, string>(), maxUserGroupUpdateTs: 0 });
+    set({ userGroupList: [], groupIdToName: new Map<number, string>(), maxUserGroupUpdateTs: 0 });
   },
 }));

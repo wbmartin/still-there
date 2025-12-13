@@ -5,7 +5,7 @@ import useAuthGuard from "../hooks/use-auth-guard";
 
 function Dashboard() {
   const authState = useAuthGuard();
-  const { examples, loading, readExampleList } = useExamplesStore();
+  const { exampleList, loading, readExampleList } = useExamplesStore();
   const hasFetched = useRef(false);
 
   useEffect(() => {
@@ -29,7 +29,7 @@ function Dashboard() {
         Dashboard
       </Title>
       <Card shadow="sm" p="lg">
-        <Text size="lg">Total Examples: {examples.length}</Text>
+        <Text size="lg">Total Examples: {exampleList.length}</Text>
       </Card>
     </div>
   );

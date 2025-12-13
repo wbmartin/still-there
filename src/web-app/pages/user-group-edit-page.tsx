@@ -24,7 +24,7 @@ function UserGroupEditPage() {
   const [searchParams] = useSearchParams();
   const { createUserGroup, updateUserGroup, deleteUserGroup, readGrantList } =
     useUserGroupsStore();
-  const { users, readUserList, addUserListToGroup, removeUserListFromGroup } =
+  const { userList, readUserList, addUserListToGroup, removeUserListFromGroup } =
     useAppUserStore();
   const navigate = useNavigate();
 
@@ -59,7 +59,7 @@ function UserGroupEditPage() {
     if (!hasFetched.current && numericId) {
       hasFetched.current = true;
       // Find group from store
-      const groups = useUserGroupsStore.getState().userGroups;
+      const groups = useUserGroupsStore.getState().userGroupList;
       const existingGroup = groups.find((g) => g.userGroupId === numericId);
       if (existingGroup) {
         setTimeout(() => {
@@ -229,7 +229,7 @@ function UserGroupEditPage() {
           Group Members
         </Title>
         {(() => {
-          const groupMembers = users.filter((u) =>
+          const groupMemberList = userList.filter((u) =>
             u.userGroupMembershipList.includes(numericId || 0),
           );
           return groupMembers.length > 0 ? (

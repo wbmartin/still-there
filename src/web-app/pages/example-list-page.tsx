@@ -9,7 +9,7 @@ import { ROUTES } from "../constants/routes";
 function ExampleListPage() {
   const authState = useAuthGuard();
   const {
-    examples,
+    exampleList,
     loading,
     readExampleList,
     deleteExample,
@@ -36,8 +36,8 @@ function ExampleListPage() {
 
   if (loading) return <div>Loading...</div>;
 
-  const totalPages = Math.ceil(examples.length / itemsPerPage);
-  const paginatedExamples = examples.slice(
+  const totalPages = Math.ceil(exampleList.length / itemsPerPage);
+  const paginatedExampleList = exampleList.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
   );

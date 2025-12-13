@@ -21,7 +21,7 @@ function UserEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
   const { readUserById, createUser, updateUser, deleteUser } = useAppUserStore();
-  const { readUserGroupList, userGroups } = useUserGroupsStore();
+  const { readUserGroupList, userGroupList } = useUserGroupsStore();
   const navigate = useNavigate();
 
   const id = searchParams.get("appUserId") || "";
@@ -155,7 +155,7 @@ function UserEditPage() {
     setDeleteModalOpen(false);
   };
 
-  const groupOptions = userGroups.map((g) => ({
+  const groupOptions = userGroupList.map((g) => ({
     value: g.userGroupId.toString(),
     label: g.groupName,
   }));

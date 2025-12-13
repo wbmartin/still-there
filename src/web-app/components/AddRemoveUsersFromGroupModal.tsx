@@ -28,7 +28,7 @@ function AddRemoveUsersFromGroupModal({
    }, [isOpen, readUserList]);
   // ============================^HOOOK LINE ^====================
 
-  const availableUsers = users.filter((user) => {
+  const availableUserList = users.filter((user) => {
     if (mode === "add") {
       return !user.userGroupMembershipList.includes(groupId || 0);
     } else {
@@ -36,7 +36,7 @@ function AddRemoveUsersFromGroupModal({
     }
   });
 
-  const userOptions = availableUsers.map((user) => ({
+  const userOptions = availableUserList.map((user) => ({
     value: user.appUserId.toString(),
     label: `${user.firstName} ${user.lastName} (${user.userName})`,
   }));
