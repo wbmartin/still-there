@@ -5,6 +5,7 @@ import { useUserGroupsStore } from "../stores/user-groups-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
+import type { UserGroup } from "../types/user-group-type";
 
 function UserGroupAdminPage() {
   const authState = useAuthGuard();
@@ -82,7 +83,7 @@ function UserGroupAdminPage() {
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {paginatedGroups.map((group: any) => (
+          {paginatedGroups.map((group: UserGroup) => (
             <Table.Tr key={group.userGroupId}>
               <Table.Td>{group.userGroupId}</Table.Td>
               <Table.Td>{group.groupName}</Table.Td>

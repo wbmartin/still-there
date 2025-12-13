@@ -6,8 +6,8 @@ interface AddRemoveUsersFromGroupModalProps {
   isOpen: boolean;
   onClose: () => void;
   groupId: number | null;
-  mode: 'add' | 'remove';
-  onConfirm: (userIds: number[]) => void;
+  mode: "add" | "remove";
+  onConfirm: (userIds: number[]) => Promise<void>;
 }
 
 function AddRemoveUsersFromGroupModal({
@@ -26,16 +26,17 @@ function AddRemoveUsersFromGroupModal({
       readUserList(); // Fetch all users for the security context
     }
   }, [isOpen, readUserList]);
+  // ============================^HOOOK LINE ^====================
 
-  const availableUsers = users.filter(user => {
-    if (mode === 'add') {
+  const availableUsers = users.filter((user) => {
+    if (mode === "add") {
       return !user.userGroupMembershipList.includes(groupId || 0);
     } else {
       return user.userGroupMembershipList.includes(groupId || 0);
     }
   });
 
-  const userOptions = availableUsers.map(user => ({
+  const userOptions = availableUsers.map((user) => ({
     value: user.appUserId.toString(),
     label: `${user.firstName} ${user.lastName} (${user.userName})`,
   }));
@@ -58,11 +59,11 @@ function AddRemoveUsersFromGroupModal({
     <Modal
       opened={isOpen}
       onClose={onClose}
-      title={mode === 'add' ? "Add Users to Group" : "Remove Users from Group"}
+      title={mode === "add" ? "Add Users to Group" : "Remove Users from Group"}
       size="lg"
     >
       <Title order={4} mb="md">
-        {mode === 'add' ? "Select users to add:" : "Select users to remove:"}
+        {mode === "add" ? "Select users to add:" : "Select users to remove:"}
       </Title>
       <MultiSelect
         data={userOptions}
@@ -73,13 +74,15 @@ function AddRemoveUsersFromGroupModal({
         mb="md"
       />
       <Group justify="flex-end">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
         <Button
           onClick={handleConfirm}
           loading={loading}
           disabled={selectedUsers.length === 0}
         >
-          {mode === 'add' ? "Add Users" : "Remove Users"}
+          {mode === "add" ? "Add Users" : "Remove Users"}
         </Button>
       </Group>
     </Modal>

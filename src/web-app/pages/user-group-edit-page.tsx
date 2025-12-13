@@ -40,7 +40,8 @@ function UserGroupEditPage() {
   const isNew = userGroupId === "new";
   const numericId = isNaN(Number(userGroupId)) ? null : Number(userGroupId);
 
-  const [formData, setFormData] = useState<UserGroupFormData>(defaultUserGroupFormData);
+  const [formData, setFormData] =
+    useState<UserGroupFormData>(defaultUserGroupFormData);
 
   const [grants, setGrants] = useState<{ id: number; text: string }[]>([]);
 
@@ -68,11 +69,13 @@ function UserGroupEditPage() {
       const groups = useUserGroupsStore.getState().userGroups;
       const existingGroup = groups.find((g) => g.userGroupId === numericId);
       if (existingGroup) {
-        setFormData({
-          groupName: existingGroup.groupName,
-          userGrantList: existingGroup.userGrantList,
-          updateTs: existingGroup.updateTs.toString(),
-        });
+        setTimeout(() => {
+          setFormData({
+            groupName: existingGroup.groupName,
+            userGrantList: existingGroup.userGrantList,
+            updateTs: existingGroup.updateTs.toString(),
+          });
+        }, 0);
       }
       // Load users for the group management
       readUserList();

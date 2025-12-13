@@ -14,7 +14,7 @@ import { useUserGroupsStore } from "../stores/user-groups-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
-import type { UserFormData } from "../types/user-type";
+import type { UserFormData, User } from "../types/user-type";
 import { defaultUserFormData } from "../types/user-type";
 
 function UserEditPage() {
@@ -41,7 +41,7 @@ function UserEditPage() {
       if (numericId && !isNew) {
         // Find user from store
         const users = useAppUserStore.getState().users;
-        const existingUser = users.find((u: any) => u.appUserId === numericId);
+        const existingUser = users.find((u: User) => u.appUserId === numericId);
         if (existingUser) {
           setTimeout(() => {
             setFormData({
@@ -54,9 +54,13 @@ function UserEditPage() {
               pwHash: "",
               updateTs: existingUser.updateTs.toString(),
             });
+            setUserLoading(false);
+          }, 0);
+        } else {
+          setTimeout(() => {
+            setUserLoading(false);
           }, 0);
         }
-        setUserLoading(false);
       }
     }
   }, [numericId, isNew, readUserGroupList]);

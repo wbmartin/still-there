@@ -30,7 +30,8 @@ function ExampleEditPage() {
   const id = searchParams.get("exampleId") || "";
   const numericId = isNaN(Number(id)) ? null : Number(id);
 
-  const [formData, setFormData] = useState<ExampleFormData>(defaultExampleFormData);
+  const [formData, setFormData] =
+    useState<ExampleFormData>(defaultExampleFormData);
 
   const isNew = id === "new";
   const [exampleLoading, setExampleLoading] = useState(

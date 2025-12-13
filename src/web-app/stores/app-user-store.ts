@@ -123,7 +123,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
       // Update local state
       set((state) => ({
         users: state.users.map(
-          (u: any) => (u.appUserId === id ? { ...u, ...data } : u),
+          (u: User) => (u.appUserId === id ? { ...u, ...data } : u),
         ),
       }));
     } catch (err: unknown) {
@@ -143,7 +143,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
       if (!response.ok) throw new Error("Failed to delete user");
       // Remove from local state
       set((state) => ({
-        users: state.users.filter((u: any) => u.appUserId !== id),
+        users: state.users.filter((u: User) => u.appUserId !== id),
       }));
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });

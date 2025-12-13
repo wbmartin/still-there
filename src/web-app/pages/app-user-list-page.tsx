@@ -5,6 +5,7 @@ import { useAppUserStore } from "../stores/app-user-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
+import type { User } from "../types/user-type";
 
 function UserAdminPage() {
   const authState = useAuthGuard();
@@ -79,7 +80,7 @@ function UserAdminPage() {
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {paginatedUsers.map((user: any) => (
+          {paginatedUsers.map((user: User) => (
             <Table.Tr key={user.appUserId}>
               <Table.Td>{user.appUserId}</Table.Td>
               <Table.Td>{user.userName}</Table.Td>

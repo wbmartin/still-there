@@ -88,7 +88,7 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
       // Update local state
       set((state) => ({
         userGroups: state.userGroups.map(
-          (g: any) => (g.userGroupId === id ? { ...g, ...data } : g),
+          (g: UserGroup) => (g.userGroupId === id ? { ...g, ...data } : g),
         ),
       }));
     } catch (err: unknown) {
@@ -108,7 +108,9 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
       if (!response.ok) throw new Error("Failed to delete user group");
       // Remove from local state
       set((state) => ({
-        userGroups: state.userGroups.filter((g: any) => g.userGroupId !== id),
+        userGroups: state.userGroups.filter(
+          (g: UserGroup) => g.userGroupId !== id,
+        ),
       }));
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
@@ -121,7 +123,8 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
         API_ENDPOINTS.GRANT_LIST,
       );
     if (!response.ok) throw new Error("Failed to fetch grant list");
-    const data: { data: { id: number; text: string }[] } = await response.json();
+    const data: { data: { id: number; text: string }[] } =
+      await response.json();
     return data.data;
   },
   //============================^FUNCTION LINE ^============================
