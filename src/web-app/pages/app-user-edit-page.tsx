@@ -20,7 +20,7 @@ import { defaultUserFormData } from "../types/user-type";
 function UserEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
-  const { createUser, updateUser, deleteUser } = useAppUserStore();
+  const { readUserById, createUser, updateUser, deleteUser } = useAppUserStore();
   const { readUserGroupList, userGroups } = useUserGroupsStore();
   const navigate = useNavigate();
 
@@ -37,33 +37,33 @@ function UserEditPage() {
   useEffect(() => {
     if (!hasFetched.current) {
       hasFetched.current = true;
-       void readUserGroupList();
+      void readUserGroupList();
       if (numericId && !isNew) {
-        // Find user from store
-        const users = useAppUserStore.getState().users;
-        const existingUser = users.find((u: User) => u.appUserId === numericId);
-        if (existingUser) {
-          setTimeout(() => {
+        // Fetch the user directly
+        void readUserById(numericId).then((user) => {
+          if (user) {
             setFormData({
-              userName: existingUser.userName,
-              firstName: existingUser.firstName,
-              lastName: existingUser.lastName,
-              email: existingUser.email,
-              userGroupMembershipList: existingUser.userGroupMembershipList,
-              mfaExempt: existingUser.mfaExempt,
+              userName: user.userName,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              email: user.email,
+              userGroupMembershipList: user.userGroupMembershipList,
+              mfaExempt: user.mfaExempt,
               pwHash: "",
-              updateTs: existingUser.updateTs.toString(),
+              updateTs: user.updateTs.toString(),
             });
-            setUserLoading(false);
-          }, 0);
-        } else {
+          }
           setTimeout(() => {
             setUserLoading(false);
           }, 0);
-        }
+        });
+      } else {
+        setTimeout(() => {
+          setUserLoading(false);
+        }, 0);
       }
     }
-  }, [numericId, isNew, readUserGroupList]);
+  }, [numericId, isNew, readUserGroupList, readUserById]);
 
   //============================^HOOOK LINE ^====================
 

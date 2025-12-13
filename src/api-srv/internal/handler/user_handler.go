@@ -49,14 +49,26 @@ func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read users (filtered by security context and optional idList)
-	users, err := h.userRepo.ReadUserList(r.Context(), jwtClaims.SecurityContext, idList)
+	// Parse optional updateTs query parameter
+	updateTs, err := GetFloatFromQuery(r, "updateTs")
+	if err != nil {
+		updateTs = 0 // Default to 0 if not provided
+	}
+
+	// Read users (filtered by security context, optional idList, and updateTs)
+	users, err := h.userRepo.ReadUserList(r.Context(), jwtClaims.SecurityContext, idList, updateTs)
 	if err != nil {
 		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve users", "ULF0", err)
 		return
 	}
 
 	logger.Debug("ULD0", "Users read")
+
+	// Ensure users is never nil
+	if users == nil {
+		users = []*model.AppUserModel{}
+	}
+
 	wrapper := model.DataWrapper{Data: users}
 	writeJSON(w, http.StatusOK, wrapper, logger)
 	logger.Info("ULD1", "User list read completed")

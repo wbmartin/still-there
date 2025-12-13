@@ -77,10 +77,11 @@ This document outlines the steps and key points for creating a new entity type i
     - Example: `example-type.ts`.
 
 4. **Store** (`stores/entity-store.ts`):
-   - Zustand store with `entity[]`, `loading`, `error`.
-   - Functions: `createEntity`,`readEntityList`,  `updateEntity`, `deleteEntity`.
-   - API calls to `/entityList`, `/entityEdit`.
-   - Example: `user-store.ts`.
+    - Zustand store with `entity[]`, `maxEntityUpdateTs`, `loading`, `error`.
+    - Functions: `createEntity`,`readEntityList`,  `updateEntity`, `deleteEntity`.
+    - API calls to `/entityList`, `/entityEdit`.
+    - Cache management: `maxEntityUpdateTs` updated only on full list fetches.
+    - Example: `user-store.ts`.
 
 5. **Pages**:
    - **List**: `entity-list-page.tsx` - Table with pagination, add/edit/delete buttons.
@@ -105,6 +106,18 @@ This document outlines the steps and key points for creating a new entity type i
    - Edit forms: Multi-select for arrays (e.g., groups), password fields for new users.
    - Navigation: Separate pages with `navigate()` instead of conditional rendering.
    - Grants centralized in `grants.go`, models define their own maps if needed.
+
+## Cache Management Pattern
+
+All entity stores must include a `max<Entity>UpdateTs` field for conditional fetching:
+
+- **State**: `max<Entity>UpdateTs: number` (initialize to 0)
+- **Update Rule**: Only update on non-ID-specific list fetches (full refreshes, not updates, creates or deletes)
+- **Usage**: Send as `updateTs` param for conditional API calls
+- **Incremental Cache Updates**: Merge returned data but **don't update max** (preserves detection of other changes)
+- **API Support**: Backend filters `WHERE update_ts > updateTs`
+
+This enables efficient caching while detecting when full refreshes are needed.
 
 ## Example References
 - **SQL**: `sql/010-initialcreate.sql`, `sql/015-initialdata.sql`

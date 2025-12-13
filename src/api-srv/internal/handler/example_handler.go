@@ -287,6 +287,11 @@ func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Ensure examples is never nil
+	if examples == nil {
+		examples = []*model.ExampleModel{}
+	}
+
 	// Return as JSON
 	wrapper := model.DataWrapper{Data: examples}
 	writeJSON(w, http.StatusOK, wrapper, logger)

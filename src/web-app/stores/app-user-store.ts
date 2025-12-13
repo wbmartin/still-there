@@ -4,23 +4,21 @@ import { apiRequest } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 
 interface AppUserState {
-	users: User[];
-	loading: boolean;
-	error: string | null;
-	readUserList: (idList?: number[]) => Promise<void>;
-	createUser: (data: Partial<User>) => Promise<void>;
-	updateUser: (id: number, data: Partial<User>) => Promise<void>;
-	deleteUser: (id: number) => Promise<void>;
-	addUserListToGroup: (userIds: number[], groupId: number) => Promise<void>;
-	removeUserListFromGroup: (
-		userIds: number[],
-		groupId: number,
-	) => Promise<void>;
-	clearCache: () => void;
+  users: User[];
+  maxAppUserUpdateTs: number;
+  loading: boolean;
+  error: string | null;
+  readUserList: () => Promise<void>;
+  readUserById: (id: number) => Promise<User | null>;
+  createUser: (data: Omit<User, 'appUserId' | 'createTs' | 'createUserId' | 'updateTs' | 'updateUserId'>) => Promise<void>;
+  updateUser: (id: number, data: Partial<User>) => Promise<void>;
+  deleteUser: (id: number) => Promise<void>;
+  clearCache: () => void;
 }
 
 export const useAppUserStore = create<AppUserState>((set, get) => ({
   users: [],
+  maxAppUserUpdateTs: 0,
   loading: false,
   error: null,
 	//============================^FUNCTION LINE ^============================
@@ -34,26 +32,86 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
 			const response = await apiRequest(url);
 			if (!response.ok) throw new Error("Failed to fetch users");
 			const data = await response.json() as ApiResponse<ApiUserModel[]>;
-			const users = data.data.map((u) => ({
-				appUserId: u.appUserId,
-				userName: u.userName,
-				firstName: u.firstName,
-				lastName: u.lastName,
-				email: u.email,
-				securityContext: u.securityContext,
-				userGroupMembershipList: u.userGroupMembershipList,
-				mfaExempt: u.mfaExempt,
-				createTs: u.createTs,
-				createUserId: u.createUserId,
-				updateTs: u.updateTs,
-				updateUserId: u.updateUserId,
-			}));
-			set({ users, loading: false });
+      const users = data.data.map((u) => ({
+        appUserId: u.appUserId,
+        userName: u.userName,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        email: u.email,
+        securityContext: u.securityContext,
+        userGroupMembershipList: u.userGroupMembershipList,
+        mfaExempt: u.mfaExempt,
+        createTs: u.createTs,
+        createUserId: u.createUserId,
+        updateTs: u.updateTs,
+        updateUserId: u.updateUserId,
+      }));
+      set({ users, loading: false });
+
+      // Update maxAppUserUpdateTs only for non-ID-specific fetches
+      if (!idList || idList.length === 0) {
+        const newMax = users.length > 0 ? Math.max(...users.map(u => u.updateTs)) : 0;
+        set({ maxAppUserUpdateTs: newMax });
+      }
 		} catch (err: unknown) {
 			const errorMessage = err instanceof Error ? err.message : "Unknown error";
 			set({ loading: false, error: errorMessage });
 		}
-	},
+  },
+  readUserById: async (id: number) => {
+    console.log('readUserById: called with id', id);
+    const maxTs = get().maxAppUserUpdateTs;
+    console.log('readUserById: maxAppUserUpdateTs', maxTs);
+    const url = `${API_ENDPOINTS.USER_LIST}?userIdList=${id}&updateTs=${maxTs}`;
+    console.log('readUserById: making request to', url);
+    try {
+      const response = await apiRequest(url);
+      console.log('readUserById: response ok?', response.ok);
+      if (!response.ok) throw new Error("Failed to fetch user");
+      const data = await response.json() as ApiResponse<ApiUserModel[]> | null;
+      console.log('readUserById: raw data', data);
+      if (!data || !data.data) {
+        console.log('readUserById: API returned null or invalid data, using cache');
+        return get().users.find(u => u.appUserId === id) || null;
+      }
+      console.log('readUserById: data.data.length', data.data.length);
+      if (data.data.length > 0) {
+        // Update cache with new user data (sync)
+        const updatedUser = {
+          appUserId: data.data[0].appUserId,
+          userName: data.data[0].userName,
+          firstName: data.data[0].firstName,
+          lastName: data.data[0].lastName,
+          email: data.data[0].email,
+          securityContext: data.data[0].securityContext,
+          userGroupMembershipList: data.data[0].userGroupMembershipList,
+          mfaExempt: data.data[0].mfaExempt,
+          createTs: data.data[0].createTs,
+          createUserId: data.data[0].createUserId,
+          updateTs: data.data[0].updateTs,
+          updateUserId: data.data[0].updateUserId,
+        };
+        console.log('readUserById: updating cache with', updatedUser);
+        set(state => ({
+          users: state.users.some(u => u.appUserId === id)
+            ? state.users.map(u => u.appUserId === id ? updatedUser : u)
+            : [...state.users, updatedUser]
+        }));
+        console.log('readUserById: returning updated user', updatedUser);
+        return updatedUser;
+      } else {
+        // Return cached user
+        const cachedUser = get().users.find(u => u.appUserId === id) || null;
+        console.log('readUserById: returning cached user', cachedUser);
+        return cachedUser;
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.error('readUserById: error', errorMessage);
+      set({ error: errorMessage });
+      return null;
+    }
+  },
   //============================^FUNCTION LINE ^============================
   createUser: async (data: Partial<User>) => {
     set({ error: null });
@@ -223,6 +281,6 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
 
   //============================^FUNCTION LINE ^============================
   clearCache: () => {
-    set({ users: [] });
+    set({ users: [], maxAppUserUpdateTs: 0 });
   },
 }));

@@ -55,6 +55,12 @@ func (h *UserGroupHandler) ReadUserGroupList(w http.ResponseWriter,
 	}
 
 	logger.Debug("UGD0", "User groups retrieved")
+
+	// Ensure groups is never nil
+	if groups == nil {
+		groups = []*model.UserGroupModel{}
+	}
+
 	wrapper := model.DataWrapper{Data: groups}
 	writeJSON(w, http.StatusOK, wrapper, logger)
 	logger.Info("UGD1", "User group list retrieval completed")

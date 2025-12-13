@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Table, Button, Title, Group, Pagination } from "@mantine/core";
 import { useAppUserStore } from "../stores/app-user-store";
+import { useUserGroupsStore } from "../stores/user-groups-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
@@ -10,6 +11,7 @@ import type { User } from "../types/user-type";
 function UserAdminPage() {
   const authState = useAuthGuard();
   const { users, loading, readUserList, deleteUser } = useAppUserStore();
+  const { getGroupName, readUserGroupList } = useUserGroupsStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
@@ -20,9 +22,10 @@ function UserAdminPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-       void readUserList();
+      void readUserList();
+      void readUserGroupList();
     }
-  }, [authState, readUserList]);
+  }, [authState, readUserList, readUserGroupList]);
   //============================^HOOOK LINE ^====================
 
   if (authState !== "YES") {
@@ -64,7 +67,7 @@ function UserAdminPage() {
       <Group justify="space-between" mb="lg">
         <Title order={1}>User Admin</Title>
         <Button
-          onClick={() => navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=new`)}
+          onClick={() => { navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=new`); }}
         >
           Add User
         </Button>
@@ -89,15 +92,19 @@ function UserAdminPage() {
                 {user.firstName} {user.lastName}
               </Table.Td>
               <Table.Td>{user.email}</Table.Td>
-              <Table.Td>{user.userGroupMembershipList.join(", ")}</Table.Td>
+              <Table.Td>
+                {user.userGroupMembershipList
+                  .map((id) => getGroupName(id))
+                  .join(", ")}
+              </Table.Td>
               <Table.Td>
                 <Button
                   size="xs"
-                  onClick={() =>
+                  onClick={() => {
                     navigate(
                       `/${ROUTES.APP_USER_EDIT}?appUserId=${user.appUserId}`,
-                    )
-                  }
+                    );
+                  }}
                 >
                   Edit
                 </Button>
@@ -105,7 +112,7 @@ function UserAdminPage() {
                   size="xs"
                   color="red"
                   ml="xs"
-                  onClick={() => handleDeleteClick(user.appUserId)}
+                  onClick={() => { handleDeleteClick(user.appUserId); }}
                 >
                   Delete
                 </Button>
@@ -121,7 +128,7 @@ function UserAdminPage() {
       )}
       <DeleteConfirmModal
         isOpen={deleteModalOpen}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={() => void handleDeleteConfirm()}
         onCancel={handleDeleteCancel}
         entityType="user"
       />

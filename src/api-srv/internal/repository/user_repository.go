@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -154,7 +155,7 @@ func (r *UserRepository) UpdateUserPassword(
 // ReadUserList retrieves users for a security context,
 // optionally filtered by idList
 func (r *UserRepository) ReadUserList(
-	ctx context.Context, securityContext int, idList []int,
+	ctx context.Context, securityContext int, idList []int, updateTs float64,
 ) ([]*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, first_name, last_name, email,
@@ -169,6 +170,12 @@ func (r *UserRepository) ReadUserList(
 	if len(idList) > 0 {
 		query += ` AND app_user_id = ANY($2)`
 		args = append(args, idList)
+	}
+
+	if updateTs > 0 {
+		paramNum := len(args) + 1
+		query += ` AND update_ts > $` + strconv.Itoa(paramNum)
+		args = append(args, updateTs)
 	}
 
 	query += ` ORDER BY user_name`
@@ -314,8 +321,8 @@ func (r *UserRepository) AddUserListToGroup(
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	// Return updated users
-	return r.ReadUserList(ctx, securityContext, userIds)
+	// Return updated users; rescan required for updated group membership
+	return r.ReadUserList(ctx, securityContext, userIds, 0)
 }
 
 // RemoveUserListFromGroup removes multiple users from a group with optimistic locking
@@ -361,8 +368,8 @@ func (r *UserRepository) RemoveUserListFromGroup(
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	// Return updated users
-	return r.ReadUserList(ctx, securityContext, userIds)
+	// Return updated users; rescan required for updated group membership
+	return r.ReadUserList(ctx, securityContext, userIds, 0)
 }
 
 // removeDuplicates removes duplicate integers from a slice
