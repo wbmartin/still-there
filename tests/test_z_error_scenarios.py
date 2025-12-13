@@ -153,13 +153,13 @@ class TestErrorScenarios:
         # Should return 409 for conflict or succeed if timestamps are handled differently
         assert response.status_code in [200, 409]
 
-    def test_rate_limiting_returns_429(self, test_client):
-        """Test that exceeding rate limits returns 429"""
+    def test_rate_limiting_returns_429(self, basic_user_client):
+        """Test that exceeding rate limits returns 429 for basic users (not exempt)"""
         # Test authenticated user rate limiting (limit: 200 per minute)
         # Use an authenticated endpoint that goes through security checks
         responses = []
         for i in range(250):  # Exceed limit to trigger rate limiting
-            response = test_client.make_request("GET", "/example", params={"exampleId": 999999})
+            response = basic_user_client.make_request("GET", "/example", params={"exampleId": 999999})
             responses.append(response.status_code)
             if response.status_code == 429:
                 break

@@ -116,7 +116,7 @@ class TestClient:
 
 @pytest.fixture(scope="session")
 def test_client():
-    """Session-scoped test client with authentication"""
+    """Session-scoped test client with admin authentication"""
     # Get base URL from environment variable set by test script
     base_url = os.environ.get("TEST_BASE_URL")
     if not base_url:
@@ -131,8 +131,33 @@ def test_client():
     except requests.RequestException:
         pytest.fail(f"Cannot connect to application. Is the application running on {base_url}?")
 
-    # Authenticate once per test session
+    # Authenticate once per test session as admin
     client.authenticate()
+    yield client
+
+    # Cleanup all created examples
+    client.cleanup_examples()
+
+
+@pytest.fixture(scope="session")
+def basic_user_client():
+    """Session-scoped test client with basic user authentication"""
+    # Get base URL from environment variable set by test script
+    base_url = os.environ.get("TEST_BASE_URL")
+    if not base_url:
+        pytest.fail("TEST_BASE_URL environment variable is required")
+    client = TestClient(base_url)
+
+    # Check if application is running
+    try:
+        response = requests.get(f"{base_url}/health", timeout=5, verify=False)
+        if response.status_code != 200:
+            pytest.fail(f"Application health check failed. Is the application running on {base_url}?")
+    except requests.RequestException:
+        pytest.fail(f"Cannot connect to application. Is the application running on {base_url}?")
+
+    # Authenticate once per test session as basic user
+    client.authenticate("basic", "basic123!")
     yield client
 
     # Cleanup all created examples
