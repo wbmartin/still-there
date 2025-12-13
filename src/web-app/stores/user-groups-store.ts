@@ -7,6 +7,7 @@ import { API_ENDPOINTS } from "../constants/api";
 interface UserGroupsState {
   userGroups: UserGroup[];
   groupIdToName: Map<number, string>;
+  maxUserGroupUpdateTs: number;
   loading: boolean;
   error: string | null;
   getGroupName: (id: number) => string;
@@ -30,6 +31,7 @@ const rebuildGroupMap = (groups: UserGroup[]) => {
 export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
   userGroups: [],
   groupIdToName: new Map<number, string>(),
+  maxUserGroupUpdateTs: 0,
   loading: false,
   error: null,
   getGroupName: (id: number) => get().groupIdToName.get(id) || `???${id}???`,
@@ -40,18 +42,19 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
       const response = await apiRequest(API_ENDPOINTS.USER_GROUP_LIST);
       if (!response.ok) throw new Error("Failed to fetch user groups");
 			const data = await response.json() as ApiResponse<ApiUserGroupModel[]>;
-       const userGroups = data.data.map((g) => ({
-         userGroupId: g.userGroupId,
-         groupName: g.groupName,
-         userGrantList: g.userGrantList,
-         securityContext: g.securityContext,
-         createTs: g.createTs,
-         createUserId: g.createUserId,
-         updateTs: g.updateTs,
-         updateUserId: g.updateUserId,
-       }));
-       const groupIdToName = rebuildGroupMap(userGroups);
-       set({ userGroups, groupIdToName, loading: false });
+      const userGroups = data.data.map((g) => ({
+        userGroupId: g.userGroupId,
+        groupName: g.groupName,
+        userGrantList: g.userGrantList,
+        securityContext: g.securityContext,
+        createTs: g.createTs,
+        createUserId: g.createUserId,
+        updateTs: g.updateTs,
+        updateUserId: g.updateUserId,
+      }));
+      const groupIdToName = rebuildGroupMap(userGroups);
+      const maxUserGroupUpdateTs = userGroups.length > 0 ? Math.max(...userGroups.map(g => g.updateTs)) : 0;
+      set({ userGroups, groupIdToName, maxUserGroupUpdateTs, loading: false });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       set({ loading: false, error: errorMessage });
@@ -143,7 +146,7 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
     return data.data;
   },
   //============================^FUNCTION LINE ^============================
-   clearCache: () => {
-     set({ userGroups: [], groupIdToName: new Map<number, string>() });
-   },
+  clearCache: () => {
+    set({ userGroups: [], groupIdToName: new Map<number, string>(), maxUserGroupUpdateTs: 0 });
+  },
 }));

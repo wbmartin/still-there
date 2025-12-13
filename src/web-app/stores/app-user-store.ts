@@ -62,7 +62,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
     console.log('readUserById: called with id', id);
     const maxTs = get().maxAppUserUpdateTs;
     console.log('readUserById: maxAppUserUpdateTs', maxTs);
-    const url = `${API_ENDPOINTS.USER_LIST}?userIdList=${id}&updateTs=${maxTs}`;
+    const url = `${API_ENDPOINTS.USER_LIST}?userIdList=${id}&afterUpdateTs=${maxTs}`;
     console.log('readUserById: making request to', url);
     try {
       const response = await apiRequest(url);

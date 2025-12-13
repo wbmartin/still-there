@@ -5,10 +5,10 @@ import { API_ENDPOINTS } from "../constants/api";
 
 interface ExamplesState {
   examples: Example[];
-  maxUpdateTs: number;
+  maxExamplesUpdateTs: number;
   loading: boolean;
   error: string | null;
-  getExample: (id: number) => Promise<Example | null>;
+  readExampleById: (id: number) => Promise<Example | null>;
   createExample: (data: Partial<Example>) => Promise<void>;
   updateExample: (id: number, data: Partial<Example>) => Promise<void>;
   deleteExample: (id: number) => Promise<void>;
@@ -18,16 +18,16 @@ interface ExamplesState {
 
 export const useExamplesStore = create<ExamplesState>((set, get) => ({
   examples: [],
-  maxUpdateTs: 0,
+  maxExamplesUpdateTs: 0,
   loading: false,
   error: null,
   //============================^FUNCTION LINE ^============================
   readExampleList: async () => {
     // console.log("getExampleList called");
-    const { maxUpdateTs } = get();
+    const { maxExamplesUpdateTs } = get();
     set({ loading: true });
     try {
-      if (maxUpdateTs === 0) {
+      if (maxExamplesUpdateTs === 0) {
         // Fetch all examples
         const response = await apiRequest(API_ENDPOINTS.EXAMPLE_LIST);
         if (!response.ok) throw new Error("Failed to fetch examples");
@@ -45,14 +45,14 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
           updateTs: e.updateTs,
           updateUserId: e.updateUserId,
         }));
-        const newMaxUpdateTs =
+        const newMaxExamplesUpdateTs =
           examples.length > 0
             ? Math.max(...examples.map((e) => e.updateTs))
             : 0;
-        set({ examples, maxUpdateTs: newMaxUpdateTs, loading: false });
+        set({ examples, maxExamplesUpdateTs: newMaxExamplesUpdateTs, loading: false });
       } else {
         // Fetch updates
-        const response = await apiRequest(`/exampleList?afterUpdateTs=${maxUpdateTs}`);
+        const response = await apiRequest(`/exampleList?afterUpdateTs=${maxExamplesUpdateTs}`);
         if (!response.ok) throw new Error("Failed to sync examples");
         const data = await response.json() as ApiResponse<ApiExampleModel[]>;
         const newExamples = data.data.map((e) => ({
@@ -104,7 +104,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
     }
   },
   //============================^FUNCTION LINE ^============================
-  getExample: async (id: number): Promise<Example | null> => {
+  readExampleById: async (id: number): Promise<Example | null> => {
     try {
       const response = await apiRequest(`/example?exampleId=${id}`);
       if (!response.ok) {
@@ -233,6 +233,6 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
   },
   //============================^FUNCTION LINE ^============================
   clearCache: () => {
-    set({ examples: [], maxUpdateTs: 0 });
+    set({ examples: [], maxExamplesUpdateTs: 0 });
   },
 }));

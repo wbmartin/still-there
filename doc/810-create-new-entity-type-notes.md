@@ -113,9 +113,9 @@ All entity stores must include a `max<Entity>UpdateTs` field for conditional fet
 
 - **State**: `max<Entity>UpdateTs: number` (initialize to 0)
 - **Update Rule**: Only update on non-ID-specific list fetches (full refreshes, not updates, creates or deletes)
-- **Usage**: Send as `updateTs` param for conditional API calls
+- **Usage**: Send as `afterUpdateTs` param for conditional API calls
 - **Incremental Cache Updates**: Merge returned data but **don't update max** (preserves detection of other changes)
-- **API Support**: Backend filters `WHERE update_ts > updateTs`
+- **API Support**: Backend filters `WHERE update_ts > afterUpdateTs`
 
 This enables efficient caching while detecting when full refreshes are needed.
 

@@ -20,7 +20,7 @@ function ExampleEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
   const {
-    getExample,
+    readExampleById,
     createExample,
     updateExample,
     deleteExample,
@@ -43,7 +43,7 @@ function ExampleEditPage() {
   useEffect(() => {
     if (numericId && !isNew && !hasFetched.current) {
       hasFetched.current = true;
-      void getExample(numericId)
+      void readExampleById(numericId)
         .then((existingExample) => {
           if (existingExample) {
             const newFormData = {
@@ -79,7 +79,7 @@ function ExampleEditPage() {
   }, [
     numericId,
     isNew,
-    getExample,
+    readExampleById,
   ]);
 
   //============================^HOOOK LINE ^====================

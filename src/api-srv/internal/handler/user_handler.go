@@ -49,14 +49,14 @@ func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse optional updateTs query parameter
-	updateTs, err := GetFloatFromQuery(r, "updateTs")
+	// Parse optional afterUpdateTs query parameter
+	afterUpdateTs, err := GetFloatFromQuery(r, "afterUpdateTs")
 	if err != nil {
-		updateTs = 0 // Default to 0 if not provided
+		afterUpdateTs = 0 // Default to 0 if not provided
 	}
 
-	// Read users (filtered by security context, optional idList, and updateTs)
-	users, err := h.userRepo.ReadUserList(r.Context(), jwtClaims.SecurityContext, idList, updateTs)
+	// Read users (filtered by security context, optional idList, and afterUpdateTs)
+	users, err := h.userRepo.ReadUserList(r.Context(), jwtClaims.SecurityContext, idList, afterUpdateTs)
 	if err != nil {
 		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve users", "ULF0", err)
 		return
