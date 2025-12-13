@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const claimsKey contextKey = "claims"
+
 // AppHelper encapsulates request-specific security checks and state
 type AppHelper struct {
 	r           *http.Request
@@ -147,7 +152,7 @@ func (sh *AppHelper) CheckJWT() *AppHelper {
 	}
 
 	sh.claims = claims
-	sh.ctx = context.WithValue(sh.r.Context(), "claims", claims)
+	sh.ctx = context.WithValue(sh.r.Context(), claimsKey, claims)
 	sh.username = claims.Subject
 
 	return sh
