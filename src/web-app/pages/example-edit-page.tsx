@@ -43,7 +43,7 @@ function ExampleEditPage() {
   useEffect(() => {
     if (numericId && !isNew && !hasFetched.current) {
       hasFetched.current = true;
-      getExample(numericId)
+      void getExample(numericId)
         .then((existingExample) => {
           if (existingExample) {
             const newFormData = {
@@ -180,7 +180,7 @@ function ExampleEditPage() {
       <Title order={1} mb="lg">
         {isNew ? "Add Example" : "Edit Example"}
       </Title>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={(e) => void handleSubmit(e)}>
         <TextInput
           label="Text"
           value={formData.exampleText}
@@ -239,7 +239,7 @@ function ExampleEditPage() {
       </form>
       <DeleteConfirmModal
         isOpen={deleteModalOpen}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={() => void handleDeleteConfirm()}
         onCancel={handleDeleteCancel}
         entityType="example"
       />

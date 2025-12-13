@@ -21,11 +21,11 @@ function AddRemoveUsersFromGroupModal({
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (isOpen) {
-      readUserList(); // Fetch all users for the security context
-    }
-  }, [isOpen, readUserList]);
+   useEffect(() => {
+     if (isOpen) {
+       void readUserList(); // Fetch all users for the security context
+     }
+   }, [isOpen, readUserList]);
   // ============================^HOOOK LINE ^====================
 
   const availableUsers = users.filter((user) => {
@@ -78,7 +78,7 @@ function AddRemoveUsersFromGroupModal({
           Cancel
         </Button>
         <Button
-          onClick={handleConfirm}
+          onClick={() => void handleConfirm()}
           loading={loading}
           disabled={selectedUsers.length === 0}
         >

@@ -76,9 +76,9 @@ function AppLayout() {
             <NavLink component={Link} to={`/${ROUTES.EXAMPLE_LIST}`} label="Examples" />
             <NavLink component={Link} to={`/${ROUTES.APP_USER_LIST}`} label="User Admin" />
             <NavLink component={Link} to={`/${ROUTES.USER_GROUP_LIST}`} label="User Groups" />
-            <Button variant="subtle" onClick={handleLogout} fullWidth style={{ justifyContent: 'flex-start' }}>
-              Logout
-            </Button>
+             <Button variant="subtle" onClick={() => void handleLogout()} fullWidth style={{ justifyContent: 'flex-start' }}>
+               Logout
+             </Button>
           </Stack>
         </nav>
         )}

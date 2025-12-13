@@ -308,7 +308,7 @@ func (r *ExampleRepository) CreateExampleList(
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	query := `
 		INSERT INTO example (
@@ -355,7 +355,7 @@ func (r *ExampleRepository) UpdateExampleList(
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	query := `
 		UPDATE example
@@ -402,7 +402,7 @@ func (r *ExampleRepository) DeleteExampleList(
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	query := `
 		UPDATE example

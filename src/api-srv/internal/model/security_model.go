@@ -13,8 +13,8 @@ type AuthResponseModel struct {
 	FirstName              string           `json:"firstName"`
 	LastName               string           `json:"lastName"`
 	SecurityContext        int              `json:"securityContext"`
-	UserGrantShortCodeList map[int][]string `json:"userGrantShortCodeList"` // indexed by security_context
-	TempToken              string           `json:"tempToken,omitempty"`    // Only present if MFA required
+	UserGrantShortCodeList map[int][]string `json:"userGrantShortCodeList"` // by security_context
+	TempToken              string           `json:"tempToken,omitempty"`    // MFA required
 }
 
 // AuthResponseWrapper wraps the auth response for consistency
@@ -50,12 +50,12 @@ type LogoffRequest struct {
 	// No body required for logoff
 }
 
-// ChangeSecurityContextRequest represents the request body for changing security context
+// ChangeSecurityContextRequest for changing security context
 type ChangeSecurityContextRequest struct {
 	TargetSecurityContext int `json:"targetSecurityContext"`
 }
 
-// ChangeSecurityContextResponse represents the response for changing security context
+// ChangeSecurityContextResponse for changing security context
 type ChangeSecurityContextResponse struct {
 	AppUserID              int              `json:"appUserId"`
 	UserName               string           `json:"userName"`
@@ -65,7 +65,7 @@ type ChangeSecurityContextResponse struct {
 	UserGrantShortCodeList map[int][]string `json:"userGrantShortCodeList"`
 }
 
-// ChangeSecurityContextResponseWrapper wraps the change security context response for consistency
+// ChangeSecurityContextResponseWrapper wraps change response
 type ChangeSecurityContextResponseWrapper struct {
 	User ChangeSecurityContextResponse `json:"user"`
 }
@@ -75,7 +75,7 @@ type DataWrapper struct {
 	Data interface{} `json:"data"`
 }
 
-// ChangeCurrentUserPasswordRequest represents the request body for changing password
+// ChangeCurrentUserPasswordRequest for changing password
 type ChangeCurrentUserPasswordRequest struct {
 	CurrentPassword string `json:"currentPassword"`
 	NewPassword     string `json:"newPassword"`
@@ -86,7 +86,7 @@ type BlockUserRequest struct {
 	UserName string `json:"userName"`
 }
 
-// ResetUserPasswordRequest represents the request body for resetting another user's password
+// ResetUserPasswordRequest for resetting another user's password
 type ResetUserPasswordRequest struct {
 	UserName    string `json:"userName"`
 	NewPassword string `json:"newPassword"`

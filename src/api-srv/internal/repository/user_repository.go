@@ -287,7 +287,7 @@ func (r *UserRepository) AddUserListToGroup(
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Update each user (only if group not already in membership list)
 	for i, userId := range userIds {
@@ -334,7 +334,7 @@ func (r *UserRepository) RemoveUserListFromGroup(
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Update each user
 	for i, userId := range userIds {

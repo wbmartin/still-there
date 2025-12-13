@@ -21,7 +21,7 @@ function UserGroupAdminPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      readUserGroupList();
+      void readUserGroupList();
     }
   }, [authState, readUserGroupList]);
 
@@ -117,7 +117,7 @@ function UserGroupAdminPage() {
       )}
       <DeleteConfirmModal
         isOpen={deleteModalOpen}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={() => void handleDeleteConfirm()}
         onCancel={handleDeleteCancel}
         entityType="user group"
       />

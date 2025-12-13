@@ -11,7 +11,7 @@ function Dashboard() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      readExampleList();
+       void readExampleList();
     }
   }, [authState, readExampleList]);
 

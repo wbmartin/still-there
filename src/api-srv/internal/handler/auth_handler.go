@@ -170,7 +170,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		}
 
 		// Delete temp token
-		appServices.KV.Set(tempTokenKey, "", "0s") // Expire immediately
+		_ = appServices.KV.Set(tempTokenKey, "", "0s") // Expire immediately
 
 		// Read user
 		user, err := userRepo.ReadUserByUserName(r.Context(), username)

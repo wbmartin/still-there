@@ -27,7 +27,7 @@ function Login() {
     if (authState === "TBD" && !refreshCalled.current) {
       refreshCalled.current = true;
       // Try refresh
-      useAuthStore.getState().authenticateWithAuthToken();
+       void useAuthStore.getState().authenticateWithAuthToken();
     } else if (authState === "YES") {
       // Navigate to postAuthDestination or dashboard
       const destination = postAuthDestination || "/dashboard";
@@ -65,7 +65,7 @@ function Login() {
           <Title order={2} mb="md" ta="center">
             Login to Proto
           </Title>
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={(e) => void handleSubmit(e)}>
             <TextInput
               label="Username"
               value={username}

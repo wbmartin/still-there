@@ -33,7 +33,7 @@ func (s *UserRepositoryTestSuite) SetupSuite() {
 
 	s.cleanup = func() {
 		// Clean test users (avoid deleting the admin user)
-		db.Exec(context.Background(),
+		_, _ = db.Exec(context.Background(),
 			"DELETE FROM app_user WHERE user_name LIKE 'Test%' OR user_name LIKE 'RepoTest%'")
 	}
 }

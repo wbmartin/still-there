@@ -31,7 +31,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         // Fetch all examples
         const response = await apiRequest(API_ENDPOINTS.EXAMPLE_LIST);
         if (!response.ok) throw new Error("Failed to fetch examples");
-        const data: ApiResponse<ApiExampleModel[]> = await response.json();
+        const data = await response.json() as ApiResponse<ApiExampleModel[]>;
         const examples = data.data.map((e) => ({
           exampleId: e.exampleId,
           exampleText: e.exampleText,
@@ -54,7 +54,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         // Fetch updates
         const response = await apiRequest(`/exampleList?afterUpdateTs=${maxUpdateTs}`);
         if (!response.ok) throw new Error("Failed to sync examples");
-        const data: ApiResponse<ApiExampleModel[]> = await response.json();
+        const data = await response.json() as ApiResponse<ApiExampleModel[]>;
         const newExamples = data.data.map((e) => ({
           exampleId: e.exampleId,
           exampleText: e.exampleText,
@@ -111,7 +111,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         if (response.status === 404 || response.status === 400) return null;
         throw new Error("Failed to fetch example");
       }
-      const data: ApiResponse<ApiExampleModel> = await response.json();
+        const data = await response.json() as ApiResponse<ApiExampleModel>;
       const apiExample = data.data;
       const example: Example = {
         exampleId: apiExample.exampleId,
@@ -161,7 +161,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error("Failed to create example");
-      const result: ApiResponse<ApiExampleModel> = await response.json();
+      const result = await response.json() as ApiResponse<ApiExampleModel>;
       const apiExample = result.data;
       const newExample: Example = {
         exampleId: apiExample.exampleId,

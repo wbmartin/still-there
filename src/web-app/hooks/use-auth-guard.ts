@@ -11,7 +11,7 @@ const useAuthGuard = () => {
   useEffect(() => {
     if (authState === "TBD") {
       // Trigger refresh
-      useAuthStore.getState().authenticateWithAuthToken();
+      void useAuthStore.getState().authenticateWithAuthToken();
     } else if (authState === "NO") {
       // Save destination
       const currentPath = location.pathname + location.search;

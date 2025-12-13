@@ -52,7 +52,7 @@ function UserGroupEditPage() {
         console.error("Failed to fetch grants:", error);
       }
     };
-    fetchGrants();
+    void fetchGrants();
   }, [readGrantList]);
 
   useEffect(() => {
@@ -71,7 +71,7 @@ function UserGroupEditPage() {
         }, 0);
       }
       // Load users for the group management
-      readUserList();
+      void readUserList();
     }
   }, [numericId, readUserList]);
 
@@ -190,7 +190,7 @@ function UserGroupEditPage() {
       <Title order={1} mb="lg">
         Edit User Group
       </Title>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={(e) => void handleSubmit(e)}>
         <TextInput
           label="Group Name"
           value={formData.groupName}
@@ -269,7 +269,7 @@ function UserGroupEditPage() {
 
       <DeleteConfirmModal
         isOpen={deleteModalOpen}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={() => void handleDeleteConfirm()}
         onCancel={handleDeleteCancel}
         entityType="user group"
       />
@@ -278,7 +278,7 @@ function UserGroupEditPage() {
         onClose={() => setUserModalOpen(false)}
         groupId={numericId}
         mode={userModalMode}
-        onConfirm={handleUserModalConfirm}
+        onConfirm={() => void handleUserModalConfirm()}
       />
     </div>
   );

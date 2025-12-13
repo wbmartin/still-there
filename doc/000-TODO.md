@@ -32,4 +32,6 @@ also need to add a binary that checks website health (probably just status) and 
 
 
 # Starting prompt
-make sure you look at my styles and quirks in the instructions. we are building a template CRUD app in Go and React. in the doc file is an 811 file that describes how to construct a new entity, we're currently building the first entity, "example", and documenting what's important to facilitate future new entity create. the last thing you did was create a critque in doc/811.
+make sure you look at my styles and quirks in the instructions. we are building a template CRUD app in Go and React. in the doc file is an 811 file that describes how to construct a new entity, we're currently building the first entity, "example", and documenting what's important to facilitate future new entity create.  
+
+we just added type-aware lint rules and have a new batch of lint warnings to clean up.

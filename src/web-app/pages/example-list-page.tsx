@@ -21,12 +21,12 @@ function ExampleListPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!hasFetched.current && authState === "YES") {
-      hasFetched.current = true;
-      readExampleList();
-    }
-  }, [authState, readExampleList]);
+   useEffect(() => {
+     if (!hasFetched.current && authState === "YES") {
+       hasFetched.current = true;
+       void readExampleList();
+     }
+   }, [authState, readExampleList]);
 
   //============================^HOOOK LINE ^====================
 
@@ -121,7 +121,7 @@ function ExampleListPage() {
       )}
       <DeleteConfirmModal
         isOpen={deleteModalOpen}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={() => void handleDeleteConfirm()}
         onCancel={handleDeleteCancel}
         entityType="example"
       />

@@ -34,7 +34,7 @@ func (s *ExampleRepositoryTestSuite) SetupSuite() {
 
 	s.cleanup = func() {
 		// Clean only test data
-		db.Exec(context.Background(),
+		_, _ = db.Exec(context.Background(),
 			"DELETE FROM example WHERE example_text LIKE 'Test%' OR example_text LIKE 'RepoTest%'")
 	}
 }

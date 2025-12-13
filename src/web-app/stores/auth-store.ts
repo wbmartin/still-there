@@ -39,7 +39,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         body: JSON.stringify(loginRequest),
       });
       if (!response.ok) throw new Error("Login failed");
-       const data: LoginResponse = await response.json();
+       const data = await response.json() as LoginResponse;
         if (data.user) {
           setCsrfToken(data.csrfToken);
           set({
@@ -65,7 +65,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     try {
       const response = await apiRequest("/refresh", {});
       if (!response.ok) throw new Error("Refresh failed");
-       const data: RefreshResponse = await response.json();
+       const data = await response.json() as RefreshResponse;
         if (data.user) {
           // console.log("Auth refresh successful for user:", data.user);
           setCsrfToken(data.csrfToken);

@@ -33,7 +33,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
 			}
 			const response = await apiRequest(url);
 			if (!response.ok) throw new Error("Failed to fetch users");
-			const data: ApiResponse<ApiUserModel[]> = await response.json();
+			const data = await response.json() as ApiResponse<ApiUserModel[]>;
 			const users = data.data.map((u) => ({
 				appUserId: u.appUserId,
 				userName: u.userName,
@@ -73,7 +73,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
         body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error("Failed to create user");
-      const result: ApiResponse<ApiUserModel> = await response.json();
+			const result = await response.json() as ApiResponse<ApiUserModel>;
       const apiUser = result.data;
       const newUser: User = {
         appUserId: apiUser.appUserId,
@@ -169,7 +169,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
         body: JSON.stringify({ userIds, groupId, updateTsList }),
       });
       if (!response.ok) throw new Error("Failed to add users to group");
-      const data: ApiResponse<User[]> = await response.json();
+			const data = await response.json() as ApiResponse<User[]>;
       // Update local cache with returned users
       set((state) => ({
         users: state.users.map(u => {
@@ -206,7 +206,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
         body: JSON.stringify({ userIds, groupId, updateTsList }),
       });
       if (!response.ok) throw new Error("Failed to remove users from group");
-      const data: ApiResponse<User[]> = await response.json();
+			const data = await response.json() as ApiResponse<User[]>;
       // Update local cache with returned users
       set((state) => ({
         users: state.users.map(u => {

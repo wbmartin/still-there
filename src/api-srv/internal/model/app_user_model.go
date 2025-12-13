@@ -4,7 +4,7 @@ package model
 type AppUserModel struct {
 	AppUserID               int      `json:"appUserId" db:"app_user_id"`
 	UserName                string   `json:"userName" db:"user_name"`
-	PwHash                  string   `json:"-" db:"pw_hash"` // Never serialize password hash
+	PwHash                  string   `json:"-" db:"pw_hash"` // Never serialize
 	FirstName               string   `json:"firstName" db:"first_name"`
 	LastName                string   `json:"lastName" db:"last_name"`
 	Email                   string   `json:"email" db:"email"`

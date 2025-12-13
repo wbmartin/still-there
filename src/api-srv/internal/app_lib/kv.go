@@ -230,7 +230,7 @@ func (c *ShrmplKVClient) Connect() error {
 	}
 
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		tcpConn.SetNoDelay(true)
+		_ = tcpConn.SetNoDelay(true)
 	}
 
 	c.conn = conn

@@ -37,7 +37,7 @@ function UserEditPage() {
   useEffect(() => {
     if (!hasFetched.current) {
       hasFetched.current = true;
-      readUserGroupList();
+       void readUserGroupList();
       if (numericId && !isNew) {
         // Find user from store
         const users = useAppUserStore.getState().users;
@@ -165,7 +165,7 @@ function UserEditPage() {
       <Title order={1} mb="lg">
         {isNew ? "Add User" : "Edit User"}
       </Title>
-      <form onSubmit={handleSubmit}>
+       <form onSubmit={(e) => void handleSubmit(e)}>
         <TextInput
           label="Username"
           value={formData.userName}
@@ -249,7 +249,7 @@ function UserEditPage() {
       </form>
       <DeleteConfirmModal
         isOpen={deleteModalOpen}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={() => void handleDeleteConfirm()}
         onCancel={handleDeleteCancel}
         entityType="user"
       />

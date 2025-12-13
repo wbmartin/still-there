@@ -20,7 +20,7 @@ function UserAdminPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      readUserList();
+       void readUserList();
     }
   }, [authState, readUserList]);
   //============================^HOOOK LINE ^====================

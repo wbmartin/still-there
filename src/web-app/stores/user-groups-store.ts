@@ -28,7 +28,7 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
     try {
       const response = await apiRequest(API_ENDPOINTS.USER_GROUP_LIST);
       if (!response.ok) throw new Error("Failed to fetch user groups");
-      const data: ApiResponse<ApiUserGroupModel[]> = await response.json();
+			const data = await response.json() as ApiResponse<ApiUserGroupModel[]>;
       const userGroups = data.data.map((g) => ({
         userGroupId: g.userGroupId,
         groupName: g.groupName,
@@ -123,8 +123,7 @@ export const useUserGroupsStore = create<UserGroupsState>((set, get) => ({
         API_ENDPOINTS.GRANT_LIST,
       );
     if (!response.ok) throw new Error("Failed to fetch grant list");
-    const data: { data: { id: number; text: string }[] } =
-      await response.json();
+    const data = await response.json() as { data: { id: number; text: string }[] };
     return data.data;
   },
   //============================^FUNCTION LINE ^============================
