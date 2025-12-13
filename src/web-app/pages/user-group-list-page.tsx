@@ -9,7 +9,7 @@ import type { UserGroup } from "../types/user-group-type";
 
 function UserGroupAdminPage() {
   const authState = useAuthGuard();
-  const { userGroupList, loading, readUserGroupList, deleteUserGroup } =
+  const { userGroupList, loading, retrieveUserGroupList, deleteUserGroup } =
     useUserGroupsStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -21,9 +21,9 @@ function UserGroupAdminPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void readUserGroupList();
+      void retrieveUserGroupList();
     }
-  }, [authState, readUserGroupList]);
+    }, [authState, retrieveUserGroupList]);
 
   //============================^HOOOK LINE ^====================
 
@@ -66,7 +66,7 @@ function UserGroupAdminPage() {
       <Group justify="space-between" mb="lg">
         <Title order={1}>User Group Admin</Title>
         <Button
-          onClick={() => navigate(`/${ROUTES.USER_GROUP_EDIT}?userGroupId=new`)}
+          onClick={() => void navigate(`/${ROUTES.USER_GROUP_EDIT}?userGroupId=new`)}
         >
           Add User Group
         </Button>
@@ -90,7 +90,7 @@ function UserGroupAdminPage() {
                 <Button
                   size="xs"
                   onClick={() =>
-                    navigate(
+                    void navigate(
                       `/${ROUTES.USER_GROUP_EDIT}?userGroupId=${group.userGroupId}`,
                     )
                   }

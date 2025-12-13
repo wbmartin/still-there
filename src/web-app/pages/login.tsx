@@ -31,7 +31,7 @@ function Login() {
     } else if (authState === "YES") {
       // Navigate to postAuthDestination or dashboard
       const destination = postAuthDestination || "/dashboard";
-      navigate(destination);
+      void navigate(destination);
     }
   }, [authState, postAuthDestination, navigate]);
 

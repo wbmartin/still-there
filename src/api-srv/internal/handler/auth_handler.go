@@ -32,7 +32,7 @@ func AuthHandler(appServices *app_lib.AppServices,
 			"Auth request parsed for user: "+req.UserName)
 
 		// Read user from database
-		user, err := userRepo.ReadUserByUserName(r.Context(), req.UserName)
+		user, err := userRepo.RetrieveUserByUserName(r.Context(), req.UserName)
 		if err != nil {
 			appServices.Logger.Warn("USLK",
 				"User lookup failed for user: "+req.UserName+", error: "+err.Error())
@@ -112,7 +112,7 @@ func AuthHandler(appServices *app_lib.AppServices,
 		csrfToken = sessionID[len(sessionID)-3:]
 
 		// Read user grants for response
-		grantList, err := userRepo.ReadUserGrantList(r.Context(), user.UserGroupMembershipList)
+		grantList, err := userRepo.RetrieveUserGrantList(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
@@ -173,7 +173,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		_ = appServices.KV.Set(tempTokenKey, "", "0s") // Expire immediately
 
 		// Read user
-		user, err := userRepo.ReadUserByUserName(r.Context(), username)
+		user, err := userRepo.RetrieveUserByUserName(r.Context(), username)
 		if err != nil {
 			appServices.Logger.Error("JWFL", "Failed to create JWT: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error",
@@ -207,7 +207,7 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 		csrfToken = sessionID[len(sessionID)-3:]
 
 		// Read user grants for response
-		grantList, err := userRepo.ReadUserGrantList(r.Context(), user.UserGroupMembershipList)
+		grantList, err := userRepo.RetrieveUserGrantList(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
@@ -260,7 +260,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		jwtClaims := app.GetClaims()
 
 		// Read user
-		user, err := userRepo.ReadUserByUserName(r.Context(), jwtClaims.Subject)
+		user, err := userRepo.RetrieveUserByUserName(r.Context(), jwtClaims.Subject)
 		if err != nil {
 			appServices.Logger.Error("USLK", "User lookup failed during refresh for user: "+jwtClaims.Subject+", error: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, jwtClaims.Subject)
@@ -287,7 +287,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		})
 
 		// Read user grants for response
-		grantList, err := userRepo.ReadUserGrantList(r.Context(), user.UserGroupMembershipList)
+		grantList, err := userRepo.RetrieveUserGrantList(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, jwtClaims.Subject)
@@ -346,7 +346,7 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 // createJWTForUser creates a JWT token for the authenticated user
 func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices *app_lib.AppServices, userGroupRepo *repository.UserGroupRepository) (string, string, error) {
 	// Read user grants
-	grants, err := userGroupRepo.ReadUserGroupListByIDList(ctx, user.UserGroupMembershipList)
+	grants, err := userGroupRepo.RetrieveUserGroupListByIDList(ctx, user.UserGroupMembershipList)
 	if err != nil {
 		return "", "", err
 	}

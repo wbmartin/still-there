@@ -20,9 +20,9 @@ import { defaultUserFormData } from "../types/user-type";
 function UserEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
-  const { readUserById, createUser, updateUser, deleteUser } =
+  const { retrieveUserById, createUser, updateUser, deleteUser } =
     useAppUserStore();
-  const { readUserGroupList, userGroupList } = useUserGroupsStore();
+  const { retrieveUserGroupList, userGroupList } = useUserGroupsStore();
   const navigate = useNavigate();
 
   const id = searchParams.get("appUserId") || "";
@@ -38,10 +38,10 @@ function UserEditPage() {
   useEffect(() => {
     if (!hasFetched.current) {
       hasFetched.current = true;
-      void readUserGroupList();
+       void retrieveUserGroupList();
       if (numericId && !isNew) {
         // Fetch the user directly
-        void readUserById(numericId).then((user) => {
+        void retrieveUserById(numericId).then((user) => {
           if (user) {
             setFormData({
               userName: user.userName,
@@ -64,7 +64,7 @@ function UserEditPage() {
         }, 0);
       }
     }
-  }, [numericId, isNew, readUserGroupList, readUserById]);
+  }, [numericId, isNew, retrieveUserGroupList, retrieveUserById]);
 
   //============================^HOOOK LINE ^====================
 
@@ -109,7 +109,7 @@ function UserEditPage() {
           withCloseButton: false,
         });
       }
-      navigate(`/${ROUTES.APP_USER_LIST}`);
+      void navigate(`/${ROUTES.APP_USER_LIST}`);
     } catch (error) {
       console.error("Error saving user:", error);
       notifications.show({
@@ -137,7 +137,7 @@ function UserEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-        navigate(`/${ROUTES.APP_USER_LIST}`);
+      void navigate(`/${ROUTES.APP_USER_LIST}`);
       } catch (error) {
         console.error("Error deleting user:", error);
         notifications.show({
@@ -242,7 +242,7 @@ function UserEditPage() {
           )}
           <Button
             variant="outline"
-            onClick={() => navigate(`/${ROUTES.APP_USER_LIST}`)}
+            onClick={() => void navigate(`/${ROUTES.APP_USER_LIST}`)}
           >
             Cancel
           </Button>

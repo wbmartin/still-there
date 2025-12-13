@@ -17,18 +17,18 @@ function AddRemoveUsersFromGroupModal({
   mode,
   onConfirm,
 }: AddRemoveUsersFromGroupModalProps) {
-  const { users, readUserList } = useAppUserStore();
+  const { userList, retrieveUserList } = useAppUserStore();
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
 
    useEffect(() => {
      if (isOpen) {
-       void readUserList(); // Fetch all users for the security context
+       void retrieveUserList(); // Fetch all users for the security context
      }
-   }, [isOpen, readUserList]);
+    }, [isOpen, retrieveUserList]);
   // ============================^HOOOK LINE ^====================
 
-  const availableUserList = users.filter((user) => {
+  const availableUserList = userList.filter((user) => {
     if (mode === "add") {
       return !user.userGroupMembershipList.includes(groupId || 0);
     } else {

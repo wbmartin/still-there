@@ -70,7 +70,7 @@ func (s *UserGroupRepositoryTestSuite) TestReadUserGroupList() {
 	}
 
 	// Test retrieving existing groups
-	groups, err := s.repo.ReadUserGroupListByIDList(context.Background(), existingGroupIDList)
+	groups, err := s.repo.RetrieveUserGroupListByIDList(context.Background(), existingGroupIDList)
 	s.NoError(err)
 	s.NotNil(groups)
 	s.Len(groups, len(existingGroupIDList))
@@ -88,23 +88,23 @@ func (s *UserGroupRepositoryTestSuite) TestReadUserGroupList() {
 	}
 }
 
-func (s *UserGroupRepositoryTestSuite) TestReadUserGroupListByIDListEmpty() {
+func (s *UserGroupRepositoryTestSuite) TestRetrieveUserGroupListByIDListEmpty() {
 	// Test with empty list
-	groups, err := s.repo.ReadUserGroupListByIDList(context.Background(), []int{})
+	groups, err := s.repo.RetrieveUserGroupListByIDList(context.Background(), []int{})
 	s.NoError(err)
 	s.Equal(0, len(groups))
 	s.Equal([]*model.UserGroupModel{}, groups)
 }
 
-func (s *UserGroupRepositoryTestSuite) TestReadUserGroupListByIDListNonExistent() {
+func (s *UserGroupRepositoryTestSuite) TestRetrieveUserGroupListByIDListNonExistent() {
 	// Test with non-existent IDs
 	groupIDList := []int{99999, 88888}
-	groups, err := s.repo.ReadUserGroupListByIDList(context.Background(), groupIDList)
+	groups, err := s.repo.RetrieveUserGroupListByIDList(context.Background(), groupIDList)
 	s.NoError(err)
 	s.Equal(0, len(groups)) // Should return empty slice for non-existent groups
 }
 
-func (s *UserGroupRepositoryTestSuite) TestReadUserGroupListByIDListPartial() {
+func (s *UserGroupRepositoryTestSuite) TestRetrieveUserGroupListByIDListPartial() {
 	// First, check what groups actually exist in the database
 	allGroups, err := s.db.Query(context.Background(), "SELECT user_group_id, group_name FROM user_group WHERE delete_user_id IS NULL ORDER BY user_group_id LIMIT 1")
 	s.NoError(err)
@@ -122,7 +122,7 @@ func (s *UserGroupRepositoryTestSuite) TestReadUserGroupListByIDListPartial() {
 
 	// Test with mix of existing and non-existing IDs
 	groupIDList := []int{existingID, 99999}
-	groups, err := s.repo.ReadUserGroupListByIDList(context.Background(), groupIDList)
+	groups, err := s.repo.RetrieveUserGroupListByIDList(context.Background(), groupIDList)
 	s.NoError(err)
 
 	// Should find only the existing group

@@ -5,15 +5,15 @@ import useAuthGuard from "../hooks/use-auth-guard";
 
 function Dashboard() {
   const authState = useAuthGuard();
-  const { exampleList, loading, readExampleList } = useExamplesStore();
+  const { exampleList, loading, retrieveExampleList } = useExamplesStore();
   const hasFetched = useRef(false);
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-       void readExampleList();
+       void retrieveExampleList();
     }
-  }, [authState, readExampleList]);
+  }, [authState, retrieveExampleList]);
 
   //============================^HOOOK LINE ^====================
   if (authState !== "YES") {

@@ -20,7 +20,7 @@ function ExampleEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
   const {
-    readExampleById,
+    retrieveExampleById,
     createExample,
     updateExample,
     deleteExample,
@@ -43,7 +43,7 @@ function ExampleEditPage() {
   useEffect(() => {
     if (numericId && !isNew && !hasFetched.current) {
       hasFetched.current = true;
-      void readExampleById(numericId)
+      void retrieveExampleById(numericId)
         .then((existingExample) => {
           if (existingExample) {
             const newFormData = {
@@ -79,7 +79,7 @@ function ExampleEditPage() {
   }, [
     numericId,
     isNew,
-    readExampleById,
+    retrieveExampleById,
   ]);
 
   //============================^HOOOK LINE ^====================
@@ -128,7 +128,7 @@ function ExampleEditPage() {
           withCloseButton: false,
         });
       }
-      navigate("/exampleList");
+      void navigate("/exampleList");
     } catch (error) {
       console.error("Error saving example:", error);
       notifications.show({
@@ -156,7 +156,7 @@ function ExampleEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-        navigate(`/${ROUTES.EXAMPLE_LIST}`);
+        void navigate(`/${ROUTES.EXAMPLE_LIST}`);
       } catch (error) {
         console.error("Error deleting example:", error);
         notifications.show({
@@ -231,7 +231,7 @@ function ExampleEditPage() {
            )}
            <Button
              variant="outline"
-             onClick={() => navigate("/exampleList")}
+              onClick={() => void navigate("/exampleList")}
            >
              Cancel
            </Button>

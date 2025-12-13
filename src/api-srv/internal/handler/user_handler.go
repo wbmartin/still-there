@@ -24,8 +24,8 @@ func NewUserHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 	}
 }
 
-// ReadUserList handles GET /userList
-func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
+// RetrieveUserList handles GET /userList
+func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
 	logger.Info("ULS0", "ReadUserList invoked")
 
@@ -56,7 +56,7 @@ func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read users (filtered by security context, optional idList, and afterUpdateTs)
-	users, err := h.userRepo.ReadUserList(r.Context(), jwtClaims.SecurityContext, idList, afterUpdateTs)
+	users, err := h.userRepo.RetrieveUserList(r.Context(), jwtClaims.SecurityContext, idList, afterUpdateTs)
 	if err != nil {
 		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve users", "ULF0", err)
 		return
@@ -74,8 +74,8 @@ func (h *UserHandler) ReadUserList(w http.ResponseWriter, r *http.Request) {
 	logger.Info("ULD1", "User list read completed")
 }
 
-// ReadGrantList handles GET /grantList
-func (h *UserHandler) ReadGrantList(w http.ResponseWriter, r *http.Request) {
+// RetrieveGrantList handles GET /grantList
+func (h *UserHandler) RetrieveGrantList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
 	logger.Info("RLS0", "ReadGrantList invoked")
 

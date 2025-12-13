@@ -19,8 +19,8 @@ func NewUserGroupRepository(db *pgxpool.Pool) *UserGroupRepository {
 	return &UserGroupRepository{db: db}
 }
 
-// ReadUserGroupListByIDList retrieves user groups by IDs
-func (r *UserGroupRepository) ReadUserGroupListByIDList(
+// RetrieveUserGroupListByIDList retrieves user groups by IDs
+func (r *UserGroupRepository) RetrieveUserGroupListByIDList(
 	ctx context.Context, groupIDs []int,
 ) ([]*model.UserGroupModel, error) {
 	if len(groupIDs) == 0 {
@@ -58,8 +58,8 @@ func (r *UserGroupRepository) ReadUserGroupListByIDList(
 	return groupList, nil
 }
 
-// ReadUserGroupList retrieves all user groups for a security context
-func (r *UserGroupRepository) ReadUserGroupList(
+// RetrieveUserGroupList retrieves all user groups for a security context
+func (r *UserGroupRepository) RetrieveUserGroupList(
 	ctx context.Context, securityContext int,
 ) ([]*model.UserGroupModel, error) {
 	query := `

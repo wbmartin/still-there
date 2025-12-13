@@ -23,8 +23,8 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-// ReadUserByUserName retrieves a user by username
-func (r *UserRepository) ReadUserByUserName(
+// RetrieveUserByUserName retrieves a user by username
+func (r *UserRepository) RetrieveUserByUserName(
 	ctx context.Context, username string,
 ) (*model.AppUserModel, error) {
 	query := `
@@ -57,8 +57,8 @@ func (r *UserRepository) ReadUserByUserName(
 	return &user, nil
 }
 
-// ReadUserGrantList retrieves user grants by security context
-func (r *UserRepository) ReadUserGrantList(
+// RetrieveUserGrantList retrieves user grants by security context
+func (r *UserRepository) RetrieveUserGrantList(
 	ctx context.Context, userGroupIDs []int,
 ) (map[int][]int, error) {
 	if len(userGroupIDs) == 0 {
@@ -152,9 +152,9 @@ func (r *UserRepository) UpdateUserPassword(
 	return nil
 }
 
-// ReadUserList retrieves users for a security context,
+// RetrieveUserList retrieves users for a security context,
 // optionally filtered by idList
-func (r *UserRepository) ReadUserList(
+func (r *UserRepository) RetrieveUserList(
 	ctx context.Context, securityContext int, idList []int, updateTs float64,
 ) ([]*model.AppUserModel, error) {
 	query := `
@@ -322,7 +322,7 @@ func (r *UserRepository) AddUserListToGroup(
 	}
 
 	// Return updated users; rescan required for updated group membership
-	return r.ReadUserList(ctx, securityContext, userIds, 0)
+	return r.RetrieveUserList(ctx, securityContext, userIds, 0)
 }
 
 // RemoveUserListFromGroup removes multiple users from a group with optimistic locking
@@ -369,7 +369,7 @@ func (r *UserRepository) RemoveUserListFromGroup(
 	}
 
 	// Return updated users; rescan required for updated group membership
-	return r.ReadUserList(ctx, securityContext, userIds, 0)
+	return r.RetrieveUserList(ctx, securityContext, userIds, 0)
 }
 
 // removeDuplicates removes duplicate integers from a slice

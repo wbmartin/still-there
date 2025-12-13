@@ -10,8 +10,8 @@ import type { User } from "../types/user-type";
 
 function UserAdminPage() {
   const authState = useAuthGuard();
-  const { userList, loading, readUserList, deleteUser } = useAppUserStore();
-  const { getGroupName, readUserGroupList } = useUserGroupsStore();
+  const { userList, loading, retrieveUserList, deleteUser } = useAppUserStore();
+  const { getGroupName, retrieveUserGroupList } = useUserGroupsStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
@@ -22,10 +22,10 @@ function UserAdminPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void readUserList();
-      void readUserGroupList();
+      void retrieveUserList();
+      void retrieveUserGroupList();
     }
-  }, [authState, readUserList, readUserGroupList]);
+    }, [authState, retrieveUserList, retrieveUserGroupList]);
   //============================^HOOOK LINE ^====================
 
   if (authState !== "YES") {
@@ -67,7 +67,7 @@ function UserAdminPage() {
       <Group justify="space-between" mb="lg">
         <Title order={1}>User Admin</Title>
         <Button
-          onClick={() => { navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=new`); }}
+          onClick={() => { void navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=new`); }}
         >
           Add User
         </Button>
@@ -101,7 +101,7 @@ function UserAdminPage() {
                 <Button
                   size="xs"
                   onClick={() => {
-                    navigate(
+                    void navigate(
                       `/${ROUTES.APP_USER_EDIT}?appUserId=${user.appUserId}`,
                     );
                   }}

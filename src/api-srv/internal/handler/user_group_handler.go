@@ -26,8 +26,8 @@ func NewUserGroupHandler(appServices *app_lib.AppServices,
 	}
 }
 
-// ReadUserGroupList handles GET /userGroupList
-func (h *UserGroupHandler) ReadUserGroupList(w http.ResponseWriter,
+// RetrieveUserGroupList handles GET /userGroupList
+func (h *UserGroupHandler) RetrieveUserGroupList(w http.ResponseWriter,
 	r *http.Request) {
 	logger := h.appsrv.Logger
 	logger.Info("URS0", "ReadUserGroupList invoked")
@@ -46,7 +46,7 @@ func (h *UserGroupHandler) ReadUserGroupList(w http.ResponseWriter,
 	jwtClaims := app.GetClaims()
 
 	// Read user groups
-	groups, err := h.userGroupRepo.ReadUserGroupList(r.Context(),
+	groups, err := h.userGroupRepo.RetrieveUserGroupList(r.Context(),
 		jwtClaims.SecurityContext)
 	if err != nil {
 		app.WriteError(w, http.StatusInternalServerError,

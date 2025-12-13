@@ -50,37 +50,51 @@ func (s *UserRepositoryTestSuite) TestNewUserRepository() {
 	s.Equal(s.db, repo.db)
 }
 
-func (s *UserRepositoryTestSuite) TestReadUserByUserName() {
-	// Test retrieving the admin user that should exist from initial data
-	user, err := s.repo.ReadUserByUserName(context.Background(), "admin")
-	if err != nil {
-		// Admin user might not exist if database wasn't initialized
-		s.T().Skip("Admin user not found in database - skipping test")
-		return
+func (s *UserRepositoryTestSuite) TestRetrieveUserByUserName() {
+	// Create a test user first
+	testUser := &model.AppUserModel{
+		UserName:                "RepoTestRetrieveUser",
+		PwHash:                  "$2a$10$test.hash.for.testing.purposes.only",
+		FirstName:               "Retrieve",
+		LastName:                "Test",
+		Email:                   "retrieve@example.com",
+		SecurityContext:         1,
+		UserGroupMembershipList: []int{1}, // Assuming group 1 exists
+		MFAExempt:               false,
+		CreateTS:                1234567890.123,
+		CreateUserID:            1,
+		UpdateTS:                1234567890.123,
+		UpdateUserID:            1,
 	}
 
+	created, err := s.repo.CreateUser(context.Background(), testUser)
+	s.NoError(err)
+	s.NotNil(created)
+
+	// Now retrieve the user by username
+	user, err := s.repo.RetrieveUserByUserName(context.Background(), "RepoTestRetrieveUser")
 	s.NoError(err)
 	s.NotNil(user)
-	s.Equal("admin", user.UserName)
-	s.Equal("Administrator", user.LastName)
-	s.Equal("admin@example.com", user.Email)
+	s.Equal("RepoTestRetrieveUser", user.UserName)
+	s.Equal("Test", user.LastName)
+	s.Equal("retrieve@example.com", user.Email)
 	s.Equal(1, user.SecurityContext)
-	s.True(user.MFAExempt)
+	s.False(user.MFAExempt)
 	s.NotNil(user.UserGroupMembershipList)
 	s.True(len(user.UserGroupMembershipList) > 0)
 	s.Nil(user.DeleteTS)
 	s.Nil(user.DeleteUserID)
 }
 
-func (s *UserRepositoryTestSuite) TestReadUserByUserNameNotFound() {
+func (s *UserRepositoryTestSuite) TestRetrieveUserByUserNameNotFound() {
 	// Test with non-existent username
-	user, err := s.repo.ReadUserByUserName(context.Background(), "nonexistentuser")
+	user, err := s.repo.RetrieveUserByUserName(context.Background(), "nonexistentuser")
 	s.Error(err)
 	s.Nil(user)
 	s.Contains(err.Error(), "user not found")
 }
 
-func (s *UserRepositoryTestSuite) TestReadUserGrantList() {
+func (s *UserRepositoryTestSuite) TestRetrieveUserGrantList() {
 	// First, check what groups actually exist
 	allGroups, err := s.db.Query(context.Background(), "SELECT user_group_id FROM user_group WHERE delete_user_id IS NULL ORDER BY user_group_id")
 	s.NoError(err)
@@ -101,7 +115,7 @@ func (s *UserRepositoryTestSuite) TestReadUserGrantList() {
 	}
 
 	// Test retrieving grants for existing groups
-	grants, err := s.repo.ReadUserGrantList(context.Background(), existingGroupIDList)
+	grants, err := s.repo.RetrieveUserGrantList(context.Background(), existingGroupIDList)
 	s.NoError(err)
 	s.NotNil(grants)
 
@@ -115,7 +129,7 @@ func (s *UserRepositoryTestSuite) TestReadUserGrantList() {
 
 func (s *UserRepositoryTestSuite) TestReadUserGrantsEmpty() {
 	// Test with empty slice
-	grants, err := s.repo.ReadUserGrantList(context.Background(), []int{})
+	grants, err := s.repo.RetrieveUserGrantList(context.Background(), []int{})
 	s.NoError(err)
 	s.NotNil(grants)
 	s.Equal(0, len(grants))
@@ -123,7 +137,7 @@ func (s *UserRepositoryTestSuite) TestReadUserGrantsEmpty() {
 
 func (s *UserRepositoryTestSuite) TestReadUserGrantsNonExistent() {
 	// Test with non-existent group IDs
-	grants, err := s.repo.ReadUserGrantList(context.Background(), []int{99999, 88888})
+	grants, err := s.repo.RetrieveUserGrantList(context.Background(), []int{99999, 88888})
 	s.NoError(err)
 	s.Equal(0, len(grants)) // Should return empty map for non-existent groups
 }

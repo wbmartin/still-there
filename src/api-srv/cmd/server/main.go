@@ -97,19 +97,19 @@ func main() {
 	mux.HandleFunc("POST /logoff", logoffHandler)
 
 	// Example CRUD
-	mux.HandleFunc("GET /example", exampleHandler.ReadExample)
+	mux.HandleFunc("GET /example", exampleHandler.RetrieveExample)
 	mux.HandleFunc("POST /example", exampleHandler.CreateExample)
 	mux.HandleFunc("PUT /example", exampleHandler.UpdateExample)
 	mux.HandleFunc("DELETE /example", exampleHandler.DeleteExample)
 
 	// Example list (all or by IDs)
-	mux.HandleFunc("GET /exampleList", exampleHandler.ReadExampleList)
+	mux.HandleFunc("GET /exampleList", exampleHandler.RetrieveExampleList)
 	mux.HandleFunc("POST /exampleList", exampleHandler.CreateExampleList)
 	mux.HandleFunc("PUT /exampleList", exampleHandler.UpdateExampleList)
 	mux.HandleFunc("DELETE /exampleList", exampleHandler.DeleteExampleList)
 
 	// User CRUD
-	mux.HandleFunc("GET /userList", userHandler.ReadUserList)
+	mux.HandleFunc("GET /userList", userHandler.RetrieveUserList)
 	mux.HandleFunc("POST /user", userHandler.CreateUser)
 	mux.HandleFunc("PUT /user", userHandler.UpdateUser)
 	mux.HandleFunc("DELETE /user", userHandler.DeleteUser)
@@ -118,10 +118,10 @@ func main() {
 	mux.HandleFunc("POST /removeUserListFromGroup",
 		userHandler.RemoveUserListFromGroupHandler)
 
-	mux.HandleFunc("GET /grantList", userHandler.ReadGrantList)
+	mux.HandleFunc("GET /grantList", userHandler.RetrieveGrantList)
 
 	// User groups
-	mux.HandleFunc("GET /userGroupList", userGroupHandler.ReadUserGroupList)
+	mux.HandleFunc("GET /userGroupList", userGroupHandler.RetrieveUserGroupList)
 	mux.HandleFunc("POST /userGroup", userGroupHandler.CreateUserGroup)
 	mux.HandleFunc("PUT /userGroup", userGroupHandler.UpdateUserGroup)
 	mux.HandleFunc("DELETE /userGroup", userGroupHandler.DeleteUserGroup)

@@ -8,11 +8,11 @@ interface ExamplesState {
   maxExampleUpdateTs: number;
   loading: boolean;
   error: string | null;
-  readExampleById: (id: number) => Promise<Example | null>;
+  retrieveExampleById: (id: number) => Promise<Example | null>;
   createExample: (data: Partial<Example>) => Promise<void>;
   updateExample: (id: number, data: Partial<Example>) => Promise<void>;
   deleteExample: (id: number) => Promise<void>;
-  readExampleList: () => Promise<void>;
+  retrieveExampleList: () => Promise<void>;
   clearCache: () => void;
 }
 
@@ -22,7 +22,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
   loading: false,
   error: null,
   //============================^FUNCTION LINE ^============================
-  readExampleList: async () => {
+  retrieveExampleList: async () => {
     // console.log("getExampleList called");
     const { maxExampleUpdateTs } = get();
     set({ loading: true });
@@ -108,7 +108,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
     }
   },
   //============================^FUNCTION LINE ^============================
-  readExampleById: async (id: number): Promise<Example | null> => {
+  retrieveExampleById: async (id: number): Promise<Example | null> => {
     try {
       const response = await apiRequest(`/example?exampleId=${id}`);
       if (!response.ok) {
@@ -182,7 +182,10 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       };
       set((state) => ({
         exampleList: [...state.exampleList, newExample],
-        maxUpdateTs: Math.max(state.maxUpdateTs, newExample.updateTs),
+        maxExampleUpdateTs: Math.max(
+          state.maxExampleUpdateTs,
+          newExample.updateTs
+        ),
       }));
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -210,7 +213,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       });
       if (!response.ok) throw new Error("Failed to update example");
       // Optionally refetch or update local state
-      await get().readExampleList();
+      await get().retrieveExampleList();
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
     }

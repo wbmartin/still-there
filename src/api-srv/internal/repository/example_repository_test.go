@@ -61,7 +61,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExample() {
 	s.Equal("RepoTest Example", created.ExampleText)
 }
 
-func (s *ExampleRepositoryTestSuite) TestReadExample() {
+func (s *ExampleRepositoryTestSuite) TestRetrieveExample() {
 	// Create test data first
 	example := &model.ExampleModel{
 		ExampleText:     "RepoTest Read Example",
@@ -75,7 +75,7 @@ func (s *ExampleRepositoryTestSuite) TestReadExample() {
 	created, _ := s.repo.CreateExample(context.Background(), example)
 
 	// Test retrieval
-	retrieved, err := s.repo.ReadExample(context.Background(), created.ExampleID, 1)
+	retrieved, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
 	s.NoError(err)
 	s.Equal(created.ExampleID, retrieved.ExampleID)
 	s.Equal("RepoTest Read Example", retrieved.ExampleText)
@@ -103,7 +103,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExample() {
 	s.NoError(err)
 
 	// Verify update
-	updated, _ := s.repo.ReadExample(context.Background(), created.ExampleID, 1)
+	updated, _ := s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
 	s.Equal("RepoTest Updated Example", updated.ExampleText)
 }
 
@@ -126,7 +126,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExample() {
 	s.Equal(created.ExampleID, deletedID)
 
 	// Verify deletion (soft delete) - should return ErrDeleted
-	_, err = s.repo.ReadExample(context.Background(), created.ExampleID, 1)
+	_, err = s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
 	s.Error(err)
 	s.True(errors.Is(err, ErrDeleted))
 }
@@ -158,7 +158,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExampleList() {
 	s.NotZero(created[1].ExampleID)
 }
 
-func (s *ExampleRepositoryTestSuite) TestReadExampleList() {
+func (s *ExampleRepositoryTestSuite) TestRetrieveExampleList() {
 	// Create test data
 	example1 := &model.ExampleModel{
 		ExampleText:     "RepoTest List Get 1",
@@ -182,7 +182,7 @@ func (s *ExampleRepositoryTestSuite) TestReadExampleList() {
 
 	// Test list retrieval
 	ids := []int{created1.ExampleID, created2.ExampleID}
-	retrieved, err := s.repo.ReadExampleList(context.Background(), ids, 1, 0)
+	retrieved, err := s.repo.RetrieveExampleList(context.Background(), ids, 1, 0)
 	s.NoError(err)
 	s.Len(retrieved, 2)
 }

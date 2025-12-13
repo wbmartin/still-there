@@ -25,8 +25,8 @@ func NewExampleHandler(appServices *app_lib.AppServices, exampleRepo *repository
 	}
 }
 
-// ReadExample handles GET /example
-func (h *ExampleHandler) ReadExample(w http.ResponseWriter, r *http.Request) {
+// RetrieveExample handles GET /example
+func (h *ExampleHandler) RetrieveExample(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
 	logger.Info("RTS0", "ReadExample invoked")
 
@@ -53,7 +53,7 @@ func (h *ExampleHandler) ReadExample(w http.ResponseWriter, r *http.Request) {
 	// Caller information automatically added to log messages
 
 	// Read example
-	example, err := h.exampleRepo.ReadExample(r.Context(), exampleID, jwtClaims.SecurityContext)
+	example, err := h.exampleRepo.RetrieveExample(r.Context(), exampleID, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			app.WriteError(w, http.StatusNotFound, "Example not found", "ERR", nil)
@@ -249,8 +249,8 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	logger.Info("DLD0", "Example deletion completed")
 }
 
-// ReadExampleList handles GET /exampleList?exampleIdList={comma-separated} (optional, if empty returns all)
-func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request) {
+// RetrieveExampleList handles GET /exampleList?exampleIdList={comma-separated} (optional, if empty returns all)
+func (h *ExampleHandler) RetrieveExampleList(w http.ResponseWriter, r *http.Request) {
 	logger := h.appsrv.Logger
 	logger.Info("RLS0", "ReadExampleList invoked")
 
@@ -281,7 +281,7 @@ func (h *ExampleHandler) ReadExampleList(w http.ResponseWriter, r *http.Request)
 	}
 
 	// If idList is empty, ReadExampleList returns all or filtered by afterUpdateTs
-	examples, err := h.exampleRepo.ReadExampleList(r.Context(), idList, jwtClaims.SecurityContext, afterUpdateTs)
+	examples, err := h.exampleRepo.RetrieveExampleList(r.Context(), idList, jwtClaims.SecurityContext, afterUpdateTs)
 	if err != nil {
 		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve examples", "LIF0", err)
 		return

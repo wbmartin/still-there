@@ -22,8 +22,8 @@ func NewExampleRepository(db *pgxpool.Pool) *ExampleRepository {
 	return &ExampleRepository{db: db}
 }
 
-// ReadExample retrieves an example by ID and security context
-func (r *ExampleRepository) ReadExample(
+// RetrieveExample retrieves an example by ID and security context
+func (r *ExampleRepository) RetrieveExample(
 	ctx context.Context,
 	exampleID int,
 	securityContext int,
@@ -214,10 +214,10 @@ func (r *ExampleRepository) DeleteExample(
 	return exampleID, nil
 }
 
-// ReadExampleList retrieves multiple examples by IDs and security context,
+// RetrieveExampleList retrieves multiple examples by IDs and security context,
 // or all if idList is empty
 // If afterUpdateTs > 0, only returns examples with update_ts > afterUpdateTs
-func (r *ExampleRepository) ReadExampleList(
+func (r *ExampleRepository) RetrieveExampleList(
 	ctx context.Context,
 	idList []int,
 	securityContext int,

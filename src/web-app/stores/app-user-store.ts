@@ -8,9 +8,24 @@ interface AppUserState {
   maxAppUserUpdateTs: number;
   loading: boolean;
   error: string | null;
-  readUserList: () => Promise<void>;
-  readUserById: (id: number) => Promise<User | null>;
-  createUser: (data: Omit<User, 'appUserId' | 'createTs' | 'createUserId' | 'updateTs' | 'updateUserId'>) => Promise<void>;
+	retrieveUserList: () => Promise<void>;
+  retrieveUserById: (id: number) => Promise<User | null>;
+  addUserListToGroup: (
+    userIds: number[],
+    groupId: number,
+    updateTsList: number[]
+  ) => Promise<void>;
+  removeUserListFromGroup: (
+    userIds: number[],
+    groupId: number,
+    updateTsList: number[]
+  ) => Promise<void>;
+  createUser: (
+    data: Omit<
+      User,
+      'appUserId' | 'createTs' | 'createUserId' | 'updateTs' | 'updateUserId' | 'securityContext'
+    >
+  ) => Promise<void>;
   updateUser: (id: number, data: Partial<User>) => Promise<void>;
   deleteUser: (id: number) => Promise<void>;
   clearCache: () => void;
@@ -22,7 +37,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
   loading: false,
   error: null,
 	//============================^FUNCTION LINE ^============================
-	readUserList: async (idList?: number[]) => {
+	retrieveUserList: async (idList?: number[]) => {
 		set({ loading: true });
 		try {
 			let url = API_ENDPOINTS.USER_LIST;
@@ -59,7 +74,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
 			set({ loading: false, error: errorMessage });
 		}
   },
-  readUserById: async (id: number) => {
+  retrieveUserById: async (id: number) => {
     const maxTs = get().maxAppUserUpdateTs;
     const url = `${API_ENDPOINTS.USER_LIST}?userIdList=${id}&afterUpdateTs=${maxTs}`;
     try {
@@ -67,7 +82,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
       if (!response.ok) throw new Error("Failed to fetch user");
       const data = await response.json() as ApiResponse<ApiUserModel[]> | null;
       if (!data || !data.data) {
-        return get().users.find(u => u.appUserId === id) || null;
+        return get().userList.find(u => u.appUserId === id) || null;
       }
       if (data.data.length > 0) {
         // Update cache with new user data (sync)
@@ -101,7 +116,31 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
       return null;
     }
   },
-  //============================^FUNCTION LINE ^============================
+  addUserListToGroup: async (
+    userIds: number[],
+    groupId: number,
+    updateTsList: number[]
+  ) => {
+    const response = await apiRequest(API_ENDPOINTS.ADD_USER_LIST_TO_GROUP, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userIds, groupId, updateTsList }),
+    });
+    if (!response.ok) throw new Error("Failed to add users to group");
+    const data = await response.json() as ApiResponse<ApiUserModel[]>;
+    // Update the cache with the returned users
+    set(state => ({
+      userList: state.userList.map(u => {
+        const updated = data.data.find(du => du.appUserId === u.appUserId);
+        return updated ? {
+          ...u,
+          userGroupMembershipList: updated.userGroupMembershipList,
+          updateTs: updated.updateTs
+        } : u;
+      })
+    }));
+  },
+
   createUser: async (data: Partial<User>) => {
     set({ error: null });
     try {
@@ -137,7 +176,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
         updateUserId: apiUser.updateUserId,
       };
       set((state) => ({
-        users: [...state.users, newUser],
+        userList: [...state.userList, newUser],
       }));
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -169,7 +208,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
       }
       // Update local state
       set((state) => ({
-        users: state.users.map(
+        userList: state.userList.map(
           (u: User) => (u.appUserId === id ? { ...u, ...data } : u),
         ),
       }));
@@ -182,7 +221,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
     set({ error: null });
     try {
       const state = get();
-      const user = state.users.find((u) => u.appUserId === id);
+      const user = state.userList.find((u) => u.appUserId === id);
       if (!user) throw new Error("User not found");
       const response = await apiRequest(API_ENDPOINTS.USER + `?userId=${id}&updateTs=${user.updateTs}`, {
         method: "DELETE",
@@ -190,7 +229,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
       if (!response.ok) throw new Error("Failed to delete user");
       // Remove from local state
       set((state) => ({
-        users: state.users.filter((u: User) => u.appUserId !== id),
+        userList: state.userList.filter((u: User) => u.appUserId !== id),
       }));
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
@@ -198,53 +237,16 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
     }
   },
 
-  //============================^FUNCTION LINE ^============================
-  addUserListToGroup: async (userIds: number[], groupId: number) => {
-    set({ error: null });
-    try {
-      // Get current updateTs for each user
-      const state = get();
-      const updateTsList = userIds.map(id => {
-        const user = state.users.find(u => u.appUserId === id);
-        if (!user) throw new Error(`User ${id} not found in cache`);
-        return user.updateTs;
-      });
 
-      const response = await apiRequest(API_ENDPOINTS.ADD_USER_LIST_TO_GROUP, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userIds, groupId, updateTsList }),
-      });
-      if (!response.ok) throw new Error("Failed to add users to group");
-			const data = await response.json() as ApiResponse<User[]>;
-      // Update local cache with returned users
-      set((state) => ({
-        users: state.users.map(u => {
-          const updated = data.data.find(nu => nu.appUserId === u.appUserId);
-          return updated || u;
-        }),
-      }));
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      set({ error: errorMessage });
-      throw new Error(errorMessage);
-    }
-  },
 
   //============================^FUNCTION LINE ^============================
-  removeUserListFromGroup: async (userIds: number[], groupId: number) => {
+  removeUserListFromGroup: async (
+    userIds: number[],
+    groupId: number,
+    updateTsList: number[]
+  ) => {
     set({ error: null });
     try {
-      // Get current updateTs for each user
-      const state = get();
-      const updateTsList = userIds.map(id => {
-        const user = state.users.find(
-          u => u.appUserId === id,
-        );
-        if (!user) throw new Error(`User ${id} not found in cache`);
-        return user.updateTs;
-      });
-
       const response = await apiRequest(
         API_ENDPOINTS.REMOVE_USER_LIST_FROM_GROUP,
         {
@@ -254,21 +256,18 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
       });
       if (!response.ok) throw new Error("Failed to remove users from group");
 			const data = await response.json() as ApiResponse<User[]>;
-      // Update local cache with returned users
-      set((state) => ({
-        users: state.users.map(u => {
-          const updated = data.data.find(nu => nu.appUserId === u.appUserId);
-          return updated || u;
-        }),
-      }));
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      set({ error: errorMessage });
-      throw new Error(errorMessage);
-    }
-  },
-
-  //============================^FUNCTION LINE ^============================
+       // Update local cache with returned users
+       set((state) => ({
+       userList: state.userList.map(
+         u => data.data.find(nu => nu.appUserId === u.appUserId) || u
+       ),
+        }));
+     } catch (err: unknown) {
+       const errorMessage = err instanceof Error ? err.message : "Unknown error";
+       set({ error: errorMessage });
+       throw new Error(errorMessage);
+     }
+    },
   clearCache: () => {
     set({ userList: [], maxAppUserUpdateTs: 0 });
   },

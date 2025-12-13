@@ -11,7 +11,7 @@ function ExampleListPage() {
   const {
     exampleList,
     loading,
-    readExampleList,
+    retrieveExampleList,
     deleteExample,
   } = useExamplesStore();
   const navigate = useNavigate();
@@ -24,9 +24,9 @@ function ExampleListPage() {
    useEffect(() => {
      if (!hasFetched.current && authState === "YES") {
        hasFetched.current = true;
-       void readExampleList();
+       void retrieveExampleList();
      }
-   }, [authState, readExampleList]);
+   }, [authState, retrieveExampleList]);
 
   //============================^HOOOK LINE ^====================
 
@@ -52,7 +52,7 @@ function ExampleListPage() {
       try {
         await deleteExample(deleteId);
         // List is updated locally, but refresh to ensure sync
-        await       readExampleList();
+        await retrieveExampleList();
       } catch (error) {
         console.error("Error deleting example:", error);
         // Error is handled in store
@@ -71,7 +71,7 @@ function ExampleListPage() {
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
         <Title order={1}>Examples</Title>
-        <Button onClick={() => navigate(`/${ROUTES.EXAMPLE_EDIT}?exampleId=new`)}>
+        <Button onClick={() => void navigate(`/${ROUTES.EXAMPLE_EDIT}?exampleId=new`)}>
           Add Example
         </Button>
       </Group>
@@ -95,9 +95,9 @@ function ExampleListPage() {
                <Table.Td>
                  <Button
                    size="xs"
-                   onClick={() =>
-                      navigate(`/${ROUTES.EXAMPLE_EDIT}?exampleId=${example.exampleId}`)
-                   }
+                    onClick={() =>
+                       void navigate(`/${ROUTES.EXAMPLE_EDIT}?exampleId=${example.exampleId}`)
+                    }
                  >
                    Edit
                  </Button>

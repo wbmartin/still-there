@@ -26,7 +26,7 @@ function UserGroupEditPage() {
     useUserGroupsStore();
   const {
     userList,
-    readUserList,
+    retrieveUserList,
     addUserListToGroup,
     removeUserListFromGroup,
   } = useAppUserStore();
@@ -75,9 +75,9 @@ function UserGroupEditPage() {
         }, 0);
       }
       // Load users for the group management
-      void readUserList();
+      void retrieveUserList();
     }
-  }, [numericId, readUserList]);
+  }, [numericId, retrieveUserList]);
 
   //============================^HOOOK LINE ^====================
 
@@ -116,7 +116,7 @@ function UserGroupEditPage() {
           withCloseButton: false,
         });
       }
-      navigate(`/${ROUTES.USER_GROUP_LIST}`);
+      void navigate(`/${ROUTES.USER_GROUP_LIST}`);
     } catch (error) {
       console.error("Error saving user group:", error);
       notifications.show({
@@ -144,7 +144,7 @@ function UserGroupEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-        navigate(`/${ROUTES.USER_GROUP_LIST}`);
+      void navigate(`/${ROUTES.USER_GROUP_LIST}`);
       } catch (error) {
         console.error("Error deleting user group:", error);
         notifications.show({
@@ -165,11 +165,14 @@ function UserGroupEditPage() {
 
   const handleUserModalConfirm = async (userIds: number[]) => {
     if (!numericId) return;
+    const updateTsList = userIds.map(
+      id => userList.find(u => u.appUserId === id)?.updateTs || 0
+    );
     try {
       if (userModalMode === "add") {
-        await addUserListToGroup(userIds, numericId);
+        await addUserListToGroup(userIds, numericId, updateTsList);
       } else {
-        await removeUserListFromGroup(userIds, numericId);
+        await removeUserListFromGroup(userIds, numericId, updateTsList);
       }
       notifications.show({
         title: "Success",
@@ -220,7 +223,7 @@ function UserGroupEditPage() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => navigate(`/${ROUTES.USER_GROUP_LIST}`)}
+            onClick={() => void navigate(`/${ROUTES.USER_GROUP_LIST}`)}
           >
             Cancel
           </Button>
@@ -282,7 +285,7 @@ function UserGroupEditPage() {
         onClose={() => setUserModalOpen(false)}
         groupId={numericId}
         mode={userModalMode}
-        onConfirm={() => void handleUserModalConfirm()}
+        onConfirm={handleUserModalConfirm}
       />
     </div>
   );
