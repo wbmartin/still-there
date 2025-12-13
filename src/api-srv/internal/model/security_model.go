@@ -8,13 +8,13 @@ type AuthRequestModel struct {
 
 // AuthResponseModel represents the response for initial authentication
 type AuthResponseModel struct {
-	AppUserID              int              `json:"appUserId"`
-	UserName               string           `json:"userName"`
-	FirstName              string           `json:"firstName"`
-	LastName               string           `json:"lastName"`
-	SecurityContext        int              `json:"securityContext"`
-	UserGrantShortCodeList map[int][]string `json:"userGrantShortCodeList"` // by security_context
-	TempToken              string           `json:"tempToken,omitempty"`    // MFA required
+	AppUserID       int           `json:"appUserId"`
+	UserName        string        `json:"userName"`
+	FirstName       string        `json:"firstName"`
+	LastName        string        `json:"lastName"`
+	SecurityContext int           `json:"securityContext"`
+	GrantList       map[int][]int `json:"grantList"`           // by security_context
+	TempToken       string        `json:"tempToken,omitempty"` // MFA required
 }
 
 // AuthResponseWrapper wraps the auth response for consistency
@@ -31,12 +31,12 @@ type Auth2RequestModel struct {
 
 // Auth2ResponseModel represents the response for successful MFA authentication
 type Auth2ResponseModel struct {
-	AppUserID              int              `json:"appUserId"`
-	UserName               string           `json:"userName"`
-	FirstName              string           `json:"firstName"`
-	LastName               string           `json:"lastName"`
-	SecurityContext        int              `json:"securityContext"`
-	UserGrantShortCodeList map[int][]string `json:"userGrantShortCodeList"`
+	AppUserID       int           `json:"appUserId"`
+	UserName        string        `json:"userName"`
+	FirstName       string        `json:"firstName"`
+	LastName        string        `json:"lastName"`
+	SecurityContext int           `json:"securityContext"`
+	GrantList       map[int][]int `json:"grantList"`
 }
 
 // Auth2ResponseWrapper wraps the auth2 response for consistency

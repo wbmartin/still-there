@@ -42,9 +42,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
        const data = await response.json() as LoginResponse;
         if (data.user) {
           setCsrfToken(data.csrfToken);
+          const grantMap = data.user.grantList || {};
+          const allGrantIds: number[] = [];
+          Object.values(grantMap).forEach(ids => allGrantIds.push(...ids));
+          const uniqueGrantIds = [...new Set(allGrantIds)];
           set({
             authState: "YES",
-            grantList: data.user.grantList || [],
+            grantList: uniqueGrantIds,
             userName: data.user.userName || "",
             securityContext: data.user.securityContext || 0,
           });
@@ -69,9 +73,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
         if (data.user) {
           // console.log("Auth refresh successful for user:", data.user);
           setCsrfToken(data.csrfToken);
+          const grantMap = data.user.grantList || {};
+          const allGrantIds: number[] = [];
+          Object.values(grantMap).forEach(ids => allGrantIds.push(...ids));
+          const uniqueGrantIds = [...new Set(allGrantIds)];
           set({
             authState: "YES",
-            grantList: data.user.grantList || [],
+            grantList: uniqueGrantIds,
             userName: data.user.userName || "",
             securityContext: data.user.securityContext || 0,
           });

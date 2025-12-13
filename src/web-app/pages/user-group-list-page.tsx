@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Table, Button, Title, Group, Pagination } from "@mantine/core";
+import { Table, Button, Title, Group, Pagination, Badge, Flex } from "@mantine/core";
 import { useUserGroupsStore } from "../stores/user-groups-store";
+import { useAuthStore } from "../stores/auth-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
+import { grants } from "../constants/grants";
 import type { UserGroup } from "../types/user-group-type";
 
 function UserGroupAdminPage() {
   const authState = useAuthGuard();
+  const { grantList } = useAuthStore();
   const { userGroupList, loading, retrieveUserGroupList, deleteUserGroup } =
     useUserGroupsStore();
   const navigate = useNavigate();
@@ -61,15 +64,22 @@ function UserGroupAdminPage() {
     setDeleteId(null);
   };
 
+  // Authorization checks
+  const canCreateUserGroup = grantList.includes(grants.CREATE_USER_GROUP);
+  const canUpdateUserGroup = grantList.includes(grants.UPDATE_USER_GROUP);
+  const canDeleteUserGroup = grantList.includes(grants.DELETE_USER_GROUP);
+
   return (
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
         <Title order={1}>User Group Admin</Title>
-        <Button
-          onClick={() => void navigate(`/${ROUTES.USER_GROUP_EDIT}?userGroupId=new`)}
-        >
-          Add User Group
-        </Button>
+        {canCreateUserGroup && (
+          <Button
+            onClick={() => void navigate(`/${ROUTES.USER_GROUP_EDIT}?userGroupId=new`)}
+          >
+            Add User Group
+          </Button>
+        )}
       </Group>
       <Table>
         <Table.Thead>
@@ -85,27 +95,39 @@ function UserGroupAdminPage() {
             <Table.Tr key={group.userGroupId}>
               <Table.Td>{group.userGroupId}</Table.Td>
               <Table.Td>{group.groupName}</Table.Td>
-              <Table.Td>{group.userGrantList.join(", ")}</Table.Td>
-              <Table.Td>
-                <Button
-                  size="xs"
-                  onClick={() =>
-                    void navigate(
-                      `/${ROUTES.USER_GROUP_EDIT}?userGroupId=${group.userGroupId}`,
-                    )
-                  }
-                >
-                  Edit
-                </Button>
-                <Button
-                  size="xs"
-                  color="red"
-                  ml="xs"
-                  onClick={() => handleDeleteClick(group.userGroupId)}
-                >
-                  Delete
-                </Button>
-              </Table.Td>
+               <Table.Td>
+                 <Flex gap="xs" wrap="wrap">
+                   {group.userGrantList.map(id => (
+                     <Badge key={id} variant="light" size="sm">
+                       {grants.idToName(id)}
+                     </Badge>
+                   ))}
+                 </Flex>
+               </Table.Td>
+               <Table.Td>
+                 {canUpdateUserGroup && (
+                   <Button
+                     size="xs"
+                     onClick={() =>
+                       void navigate(
+                         `/${ROUTES.USER_GROUP_EDIT}?userGroupId=${group.userGroupId}`,
+                       )
+                     }
+                   >
+                     Edit
+                   </Button>
+                 )}
+                 {canDeleteUserGroup && (
+                   <Button
+                     size="xs"
+                     color="red"
+                     ml="xs"
+                     onClick={() => handleDeleteClick(group.userGroupId)}
+                   >
+                     Delete
+                   </Button>
+                 )}
+               </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

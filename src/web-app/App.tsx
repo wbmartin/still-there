@@ -11,6 +11,7 @@ import UserGroupEditPage from './pages/user-group-edit-page'
 
 import { useAuthStore } from './stores/auth-store'
 import { ROUTES } from './constants/routes'
+import { grants } from './constants/grants'
 
 const router = createBrowserRouter([
   {
@@ -58,13 +59,17 @@ const router = createBrowserRouter([
 ])
 
 function AppLayout() {
-  const { logout, authState } = useAuthStore();
+  const { logout, authState, grantList } = useAuthStore();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
     await logout();
     void navigate(`/${ROUTES.LOGIN}`);
   };
+
+  // Authorization checks for navigation
+  const canManageUsers = grantList.includes(grants.CREATE_USER);
+  const canManageUserGroups = grantList.includes(grants.CREATE_USER_GROUP);
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
@@ -74,12 +79,12 @@ function AppLayout() {
           <Stack gap="xs">
             <NavLink component={Link} to={`/${ROUTES.DASHBOARD}`} label="Dashboard" />
             <NavLink component={Link} to={`/${ROUTES.EXAMPLE_LIST}`} label="Examples" />
-            <NavLink component={Link} to={`/${ROUTES.APP_USER_LIST}`} label="User Admin" />
-            <NavLink component={Link} to={`/${ROUTES.USER_GROUP_LIST}`} label="User Groups" />
+            {canManageUsers && <NavLink component={Link} to={`/${ROUTES.APP_USER_LIST}`} label="User Admin" />}
+            {canManageUserGroups && <NavLink component={Link} to={`/${ROUTES.USER_GROUP_LIST}`} label="User Groups" />}
              <Button variant="subtle" onClick={() => void handleLogout()} fullWidth style={{ justifyContent: 'flex-start' }}>
                Logout
              </Button>
-          </Stack>
+           </Stack>
         </nav>
         )}
         <main style={{ flex: 1, padding: '1rem' }}>

@@ -73,13 +73,13 @@ func AuthHandler(appServices *app_lib.AppServices,
 			}
 
 			response := model.AuthResponseModel{
-				AppUserID:              user.AppUserID,
-				UserName:               user.UserName,
-				FirstName:              user.FirstName,
-				LastName:               user.LastName,
-				SecurityContext:        user.SecurityContext,
-				UserGrantShortCodeList: make(map[int][]string), // Empty for MFA flow
-				TempToken:              tempToken,
+				AppUserID:       user.AppUserID,
+				UserName:        user.UserName,
+				FirstName:       user.FirstName,
+				LastName:        user.LastName,
+				SecurityContext: user.SecurityContext,
+				GrantList:       make(map[int][]int), // Empty for MFA flow
+				TempToken:       tempToken,
 			}
 
 			wrapper := model.AuthResponseWrapper{User: response}
@@ -118,25 +118,14 @@ func AuthHandler(appServices *app_lib.AppServices,
 			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
 			return
 		}
-		// Convert grants map to short codes
-		grantShortCodeList := make(map[int][]string)
-		for securityContext, grantIDs := range grantList {
-			var shortCodeList []string
-			for _, grantID := range grantIDs {
-				if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
-					shortCodeList = append(shortCodeList, shortCode)
-				}
-			}
-			grantShortCodeList[securityContext] = shortCodeList
-		}
 
 		response := model.Auth2ResponseModel{
-			AppUserID:              user.AppUserID,
-			UserName:               user.UserName,
-			FirstName:              user.FirstName,
-			LastName:               user.LastName,
-			SecurityContext:        user.SecurityContext,
-			UserGrantShortCodeList: grantShortCodeList,
+			AppUserID:       user.AppUserID,
+			UserName:        user.UserName,
+			FirstName:       user.FirstName,
+			LastName:        user.LastName,
+			SecurityContext: user.SecurityContext,
+			GrantList:       grantList,
 		}
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
@@ -214,25 +203,13 @@ func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRep
 			return
 		}
 
-		// Convert grants map to short codes
-		grantShortCodeList := make(map[int][]string)
-		for securityContext, grantIDs := range grantList {
-			var shortCodeList []string
-			for _, grantID := range grantIDs {
-				if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
-					shortCodeList = append(shortCodeList, shortCode)
-				}
-			}
-			grantShortCodeList[securityContext] = shortCodeList
-		}
-
 		response := model.Auth2ResponseModel{
-			AppUserID:              user.AppUserID,
-			UserName:               user.UserName,
-			FirstName:              user.FirstName,
-			LastName:               user.LastName,
-			SecurityContext:        user.SecurityContext,
-			UserGrantShortCodeList: grantShortCodeList,
+			AppUserID:       user.AppUserID,
+			UserName:        user.UserName,
+			FirstName:       user.FirstName,
+			LastName:        user.LastName,
+			SecurityContext: user.SecurityContext,
+			GrantList:       grantList,
 		}
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
@@ -294,25 +271,13 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 			return
 		}
 
-		// Convert grants map to short codes
-		grantShortCodeList := make(map[int][]string)
-		for securityContext, grantIDs := range grantList {
-			var shortCodeList []string
-			for _, grantID := range grantIDs {
-				if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
-					shortCodeList = append(shortCodeList, shortCode)
-				}
-			}
-			grantShortCodeList[securityContext] = shortCodeList
-		}
-
 		response := model.Auth2ResponseModel{
-			AppUserID:              user.AppUserID,
-			UserName:               user.UserName,
-			FirstName:              user.FirstName,
-			LastName:               user.LastName,
-			SecurityContext:        user.SecurityContext,
-			UserGrantShortCodeList: grantShortCodeList,
+			AppUserID:       user.AppUserID,
+			UserName:        user.UserName,
+			FirstName:       user.FirstName,
+			LastName:        user.LastName,
+			SecurityContext: user.SecurityContext,
+			GrantList:       grantList,
 		}
 
 		csrfToken := sessionID[len(sessionID)-3:]
