@@ -58,10 +58,12 @@ func (r *UserRepository) RetrieveUserByUserName(
 }
 
 // RetrieveUserGrantList retrieves user grants by security context
-func (r *UserRepository) RetrieveUserGrantList(
-	ctx context.Context, userGroupIDs []int,
+
+// GetGrantsForGroups retrieves all grants for a list of groups organized by security context
+func (r *UserRepository) GetGrantsForGroups(
+	ctx context.Context, groupIDs []int,
 ) (map[int][]int, error) {
-	if len(userGroupIDs) == 0 {
+	if len(groupIDs) == 0 {
 		return make(map[int][]int), nil
 	}
 
@@ -70,9 +72,9 @@ func (r *UserRepository) RetrieveUserGrantList(
 		FROM user_group ug
 		WHERE ug.user_group_id = ANY($1) AND ug.delete_user_id IS NULL`
 
-	rowList, err := r.db.Query(ctx, query, userGroupIDs)
+	rowList, err := r.db.Query(ctx, query, groupIDs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user grants: %w", err)
+		return nil, fmt.Errorf("failed to get grants for groups: %w", err)
 	}
 	defer rowList.Close()
 
@@ -82,7 +84,7 @@ func (r *UserRepository) RetrieveUserGrantList(
 		var grantList []int
 		err := rowList.Scan(&securityContext, &grantList)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan user grants: %w", err)
+			return nil, fmt.Errorf("failed to scan grant list: %w", err)
 		}
 
 		if existing, exists := grants[securityContext]; exists {

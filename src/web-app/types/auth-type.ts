@@ -1,8 +1,9 @@
-export type AuthStateType = 'YES' | 'NO' | 'CHECKING' | 'TBD';
+export type AuthStateType = "YES" | "NO" | "CHECKING" | "TBD";
 
 export interface User {
   userName: string;
-  grantList: Record<number, number[]>;
+  grantList: number[];
+  availableSecurityContextList: number[];
   securityContext: number;
 }
 
@@ -24,6 +25,7 @@ export interface RefreshResponse {
 export interface AuthState {
   authState: AuthStateType;
   grantList: number[];
+  availableSecurityContextList: number[];
   userName: string;
   securityContext: number;
   postAuthDestination: string;

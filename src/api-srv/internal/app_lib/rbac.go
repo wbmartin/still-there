@@ -21,7 +21,7 @@ func NewRBACManager(logger ThisAppLoggerInterface,
 	}
 }
 
-// HasGrant checks if a user has a specific grant in a security context
+// HasGrant checks if a user has a specific grant in their current security context
 func (r *RBACManager) HasGrant(claims *Claims, grantID int,
 	securityContext int) bool {
 	if claims == nil || claims.Grants == nil {
@@ -30,15 +30,15 @@ func (r *RBACManager) HasGrant(claims *Claims, grantID int,
 		return false
 	}
 
-	contextGrants, exists := claims.Grants[securityContext]
-	if !exists {
-		r.logger.Debug("NCT0",
-			fmt.Sprintf("No grants found for security context: %d", securityContext),
+	// Since grants are now context-specific, check if the security context matches
+	if claims.SecurityContext != securityContext {
+		r.logger.Debug("SCT0",
+			fmt.Sprintf("Security context mismatch - requested: %d, user: %d", securityContext, claims.SecurityContext),
 			"username", r.username)
 		return false
 	}
 
-	for _, userGrantID := range contextGrants {
+	for _, userGrantID := range claims.Grants {
 		if userGrantID == grantID {
 			r.logger.Debug("RFD0",
 				fmt.Sprintf("Grant found - ID: %d, context: %d",
@@ -64,47 +64,12 @@ func (r *RBACManager) HasAnyGrantInContext(claims *Claims,
 		return false
 	}
 
-	contextGrants, exists := claims.Grants[securityContext]
-	return exists && len(contextGrants) > 0
-}
-
-// RetrieveUserGrantsByContext retrieves all grant short codes for a user
-// by security context
-func (r *RBACManager) RetrieveUserGrantsByContext(claims *Claims) map[int][]string {
-	result := make(map[int][]string)
-
-	if claims == nil || claims.Grants == nil {
-		return result
-	}
-
-	for securityContext, grantIDs := range claims.Grants {
-		var shortCodeList []string
-		for _, grantID := range grantIDs {
-			if shortCode, exists := model.GrantIDToShortCodeMap[grantID]; exists {
-				shortCodeList = append(shortCodeList, shortCode)
-			} else {
-				r.logger.Warn("UGT0",
-					fmt.Sprintf("Unknown grant ID encountered: %d", grantID),
-					"username", r.username)
-			}
-		}
-		result[securityContext] = shortCodeList
-	}
-
-	return result
+	// Check if the security context matches and has grants
+	return claims.SecurityContext == securityContext && len(claims.Grants) > 0
 }
 
 // ValidateGrantID checks if a grant ID is valid
 func (r *RBACManager) ValidateGrantID(grantID int) bool {
 	_, exists := model.GrantIDToShortCodeMap[grantID]
 	return exists
-}
-
-// RetrieveGrantShortCode returns the short code for a grant ID
-func (r *RBACManager) RetrieveGrantShortCode(grantID int) (string, error) {
-	shortCode, exists := model.GrantIDToShortCodeMap[grantID]
-	if !exists {
-		return "", fmt.Errorf("unknown grant ID: %d", grantID)
-	}
-	return shortCode, nil
 }

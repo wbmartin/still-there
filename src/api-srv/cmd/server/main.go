@@ -78,6 +78,7 @@ func main() {
 	authHandler := handler.AuthHandler(appServices, userRepo, userGroupRepo)
 	auth2Handler := handler.Auth2Handler(appServices, userRepo, userGroupRepo)
 	refreshHandler := handler.RefreshHandler(appServices, userRepo, userGroupRepo)
+	changeSecurityContextHandler := handler.ChangeSecurityContextHandler(appServices, userRepo, userGroupRepo)
 	logoffHandler := handler.LogoffHandler(appServices)
 
 	exampleHandler := handler.NewExampleHandler(appServices, exampleRepo)
@@ -94,6 +95,7 @@ func main() {
 	mux.HandleFunc("POST /auth", authHandler)
 	mux.HandleFunc("POST /auth2", auth2Handler)
 	mux.HandleFunc("GET /refresh", refreshHandler)
+	mux.HandleFunc("POST /changeSecurityContext", changeSecurityContextHandler)
 	mux.HandleFunc("POST /logoff", logoffHandler)
 
 	// Example CRUD

@@ -8,13 +8,14 @@ type AuthRequestModel struct {
 
 // AuthResponseModel represents the response for initial authentication
 type AuthResponseModel struct {
-	AppUserID       int           `json:"appUserId"`
-	UserName        string        `json:"userName"`
-	FirstName       string        `json:"firstName"`
-	LastName        string        `json:"lastName"`
-	SecurityContext int           `json:"securityContext"`
-	GrantList       map[int][]int `json:"grantList"`           // by security_context
-	TempToken       string        `json:"tempToken,omitempty"` // MFA required
+	AppUserID                    int    `json:"appUserId"`
+	UserName                     string `json:"userName"`
+	FirstName                    string `json:"firstName"`
+	LastName                     string `json:"lastName"`
+	SecurityContext              int    `json:"securityContext"`
+	GrantList                    []int  `json:"grantList"`
+	AvailableSecurityContextList []int  `json:"availableSecurityContextList"`
+	TempToken                    string `json:"tempToken,omitempty"` // MFA required
 }
 
 // AuthResponseWrapper wraps the auth response for consistency
@@ -31,12 +32,13 @@ type Auth2RequestModel struct {
 
 // Auth2ResponseModel represents the response for successful MFA authentication
 type Auth2ResponseModel struct {
-	AppUserID       int           `json:"appUserId"`
-	UserName        string        `json:"userName"`
-	FirstName       string        `json:"firstName"`
-	LastName        string        `json:"lastName"`
-	SecurityContext int           `json:"securityContext"`
-	GrantList       map[int][]int `json:"grantList"`
+	AppUserID                    int    `json:"appUserId"`
+	UserName                     string `json:"userName"`
+	FirstName                    string `json:"firstName"`
+	LastName                     string `json:"lastName"`
+	SecurityContext              int    `json:"securityContext"`
+	GrantList                    []int  `json:"grantList"`
+	AvailableSecurityContextList []int  `json:"availableSecurityContextList"`
 }
 
 // Auth2ResponseWrapper wraps the auth2 response for consistency
@@ -50,9 +52,9 @@ type LogoffRequest struct {
 	// No body required for logoff
 }
 
-// ChangeSecurityContextRequest for changing security context
+// ChangeSecurityContextRequest represents the request to change security context
 type ChangeSecurityContextRequest struct {
-	TargetSecurityContext int `json:"targetSecurityContext"`
+	SecurityContext int `json:"securityContext"`
 }
 
 // ChangeSecurityContextResponse for changing security context

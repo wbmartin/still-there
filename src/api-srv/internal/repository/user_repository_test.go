@@ -94,7 +94,7 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserByUserNameNotFound() {
 	s.Contains(err.Error(), "user not found")
 }
 
-func (s *UserRepositoryTestSuite) TestRetrieveUserGrantList() {
+func (s *UserRepositoryTestSuite) TestGetGrantsForGroups() {
 	// First, check what groups actually exist
 	allGroups, err := s.db.Query(context.Background(), "SELECT user_group_id FROM user_group WHERE delete_user_id IS NULL ORDER BY user_group_id")
 	s.NoError(err)
@@ -115,31 +115,31 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserGrantList() {
 	}
 
 	// Test retrieving grants for existing groups
-	grants, err := s.repo.RetrieveUserGrantList(context.Background(), existingGroupIDList)
+	grantsMap, err := s.repo.GetGrantsForGroups(context.Background(), existingGroupIDList)
 	s.NoError(err)
-	s.NotNil(grants)
+	s.NotNil(grantsMap)
 
 	// Should have at least one security context with grants
 	totalGrants := 0
-	for _, grantList := range grants {
+	for _, grantList := range grantsMap {
 		totalGrants += len(grantList)
 	}
 	s.True(totalGrants > 0, "Should have at least one grant")
 }
 
-func (s *UserRepositoryTestSuite) TestReadUserGrantsEmpty() {
+func (s *UserRepositoryTestSuite) TestGetGrantsForGroupsEmpty() {
 	// Test with empty slice
-	grants, err := s.repo.RetrieveUserGrantList(context.Background(), []int{})
+	grantsMap, err := s.repo.GetGrantsForGroups(context.Background(), []int{})
 	s.NoError(err)
-	s.NotNil(grants)
-	s.Equal(0, len(grants))
+	s.NotNil(grantsMap)
+	s.Equal(0, len(grantsMap))
 }
 
-func (s *UserRepositoryTestSuite) TestReadUserGrantsNonExistent() {
+func (s *UserRepositoryTestSuite) TestGetGrantsForGroupsNonExistent() {
 	// Test with non-existent group IDs
-	grants, err := s.repo.RetrieveUserGrantList(context.Background(), []int{99999, 88888})
+	grantsMap, err := s.repo.GetGrantsForGroups(context.Background(), []int{99999, 88888})
 	s.NoError(err)
-	s.Equal(0, len(grants)) // Should return empty map for non-existent groups
+	s.Equal(0, len(grantsMap)) // Should return empty map for non-existent groups
 }
 
 func (s *UserRepositoryTestSuite) TestCreateUser() {

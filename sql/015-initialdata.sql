@@ -7,6 +7,12 @@ VALUES
     ('Basic User', ARRAY[1001, 1002, 1003, 1004, 8001, 9010], 1, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0),
     ('Admin', ARRAY[1001, 1002, 1003, 1004, 8001, 9001, 9002, 9003, 9010, 9011, 9012, 9013, 9014, 9015], 1, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0);
 
+-- Insert user groups for security context 2 (mirroring context 1)
+INSERT INTO user_group (group_name, user_grant_list, security_context, create_ts, create_user_id, update_ts, update_user_id)
+VALUES
+    ('Basic2 User', ARRAY[1001, 1002, 1003, 1004, 8001, 9010], 2, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0),
+    ('Admin2', ARRAY[1001, 1002, 1003, 1004, 8001, 9001, 9002, 9003, 9010, 9011, 9012, 9013, 9014, 9015], 2, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0);
+
 -- Insert admin user (password hash for 'admin123!')
 INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context, user_group_membership_list, mfa_exempt, create_ts, create_user_id, update_ts, update_user_id)
 VALUES
@@ -37,6 +43,9 @@ VALUES
           0,
           EXTRACT(EPOCH FROM NOW()),
           0);
+
+-- Add admin user to group 7 for additional context access
+UPDATE app_user SET user_group_membership_list = ARRAY[2, 7] WHERE app_user_id = 1;
 
 -- Insert example data
 INSERT INTO example (example_text, example_int, example_float, example_int_array, example_float_array, security_context, create_ts, create_user_id, update_ts, update_user_id)

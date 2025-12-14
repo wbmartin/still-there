@@ -12,4 +12,5 @@ export const ROUTES = {
    EXAMPLE_LIST: 'exampleList',
    EXAMPLE_EDIT: 'example', // Base path; append ?exampleId
    LOGIN: 'login',
+   USER_PREFERENCES: 'userPreferences',
 } as const;

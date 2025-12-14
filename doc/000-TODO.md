@@ -1,6 +1,5 @@
 # React App
-
-- several userAdmin page needs to map user groups  to group names, etc
+- when the user changes context, all cache has to be invalidted
 - table sorting
 - add error boundary
 - lots of unknown users coming into the api server logs

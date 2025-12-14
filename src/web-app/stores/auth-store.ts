@@ -8,18 +8,20 @@ import type {
 } from "../types/auth-type";
 import { apiRequest, setCsrfToken, clearCsrfToken } from "../utils/api";
 
-interface AuthStore extends Omit<AuthState, 'csrfToken'> {
+interface AuthStore extends Omit<AuthState, "csrfToken"> {
   authenticateWithUsernamePassword: (
     userName: string,
     password: string,
   ) => Promise<void>;
   authenticateWithAuthToken: () => Promise<void>;
   logout: () => Promise<void>;
+  changeSecurityContext: (newContext: number) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
   authState: "TBD" as AuthStateType,
   grantList: [],
+  availableSecurityContextList: [],
   userName: "",
   securityContext: 0,
   postAuthDestination: "",
@@ -39,20 +41,18 @@ export const useAuthStore = create<AuthStore>((set) => ({
         body: JSON.stringify(loginRequest),
       });
       if (!response.ok) throw new Error("Login failed");
-       const data = await response.json() as LoginResponse;
-        if (data.user) {
-          setCsrfToken(data.csrfToken);
-          const grantMap = data.user.grantList || {};
-          const allGrantIds: number[] = [];
-          Object.values(grantMap).forEach(ids => allGrantIds.push(...ids));
-          const uniqueGrantIds = [...new Set(allGrantIds)];
-          set({
-            authState: "YES",
-            grantList: uniqueGrantIds,
-            userName: data.user.userName || "",
-            securityContext: data.user.securityContext || 0,
-          });
-        }
+      const data = (await response.json()) as LoginResponse;
+      if (data.user) {
+        setCsrfToken(data.csrfToken);
+        set({
+          authState: "YES",
+          grantList: data.user.grantList || [],
+          availableSecurityContextList:
+            data.user.availableSecurityContextList || [],
+          userName: data.user.userName || "",
+          securityContext: data.user.securityContext || 0,
+        });
+      }
     } catch (err) {
       set({
         authState: "NO",
@@ -69,21 +69,19 @@ export const useAuthStore = create<AuthStore>((set) => ({
     try {
       const response = await apiRequest("/refresh", {});
       if (!response.ok) throw new Error("Refresh failed");
-       const data = await response.json() as RefreshResponse;
-        if (data.user) {
-          // console.log("Auth refresh successful for user:", data.user);
-          setCsrfToken(data.csrfToken);
-          const grantMap = data.user.grantList || {};
-          const allGrantIds: number[] = [];
-          Object.values(grantMap).forEach(ids => allGrantIds.push(...ids));
-          const uniqueGrantIds = [...new Set(allGrantIds)];
-          set({
-            authState: "YES",
-            grantList: uniqueGrantIds,
-            userName: data.user.userName || "",
-            securityContext: data.user.securityContext || 0,
-          });
-        }
+      const data = (await response.json()) as RefreshResponse;
+      if (data.user) {
+        // console.log("Auth refresh successful for user:", data.user);
+        setCsrfToken(data.csrfToken);
+        set({
+          authState: "YES",
+          grantList: data.user.grantList || [],
+          availableSecurityContextList:
+            data.user.availableSecurityContextList || [],
+          userName: data.user.userName || "",
+          securityContext: data.user.securityContext || 0,
+        });
+      }
     } catch (err) {
       // console.log("Auth refresh not successful 2");
       set({
@@ -105,9 +103,39 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({
       authState: "NO",
       grantList: [],
+      availableSecurityContextList: [],
       userName: "",
       securityContext: 0,
       postAuthDestination: "",
     });
+  },
+
+  changeSecurityContext: async (newContext: number) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await apiRequest("/changeSecurityContext", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ securityContext: newContext }),
+      });
+      if (!response.ok) throw new Error("Context change failed");
+      const data = (await response.json()) as LoginResponse;
+      if (data.user) {
+        set({
+          authState: "YES",
+          grantList: data.user.grantList || [],
+          availableSecurityContextList:
+            data.user.availableSecurityContextList || [],
+          userName: data.user.userName || "",
+          securityContext: data.user.securityContext || 0,
+        });
+      }
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : "Context change failed",
+      });
+    } finally {
+      set({ loading: false });
+    }
   },
 }));

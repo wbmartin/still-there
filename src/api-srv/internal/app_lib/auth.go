@@ -14,11 +14,11 @@ import (
 // Claims represents the JWT claims structure
 type Claims struct {
 	jwt.RegisteredClaims
-	UserID          int           `json:"uid"`
-	SessionID       string        `json:"ses"`
-	SecurityContext int           `json:"sctx"`
-	Grants          map[int][]int `json:"grants"`
-	// map[security_context][]grant_id
+	UserID          int    `json:"uid"`
+	SessionID       string `json:"ses"`
+	SecurityContext int    `json:"sctx"`
+	Grants          []int  `json:"grants"`
+	// []grant_id for current security context
 }
 
 // Argon2id parameters (OWASP recommended)
@@ -96,7 +96,7 @@ func GenerateJWT(
 	userID int,
 	sessionID string,
 	securityContext int,
-	grants map[int][]int,
+	grants []int,
 	jwtSecret string,
 	expireHours int,
 ) (string, error) {

@@ -1,11 +1,11 @@
 package handler
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
@@ -13,18 +13,18 @@ import (
 )
 
 // AuthHandler handles initial authentication (username/password)
-func AuthHandler(appServices *app_lib.AppServices,
-	userRepo *repository.UserRepository,
-	userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
+func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var csrfToken string
 		appServices.Logger.Info("STRT", "Auth request started")
 
+		// Create app helper for error handling
+		app := app_lib.NewAppHelper(w, r, appServices)
+
 		// Parse request
 		var req model.AuthRequestModel
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid request body",
-				appServices.Logger, "PreAuth")
+			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
 			return
 		}
 
@@ -36,8 +36,7 @@ func AuthHandler(appServices *app_lib.AppServices,
 		if err != nil {
 			appServices.Logger.Warn("USLK",
 				"User lookup failed for user: "+req.UserName+", error: "+err.Error())
-			writeError(w, http.StatusUnauthorized, "Invalid credentials",
-				appServices.Logger, "PreAuth")
+			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "ICRD", err)
 			return
 		}
 
@@ -45,8 +44,7 @@ func AuthHandler(appServices *app_lib.AppServices,
 		if !app_lib.CheckPasswordHash(req.Password, user.PwHash) {
 			appServices.Logger.Warn("PSFL",
 				"Password verification failed for user: "+req.UserName)
-			writeError(w, http.StatusUnauthorized, "Invalid credentials",
-				appServices.Logger, "PreAuth")
+			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "ICRD", nil)
 			return
 		}
 
@@ -57,8 +55,7 @@ func AuthHandler(appServices *app_lib.AppServices,
 			if _, err := rand.Read(tempTokenBytes); err != nil {
 				appServices.Logger.Error("TKGN",
 					"Failed to generate temp token: "+err.Error())
-				writeError(w, http.StatusInternalServerError, "Internal server error",
-					appServices.Logger, "PreAuth")
+				app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
 				return
 			}
 			tempToken := hex.EncodeToString(tempTokenBytes)
@@ -67,19 +64,19 @@ func AuthHandler(appServices *app_lib.AppServices,
 			tempTokenKey := "TEMP_AUTH_" + tempToken
 			if err := appServices.KV.Set(tempTokenKey, req.UserName, "10m"); err != nil {
 				appServices.Logger.Error("TKST", "Failed to store temp token: "+err.Error())
-				writeError(w, http.StatusBadRequest, "Invalid request body",
-					appServices.Logger, "PreAuth")
+				app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
 				return
 			}
 
 			response := model.AuthResponseModel{
-				AppUserID:       user.AppUserID,
-				UserName:        user.UserName,
-				FirstName:       user.FirstName,
-				LastName:        user.LastName,
-				SecurityContext: user.SecurityContext,
-				GrantList:       make(map[int][]int), // Empty for MFA flow
-				TempToken:       tempToken,
+				AppUserID:                    user.AppUserID,
+				UserName:                     user.UserName,
+				FirstName:                    user.FirstName,
+				LastName:                     user.LastName,
+				SecurityContext:              user.SecurityContext,
+				GrantList:                    []int{}, // Empty for MFA flow
+				AvailableSecurityContextList: []int{}, // Empty for MFA flow
+				TempToken:                    tempToken,
 			}
 
 			wrapper := model.AuthResponseWrapper{User: response}
@@ -89,13 +86,25 @@ func AuthHandler(appServices *app_lib.AppServices,
 			return
 		}
 
+		// Get all grants for user's groups
+		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.UserGroupMembershipList)
+		if err != nil {
+			appServices.Logger.Error("GRFL", "Failed to get grants for user: "+err.Error())
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			return
+		}
+
+		// Extract available security contexts from grant map keys
+		availableContextList := make([]int, 0, len(grantsMap))
+		for ctx := range grantsMap {
+			availableContextList = append(availableContextList, ctx)
+		}
+
 		// Issue full JWT
-		jwt, sessionID, err := createJWTForUser(r.Context(), user,
-			appServices, userGroupRepo)
+		jwt, sessionID, err := createJWTForUser(user, grantsMap[user.SecurityContext], appServices)
 		if err != nil {
 			appServices.Logger.Error("JWFL", "Failed to create JWT: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error",
-				appServices.Logger, "PreAuth")
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
 			return
 		}
 		// Set JWT cookie
@@ -111,110 +120,19 @@ func AuthHandler(appServices *app_lib.AppServices,
 		// CSRF token is last 3 characters of session ID
 		csrfToken = sessionID[len(sessionID)-3:]
 
-		// Read user grants for response
-		grantList, err := userRepo.RetrieveUserGrantList(r.Context(), user.UserGroupMembershipList)
-		if err != nil {
-			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
-			return
-		}
-
 		response := model.Auth2ResponseModel{
-			AppUserID:       user.AppUserID,
-			UserName:        user.UserName,
-			FirstName:       user.FirstName,
-			LastName:        user.LastName,
-			SecurityContext: user.SecurityContext,
-			GrantList:       grantList,
+			AppUserID:                    user.AppUserID,
+			UserName:                     user.UserName,
+			FirstName:                    user.FirstName,
+			LastName:                     user.LastName,
+			SecurityContext:              user.SecurityContext,
+			GrantList:                    grantsMap[user.SecurityContext],
+			AvailableSecurityContextList: availableContextList,
 		}
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		appServices.Logger.Info("A2SC", "Auth2 successful for user: "+user.UserName)
-	}
-}
-
-// Auth2Handler handles MFA authentication (temp token + TOTP)
-func Auth2Handler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var csrfToken string
-		appServices.Logger.Info("A2ST", "Auth2 request started")
-
-		// Parse request
-		var req model.Auth2RequestModel
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "Invalid request body", appServices.Logger, "PreAuth")
-			return
-		}
-
-		appServices.Logger.Debug("A2PS", "Auth2 request parsed for token: "+req.TempToken[:8]+"...")
-
-		// Read username from temp token
-		tempTokenKey := "TEMP_AUTH_" + req.TempToken
-		username, err := appServices.KV.Get(tempTokenKey)
-		if err != nil {
-			appServices.Logger.Warn("TKLK", "Temp token lookup failed for token: "+req.TempToken[:8]+"..., error: "+err.Error())
-			writeError(w, http.StatusUnauthorized, "Invalid or expired temp token", appServices.Logger, "PreAuth")
-			return
-		}
-
-		// Delete temp token
-		_ = appServices.KV.Set(tempTokenKey, "", "0s") // Expire immediately
-
-		// Read user
-		user, err := userRepo.RetrieveUserByUserName(r.Context(), username)
-		if err != nil {
-			appServices.Logger.Error("JWFL", "Failed to create JWT: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error",
-				appServices.Logger, "PreAuth")
-			return
-		}
-
-		// TODO: Verify TOTP code here
-		// For now, accept any TOTP (this should be implemented with a proper TOTP library)
-		appServices.Logger.Warn("TOTP", "TOTP verification not implemented - accepting any code")
-
-		// Issue full JWT
-		jwt, sessionID, err := createJWTForUser(r.Context(), user, appServices, userGroupRepo)
-		if err != nil {
-			appServices.Logger.Error("JWFL", "Failed to create JWT: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
-			return
-		}
-
-		// Set JWT cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:     "auth",
-			Value:    jwt,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
-		})
-
-		// CSRF token is last 3 characters of session ID
-		csrfToken = sessionID[len(sessionID)-3:]
-
-		// Read user grants for response
-		grantList, err := userRepo.RetrieveUserGrantList(r.Context(), user.UserGroupMembershipList)
-		if err != nil {
-			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, "PreAuth")
-			return
-		}
-
-		response := model.Auth2ResponseModel{
-			AppUserID:       user.AppUserID,
-			UserName:        user.UserName,
-			FirstName:       user.FirstName,
-			LastName:        user.LastName,
-			SecurityContext: user.SecurityContext,
-			GrantList:       grantList,
-		}
-
-		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
-		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		appServices.Logger.Info("A2SC", "Auth2 successful for user: "+user.UserName)
+		appServices.Logger.Info("AUTH", "Authentication successful for user: "+user.UserName)
 	}
 }
 
@@ -240,15 +158,30 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), jwtClaims.Subject)
 		if err != nil {
 			appServices.Logger.Error("USLK", "User lookup failed during refresh for user: "+jwtClaims.Subject+", error: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, jwtClaims.Subject)
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
 			return
 		}
 
-		// Issue updated JWT
-		jwt, sessionID, err := createJWTForUser(r.Context(), user, appServices, userGroupRepo)
+		// Get all grants for user's groups
+		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.UserGroupMembershipList)
 		if err != nil {
-			appServices.Logger.Error("JWFL", "Failed to create updated JWT: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, jwtClaims.Subject)
+			appServices.Logger.Error("GRFL", "Failed to get grants for refresh: "+err.Error())
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			return
+		}
+
+		// Extract available security contexts from grant map keys
+		availableContextList := make([]int, 0, len(grantsMap))
+		for ctx := range grantsMap {
+			availableContextList = append(availableContextList, ctx)
+		}
+		user.SecurityContext = jwtClaims.SecurityContext
+
+		// Issue updated JWT
+		jwt, sessionID, err := createJWTForUser(user, grantsMap[user.SecurityContext], appServices)
+		if err != nil {
+			appServices.Logger.Error("JWFL", "Failed to create JWT: "+err.Error())
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
 			return
 		}
 
@@ -263,27 +196,119 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 			MaxAge:   3600, // 1 hour
 		})
 
-		// Read user grants for response
-		grantList, err := userRepo.RetrieveUserGrantList(r.Context(), user.UserGroupMembershipList)
-		if err != nil {
-			appServices.Logger.Error("GRFL", "Failed to get user grants: "+err.Error())
-			writeError(w, http.StatusInternalServerError, "Internal server error", appServices.Logger, jwtClaims.Subject)
-			return
-		}
-
 		response := model.Auth2ResponseModel{
-			AppUserID:       user.AppUserID,
-			UserName:        user.UserName,
-			FirstName:       user.FirstName,
-			LastName:        user.LastName,
-			SecurityContext: user.SecurityContext,
-			GrantList:       grantList,
+			AppUserID:                    user.AppUserID,
+			UserName:                     user.UserName,
+			FirstName:                    user.FirstName,
+			LastName:                     user.LastName,
+			SecurityContext:              user.SecurityContext,
+			GrantList:                    grantsMap[user.SecurityContext],
+			AvailableSecurityContextList: availableContextList,
 		}
 
 		csrfToken := sessionID[len(sessionID)-3:]
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
 		appServices.Logger.Info("RFSC", "Refresh successful for user: "+user.UserName)
+	}
+}
+
+// ChangeSecurityContextHandler handles changing the user's security context
+func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		appServices.Logger.Info("CSCS", "Change security context request started")
+
+		// Create app helper for error handling
+		app := app_lib.NewAppHelper(w, r, appServices)
+
+		// Parse request
+		var req model.ChangeSecurityContextRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
+			return
+		}
+
+		// Security checks - JWT validation only
+		app.CheckJWT()
+		app.CheckRateLimitAndUserBlock()
+		app.SkipCSRF()
+		app.SkipAuthorization() // Authorization checked below
+
+		if !app.CheckAllChecksComplete() {
+			return
+		}
+
+		jwtClaims := app.GetClaims()
+		userName := jwtClaims.Subject
+
+		// Read current user
+		dbUser, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
+		if err != nil {
+			appServices.Logger.Error("USLK", "User lookup failed during context change for user: "+userName+", error: "+err.Error())
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			return
+		}
+
+		// Get all grants for user's groups
+		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), dbUser.UserGroupMembershipList)
+		if err != nil {
+			appServices.Logger.Error("GRFL", "Failed to get grants for context change: "+err.Error())
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			return
+		}
+
+		// Extract available security contexts from grant map keys
+		availableContextList := make([]int, 0, len(grantsMap))
+		for ctx := range grantsMap {
+			availableContextList = append(availableContextList, ctx)
+		}
+
+		// Check if requested context is available
+		if _, exists := grantsMap[req.SecurityContext]; !exists {
+			appServices.Logger.Warn("CSCF", "User "+userName+" attempted to switch to unauthorized context: "+strconv.Itoa(req.SecurityContext))
+			app.WriteError(w, http.StatusForbidden, "Security context not available", "SCNA", nil)
+			return
+		}
+
+		// Create new user object with updated security context
+		updatedUser := *dbUser
+		updatedUser.SecurityContext = req.SecurityContext
+
+		// Issue new JWT with updated context
+		jwt, sessionID, err := createJWTForUser(&updatedUser, grantsMap[req.SecurityContext], appServices)
+		if err != nil {
+			appServices.Logger.Error("JWFL", "Failed to create JWT for context change: "+err.Error())
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			return
+		}
+
+		// Set new JWT cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "auth",
+			Value:    jwt,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   3600, // 1 hour
+		})
+
+		// CSRF token is last 3 characters of session ID
+		csrfToken := sessionID[len(sessionID)-3:]
+
+		response := model.Auth2ResponseModel{
+			AppUserID:                    dbUser.AppUserID,
+			UserName:                     dbUser.UserName,
+			FirstName:                    dbUser.FirstName,
+			LastName:                     dbUser.LastName,
+			SecurityContext:              req.SecurityContext,
+			GrantList:                    grantsMap[req.SecurityContext],
+			AvailableSecurityContextList: availableContextList,
+		}
+
+		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
+		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+		appServices.Logger.Info("CSCN", "Security context changed for user: "+userName+" to context: "+strconv.Itoa(req.SecurityContext))
 	}
 }
 
@@ -303,25 +328,13 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 			MaxAge:   -1, // Expire immediately
 		})
 
-		writeJSON(w, http.StatusOK, map[string]string{"message": "Logged off successfully"}, appServices.Logger)
-		appServices.Logger.Info("LODN", "Logoff completed")
+		w.WriteHeader(http.StatusOK)
+		appServices.Logger.Info("LOFN", "Logoff successful")
 	}
 }
 
 // createJWTForUser creates a JWT token for the authenticated user
-func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices *app_lib.AppServices, userGroupRepo *repository.UserGroupRepository) (string, string, error) {
-	// Read user grants
-	grants, err := userGroupRepo.RetrieveUserGroupListByIDList(ctx, user.UserGroupMembershipList)
-	if err != nil {
-		return "", "", err
-	}
-
-	// Build grants map by security context
-	grantsMap := make(map[int][]int)
-	for _, group := range grants {
-		grantsMap[group.SecurityContext] = append(grantsMap[group.SecurityContext], group.UserGrantList...)
-	}
-
+func createJWTForUser(user *model.AppUserModel, grantList []int, appServices *app_lib.AppServices) (string, string, error) {
 	// Generate session ID
 	sessionIDBytes := make([]byte, 16)
 	if _, err := rand.Read(sessionIDBytes); err != nil {
@@ -335,7 +348,7 @@ func createJWTForUser(ctx context.Context, user *model.AppUserModel, appServices
 		user.AppUserID,
 		sessionID,
 		user.SecurityContext,
-		grantsMap,
+		grantList,
 		appServices.Config.JWTSecret,
 		appServices.Config.JWTSessionExpireHours,
 	)
