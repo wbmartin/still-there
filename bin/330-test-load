@@ -1,0 +1,41 @@
+#!/bin/bash
+
+set -e
+
+echo "Building and running API load test..."
+
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Change to project root directory
+pushd "$PROJECT_ROOT" > /dev/null
+
+# Ensure dist directory exists
+mkdir -p dist
+
+# Build the load test binary
+echo "Building load test binary..."
+cd "src/api-srv"
+go build -o "../dist/load-test" ./cmd/load-test
+
+# Change back to project root for checking and running
+cd "$PROJECT_ROOT"
+
+# Check if binary exists and is executable
+if [ ! -f "dist/load-test" ]; then
+    echo "Error: Load test binary not found at $PWD/dist/load-test"
+    ls -la dist/ 2>/dev/null || echo "dist directory not found"
+    exit 1
+fi
+if [ ! -x "dist/load-test" ]; then
+    echo "Error: Load test binary not executable at $PWD/dist/load-test"
+    exit 1
+fi
+
+# Run the load test with all passed arguments
+echo "Running load test..."
+"./dist/load-test" "$@"
+
+# Return to original directory
+popd > /dev/null
