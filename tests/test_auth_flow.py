@@ -80,7 +80,7 @@ class TestAuthentication:
     def test_health_check(self):
         """Test that health endpoint works without authentication"""
         base_url = os.environ.get("TEST_BASE_URL", "http://localhost:8080")
-        response = requests.get(f"{base_url}/health")
+        response = requests.get(f"{base_url}/health", verify=False)
         assert response.status_code == 200
 
         data = response.json()

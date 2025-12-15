@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Integration tests for web service
-# Tests the full HTTP stack including authentication, CSRF, and CRUD operations
+# Tests the full HTTP stack including authentication and CRUD operations
 # Reads the actual port from the config file
 
 set -e
@@ -9,6 +9,9 @@ set -e
 # Get the directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Change to project root directory
+pushd "$PROJECT_ROOT" > /dev/null
 
 # Read the server port from config file
 CONFIG_FILE="$PROJECT_ROOT/etc/loc-api-srv.env"
@@ -41,21 +44,16 @@ fi
 VENV_DIR="tests/.venv"
 if [ ! -d "$VENV_DIR" ]; then
     echo "Creating virtual environment for integration tests..."
-    cd tests
-    python3 -m venv .venv
-    cd ..
+    python3 -m venv tests/.venv
 fi
 
 # Activate virtual environment
 echo "Activating virtual environment..."
-# shellcheck disable=SC1091
 source "tests/.venv/bin/activate"
 
 # Install/update dependencies in virtual environment
 echo "Installing test dependencies..."
-cd tests
-pip install -r requirements.txt
-cd ..
+pip install -r tests/requirements.txt
 
 # Check if application is running
 echo "Checking if application is running on $BASE_URL..."
@@ -68,17 +66,19 @@ echo "✅ Application is running on $BASE_URL"
 
 # Run the integration tests
 echo "Running integration tests..."
-cd tests
 
 # Set environment variable for test base URL
 export TEST_BASE_URL="$BASE_URL"
 
 # Run tests with verbose output and generate HTML report
-python3 -m pytest -v --tb=short --html=reports/integration_test_report.html --self-contained-html
+python3 -m pytest -v --tb=short --html=tests/reports/integration_test_report.html --self-contained-html
 
 echo ""
 echo "✅ Integration tests completed!"
-echo "📊 HTML Report: tests/reports/integration_test_report.html"
+echo "📊 HTML Report: $PROJECT_ROOT/tests/reports/integration_test_report.html"
 
 # Deactivate virtual environment
 deactivate
+
+# Return to original directory
+popd > /dev/null

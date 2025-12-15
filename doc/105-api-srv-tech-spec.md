@@ -25,29 +25,39 @@ src/api-srv/
 ├── cmd/server/main.go              # Application entry point
 ├── internal/
 │   ├── app_lib/                    # Shared application libraries
+│   │   ├── app_helper.go           # Error handling and response utilities
 │   │   ├── auth.go                 # JWT handling, password hashing
 │   │   ├── config.go               # Configuration management
-│   │   ├── database.go             # PostgreSQL connection
 │   │   ├── kv.go                   # shrmpl-kv client
 │   │   ├── logging.go              # Structured logging
 │   │   ├── rbac.go                 # RBAC logic
-│   │   ├── security.go             # Security helpers (CSRF, rate limiting)
 │   │   └── services.go             # Application services
 │   ├── handler/                    # HTTP handlers
 │   │   ├── auth_handler.go         # Authentication endpoints
-│   │   ├── example_handler.go      # CRUD operations
+│   │   ├── common.go               # Shared handler utilities
+│   │   ├── example_handler.go      # Example CRUD operations
 │   │   ├── health_handler.go       # Health checks
-│   │   └── common.go               # Shared handler utilities
+│   │   ├── user_group_handler.go   # User group CRUD operations
+│   │   └── user_handler.go         # User CRUD operations
 │   ├── model/                      # Domain models
 │   │   ├── app_user_model.go       # User entities
 │   │   ├── example_model.go        # Example entities
+│   │   ├── example_model_test.go   # Example model tests
+│   │   ├── grants.go               # Grant definitions
 │   │   ├── security_model.go       # Security-related models
-│   │   └── user_grant_model.go     # RBAC models
+│   │   ├── user_grant_model.go     # RBAC models
+│   │   ├── user_grant_model_test.go # User grant model tests
+│   │   └── user_group_model.go     # User group entities
 │   └── repository/                 # Data access layer
 │       ├── errors.go               # Repository errors
 │       ├── example_repository.go   # Example data operations
+│       ├── example_repository_test.go # Example repository tests
 │       ├── retry.go                # Database retry logic
-│       └── user_repository.go      # User data operations
+│       ├── user_group_repository.go # User group data operations
+│       ├── user_group_repository_test.go # User group repository tests
+│       ├── user_repository.go      # User data operations
+│       └── user_repository_test.go # User repository tests
+├── .golangci.yml                   # Go linting configuration
 ├── go.mod
 ├── go.sum
 └── README.md
@@ -80,7 +90,8 @@ initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.s
 |--------|------|------|------|------------|-------------|
 | GET | /health | No | No | N/A | Basic health check |
 | POST | /auth | No | No | N/A | Username/password authentication |
-| POST | /auth2 | No | No | N/A | MFA token verification |
+| GET | /refresh | Yes | No | N/A | Refresh JWT token |
+| POST | /changeSecurityContext | Yes | No | N/A | Switch security context |
 | POST | /logoff | Yes | No | N/A | Clear authentication cookie |
 | GET | /example | Yes | No | GET_EXAMPLE | Retrieve single example |
 | GET | /exampleList | Yes | No | GET_EXAMPLE | Retrieve multiple examples |
@@ -90,6 +101,17 @@ initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.s
 | PUT | /exampleList | Yes | Yes | CHG_EXAMPLE | Bulk update examples |
 | DELETE | /example | Yes | Yes | DEL_EXAMPLE | Soft delete example |
 | DELETE | /exampleList | Yes | Yes | DEL_EXAMPLE | Bulk soft delete examples |
+| GET | /userList | Yes | No | GET_USER | Retrieve user list |
+| POST | /user | Yes | Yes | ADD_USER | Create new user |
+| PUT | /user | Yes | Yes | CHG_USER | Update user |
+| DELETE | /user | Yes | Yes | DEL_USER | Delete user |
+| POST | /addUserListToGroup | Yes | Yes | CHG_USER_GROUP | Add users to group |
+| POST | /removeUserListFromGroup | Yes | Yes | CHG_USER_GROUP | Remove users from group |
+| GET | /grantList | Yes | No | GET_USER | Retrieve available grants |
+| GET | /userGroupList | Yes | No | GET_USER_GROUP | Retrieve user group list |
+| POST | /userGroup | Yes | Yes | ADD_USER_GROUP | Create user group |
+| PUT | /userGroup | Yes | Yes | CHG_USER_GROUP | Update user group |
+| DELETE | /userGroup | Yes | Yes | DEL_USER_GROUP | Delete user group |
 
 ### Request/Response Format
 
@@ -124,10 +146,7 @@ initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.s
      "uid": 123,
      "ses": "session-id",
      "sctx": 1,
-     "grants": {
-       "1": [1001, 1002, 1003],
-       "2": [1001]
-     }
+     "grants": [1001, 1002, 1003, 8001, 9001]
    }
    ```
 
@@ -139,9 +158,9 @@ initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.s
 - **Session Management**: Session IDs stored in JWT, validated against shrmpl-kv for blocking
 
 ### Authorization (RBAC)
-- **Grants**: Per-security-context permissions
-- **User Groups**: Collections of grants assigned to users
-- **Context Switching**: Users can operate in multiple security contexts
+- **Grants**: Context-specific permissions in JWT (only current context's grants)
+- **User Groups**: Collections of grants assigned to users per security context
+- **Context Switching**: Users can switch between security contexts, JWT updated accordingly
 
 ### Security Checks (Per Request)
 1. **JWT Validation**: Verify token signature and claims
@@ -152,10 +171,21 @@ initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.s
 4. **CSRF Protection**: Compare `X-CSRF-Token` header with last 3 chars of session ID
 5. **RBAC**: Verify user has required grant for target security context
 
+### Security Headers (All Responses)
+- **Content-Security-Policy**: Restricts resource loading to prevent XSS
+- **Strict-Transport-Security**: Forces HTTPS connections (1 year + subdomains + preload)
+- **X-Frame-Options**: Prevents clickjacking attacks
+- **X-Content-Type-Options**: Prevents MIME type sniffing
+- **Referrer-Policy**: Controls referrer information leakage
+- **Permissions-Policy**: Restricts browser features (camera, microphone, geolocation, etc.)
+- **X-Permitted-Cross-Domain-Policies**: Restricts Flash cross-domain requests
+- **Cache-Control**: Prevents caching of sensitive API responses
+
 ### Multi-tenancy
 - **Security Context**: Integer identifier for tenant isolation
 - **Data Segregation**: All queries filter by `security_context`
-- **Grant Isolation**: Permissions scoped to security contexts
+- **Grant Isolation**: Permissions scoped to security contexts, JWT contains only current context grants
+- **Context Switching**: `/changeSecurityContext` endpoint allows users to switch contexts
 
 ## Configuration
 
@@ -308,7 +338,7 @@ TEST_BASE_URL=https://localhost:8443
 
 ### Code Quality
 - **Formatting**: `go fmt`
-- **Linting**: Manual review (future: golangci-lint)
+- **Linting**: golangci-lint with `.golangci.yml` configuration
 - **Testing**: Run `go test ./...` to validate changes
 - **Documentation**: Inline comments, README updates
 
@@ -318,7 +348,6 @@ TEST_BASE_URL=https://localhost:8443
 - TOTP implementation for MFA
 - Input validation middleware
 - OpenAPI/Swagger documentation
-- Comprehensive integration tests
 
 ### Medium Priority
 - Performance monitoring
@@ -331,6 +360,17 @@ TEST_BASE_URL=https://localhost:8443
 - CI/CD pipeline
 - Log aggregation
 - Feature flags
+
+## Recent Implementations
+
+### Completed Features
+- **Comprehensive Integration Tests**: 43 test cases covering authentication, authorization, CRUD operations, error scenarios, and security features
+- **User Management**: Full CRUD operations for users with proper RBAC controls
+- **User Group Management**: Group-based permission assignment and management
+- **Security Context Switching**: Multi-tenant context switching with JWT updates
+- **Enhanced Error Handling**: Specific error codes and improved logging
+- **Database Optimization**: Strategic indexing for update_ts fields and optimistic locking
+- **Code Quality**: golangci-lint configuration and comprehensive test coverage
 
 This specification captures the current implementation and serves as a foundation for future development and maintenance of the ProtoStack-ReactGo API server.</content>
 <parameter name="filePath">doc/105-api-srv-tech-spec.md

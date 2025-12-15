@@ -76,7 +76,6 @@ func main() {
 	// Initialize handlers
 	healthHandler := handler.HealthHandler(appServices)
 	authHandler := handler.AuthHandler(appServices, userRepo, userGroupRepo)
-	auth2Handler := handler.Auth2Handler(appServices, userRepo, userGroupRepo)
 	refreshHandler := handler.RefreshHandler(appServices, userRepo, userGroupRepo)
 	changeSecurityContextHandler := handler.ChangeSecurityContextHandler(appServices, userRepo, userGroupRepo)
 	logoffHandler := handler.LogoffHandler(appServices)
@@ -88,12 +87,14 @@ func main() {
 	// Setup routes
 	mux := http.NewServeMux()
 
+	// Apply security headers middleware to all routes
+	securedMux := app_lib.SecurityHeadersMiddleware(mux)
+
 	// Health check
 	mux.HandleFunc("GET /health", healthHandler)
 
 	// Authentication
 	mux.HandleFunc("POST /auth", authHandler)
-	mux.HandleFunc("POST /auth2", auth2Handler)
 	mux.HandleFunc("GET /refresh", refreshHandler)
 	mux.HandleFunc("POST /changeSecurityContext", changeSecurityContextHandler)
 	mux.HandleFunc("POST /logoff", logoffHandler)
@@ -131,7 +132,7 @@ func main() {
 	// Create server
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", config.ServerPort),
-		Handler: mux,
+		Handler: securedMux,
 	}
 
 	// Start server in goroutine

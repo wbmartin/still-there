@@ -65,6 +65,15 @@ CREATE TABLE example(
 -- Indexes for performance
 CREATE INDEX idx_app_user_username ON app_user(user_name);
 CREATE INDEX idx_app_user_security_context ON app_user(security_context);
+CREATE INDEX idx_app_user_security_context_update_ts ON app_user(security_context, update_ts);
+CREATE INDEX idx_app_user_id_update_ts ON app_user(app_user_id, update_ts);
+
+
 CREATE INDEX idx_user_group_security_context ON user_group(security_context);
+CREATE INDEX idx_user_group_security_context_update_ts ON user_group(security_context, update_ts);
+CREATE INDEX idx_user_group_id_update_ts ON user_group(user_group_id, update_ts);
+
 CREATE INDEX idx_example_security_context ON example(security_context);
 CREATE INDEX idx_example_delete_user_id ON example(delete_user_id);
+CREATE INDEX idx_example_security_context_update_ts ON example(security_context, update_ts);
+CREATE INDEX idx_example_id_update_ts ON example(example_id, update_ts);
