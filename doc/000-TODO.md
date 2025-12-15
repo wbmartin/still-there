@@ -29,6 +29,7 @@
 # API Server
 - TOTP implementation, open to do in auth_handler.go also lots of impacts to the react app. Needs to be part of the login flow, and also need to have a way to onboard users with TOTP, and reset TOTP for users that lost their device. Admin should be able to reset TOTP for users.
 - database change user_group -> app_user_group
+- account lockout after failed login attempts, need to track failed login attempts and lock the account for a period of time after too many failed attempts.
 
 
 # database

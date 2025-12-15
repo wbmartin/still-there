@@ -29,6 +29,35 @@ if [ ! -f "$CONFIG_PATH" ]; then
     exit 1
 fi
 
+# Kill any existing instances of the server
+echo "Checking for existing server instances..."
+EXISTING_PIDS=$(pgrep -f "proto-go-app" || true)
+
+if [ -n "$EXISTING_PIDS" ]; then
+    echo "Found existing server instances (PIDs: $EXISTING_PIDS), terminating..."
+    echo "$EXISTING_PIDS" | xargs kill -TERM 2>/dev/null || true
+
+    # Wait up to 10 seconds for graceful shutdown
+    for i in {1..10}; do
+        if ! pgrep -f "proto-go-app" > /dev/null 2>&1; then
+            echo "All existing instances terminated gracefully."
+            break
+        fi
+        echo "Waiting for server shutdown... ($i/10)"
+        sleep 1
+    done
+
+    # Force kill any remaining instances
+    REMAINING_PIDS=$(pgrep -f "proto-go-app" || true)
+    if [ -n "$REMAINING_PIDS" ]; then
+        echo "Force killing remaining instances (PIDs: $REMAINING_PIDS)..."
+        echo "$REMAINING_PIDS" | xargs kill -KILL 2>/dev/null || true
+        sleep 2
+    fi
+else
+    echo "No existing server instances found."
+fi
+
 # Run the binary
 echo "Starting API server..."
 "$BINARY_PATH" "$CONFIG_PATH"
