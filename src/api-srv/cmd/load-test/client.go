@@ -135,16 +135,11 @@ func (c *APIClient) UpdateExample(exampleID int, updateTs float64) error {
 }
 
 func (c *APIClient) GetExample(exampleID int) error {
-	return c.makeRequest("GET", "/example?id="+fmt.Sprintf("%d", exampleID), nil, nil)
+	return c.makeRequest("GET", "/example?exampleId="+fmt.Sprintf("%d", exampleID), nil, nil)
 }
 
 func (c *APIClient) DeleteExample(exampleID int, updateTs float64) error {
-	deleteData := map[string]interface{}{
-		"exampleId": exampleID,
-		"updateTs":  updateTs,
-	}
-
-	return c.makeRequest("DELETE", "/example", deleteData, nil)
+	return c.makeRequest("DELETE", "/example?exampleId="+fmt.Sprintf("%d", exampleID)+"&updateTs="+fmt.Sprintf("%.7f", updateTs), nil, nil)
 }
 
 func (c *APIClient) Logout() error {

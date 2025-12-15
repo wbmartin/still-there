@@ -33,6 +33,10 @@ if [ ! -x "dist/load-test" ]; then
     exit 1
 fi
 
+# Prompt user to continue
+echo "Load test binary built successfully. Press Enter to run the test, or Ctrl+C to abort..."
+read -r || exit 1
+
 # Run the load test with all passed arguments
 echo "Running load test..."
 "./dist/load-test" "$@"
