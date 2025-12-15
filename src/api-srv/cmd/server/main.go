@@ -62,7 +62,7 @@ func main() {
 
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(dbPool)
-	userGroupRepo := repository.NewUserGroupRepository(dbPool)
+	appUserGroupRepo := repository.NewAppUserGroupRepository(dbPool)
 	exampleRepo := repository.NewExampleRepository(dbPool)
 
 	// Initialize app dependencies
@@ -75,14 +75,14 @@ func main() {
 
 	// Initialize handlers
 	healthHandler := handler.HealthHandler(appServices)
-	authHandler := handler.AuthHandler(appServices, userRepo, userGroupRepo)
-	refreshHandler := handler.RefreshHandler(appServices, userRepo, userGroupRepo)
-	changeSecurityContextHandler := handler.ChangeSecurityContextHandler(appServices, userRepo, userGroupRepo)
+	authHandler := handler.AuthHandler(appServices, userRepo, appUserGroupRepo)
+	refreshHandler := handler.RefreshHandler(appServices, userRepo, appUserGroupRepo)
+	changeSecurityContextHandler := handler.ChangeSecurityContextHandler(appServices, userRepo, appUserGroupRepo)
 	logoffHandler := handler.LogoffHandler(appServices)
 
 	exampleHandler := handler.NewExampleHandler(appServices, exampleRepo)
 	userHandler := handler.NewUserHandler(appServices, userRepo)
-	userGroupHandler := handler.NewUserGroupHandler(appServices, userGroupRepo)
+	appUserGroupHandler := handler.NewAppUserGroupHandler(appServices, appUserGroupRepo)
 
 	// Setup routes
 	mux := http.NewServeMux()
@@ -124,10 +124,10 @@ func main() {
 	mux.HandleFunc("GET /grantList", userHandler.RetrieveGrantList)
 
 	// User groups
-	mux.HandleFunc("GET /userGroupList", userGroupHandler.RetrieveUserGroupList)
-	mux.HandleFunc("POST /userGroup", userGroupHandler.CreateUserGroup)
-	mux.HandleFunc("PUT /userGroup", userGroupHandler.UpdateUserGroup)
-	mux.HandleFunc("DELETE /userGroup", userGroupHandler.DeleteUserGroup)
+	mux.HandleFunc("GET /userGroupList", appUserGroupHandler.RetrieveAppUserGroupList)
+	mux.HandleFunc("POST /userGroup", appUserGroupHandler.CreateAppUserGroup)
+	mux.HandleFunc("PUT /userGroup", appUserGroupHandler.UpdateAppUserGroup)
+	mux.HandleFunc("DELETE /userGroup", appUserGroupHandler.DeleteAppUserGroup)
 
 	// Create server
 	server := &http.Server{

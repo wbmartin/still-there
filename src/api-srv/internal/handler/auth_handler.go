@@ -13,7 +13,7 @@ import (
 )
 
 // AuthHandler handles initial authentication (username/password)
-func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
+func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, appUserGroupRepo *repository.AppUserGroupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var csrfToken string
 		appServices.Logger.Info("STRT", "Auth request started")
@@ -87,7 +87,7 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 		}
 
 		// Get all grants for user's groups
-		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.UserGroupMembershipList)
+		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.AppUserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get grants for user: "+err.Error())
 			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
@@ -137,7 +137,7 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 }
 
 // RefreshHandler handles session refresh
-func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
+func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, appUserGroupRepo *repository.AppUserGroupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		appServices.Logger.Info("RFST", "Refresh request started")
 
@@ -163,7 +163,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		}
 
 		// Get all grants for user's groups
-		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.UserGroupMembershipList)
+		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.AppUserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get grants for refresh: "+err.Error())
 			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
@@ -214,7 +214,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 }
 
 // ChangeSecurityContextHandler handles changing the user's security context
-func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, userGroupRepo *repository.UserGroupRepository) http.HandlerFunc {
+func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, appUserGroupRepo *repository.AppUserGroupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		appServices.Logger.Info("CSCS", "Change security context request started")
 
@@ -250,7 +250,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 		}
 
 		// Get all grants for user's groups
-		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), dbUser.UserGroupMembershipList)
+		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), dbUser.AppUserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRFL", "Failed to get grants for context change: "+err.Error())
 			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)

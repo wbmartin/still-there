@@ -37,7 +37,7 @@ src/api-srv/
 │   │   ├── common.go               # Shared handler utilities
 │   │   ├── example_handler.go      # Example CRUD operations
 │   │   ├── health_handler.go       # Health checks
-│   │   ├── user_group_handler.go   # User group CRUD operations
+│   │   ├── app_user_group_handler.go   # User group CRUD operations
 │   │   └── user_handler.go         # User CRUD operations
 │   ├── model/                      # Domain models
 │   │   ├── app_user_model.go       # User entities
@@ -47,14 +47,14 @@ src/api-srv/
 │   │   ├── security_model.go       # Security-related models
 │   │   ├── user_grant_model.go     # RBAC models
 │   │   ├── user_grant_model_test.go # User grant model tests
-│   │   └── user_group_model.go     # User group entities
+│   │   └── app_user_group_model.go     # User group entities
 │   └── repository/                 # Data access layer
 │       ├── errors.go               # Repository errors
 │       ├── example_repository.go   # Example data operations
 │       ├── example_repository_test.go # Example repository tests
 │       ├── retry.go                # Database retry logic
-│       ├── user_group_repository.go # User group data operations
-│       ├── user_group_repository_test.go # User group repository tests
+│       ├── app_user_group_repository.go # User group data operations
+│       ├── app_user_group_repository_test.go # User group repository tests
 │       ├── user_repository.go      # User data operations
 │       └── user_repository_test.go # User repository tests
 ├── .golangci.yml                   # Go linting configuration

@@ -29,7 +29,7 @@ func (r *UserRepository) RetrieveUserByUserName(
 ) (*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
-		       security_context, user_group_membership_list, mfa_exempt,
+		       security_context, app_user_group_membership_list, mfa_exempt,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
@@ -41,7 +41,7 @@ func (r *UserRepository) RetrieveUserByUserName(
 		return row.Scan(
 			&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName,
 			&user.LastName, &user.Email, &user.SecurityContext,
-			&user.UserGroupMembershipList, &user.MFAExempt,
+			&user.AppUserGroupMembershipList, &user.MFAExempt,
 			&user.CreateTS, &user.CreateUserID, &user.UpdateTS,
 			&user.UpdateUserID, &user.DeleteTS, &user.DeleteUserID,
 		)
@@ -69,8 +69,8 @@ func (r *UserRepository) GetGrantsForGroups(
 
 	query := `
 		SELECT ug.security_context, ug.user_grant_list
-		FROM user_group ug
-		WHERE ug.user_group_id = ANY($1) AND ug.delete_user_id IS NULL`
+		FROM app_user_group ug
+		WHERE ug.app_user_group_id = ANY($1) AND ug.delete_user_id IS NULL`
 
 	rowList, err := r.db.Query(ctx, query, groupIDs)
 	if err != nil {
@@ -113,14 +113,14 @@ func (r *UserRepository) CreateUser(
 
 	query := `
 		INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email,
-		                     security_context, user_group_membership_list, mfa_exempt,
+		       security_context, app_user_group_membership_list, mfa_exempt,
 		                     create_ts, create_user_id, update_ts, update_user_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING app_user_id`
 
 	err := r.db.QueryRow(ctx, query,
 		user.UserName, user.PwHash, user.FirstName, user.LastName, user.Email,
-		user.SecurityContext, user.UserGroupMembershipList, user.MFAExempt,
+		user.SecurityContext, user.AppUserGroupMembershipList, user.MFAExempt,
 		user.CreateTS, user.CreateUserID, user.UpdateTS, user.UpdateUserID,
 	).Scan(&user.AppUserID)
 
@@ -161,7 +161,7 @@ func (r *UserRepository) RetrieveUserList(
 ) ([]*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, first_name, last_name, email,
-		       security_context, user_group_membership_list, mfa_exempt,
+		       security_context, app_user_group_membership_list, mfa_exempt,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
@@ -193,7 +193,7 @@ func (r *UserRepository) RetrieveUserList(
 		var user model.AppUserModel
 		err := rows.Scan(
 			&user.AppUserID, &user.UserName, &user.FirstName, &user.LastName, &user.Email,
-			&user.SecurityContext, &user.UserGroupMembershipList, &user.MFAExempt,
+			&user.SecurityContext, &user.AppUserGroupMembershipList, &user.MFAExempt,
 			&user.CreateTS, &user.CreateUserID, &user.UpdateTS, &user.UpdateUserID,
 			&user.DeleteTS, &user.DeleteUserID,
 		)
@@ -213,13 +213,13 @@ func (r *UserRepository) UpdateUser(
 	query := `
 		UPDATE app_user
 		SET user_name = $1, first_name = $2, last_name = $3, email = $4,
-		    user_group_membership_list = $5, mfa_exempt = $6,
+		    app_user_group_membership_list = $5, mfa_exempt = $6,
 		    update_ts = $7, update_user_id = $8
 		WHERE app_user_id = $9 AND update_ts = $10 AND delete_user_id IS NULL`
 
 	result, err := r.db.Exec(ctx, query,
 		user.UserName, user.FirstName, user.LastName, user.Email,
-		user.UserGroupMembershipList, user.MFAExempt,
+		user.AppUserGroupMembershipList, user.MFAExempt,
 		user.UpdateTS, user.UpdateUserID,
 		user.AppUserID, clientUpdateTS)
 	if err != nil {
@@ -304,10 +304,10 @@ func (r *UserRepository) AddUserListToGroup(
 	for i, userId := range userIds {
 		result, err := tx.Exec(ctx, `
 			UPDATE app_user
-			SET user_group_membership_list = array_append(user_group_membership_list, $2),
+			SET app_user_group_membership_list = array_append(app_user_group_membership_list, $2),
 				update_ts = $3,
 				update_user_id = $4
-			WHERE app_user_id = $1 AND update_ts = $5 AND delete_user_id IS NULL AND $2 != ALL(user_group_membership_list)`,
+			WHERE app_user_id = $1 AND update_ts = $5 AND delete_user_id IS NULL AND $2 != ALL(app_user_group_membership_list)`,
 			userId, groupId, float64(time.Now().UnixNano())/1e9, updateUserId, updateTsList[i])
 
 		if err != nil {
@@ -351,7 +351,7 @@ func (r *UserRepository) RemoveUserListFromGroup(
 	for i, userId := range userIds {
 		result, err := tx.Exec(ctx, `
 			UPDATE app_user
-			SET user_group_membership_list = array_remove(user_group_membership_list, $2),
+			SET app_user_group_membership_list = array_remove(app_user_group_membership_list, $2),
 				update_ts = $3,
 				update_user_id = $4
 			WHERE app_user_id = $1 AND update_ts = $5 AND delete_user_id IS NULL`,

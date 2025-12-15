@@ -1,8 +1,8 @@
 package model
 
-// UserGroupModel represents a user group
-type UserGroupModel struct {
-	UserGroupID     int      `json:"userGroupId" db:"user_group_id"`
+// AppUserGroupModel represents a user group
+type AppUserGroupModel struct {
+	AppUserGroupID  int      `json:"appUserGroupId" db:"app_user_group_id"`
 	GroupName       string   `json:"groupName" db:"group_name"`
 	UserGrantList   []int    `json:"userGrantList" db:"user_grant_list"`
 	SecurityContext int      `json:"securityContext" db:"security_context"`

@@ -9,18 +9,18 @@ import (
 	"testing"
 )
 
-func TestUserGroupRepository(t *testing.T) {
-	suite.Run(t, &UserGroupRepositoryTestSuite{})
+func TestAppUserGroupRepository(t *testing.T) {
+	suite.Run(t, &AppUserGroupRepositoryTestSuite{})
 }
 
-type UserGroupRepositoryTestSuite struct {
+type AppUserGroupRepositoryTestSuite struct {
 	suite.Suite
 	db      *pgxpool.Pool
-	repo    *UserGroupRepository
+	repo    *AppUserGroupRepository
 	cleanup func()
 }
 
-func (s *UserGroupRepositoryTestSuite) SetupSuite() {
+func (s *AppUserGroupRepositoryTestSuite) SetupSuite() {
 	// Load configuration from the same file used by the application
 	config, err := app_lib.LoadConfig("../../../../etc/loc-api-srv.env")
 	s.Require().NoError(err)
@@ -29,7 +29,7 @@ func (s *UserGroupRepositoryTestSuite) SetupSuite() {
 	db, err := pgxpool.New(context.Background(), config.DatabaseURL)
 	s.Require().NoError(err)
 	s.db = db
-	s.repo = NewUserGroupRepository(db)
+	s.repo = NewAppUserGroupRepository(db)
 
 	s.cleanup = func() {
 		// Clean only test data if any was created
@@ -37,21 +37,21 @@ func (s *UserGroupRepositoryTestSuite) SetupSuite() {
 	}
 }
 
-func (s *UserGroupRepositoryTestSuite) TearDownSuite() {
+func (s *AppUserGroupRepositoryTestSuite) TearDownSuite() {
 	s.cleanup()
 	s.db.Close()
 }
 
-func (s *UserGroupRepositoryTestSuite) TestNewUserGroupRepository() {
+func (s *AppUserGroupRepositoryTestSuite) TestNewAppUserGroupRepository() {
 	// Test constructor
-	repo := NewUserGroupRepository(s.db)
+	repo := NewAppUserGroupRepository(s.db)
 	s.NotNil(repo)
 	s.Equal(s.db, repo.db)
 }
 
-func (s *UserGroupRepositoryTestSuite) TestReadUserGroupList() {
+func (s *AppUserGroupRepositoryTestSuite) TestReadAppUserGroupList() {
 	// First, check what groups actually exist in the database
-	allGroups, err := s.db.Query(context.Background(), "SELECT user_group_id FROM user_group WHERE delete_user_id IS NULL ORDER BY user_group_id")
+	allGroups, err := s.db.Query(context.Background(), "SELECT app_user_group_id FROM app_user_group WHERE delete_user_id IS NULL ORDER BY app_user_group_id")
 	s.NoError(err)
 	defer allGroups.Close()
 
@@ -70,14 +70,14 @@ func (s *UserGroupRepositoryTestSuite) TestReadUserGroupList() {
 	}
 
 	// Test retrieving existing groups
-	groups, err := s.repo.RetrieveUserGroupListByIDList(context.Background(), existingGroupIDList)
+	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), existingGroupIDList)
 	s.NoError(err)
 	s.NotNil(groups)
 	s.Len(groups, len(existingGroupIDList))
 
 	// Validate each returned group
 	for _, group := range groups {
-		s.NotZero(group.UserGroupID)
+		s.NotZero(group.AppUserGroupID)
 		s.NotEmpty(group.GroupName)
 		s.NotNil(group.UserGrantList)
 		s.True(len(group.UserGrantList) > 0, "Group should have at least one grant")
@@ -88,25 +88,25 @@ func (s *UserGroupRepositoryTestSuite) TestReadUserGroupList() {
 	}
 }
 
-func (s *UserGroupRepositoryTestSuite) TestRetrieveUserGroupListByIDListEmpty() {
+func (s *AppUserGroupRepositoryTestSuite) TestRetrieveAppUserGroupListByIDListEmpty() {
 	// Test with empty list
-	groups, err := s.repo.RetrieveUserGroupListByIDList(context.Background(), []int{})
+	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), []int{})
 	s.NoError(err)
 	s.Equal(0, len(groups))
-	s.Equal([]*model.UserGroupModel{}, groups)
+	s.Equal([]*model.AppUserGroupModel{}, groups)
 }
 
-func (s *UserGroupRepositoryTestSuite) TestRetrieveUserGroupListByIDListNonExistent() {
+func (s *AppUserGroupRepositoryTestSuite) TestRetrieveAppUserGroupListByIDListNonExistent() {
 	// Test with non-existent IDs
 	groupIDList := []int{99999, 88888}
-	groups, err := s.repo.RetrieveUserGroupListByIDList(context.Background(), groupIDList)
+	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), groupIDList)
 	s.NoError(err)
 	s.Equal(0, len(groups)) // Should return empty slice for non-existent groups
 }
 
-func (s *UserGroupRepositoryTestSuite) TestRetrieveUserGroupListByIDListPartial() {
+func (s *AppUserGroupRepositoryTestSuite) TestRetrieveAppUserGroupListByIDListPartial() {
 	// First, check what groups actually exist in the database
-	allGroups, err := s.db.Query(context.Background(), "SELECT user_group_id, group_name FROM user_group WHERE delete_user_id IS NULL ORDER BY user_group_id LIMIT 1")
+	allGroups, err := s.db.Query(context.Background(), "SELECT app_user_group_id, group_name FROM app_user_group WHERE delete_user_id IS NULL ORDER BY app_user_group_id LIMIT 1")
 	s.NoError(err)
 	defer allGroups.Close()
 
@@ -122,11 +122,11 @@ func (s *UserGroupRepositoryTestSuite) TestRetrieveUserGroupListByIDListPartial(
 
 	// Test with mix of existing and non-existing IDs
 	groupIDList := []int{existingID, 99999}
-	groups, err := s.repo.RetrieveUserGroupListByIDList(context.Background(), groupIDList)
+	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), groupIDList)
 	s.NoError(err)
 
 	// Should find only the existing group
 	s.Len(groups, 1)
-	s.Equal(existingID, groups[0].UserGroupID)
+	s.Equal(existingID, groups[0].AppUserGroupID)
 	s.Equal(existingName, groups[0].GroupName)
 }

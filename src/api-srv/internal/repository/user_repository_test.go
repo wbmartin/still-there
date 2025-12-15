@@ -7,6 +7,7 @@ import (
 	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
 	"testing"
+	"time"
 )
 
 func TestUserRepository(t *testing.T) {
@@ -52,19 +53,20 @@ func (s *UserRepositoryTestSuite) TestNewUserRepository() {
 
 func (s *UserRepositoryTestSuite) TestRetrieveUserByUserName() {
 	// Create a test user first
+	testUserName := "TestUser" + time.Now().Format("20060102150405") // Remove underscore to pass validation
 	testUser := &model.AppUserModel{
-		UserName:                "RepoTestRetrieveUser",
-		PwHash:                  "$2a$10$test.hash.for.testing.purposes.only",
-		FirstName:               "Retrieve",
-		LastName:                "Test",
-		Email:                   "retrieve@example.com",
-		SecurityContext:         1,
-		UserGroupMembershipList: []int{1}, // Assuming group 1 exists
-		MFAExempt:               false,
-		CreateTS:                1234567890.123,
-		CreateUserID:            1,
-		UpdateTS:                1234567890.123,
-		UpdateUserID:            1,
+		UserName:                   testUserName,
+		PwHash:                     "$2a$10$example.hash.here",
+		FirstName:                  "Test",
+		LastName:                   "User",
+		Email:                      "test@example.com",
+		SecurityContext:            1,
+		AppUserGroupMembershipList: []int{1}, // Assuming group 1 exists
+		MFAExempt:                  false,
+		CreateTS:                   1234567890.123,
+		CreateUserID:               1,
+		UpdateTS:                   1234567890.123,
+		UpdateUserID:               1,
 	}
 
 	created, err := s.repo.CreateUser(context.Background(), testUser)
@@ -72,16 +74,16 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserByUserName() {
 	s.NotNil(created)
 
 	// Now retrieve the user by username
-	user, err := s.repo.RetrieveUserByUserName(context.Background(), "RepoTestRetrieveUser")
+	user, err := s.repo.RetrieveUserByUserName(context.Background(), testUserName)
 	s.NoError(err)
 	s.NotNil(user)
-	s.Equal("RepoTestRetrieveUser", user.UserName)
-	s.Equal("Test", user.LastName)
-	s.Equal("retrieve@example.com", user.Email)
+	s.Equal(testUserName, user.UserName)
+	s.Equal("User", user.LastName)
+	s.Equal("test@example.com", user.Email)
 	s.Equal(1, user.SecurityContext)
 	s.False(user.MFAExempt)
-	s.NotNil(user.UserGroupMembershipList)
-	s.True(len(user.UserGroupMembershipList) > 0)
+	s.NotNil(user.AppUserGroupMembershipList)
+	s.True(len(user.AppUserGroupMembershipList) > 0)
 	s.Nil(user.DeleteTS)
 	s.Nil(user.DeleteUserID)
 }
@@ -96,7 +98,7 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserByUserNameNotFound() {
 
 func (s *UserRepositoryTestSuite) TestGetGrantsForGroups() {
 	// First, check what groups actually exist
-	allGroups, err := s.db.Query(context.Background(), "SELECT user_group_id FROM user_group WHERE delete_user_id IS NULL ORDER BY user_group_id")
+	allGroups, err := s.db.Query(context.Background(), "SELECT app_user_group_id FROM app_user_group WHERE delete_user_id IS NULL ORDER BY app_user_group_id")
 	s.NoError(err)
 	defer allGroups.Close()
 
@@ -145,18 +147,18 @@ func (s *UserRepositoryTestSuite) TestGetGrantsForGroupsNonExistent() {
 func (s *UserRepositoryTestSuite) TestCreateUser() {
 	// Create a test user
 	user := &model.AppUserModel{
-		UserName:                "RepoTestUser",
-		PwHash:                  "$2a$10$test.hash.for.testing.purposes.only",
-		FirstName:               "Test",
-		LastName:                "User",
-		Email:                   "test@example.com",
-		SecurityContext:         1,
-		UserGroupMembershipList: []int{1}, // Assuming group 1 exists
-		MFAExempt:               false,
-		CreateTS:                1234567890.123,
-		CreateUserID:            1,
-		UpdateTS:                1234567890.123,
-		UpdateUserID:            1,
+		UserName:                   "RepoTestUser",
+		PwHash:                     "$2a$10$test.hash.for.testing.purposes.only",
+		FirstName:                  "Test",
+		LastName:                   "User",
+		Email:                      "test@example.com",
+		SecurityContext:            1,
+		AppUserGroupMembershipList: []int{1}, // Assuming group 1 exists
+		MFAExempt:                  false,
+		CreateTS:                   1234567890.123,
+		CreateUserID:               1,
+		UpdateTS:                   1234567890.123,
+		UpdateUserID:               1,
 	}
 
 	created, err := s.repo.CreateUser(context.Background(), user)
@@ -172,18 +174,18 @@ func (s *UserRepositoryTestSuite) TestCreateUser() {
 func (s *UserRepositoryTestSuite) TestCreateUserInvalidUsername() {
 	// Create a test user with invalid username
 	user := &model.AppUserModel{
-		UserName:                "invalid-user!",
-		PwHash:                  "$2a$10$test.hash.for.testing.purposes.only",
-		FirstName:               "Test",
-		LastName:                "User",
-		Email:                   "test@example.com",
-		SecurityContext:         1,
-		UserGroupMembershipList: []int{1},
-		MFAExempt:               false,
-		CreateTS:                1234567890.123,
-		CreateUserID:            1,
-		UpdateTS:                1234567890.123,
-		UpdateUserID:            1,
+		UserName:                   "invalid-user!",
+		PwHash:                     "$2a$10$test.hash.for.testing.purposes.only",
+		FirstName:                  "Test",
+		LastName:                   "User",
+		Email:                      "test@example.com",
+		SecurityContext:            1,
+		AppUserGroupMembershipList: []int{1},
+		MFAExempt:                  false,
+		CreateTS:                   1234567890.123,
+		CreateUserID:               1,
+		UpdateTS:                   1234567890.123,
+		UpdateUserID:               1,
 	}
 
 	created, err := s.repo.CreateUser(context.Background(), user)
@@ -195,18 +197,18 @@ func (s *UserRepositoryTestSuite) TestCreateUserInvalidUsername() {
 func (s *UserRepositoryTestSuite) TestUpdateUserPassword() {
 	// First create a test user
 	user := &model.AppUserModel{
-		UserName:                "RepoTestPasswordUser",
-		PwHash:                  "$2a$10$original.hash",
-		FirstName:               "Password",
-		LastName:                "Test",
-		Email:                   "password@example.com",
-		SecurityContext:         1,
-		UserGroupMembershipList: []int{1},
-		MFAExempt:               false,
-		CreateTS:                1234567890.123,
-		CreateUserID:            1,
-		UpdateTS:                1234567890.123,
-		UpdateUserID:            1,
+		UserName:                   "RepoTestPasswordUser",
+		PwHash:                     "$2a$10$original.hash",
+		FirstName:                  "Password",
+		LastName:                   "Test",
+		Email:                      "password@example.com",
+		SecurityContext:            1,
+		AppUserGroupMembershipList: []int{1},
+		MFAExempt:                  false,
+		CreateTS:                   1234567890.123,
+		CreateUserID:               1,
+		UpdateTS:                   1234567890.123,
+		UpdateUserID:               1,
 	}
 
 	created, _ := s.repo.CreateUser(context.Background(), user)

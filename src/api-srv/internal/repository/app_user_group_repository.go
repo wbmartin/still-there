@@ -9,30 +9,30 @@ import (
 	"github.com/wbmartin/starter-api/internal/model"
 )
 
-// UserGroupRepository handles database operations for user groups
-type UserGroupRepository struct {
+// AppUserGroupRepository handles database operations for user groups
+type AppUserGroupRepository struct {
 	db *pgxpool.Pool
 }
 
-// NewUserGroupRepository creates a new user group repository
-func NewUserGroupRepository(db *pgxpool.Pool) *UserGroupRepository {
-	return &UserGroupRepository{db: db}
+// NewAppUserGroupRepository creates a new user group repository
+func NewAppUserGroupRepository(db *pgxpool.Pool) *AppUserGroupRepository {
+	return &AppUserGroupRepository{db: db}
 }
 
-// RetrieveUserGroupListByIDList retrieves user groups by IDs
-func (r *UserGroupRepository) RetrieveUserGroupListByIDList(
+// RetrieveAppUserGroupListByIDList retrieves user groups by IDs
+func (r *AppUserGroupRepository) RetrieveAppUserGroupListByIDList(
 	ctx context.Context, groupIDs []int,
-) ([]*model.UserGroupModel, error) {
+) ([]*model.AppUserGroupModel, error) {
 	if len(groupIDs) == 0 {
-		return []*model.UserGroupModel{}, nil
+		return []*model.AppUserGroupModel{}, nil
 	}
 
 	query := `
-		SELECT user_group_id, group_name, user_grant_list, security_context,
+		SELECT app_user_group_id, group_name, user_grant_list, security_context,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
-		FROM user_group
-		WHERE user_group_id = ANY($1) AND delete_user_id IS NULL`
+		FROM app_user_group
+		WHERE app_user_group_id = ANY($1) AND delete_user_id IS NULL`
 
 	rowList, err := r.db.Query(ctx, query, groupIDs)
 	if err != nil {
@@ -40,11 +40,11 @@ func (r *UserGroupRepository) RetrieveUserGroupListByIDList(
 	}
 	defer rowList.Close()
 
-	var groupList []*model.UserGroupModel
+	var groupList []*model.AppUserGroupModel
 	for rowList.Next() {
-		var group model.UserGroupModel
+		var group model.AppUserGroupModel
 		err := rowList.Scan(
-			&group.UserGroupID, &group.GroupName, &group.UserGrantList,
+			&group.AppUserGroupID, &group.GroupName, &group.UserGrantList,
 			&group.SecurityContext, &group.CreateTS, &group.CreateUserID,
 			&group.UpdateTS, &group.UpdateUserID, &group.DeleteTS,
 			&group.DeleteUserID,
@@ -58,15 +58,15 @@ func (r *UserGroupRepository) RetrieveUserGroupListByIDList(
 	return groupList, nil
 }
 
-// RetrieveUserGroupList retrieves all user groups for a security context
-func (r *UserGroupRepository) RetrieveUserGroupList(
+// RetrieveAppUserGroupList retrieves all user groups for a security context
+func (r *AppUserGroupRepository) RetrieveAppUserGroupList(
 	ctx context.Context, securityContext int,
-) ([]*model.UserGroupModel, error) {
+) ([]*model.AppUserGroupModel, error) {
 	query := `
-		SELECT user_group_id, group_name, user_grant_list, security_context,
+		SELECT app_user_group_id, group_name, user_grant_list, security_context,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
-		FROM user_group
+		FROM app_user_group
 		WHERE security_context = $1 AND delete_user_id IS NULL
 		ORDER BY group_name`
 
@@ -76,11 +76,11 @@ func (r *UserGroupRepository) RetrieveUserGroupList(
 	}
 	defer rows.Close()
 
-	var groups []*model.UserGroupModel
+	var groups []*model.AppUserGroupModel
 	for rows.Next() {
-		var group model.UserGroupModel
+		var group model.AppUserGroupModel
 		err := rows.Scan(
-			&group.UserGroupID, &group.GroupName, &group.UserGrantList, &group.SecurityContext,
+			&group.AppUserGroupID, &group.GroupName, &group.UserGrantList, &group.SecurityContext,
 			&group.CreateTS, &group.CreateUserID, &group.UpdateTS, &group.UpdateUserID,
 			&group.DeleteTS, &group.DeleteUserID,
 		)
@@ -93,15 +93,15 @@ func (r *UserGroupRepository) RetrieveUserGroupList(
 	return groups, nil
 }
 
-// CreateUserGroup creates a new user group
-func (r *UserGroupRepository) CreateUserGroup(
-	ctx context.Context, group *model.UserGroupModel,
-) (*model.UserGroupModel, error) {
+// CreateAppUserGroup creates a new user group
+func (r *AppUserGroupRepository) CreateAppUserGroup(
+	ctx context.Context, group *model.AppUserGroupModel,
+) (*model.AppUserGroupModel, error) {
 	query := `
-		INSERT INTO user_group (group_name, user_grant_list, security_context,
+		INSERT INTO app_user_group (group_name, user_grant_list, security_context,
 		                        create_ts, create_user_id, update_ts, update_user_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING user_group_id`
+		RETURNING app_user_group_id`
 
 	var newID int
 	err := r.db.QueryRow(ctx, query,
@@ -112,24 +112,24 @@ func (r *UserGroupRepository) CreateUserGroup(
 		return nil, fmt.Errorf("failed to create user group: %w", err)
 	}
 
-	group.UserGroupID = newID
+	group.AppUserGroupID = newID
 	return group, nil
 }
 
-// UpdateUserGroup updates a user group with optimistic locking
-func (r *UserGroupRepository) UpdateUserGroup(
-	ctx context.Context, group *model.UserGroupModel, clientUpdateTS float64,
+// UpdateAppUserGroup updates a user group with optimistic locking
+func (r *AppUserGroupRepository) UpdateAppUserGroup(
+	ctx context.Context, group *model.AppUserGroupModel, clientUpdateTS float64,
 ) error {
 	query := `
-		UPDATE user_group
+		UPDATE app_user_group
 		SET group_name = $1, user_grant_list = $2,
 		    update_ts = $3, update_user_id = $4
-		WHERE user_group_id = $5 AND update_ts = $6 AND delete_user_id IS NULL`
+		WHERE app_user_group_id = $5 AND update_ts = $6 AND delete_user_id IS NULL`
 
 	result, err := r.db.Exec(ctx, query,
 		group.GroupName, group.UserGrantList,
 		group.UpdateTS, group.UpdateUserID,
-		group.UserGroupID, clientUpdateTS)
+		group.AppUserGroupID, clientUpdateTS)
 	if err != nil {
 		return fmt.Errorf("failed to update user group: %w", err)
 	}
@@ -137,9 +137,9 @@ func (r *UserGroupRepository) UpdateUserGroup(
 	if result.RowsAffected() == 0 {
 		// Check if group exists
 		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM user_group
-			WHERE user_group_id = $1 AND delete_user_id IS NULL)`
-		err = r.db.QueryRow(ctx, checkQuery, group.UserGroupID).Scan(&exists)
+		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user_group
+			WHERE app_user_group_id = $1 AND delete_user_id IS NULL)`
+		err = r.db.QueryRow(ctx, checkQuery, group.AppUserGroupID).Scan(&exists)
 		if err != nil {
 			return fmt.Errorf("failed to check user group existence: %w", err)
 		}
@@ -152,8 +152,8 @@ func (r *UserGroupRepository) UpdateUserGroup(
 	return nil
 }
 
-// DeleteUserGroup soft deletes a user group if no users are assigned
-func (r *UserGroupRepository) DeleteUserGroup(
+// DeleteAppUserGroup soft deletes a user group if no users are assigned
+func (r *AppUserGroupRepository) DeleteAppUserGroup(
 	ctx context.Context,
 	groupID int,
 	securityContext int,
@@ -165,7 +165,7 @@ func (r *UserGroupRepository) DeleteUserGroup(
 	checkQuery := `
 		SELECT COUNT(*)
 		FROM app_user
-		WHERE $1 = ANY(user_group_membership_list) AND delete_user_id IS NULL`
+		WHERE $1 = ANY(app_user_group_membership_list) AND delete_user_id IS NULL`
 	var count int
 	err := r.db.QueryRow(ctx, checkQuery, groupID).Scan(&count)
 	if err != nil {
@@ -177,9 +177,9 @@ func (r *UserGroupRepository) DeleteUserGroup(
 
 	// Delete the group
 	query := `
-		UPDATE user_group
+		UPDATE app_user_group
 		SET delete_ts = $1, delete_user_id = $2
-		WHERE user_group_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+		WHERE app_user_group_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
 	result, err := r.db.Exec(ctx, query, deleteTS, deleteUserID, groupID, securityContext, clientUpdateTS)
 	if err != nil {
@@ -189,7 +189,7 @@ func (r *UserGroupRepository) DeleteUserGroup(
 	if result.RowsAffected() == 0 {
 		// Check if group exists
 		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM user_group WHERE user_group_id = $1 AND delete_user_id IS NULL)`
+		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user_group WHERE app_user_group_id = $1 AND delete_user_id IS NULL)`
 		err = r.db.QueryRow(ctx, checkQuery, groupID).Scan(&exists)
 		if err != nil {
 			return 0, fmt.Errorf("failed to check user group existence: %w", err)
@@ -200,5 +200,5 @@ func (r *UserGroupRepository) DeleteUserGroup(
 		return 0, ErrConflict
 	}
 
-	return groupID, nil
+	return int(result.RowsAffected()), nil
 }
