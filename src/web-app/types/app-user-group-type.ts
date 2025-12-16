@@ -1,6 +1,6 @@
-// User Group Types
-export interface UserGroup {
-  userGroupId: number;
+// App User Group Types
+export interface AppUserGroup {
+  appUserGroupId: number;
   groupName: string;
   userGrantList: number[];
   securityContext: number;
@@ -12,8 +12,8 @@ export interface UserGroup {
   deleteUserId?: number;
 }
 
-export interface ApiUserGroupModel {
-  userGroupId: number;
+export interface ApiAppUserGroupModel {
+  appUserGroupId: number;
   groupName: string;
   userGrantList: number[];
   securityContext: number;
@@ -25,13 +25,13 @@ export interface ApiUserGroupModel {
   deleteUserId?: number;
 }
 
-export interface UserGroupFormData {
+export interface AppUserGroupFormData {
   groupName: string;
   userGrantList: number[];
   updateTs: string;
 }
 
-export const defaultUserGroupFormData: UserGroupFormData = {
+export const defaultAppUserGroupFormData: AppUserGroupFormData = {
   groupName: "",
   userGrantList: [],
   updateTs: "",

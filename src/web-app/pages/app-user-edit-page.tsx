@@ -10,7 +10,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useAppUserStore } from "../stores/app-user-store";
-import { useUserGroupsStore } from "../stores/user-groups-store";
+import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
@@ -22,7 +22,7 @@ function UserEditPage() {
   const [searchParams] = useSearchParams();
   const { retrieveUserById, createUser, updateUser, deleteUser } =
     useAppUserStore();
-  const { retrieveUserGroupList, userGroupList } = useUserGroupsStore();
+  const { retrieveAppUserGroupList, appUserGroupList, loading: groupsLoading } = useAppUserGroupStore();
   const navigate = useNavigate();
 
   const id = searchParams.get("appUserId") || "";
@@ -36,9 +36,9 @@ function UserEditPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   useEffect(() => {
-    if (!hasFetched.current) {
+    if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-       void retrieveUserGroupList();
+       void retrieveAppUserGroupList();
       if (numericId && !isNew) {
         // Fetch the user directly
         void retrieveUserById(numericId).then((user) => {
@@ -48,7 +48,7 @@ function UserEditPage() {
               firstName: user.firstName,
               lastName: user.lastName,
               email: user.email,
-              userGroupMembershipList: user.userGroupMembershipList,
+              appUserGroupMembershipList: user.appUserGroupMembershipList,
               mfaExempt: user.mfaExempt,
               pwHash: "",
               updateTs: user.updateTs.toString(),
@@ -64,9 +64,13 @@ function UserEditPage() {
         }, 0);
       }
     }
-  }, [numericId, isNew, retrieveUserGroupList, retrieveUserById]);
+  }, [authState, numericId, isNew, retrieveAppUserGroupList, retrieveUserById]);
 
   //============================^HOOOK LINE ^====================
+
+  if (authState !== "YES") {
+    return <div>Checking Auth...</div>;
+  }
 
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
@@ -83,7 +87,7 @@ function UserEditPage() {
       firstName: formData.firstName,
       lastName: formData.lastName,
       email: formData.email,
-      userGroupMembershipList: formData.userGroupMembershipList,
+              appUserGroupMembershipList: formData.appUserGroupMembershipList,
       mfaExempt: formData.mfaExempt,
       pwHash: formData.pwHash || undefined,
       updateTs: !isNew ? Number(formData.updateTs) : undefined,
@@ -156,10 +160,12 @@ function UserEditPage() {
     setDeleteModalOpen(false);
   };
 
-  const groupOptions = userGroupList.map((g) => ({
-    value: g.userGroupId.toString(),
+  const groupOptions = appUserGroupList.map((g) => ({
+    value: g.appUserGroupId.toString(),
     label: g.groupName,
   }));
+
+
 
   return (
     <div style={{ padding: "2rem" }}>
@@ -216,13 +222,14 @@ function UserEditPage() {
         <MultiSelect
           label="Groups"
           data={groupOptions}
-          value={formData.userGroupMembershipList.map(String)}
+          value={formData.appUserGroupMembershipList.map(String)}
           onChange={(values) =>
             setFormData({
               ...formData,
-              userGroupMembershipList: values.map(Number),
+              appUserGroupMembershipList: values.map(Number),
             })
           }
+          disabled={groupsLoading}
           mb="md"
         />
         <Checkbox

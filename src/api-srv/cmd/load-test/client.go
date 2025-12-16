@@ -56,7 +56,7 @@ func NewAPIClient(baseURL string) *APIClient {
 	}
 }
 
-func (c *APIClient) Login() (exampleID int, updateTs float64, err error) {
+func (c *APIClient) Login() error {
 	// Authentication request
 	authData := map[string]string{
 		"userName": "admin",
@@ -66,25 +66,25 @@ func (c *APIClient) Login() (exampleID int, updateTs float64, err error) {
 	jsonData, _ := json.Marshal(authData)
 	req, err := http.NewRequest("POST", c.baseURL+"/auth", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to create auth request: %w", err)
+		return fmt.Errorf("failed to create auth request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return 0, 0, fmt.Errorf("auth request failed: %w", err)
+		return fmt.Errorf("auth request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return 0, 0, fmt.Errorf("auth failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("auth failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse response
 	var authResp AuthResponse
 	if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
-		return 0, 0, fmt.Errorf("failed to parse auth response: %w", err)
+		return fmt.Errorf("failed to parse auth response: %w", err)
 	}
 
 	// Extract JWT from cookie
@@ -98,13 +98,13 @@ func (c *APIClient) Login() (exampleID int, updateTs float64, err error) {
 	c.csrfToken = authResp.CsrfToken
 
 	if c.jwtToken == "" {
-		return 0, 0, fmt.Errorf("no JWT token received")
+		return fmt.Errorf("no JWT token received")
 	}
 
-	return 0, 0, nil
+	return nil
 }
 
-func (c *APIClient) CreateExample() error {
+func (c *APIClient) CreateExample() (int, float64, error) {
 	exampleData := map[string]interface{}{
 		"exampleText":       "Load Test Example",
 		"exampleInt":        42,
@@ -114,7 +114,52 @@ func (c *APIClient) CreateExample() error {
 		"securityContext":   1,
 	}
 
-	return c.makeRequest("POST", "/example", exampleData, nil)
+	// Make the request and capture response
+	req, err := http.NewRequest("POST", c.baseURL+"/example", nil)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	if c.jwtToken != "" {
+		req.AddCookie(&http.Cookie{Name: "auth", Value: c.jwtToken})
+	}
+	if c.csrfToken != "" {
+		req.Header.Set("X-CSRF-Token", c.csrfToken)
+	}
+
+	// Add JSON body
+	jsonData, err := json.Marshal(exampleData)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to marshal request data: %w", err)
+	}
+	req.Body = io.NopCloser(bytes.NewBuffer(jsonData))
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return 0, 0, fmt.Errorf("create request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return 0, 0, fmt.Errorf("create failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response to get example ID and update timestamp
+	var response struct {
+		Data struct {
+			ExampleID int     `json:"exampleId"`
+			UpdateTS  float64 `json:"updateTs"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return 0, 0, fmt.Errorf("failed to parse create response: %w", err)
+	}
+
+	return response.Data.ExampleID, response.Data.UpdateTS, nil
 }
 
 func (c *APIClient) UpdateExample(exampleID int, updateTs float64) error {

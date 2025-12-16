@@ -30,9 +30,9 @@ function AddRemoveUsersFromGroupModal({
 
   const availableUserList = userList.filter((user) => {
     if (mode === "add") {
-      return !user.userGroupMembershipList.includes(groupId || 0);
+      return !user.appUserGroupMembershipList.includes(groupId || 0);
     } else {
-      return user.userGroupMembershipList.includes(groupId || 0);
+      return user.appUserGroupMembershipList.includes(groupId || 0);
     }
   });
 

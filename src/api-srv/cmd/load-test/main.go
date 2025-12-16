@@ -272,7 +272,7 @@ func runWorker(workerID int, config Config, metricsChan chan<- OperationMetric, 
 func runCycle(client *APIClient, metricsChan chan<- OperationMetric) {
 	// 1. Login
 	start := time.Now()
-	exampleID, updateTs, err := client.Login()
+	err := client.Login()
 	duration := time.Since(start)
 
 	success := err == nil
@@ -299,7 +299,7 @@ func runCycle(client *APIClient, metricsChan chan<- OperationMetric) {
 
 	// 2. Create example
 	start = time.Now()
-	err = client.CreateExample()
+	exampleID, updateTs, err := client.CreateExample()
 	duration = time.Since(start)
 
 	metricsChan <- OperationMetric{
@@ -315,9 +315,39 @@ func runCycle(client *APIClient, metricsChan chan<- OperationMetric) {
 		return
 	}
 
-	// 3. Update example (exercise the update operation)
+	metricsChan <- OperationMetric{
+		Operation: OpLogin,
+		Duration:  duration,
+		Success:   success,
+		ErrorType: errorType,
+		Timestamp: time.Now(),
+	}
+
+	if !success {
+		return
+	}
+
+	// 2. Create example
 	start = time.Now()
-	err = client.UpdateExample(exampleID, updateTs)
+	exampleID, updateTs, err = client.CreateExample()
+	duration = time.Since(start)
+
+	metricsChan <- OperationMetric{
+		Operation: OpCreate,
+		Duration:  duration,
+		Success:   err == nil,
+		ErrorType: getErrorType(err),
+		Timestamp: time.Now(),
+	}
+
+	if err != nil {
+		client.Logout() // Cleanup
+		return
+	}
+
+	// 2. Create example
+	start = time.Now()
+	exampleID, updateTs, err = client.CreateExample()
 	duration = time.Since(start)
 
 	metricsChan <- OperationMetric{

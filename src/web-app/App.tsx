@@ -6,8 +6,8 @@ import ExampleListPage from './pages/example-list-page'
 import ExampleEditPage from './pages/example-edit-page'
 import AppUserListPage from './pages/app-user-list-page'
 import AppUserEditPage from './pages/app-user-edit-page'
-import UserGroupListPage from './pages/user-group-list-page'
-import UserGroupEditPage from './pages/user-group-edit-page'
+import AppUserGroupListPage from './pages/app-user-group-list-page'
+import AppUserGroupEditPage from './pages/app-user-group-edit-page'
 import UserPreferencesPage from './pages/user-preferences-page'
 
 import { useAuthStore } from './stores/auth-store'
@@ -48,12 +48,12 @@ const router = createBrowserRouter([
            element: <AppUserEditPage />,
          },
          {
-           path: ROUTES.USER_GROUP_LIST,
-           element: <UserGroupListPage />,
+           path: ROUTES.APP_USER_GROUP_LIST,
+           element: <AppUserGroupListPage />,
          },
           {
-            path: ROUTES.USER_GROUP_EDIT,
-            element: <UserGroupEditPage />,
+            path: ROUTES.APP_USER_GROUP_EDIT,
+            element: <AppUserGroupEditPage />,
           },
           {
             path: ROUTES.USER_PREFERENCES,
@@ -85,7 +85,7 @@ function AppLayout() {
             <NavLink component={Link} to={`/${ROUTES.DASHBOARD}`} label="Dashboard" />
             <NavLink component={Link} to={`/${ROUTES.EXAMPLE_LIST}`} label="Examples" />
             {canManageUsers && <NavLink component={Link} to={`/${ROUTES.APP_USER_LIST}`} label="User Admin" />}
-            {canManageUserGroups && <NavLink component={Link} to={`/${ROUTES.USER_GROUP_LIST}`} label="User Groups" />}
+            {canManageUserGroups && <NavLink component={Link} to={`/${ROUTES.APP_USER_GROUP_LIST}`} label="User Groups" />}
             <NavLink component={Link} to={`/${ROUTES.USER_PREFERENCES}`} label="Preferences" />
              <Button variant="subtle" onClick={() => void handleLogout()} fullWidth style={{ justifyContent: 'flex-start' }}>
                Logout

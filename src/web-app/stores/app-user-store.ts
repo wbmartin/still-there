@@ -54,7 +54,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
         lastName: u.lastName,
         email: u.email,
         securityContext: u.securityContext,
-        userGroupMembershipList: u.userGroupMembershipList,
+        appUserGroupMembershipList: u.appUserGroupMembershipList,
         mfaExempt: u.mfaExempt,
         createTs: u.createTs,
         createUserId: u.createUserId,
@@ -93,7 +93,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
           lastName: data.data[0].lastName,
           email: data.data[0].email,
           securityContext: data.data[0].securityContext,
-          userGroupMembershipList: data.data[0].userGroupMembershipList,
+          appUserGroupMembershipList: data.data[0].appUserGroupMembershipList,
           mfaExempt: data.data[0].mfaExempt,
           createTs: data.data[0].createTs,
           createUserId: data.data[0].createUserId,
@@ -134,7 +134,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
         const updated = data.data.find(du => du.appUserId === u.appUserId);
         return updated ? {
           ...u,
-          userGroupMembershipList: updated.userGroupMembershipList,
+          appUserGroupMembershipList: updated.appUserGroupMembershipList,
           updateTs: updated.updateTs
         } : u;
       })
@@ -149,7 +149,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email,
-        userGroupMembershipList: data.userGroupMembershipList,
+        appUserGroupMembershipList: data.appUserGroupMembershipList,
         mfaExempt: data.mfaExempt,
         pwHash: data.pwHash, // Assuming password is passed as pwHash
       };
@@ -168,7 +168,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
         lastName: apiUser.lastName,
         email: apiUser.email,
         securityContext: apiUser.securityContext,
-        userGroupMembershipList: apiUser.userGroupMembershipList,
+        appUserGroupMembershipList: apiUser.appUserGroupMembershipList,
         mfaExempt: apiUser.mfaExempt,
         createTs: apiUser.createTs,
         createUserId: apiUser.createUserId,
@@ -194,7 +194,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email,
-        userGroupMembershipList: data.userGroupMembershipList,
+        appUserGroupMembershipList: data.appUserGroupMembershipList,
         mfaExempt: data.mfaExempt,
         updateTs: data.updateTs,
       };

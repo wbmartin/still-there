@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Table, Button, Title, Group, Pagination } from "@mantine/core";
 import { useAppUserStore } from "../stores/app-user-store";
-import { useUserGroupsStore } from "../stores/user-groups-store";
+import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
@@ -11,7 +11,7 @@ import type { User } from "../types/user-type";
 function UserAdminPage() {
   const authState = useAuthGuard();
   const { userList, loading, retrieveUserList, deleteUser } = useAppUserStore();
-  const { getGroupName, retrieveUserGroupList } = useUserGroupsStore();
+  const { getGroupName, retrieveAppUserGroupList } = useAppUserGroupStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
@@ -23,9 +23,9 @@ function UserAdminPage() {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
       void retrieveUserList();
-      void retrieveUserGroupList();
+      void retrieveAppUserGroupList();
     }
-    }, [authState, retrieveUserList, retrieveUserGroupList]);
+    }, [authState, retrieveUserList, retrieveAppUserGroupList]);
   //============================^HOOOK LINE ^====================
 
   if (authState !== "YES") {
@@ -93,7 +93,7 @@ function UserAdminPage() {
               </Table.Td>
               <Table.Td>{user.email}</Table.Td>
               <Table.Td>
-                {user.userGroupMembershipList
+                {user.appUserGroupMembershipList
                   .map((id) => getGroupName(id))
                   .join(", ")}
               </Table.Td>

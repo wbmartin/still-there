@@ -124,10 +124,10 @@ func main() {
 	mux.HandleFunc("GET /grantList", userHandler.RetrieveGrantList)
 
 	// User groups
-	mux.HandleFunc("GET /userGroupList", appUserGroupHandler.RetrieveAppUserGroupList)
-	mux.HandleFunc("POST /userGroup", appUserGroupHandler.CreateAppUserGroup)
-	mux.HandleFunc("PUT /userGroup", appUserGroupHandler.UpdateAppUserGroup)
-	mux.HandleFunc("DELETE /userGroup", appUserGroupHandler.DeleteAppUserGroup)
+	mux.HandleFunc("GET /appUserGroupList", appUserGroupHandler.RetrieveAppUserGroupList)
+	mux.HandleFunc("POST /appUserGroup", appUserGroupHandler.CreateAppUserGroup)
+	mux.HandleFunc("PUT /appUserGroup", appUserGroupHandler.UpdateAppUserGroup)
+	mux.HandleFunc("DELETE /appUserGroup", appUserGroupHandler.DeleteAppUserGroup)
 
 	// Create server
 	server := &http.Server{

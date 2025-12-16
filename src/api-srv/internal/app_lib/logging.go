@@ -16,6 +16,7 @@ type ThisAppLoggerInterface interface {
 	Info(code, message string, keyvals ...interface{})
 	Warn(code, message string, keyvals ...interface{})
 	Error(code, message string, keyvals ...interface{})
+	ErrorWithCallerSkip(code, message string, skip int, keyvals ...interface{})
 	Close()
 }
 
@@ -62,7 +63,7 @@ func NewLogger(config *Config) *Logger {
 }
 
 // log sends a log message to shrmpl-log with caller information
-func (l *Logger) log(level string, code string, message string,
+func (l *Logger) log(level string, code string, message string, skip int,
 	keyvals ...interface{}) {
 	// Parse key-value pairs for username
 	username := "unknown"
@@ -77,9 +78,8 @@ func (l *Logger) log(level string, code string, message string,
 	// Format message with username
 	formattedMsg := fmt.Sprintf("[%s] %s", username, message)
 
-	// Add caller information (skip 2 frames: log() -> Debug/Info/Warn/Error()
-	// -> caller)
-	_, file, line, ok := runtime.Caller(2)
+	// Add caller information with configurable skip
+	_, file, line, ok := runtime.Caller(skip)
 	callerInfo := ""
 	if ok {
 		// Extract just the filename from the full path
@@ -121,22 +121,27 @@ func (l *Logger) log(level string, code string, message string,
 
 // Debug logs at debug level
 func (l *Logger) Debug(code, message string, keyvals ...interface{}) {
-	l.log("DEBG", code, message, keyvals...)
+	l.log("DEBG", code, message, 2, keyvals...)
 }
 
 // Info logs at info level
 func (l *Logger) Info(code, message string, keyvals ...interface{}) {
-	l.log("INFO", code, message, keyvals...)
+	l.log("INFO", code, message, 2, keyvals...)
 }
 
 // Warn logs at warn level
 func (l *Logger) Warn(code, message string, keyvals ...interface{}) {
-	l.log("WARN", code, message, keyvals...)
+	l.log("WARN", code, message, 2, keyvals...)
 }
 
 // Error logs at error level
 func (l *Logger) Error(code, message string, keyvals ...interface{}) {
-	l.log("ERRO", code, message, keyvals...)
+	l.log("ERRO", code, message, 2, keyvals...)
+}
+
+// ErrorWithCallerSkip logs at error level with custom caller skip level
+func (l *Logger) ErrorWithCallerSkip(code, message string, skip int, keyvals ...interface{}) {
+	l.log("ERRO", code, message, skip, keyvals...)
 }
 
 // ShrmplLogClient represents a client for the shrmpl-log service

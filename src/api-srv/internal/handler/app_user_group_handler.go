@@ -206,7 +206,7 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 	jwtClaims := app.GetClaims()
 
 	// Parse query parameters
-	groupID, err := GetIntFromQuery(r, "userGroupId")
+	groupID, err := GetIntFromQuery(r, "appUserGroupId")
 	if err != nil {
 		app.WriteError(w, http.StatusBadRequest, err.Error(), "ERR", nil)
 		return

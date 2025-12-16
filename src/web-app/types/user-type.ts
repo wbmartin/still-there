@@ -6,7 +6,7 @@ export interface User {
   lastName: string;
   email: string;
   securityContext: number;
-  userGroupMembershipList: number[];
+  appUserGroupMembershipList: number[];
   mfaExempt: boolean;
   pwHash?: string;
   createTs: number;
@@ -22,7 +22,7 @@ export interface ApiUserModel {
   lastName: string;
   email: string;
   securityContext: number;
-  userGroupMembershipList: number[];
+  appUserGroupMembershipList: number[];
   mfaExempt: boolean;
   createTs: number;
   createUserId: number;
@@ -43,7 +43,7 @@ export interface UserFormData {
   firstName: string;
   lastName: string;
   email: string;
-  userGroupMembershipList: number[];
+  appUserGroupMembershipList: number[];
   mfaExempt: boolean;
   pwHash: string;
   updateTs: string;
@@ -54,7 +54,7 @@ export const defaultUserFormData: UserFormData = {
   firstName: "",
   lastName: "",
   email: "",
-  userGroupMembershipList: [],
+  appUserGroupMembershipList: [],
   mfaExempt: false,
   pwHash: "",
   updateTs: "",

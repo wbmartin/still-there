@@ -1,19 +1,19 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Table, Button, Title, Group, Pagination, Badge, Flex } from "@mantine/core";
-import { useUserGroupsStore } from "../stores/user-groups-store";
+import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAuthStore } from "../stores/auth-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
-import type { UserGroup } from "../types/user-group-type";
+import type { AppUserGroup } from "../types/app-user-group-type";
 
-function UserGroupAdminPage() {
+function AppUserGroupListPage() {
   const authState = useAuthGuard();
   const { grantList } = useAuthStore();
-  const { userGroupList, loading, retrieveUserGroupList, deleteUserGroup } =
-    useUserGroupsStore();
+  const { appUserGroupList, loading, retrieveAppUserGroupList, deleteUserGroup } =
+    useAppUserGroupStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
@@ -24,9 +24,9 @@ function UserGroupAdminPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void retrieveUserGroupList();
+      void retrieveAppUserGroupList();
     }
-    }, [authState, retrieveUserGroupList]);
+    }, [authState, retrieveAppUserGroupList]);
 
   //============================^HOOOK LINE ^====================
 
@@ -36,8 +36,8 @@ function UserGroupAdminPage() {
 
   if (loading) return <div>Loading...</div>;
 
-  const totalPageCount = Math.ceil(userGroupList.length / itemsPerPage);
-  const paginatedGroupList = userGroupList.slice(
+  const totalPageCount = Math.ceil(appUserGroupList.length / itemsPerPage);
+  const paginatedGroupList = appUserGroupList.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
   );
@@ -75,7 +75,7 @@ function UserGroupAdminPage() {
         <Title order={1}>User Group Admin</Title>
         {canCreateUserGroup && (
           <Button
-            onClick={() => void navigate(`/${ROUTES.USER_GROUP_EDIT}?userGroupId=new`)}
+            onClick={() => void navigate(`/${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=new`)}
           >
             Add User Group
           </Button>
@@ -91,9 +91,9 @@ function UserGroupAdminPage() {
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {paginatedGroupList.map((group: UserGroup) => (
-            <Table.Tr key={group.userGroupId}>
-              <Table.Td>{group.userGroupId}</Table.Td>
+          {paginatedGroupList.map((group: AppUserGroup) => (
+            <Table.Tr key={group.appUserGroupId}>
+              <Table.Td>{group.appUserGroupId}</Table.Td>
               <Table.Td>{group.groupName}</Table.Td>
                <Table.Td>
                  <Flex gap="xs" wrap="wrap">
@@ -110,7 +110,7 @@ function UserGroupAdminPage() {
                      size="xs"
                      onClick={() =>
                        void navigate(
-                         `/${ROUTES.USER_GROUP_EDIT}?userGroupId=${group.userGroupId}`,
+                         `/${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=${group.appUserGroupId}`,
                        )
                      }
                    >
@@ -122,7 +122,7 @@ function UserGroupAdminPage() {
                      size="xs"
                      color="red"
                      ml="xs"
-                     onClick={() => handleDeleteClick(group.userGroupId)}
+                     onClick={() => handleDeleteClick(group.appUserGroupId)}
                    >
                      Delete
                    </Button>
@@ -147,4 +147,4 @@ function UserGroupAdminPage() {
   );
 }
 
-export default UserGroupAdminPage;
+export default AppUserGroupListPage;

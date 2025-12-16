@@ -115,7 +115,7 @@ func (ah *AppHelper) WriteError(
 	if err != nil {
 		internalMsg = clientMsg + ": " + err.Error()
 	}
-	ah.appServices.Logger.Error(code, internalMsg, "username", ah.username)
+	ah.appServices.Logger.ErrorWithCallerSkip(code, internalMsg, 3, "username", ah.username)
 	response := map[string]string{"error": clientMsg}
 	writeJSON(w, status, response, ah.appServices.Logger)
 }

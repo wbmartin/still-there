@@ -11,19 +11,20 @@ import {
   Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useUserGroupsStore } from "../stores/user-groups-store";
+import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAppUserStore } from "../stores/app-user-store";
 import useAuthGuard from "../hooks/use-auth-guard";
+import type { AppUserGroup } from "../types/app-user-group-type";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import AddRemoveUsersFromGroupModal from "../components/AddRemoveUsersFromGroupModal";
-import type { UserGroupFormData } from "../types/user-group-type";
-import { defaultUserGroupFormData } from "../types/user-group-type";
+import type { AppUserGroupFormData } from "../types/app-user-group-type";
+import { defaultAppUserGroupFormData } from "../types/app-user-group-type";
 
-function UserGroupEditPage() {
+function AppUserGroupEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
   const { createUserGroup, updateUserGroup, deleteUserGroup, readGrantList } =
-    useUserGroupsStore();
+    useAppUserGroupStore();
   const {
     userList,
     retrieveUserList,
@@ -32,12 +33,12 @@ function UserGroupEditPage() {
   } = useAppUserStore();
   const navigate = useNavigate();
 
-  const userGroupId = searchParams.get("userGroupId") || "";
-  const isNew = userGroupId === "new";
-  const numericId = isNaN(Number(userGroupId)) ? null : Number(userGroupId);
+  const appUserGroupId = searchParams.get("appUserGroupId") || "";
+  const isNew = appUserGroupId === "new";
+  const numericId = isNaN(Number(appUserGroupId)) ? null : Number(appUserGroupId);
 
-  const [formData, setFormData] = useState<UserGroupFormData>(
-    defaultUserGroupFormData,
+  const [formData, setFormData] = useState<AppUserGroupFormData>(
+    defaultAppUserGroupFormData,
   );
 
   const [grants, setGrants] = useState<{ id: number; text: string }[]>([]);
@@ -63,8 +64,8 @@ function UserGroupEditPage() {
     if (!hasFetched.current && numericId) {
       hasFetched.current = true;
       // Find group from store
-      const groups = useUserGroupsStore.getState().userGroupList;
-      const existingGroup = groups.find((g) => g.userGroupId === numericId);
+      const groups = useAppUserGroupStore.getState().appUserGroupList;
+      const existingGroup = groups.find((g: AppUserGroup) => g.appUserGroupId === numericId);
       if (existingGroup) {
         setTimeout(() => {
           setFormData({
@@ -107,7 +108,7 @@ function UserGroupEditPage() {
           withCloseButton: false,
         });
       } else {
-        await updateUserGroup(Number(userGroupId), data);
+        await updateUserGroup(Number(appUserGroupId), data);
         notifications.show({
           title: "Success",
           message: "User group updated successfully",
@@ -116,7 +117,7 @@ function UserGroupEditPage() {
           withCloseButton: false,
         });
       }
-      void navigate(`/${ROUTES.USER_GROUP_LIST}`);
+      void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`);
     } catch (error) {
       console.error("Error saving user group:", error);
       notifications.show({
@@ -144,7 +145,7 @@ function UserGroupEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-      void navigate(`/${ROUTES.USER_GROUP_LIST}`);
+      void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`);
       } catch (error) {
         console.error("Error deleting user group:", error);
         notifications.show({
@@ -166,7 +167,7 @@ function UserGroupEditPage() {
   const handleUserModalConfirm = async (userIds: number[]) => {
     if (!numericId) return;
     const updateTsList = userIds.map(
-      id => userList.find(u => u.appUserId === id)?.updateTs || 0
+      id => userList.find(u => u.appUserId === id)!.updateTs
     );
     try {
       if (userModalMode === "add") {
@@ -223,7 +224,7 @@ function UserGroupEditPage() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => void navigate(`/${ROUTES.USER_GROUP_LIST}`)}
+            onClick={() => void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`)}
           >
             Cancel
           </Button>
@@ -237,7 +238,7 @@ function UserGroupEditPage() {
         </Title>
         {(() => {
           const groupMemberList = userList.filter((u) =>
-            u.userGroupMembershipList.includes(numericId || 0),
+            u.appUserGroupMembershipList.includes(numericId || 0),
           );
           return groupMemberList.length > 0 ? (
             <List type="ordered" mb="md">
@@ -291,4 +292,4 @@ function UserGroupEditPage() {
   );
 }
 
-export default UserGroupEditPage;
+export default AppUserGroupEditPage;

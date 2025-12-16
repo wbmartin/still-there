@@ -16,7 +16,7 @@ import (
 func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, appUserGroupRepo *repository.AppUserGroupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var csrfToken string
-		appServices.Logger.Info("STRT", "Auth request started")
+		appServices.Logger.Info("STRT", "Auth request started", "username", "preauth")
 
 		// Create app helper for error handling
 		app := app_lib.NewAppHelper(w, r, appServices)
@@ -29,13 +29,13 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 		}
 
 		appServices.Logger.Debug("PRSE",
-			"Auth request parsed for user: "+req.UserName)
+			"Auth request parsed for user: "+req.UserName, "username", req.UserName)
 
 		// Read user from database
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), req.UserName)
 		if err != nil {
 			appServices.Logger.Warn("USLK",
-				"User lookup failed for user: "+req.UserName+", error: "+err.Error())
+				"User lookup failed for user: "+req.UserName+", error: "+err.Error(), "username", req.UserName)
 			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "ICRD", err)
 			return
 		}
@@ -132,15 +132,13 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		appServices.Logger.Info("AUTH", "Authentication successful for user: "+user.UserName)
+		appServices.Logger.Info("AUTH", "Authentication successful for user: "+user.UserName, "username", user.UserName)
 	}
 }
 
 // RefreshHandler handles session refresh
 func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, appUserGroupRepo *repository.AppUserGroupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		appServices.Logger.Info("RFST", "Refresh request started")
-
 		// Security checks
 		app := app_lib.NewAppHelper(w, r, appServices)
 		app.CheckJWT()
@@ -152,12 +150,14 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 			return
 		}
 
+		appServices.Logger.Info("RFST", "Refresh request started", "username", app.GetUsername())
+
 		jwtClaims := app.GetClaims()
 
 		// Read user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), jwtClaims.Subject)
 		if err != nil {
-			appServices.Logger.Error("USLK", "User lookup failed during refresh for user: "+jwtClaims.Subject+", error: "+err.Error())
+			appServices.Logger.Error("USLK", "User lookup failed during refresh for user: "+jwtClaims.Subject+", error: "+err.Error(), "username", jwtClaims.Subject)
 			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
 			return
 		}
@@ -165,7 +165,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		// Get all grants for user's groups
 		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.AppUserGroupMembershipList)
 		if err != nil {
-			appServices.Logger.Error("GRFL", "Failed to get grants for refresh: "+err.Error())
+			appServices.Logger.Error("GRFL", "Failed to get grants for refresh: "+err.Error(), "username", app.GetUsername())
 			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
 			return
 		}
@@ -180,7 +180,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		// Issue updated JWT
 		jwt, sessionID, err := createJWTForUser(user, grantsMap[user.SecurityContext], appServices)
 		if err != nil {
-			appServices.Logger.Error("JWFL", "Failed to create JWT: "+err.Error())
+			appServices.Logger.Error("JWFL", "Failed to create JWT: "+err.Error(), "username", app.GetUsername())
 			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
 			return
 		}
@@ -209,26 +209,24 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		csrfToken := sessionID[len(sessionID)-3:]
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		appServices.Logger.Info("RFSC", "Refresh successful for user: "+user.UserName)
+		appServices.Logger.Info("RFSC", "Refresh successful for user: "+user.UserName, "username", user.UserName)
 	}
 }
 
 // ChangeSecurityContextHandler handles changing the user's security context
 func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, appUserGroupRepo *repository.AppUserGroupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		appServices.Logger.Info("CSCS", "Change security context request started")
-
 		// Create app helper for error handling
 		app := app_lib.NewAppHelper(w, r, appServices)
 
-		// Parse request
+		// Parse request first to get security context
 		var req model.ChangeSecurityContextRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
 			return
 		}
 
-		// Security checks - JWT validation only
+		// Security checks
 		app.CheckJWT()
 		app.CheckRateLimitAndUserBlock()
 		app.SkipCSRF()
@@ -238,13 +236,15 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 			return
 		}
 
+		appServices.Logger.Info("CSCS", "Change security context request started", "username", app.GetUsername())
+
 		jwtClaims := app.GetClaims()
 		userName := jwtClaims.Subject
 
 		// Read current user
 		dbUser, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
 		if err != nil {
-			appServices.Logger.Error("USLK", "User lookup failed during context change for user: "+userName+", error: "+err.Error())
+			appServices.Logger.Error("USLK", "User lookup failed during context change for user: "+userName+", error: "+err.Error(), "username", userName)
 			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
 			return
 		}
@@ -252,7 +252,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 		// Get all grants for user's groups
 		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), dbUser.AppUserGroupMembershipList)
 		if err != nil {
-			appServices.Logger.Error("GRFL", "Failed to get grants for context change: "+err.Error())
+			appServices.Logger.Error("GRFL", "Failed to get grants for context change: "+err.Error(), "username", app.GetUsername())
 			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
 			return
 		}
@@ -265,7 +265,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 
 		// Check if requested context is available
 		if _, exists := grantsMap[req.SecurityContext]; !exists {
-			appServices.Logger.Warn("CSCF", "User "+userName+" attempted to switch to unauthorized context: "+strconv.Itoa(req.SecurityContext))
+			appServices.Logger.Warn("CSCF", "User "+userName+" attempted to switch to unauthorized context: "+strconv.Itoa(req.SecurityContext), "username", userName)
 			app.WriteError(w, http.StatusForbidden, "Security context not available", "SCNA", nil)
 			return
 		}
@@ -277,7 +277,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 		// Issue new JWT with updated context
 		jwt, sessionID, err := createJWTForUser(&updatedUser, grantsMap[req.SecurityContext], appServices)
 		if err != nil {
-			appServices.Logger.Error("JWFL", "Failed to create JWT for context change: "+err.Error())
+			appServices.Logger.Error("JWFL", "Failed to create JWT for context change: "+err.Error(), "username", app.GetUsername())
 			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
 			return
 		}
@@ -308,14 +308,25 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		appServices.Logger.Info("CSCN", "Security context changed for user: "+userName+" to context: "+strconv.Itoa(req.SecurityContext))
+		appServices.Logger.Info("CSCN", "Security context changed for user: "+userName+" to context: "+strconv.Itoa(req.SecurityContext), "username", userName)
 	}
 }
 
 // LogoffHandler handles user logoff
 func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		appServices.Logger.Info("LOST", "Logoff request started")
+		// Use AppHelper to extract username from JWT (skip other validations)
+		app := app_lib.NewAppHelper(w, r, appServices)
+		app.CheckJWT()                   // Extract username from JWT
+		app.CheckRateLimitAndUserBlock() // No rate limiting for logoff
+		app.SkipCSRF()                   // No CSRF needed for logoff
+		app.SkipAuthorization()          // No authorization needed for logoff
+
+		if !app.CheckAllChecksComplete() {
+			return
+		}
+
+		appServices.Logger.Info("LOST", "Logoff request started", "username", app.GetUsername())
 
 		// Clear the auth cookie
 		http.SetCookie(w, &http.Cookie{
@@ -329,7 +340,7 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 		})
 
 		w.WriteHeader(http.StatusOK)
-		appServices.Logger.Info("LOFN", "Logoff successful")
+		appServices.Logger.Info("LOFN", "Logoff successful", "username", app.GetUsername())
 	}
 }
 

@@ -1,9 +1,9 @@
 # On remote
 ssh pathway-atticus-uat-vm
 ```
-cp /etc/letsencrypt/live/local-atticus-snipper.teamtaggle.com/fullchain.pem ~brandon/local-atticus-snipper.teamtaggle.com-privkey.pem
+cp /etc/letsencrypt/live/local-atticus-snipper.teamtaggle.com/fullchain.pem ~brandon/local-atticus-snipper.teamtaggle.com-fullchain.pem
 
-cp /etc/letsencrypt/live/local-atticus-snipper.teamtaggle.com/fullchain.pem ~brandon/local-atticus-snipper.teamtaggle.com-privkey.pem
+cp /etc/letsencrypt/live/local-atticus-snipper.teamtaggle.com/privkey.pem ~brandon/local-atticus-snipper.teamtaggle.com-privkey.pem
 ```
 
 # on Local
