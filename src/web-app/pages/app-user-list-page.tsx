@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Table, Button, Title, Group, Pagination } from "@mantine/core";
 import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
@@ -13,11 +13,16 @@ function UserAdminPage() {
   const { userList, loading, retrieveUserList, deleteUser } = useAppUserStore();
   const { getGroupName, retrieveAppUserGroupList } = useAppUserGroupStore();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
-  const itemsPerPage = 20;
+  const itemsPerPage = 15;
   const hasFetched = useRef(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+
+  // Sort state from URL params
+  const sortColumn = searchParams.get("sort") || "appUserId";
+  const sortDirection = (searchParams.get("dir") || "asc") as "asc" | "desc";
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
@@ -34,8 +39,39 @@ function UserAdminPage() {
 
   if (loading) return <div>Loading...</div>;
 
-  const totalPageCount = Math.ceil(userList.length / itemsPerPage);
-  const paginatedUserList = userList.slice(
+  // Sort users
+  const sortedUserList = [...userList].sort((a, b) => {
+    let aValue: string | number;
+    let bValue: string | number;
+
+    switch (sortColumn) {
+      case "appUserId":
+        aValue = a.appUserId;
+        bValue = b.appUserId;
+        break;
+      case "userName":
+        aValue = a.userName.toLowerCase();
+        bValue = b.userName.toLowerCase();
+        break;
+      case "name":
+        aValue = `${a.firstName} ${a.lastName}`.toLowerCase();
+        bValue = `${b.firstName} ${b.lastName}`.toLowerCase();
+        break;
+      case "email":
+        aValue = a.email.toLowerCase();
+        bValue = b.email.toLowerCase();
+        break;
+      default:
+        return 0;
+    }
+
+    if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+    if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const totalPageCount = Math.ceil(sortedUserList.length / itemsPerPage);
+  const paginatedUserList = sortedUserList.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
   );
@@ -62,6 +98,12 @@ function UserAdminPage() {
     setDeleteId(null);
   };
 
+  const handleSort = (column: string) => {
+    const newDirection = sortColumn === column && sortDirection === "asc" ? "desc" : "asc";
+    setSearchParams({ sort: column, dir: newDirection });
+    setPage(1); // Reset to first page when sorting
+  };
+
   return (
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
@@ -75,10 +117,30 @@ function UserAdminPage() {
       <Table>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>ID</Table.Th>
-            <Table.Th>Username</Table.Th>
-            <Table.Th>Name</Table.Th>
-            <Table.Th>Email</Table.Th>
+            <Table.Th
+              style={{ cursor: "pointer" }}
+              onClick={() => handleSort("appUserId")}
+            >
+              ID {sortColumn === "appUserId" && (sortDirection === "asc" ? "↑" : "↓")}
+            </Table.Th>
+            <Table.Th
+              style={{ cursor: "pointer" }}
+              onClick={() => handleSort("userName")}
+            >
+              Username {sortColumn === "userName" && (sortDirection === "asc" ? "↑" : "↓")}
+            </Table.Th>
+            <Table.Th
+              style={{ cursor: "pointer" }}
+              onClick={() => handleSort("name")}
+            >
+              Name {sortColumn === "name" && (sortDirection === "asc" ? "↑" : "↓")}
+            </Table.Th>
+            <Table.Th
+              style={{ cursor: "pointer" }}
+              onClick={() => handleSort("email")}
+            >
+              Email {sortColumn === "email" && (sortDirection === "asc" ? "↑" : "↓")}
+            </Table.Th>
             <Table.Th>Groups</Table.Th>
             <Table.Th>Actions</Table.Th>
           </Table.Tr>

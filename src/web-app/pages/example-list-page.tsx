@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Table, Button, Title, Group, Pagination } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
@@ -15,11 +15,16 @@ function ExampleListPage() {
     deleteExample,
   } = useExamplesStore();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
-  const itemsPerPage = 20;
+  const itemsPerPage = 15;
   const hasFetched = useRef(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+
+  // Sort state from URL params
+  const sortColumn = searchParams.get("sort") || "exampleId";
+  const sortDirection = (searchParams.get("dir") || "asc") as "asc" | "desc";
 
    useEffect(() => {
      if (!hasFetched.current && authState === "YES") {
@@ -36,8 +41,39 @@ function ExampleListPage() {
 
   if (loading) return <div>Loading...</div>;
 
-  const totalPageCount = Math.ceil(exampleList.length / itemsPerPage);
-  const paginatedExampleList = exampleList.slice(
+  // Sort examples
+  const sortedExampleList = [...exampleList].sort((a, b) => {
+    let aValue: string | number;
+    let bValue: string | number;
+
+    switch (sortColumn) {
+      case "exampleId":
+        aValue = a.exampleId;
+        bValue = b.exampleId;
+        break;
+      case "exampleText":
+        aValue = a.exampleText.toLowerCase();
+        bValue = b.exampleText.toLowerCase();
+        break;
+      case "exampleInt":
+        aValue = a.exampleInt || 0;
+        bValue = b.exampleInt || 0;
+        break;
+      case "exampleFloat":
+        aValue = a.exampleFloat || 0;
+        bValue = b.exampleFloat || 0;
+        break;
+      default:
+        return 0;
+    }
+
+    if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+    if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const totalPageCount = Math.ceil(sortedExampleList.length / itemsPerPage);
+  const paginatedExampleList = sortedExampleList.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
   );
@@ -67,6 +103,12 @@ function ExampleListPage() {
     setDeleteId(null);
   };
 
+  const handleSort = (column: string) => {
+    const newDirection = sortColumn === column && sortDirection === "asc" ? "desc" : "asc";
+    setSearchParams({ sort: column, dir: newDirection });
+    setPage(1); // Reset to first page when sorting
+  };
+
   return (
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
@@ -78,10 +120,30 @@ function ExampleListPage() {
       <Table>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>ID</Table.Th>
-            <Table.Th>Text</Table.Th>
-            <Table.Th>Int</Table.Th>
-            <Table.Th>Float</Table.Th>
+            <Table.Th
+              style={{ cursor: "pointer" }}
+              onClick={() => handleSort("exampleId")}
+            >
+              ID {sortColumn === "exampleId" && (sortDirection === "asc" ? "↑" : "↓")}
+            </Table.Th>
+            <Table.Th
+              style={{ cursor: "pointer" }}
+              onClick={() => handleSort("exampleText")}
+            >
+              Text {sortColumn === "exampleText" && (sortDirection === "asc" ? "↑" : "↓")}
+            </Table.Th>
+            <Table.Th
+              style={{ cursor: "pointer" }}
+              onClick={() => handleSort("exampleInt")}
+            >
+              Int {sortColumn === "exampleInt" && (sortDirection === "asc" ? "↑" : "↓")}
+            </Table.Th>
+            <Table.Th
+              style={{ cursor: "pointer" }}
+              onClick={() => handleSort("exampleFloat")}
+            >
+              Float {sortColumn === "exampleFloat" && (sortDirection === "asc" ? "↑" : "↓")}
+            </Table.Th>
             <Table.Th>Actions</Table.Th>
           </Table.Tr>
         </Table.Thead>

@@ -16,7 +16,7 @@ function AppUserGroupListPage() {
     useAppUserGroupStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
-  const itemsPerPage = 20;
+  const itemsPerPage = 15;
   const hasFetched = useRef(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
