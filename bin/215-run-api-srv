@@ -58,6 +58,39 @@ else
     echo "No existing server instances found."
 fi
 
+# Detect execution mode
+# Check for explicit flags first
+if [ "$1" = "--daemon" ] || [ "$1" = "-d" ]; then
+    INTERACTIVE=false
+    echo "Running in daemon mode (background execution)..."
+elif [ "$1" = "--interactive" ] || [ "$1" = "-i" ]; then
+    INTERACTIVE=true
+    echo "Running in interactive mode (explicit flag)..."
+elif [ -t 1 ]; then
+    INTERACTIVE=true
+    echo "Running in interactive mode (TTY detected)..."
+else
+    INTERACTIVE=false
+    echo "Running in daemon mode (background execution)..."
+fi
+
 # Run the binary
-echo "Starting API server..."
-"$BINARY_PATH" "$CONFIG_PATH"
+if [ "$INTERACTIVE" = true ]; then
+    # Interactive mode: Show output, block until server exits
+    echo "Starting API server..."
+    "$BINARY_PATH" "$CONFIG_PATH"
+else
+    # Programmatic mode: Run in background, redirect output
+    echo "Starting API server in background..."
+    "$BINARY_PATH" "$CONFIG_PATH" > tmp/server.log 2>&1 &
+    SERVER_PID=$!
+    echo $SERVER_PID > tmp/server.pid
+    echo "Server started in background (PID: $SERVER_PID)"
+    echo "Monitor logs: tail -f tmp/server.log"
+    echo "Stop server: kill $SERVER_PID"
+
+    # Wait briefly for startup message, then exit
+    # The server is ready once "Server starting on HTTPS port: 8443" appears
+    sleep 2
+    echo "Server startup initiated. You can continue working."
+fi

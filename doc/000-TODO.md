@@ -1,21 +1,18 @@
 # React App
-- when the user changes context, all cache has to be invalidted
-- table sorting
-- add error boundary
-- lots of unknown users coming into the api server logs
-
-- MFA
-  - add MFA onboarding for users, 
-  - MFAreset for admin. 
-  - redo the auth2 handler opencode deleted
-
 - password
   - add password reset for admin, maybe a modal on the user edit page.
   - add password change for users
   - adding a user needs to hash the password and should require the admin to enter it twice to confirm. 
   - add a button to generate a good password, let you view the passwords as you type it. may be nice to let it copy the password to the clipboard.
 
-- page number on the user list page should be part of state so a refresh or link takes to same place.
+- MFA
+  - add MFA onboarding for users, 
+  - MFAreset for admin. 
+  - redo the auth2 handler opencode deleted
+  - investigate passcode as second factor
+
+
+
 
 - react forms complaint - maybe should be using a library.
 - user profile page
@@ -24,9 +21,10 @@
   - upload avatar button.  
   
   
-  - Non Sensitive file storing -There will be an nginx server running on the server and we should use it to server static non sensitive files
+- Non Sensitive file storing -There will be an nginx server running on the server and we should use it to server static non sensitive files
 
 - Check on all repo functions, they should be receving the security context from users jwt claims.
+- page number on the user list page should be part of state so a refresh or link takes to same place.
 
 
 
@@ -35,24 +33,14 @@
 - account lockout after failed login attempts, need to track failed login attempts and lock the account for a period of time after too many failed attempts.
 - It is currently possible for someone with user update rights to add a group ID outside their context and gain access to another context.  The groups need to be checked to make sure they are within the users security context.
 - need to compare https with http in the load test.
+- need to toggle https in the config file.
 
-
-# database
-- table user_group needs to be renamed to app_user_group and all references to it in code and sql need to be updated.
-
-# passkeys
-You need to make a passkey login system for the api server and react app.
 
 # shrmpl-chk and shrmpl-mon
 need to add rust web server that listens to a port (may not need to be https) and receives health information, only in the query string. reads a cronitor type schedule and makes slack calls when things go wrong. needs to get slack webhook url from the shrmpl key server
 also need to add a binary that checks website health (probably just status) and records the checkins to shrmpl-mon.
 
 # you need to make a smug mug clone
-
-
-
-
-
 
 
 
