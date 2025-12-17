@@ -38,8 +38,7 @@ func (h *ExampleHandler) RetrieveExample(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	logger := h.appsrv.Logger
-	logger.Info("RTS0", "ReadExample invoked", "username", app.GetUsername())
+	app.Info("RTS0", "ReadExample invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -67,10 +66,10 @@ func (h *ExampleHandler) RetrieveExample(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	logger.Debug("RET0", fmt.Sprintf("Example retrieved: %+v", example))
+	app.Debug("RET0", fmt.Sprintf("Example retrieved: %+v", example))
 	wrapper := model.DataWrapper{Data: example}
-	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("GTD0", "Example retrieval completed", "username", app.GetUsername())
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.Info("GTD0", "Example retrieval completed")
 }
 
 // CreateExample handles POST /example
@@ -86,8 +85,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger := h.appsrv.Logger
-	logger.Info("CRS0", "CreateExample invoked", "username", app.GetUsername())
+	app.Info("CRS0", "CreateExample invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -98,7 +96,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("CRP0", fmt.Sprintf("Example creation request parsed: %+v", example))
+	app.Debug("CRP0", fmt.Sprintf("Example creation request parsed: %+v", example))
 
 	// Validate required fields
 	if example.ExampleText == "" {
@@ -123,10 +121,10 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("CRD0", fmt.Sprintf("Example created: %+v", createdExample))
+	app.Debug("CRD0", fmt.Sprintf("Example created: %+v", createdExample))
 	wrapper := model.DataWrapper{Data: createdExample}
-	writeJSON(w, http.StatusCreated, wrapper, logger)
-	logger.Info("CRD1", "Example creation completed", "username", app.GetUsername())
+	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
+	app.Info("CRD1", "Example creation completed")
 }
 
 // UpdateExample handles PUT /example
@@ -142,8 +140,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger := h.appsrv.Logger
-	logger.Info("UPS0", "UpdateExample invoked", "username", app.GetUsername())
+	app.Info("UPS0", "UpdateExample invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -154,7 +151,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("UPP0", fmt.Sprintf("Example update request parsed: %+v", example))
+	app.Debug("UPP0", fmt.Sprintf("Example update request parsed: %+v", example))
 
 	// Validate required fields
 	if example.ExampleID == 0 || example.ExampleText == "" {
@@ -187,10 +184,10 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("UPD0", fmt.Sprintf("Example updated: %+v", example))
+	app.Debug("UPD0", fmt.Sprintf("Example updated: %+v", example))
 	wrapper := model.DataWrapper{Data: example}
-	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("UPD1", "Example update completed", "username", app.GetUsername())
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.Info("UPD1", "Example update completed")
 }
 
 // DeleteExample handles DELETE /example
@@ -206,8 +203,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger := h.appsrv.Logger
-	logger.Info("DES0", "DeleteExample invoked", "username", app.GetUsername())
+	app.Info("DES0", "DeleteExample invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -245,8 +241,8 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 
 	data := map[string]interface{}{"message": "Example deleted successfully", "example_id": deletedID}
 	wrapper := model.DataWrapper{Data: data}
-	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("DLD0", "Example deletion completed", "username", app.GetUsername())
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.Info("DLD0", "Example deletion completed")
 }
 
 // RetrieveExampleList handles GET /exampleList?exampleIdList={comma-separated} (optional, if empty returns all)
@@ -262,8 +258,7 @@ func (h *ExampleHandler) RetrieveExampleList(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	logger := h.appsrv.Logger
-	logger.Info("RLS0", "ReadExampleList invoked", "username", app.GetUsername())
+	app.Info("RLS0", "ReadExampleList invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -294,9 +289,9 @@ func (h *ExampleHandler) RetrieveExampleList(w http.ResponseWriter, r *http.Requ
 
 	// Return as JSON
 	wrapper := model.DataWrapper{Data: examples}
-	writeJSON(w, http.StatusOK, wrapper, logger)
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 
-	logger.Info("LIR0", fmt.Sprintf("Returned %d examples", len(examples)), "username", app.GetUsername())
+	app.Info("LIR0", fmt.Sprintf("Returned %d examples", len(examples)))
 }
 
 // CreateExampleList handles POST /exampleList
@@ -312,8 +307,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	logger := h.appsrv.Logger
-	logger.Info("CLS0", "CreateExampleList invoked", "username", app.GetUsername())
+	app.Info("CLS0", "CreateExampleList invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -370,9 +364,9 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 
 	// Return the created examples with IDs
 	wrapper := model.DataWrapper{Data: createdExamples}
-	writeJSON(w, http.StatusCreated, wrapper, logger)
+	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
 
-	logger.Info("BCR0", fmt.Sprintf("Created %d examples", len(createdExamples)), "username", app.GetUsername())
+	app.Info("BCR0", fmt.Sprintf("Created %d examples", len(createdExamples)))
 }
 
 // UpdateExampleList handles PUT /exampleList
@@ -388,8 +382,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	logger := h.appsrv.Logger
-	logger.Info("ULS0", "UpdateExampleList invoked", "username", app.GetUsername())
+	app.Info("ULS0", "UpdateExampleList invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -440,9 +433,9 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	// Return success
 	data := map[string]string{"message": "Examples updated successfully"}
 	wrapper := model.DataWrapper{Data: data}
-	writeJSON(w, http.StatusOK, wrapper, logger)
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 
-	logger.Info("BUR0", fmt.Sprintf("Updated %d examples", len(exampleList)), "username", app.GetUsername())
+	app.Info("BUR0", fmt.Sprintf("Updated %d examples", len(exampleList)))
 }
 
 // DeleteExampleList handles DELETE /exampleList?exampleIdList={comma-separated}&updateTs={comma-separated}
@@ -458,8 +451,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	logger := h.appsrv.Logger
-	logger.Info("DLS0", "DeleteExampleList invoked", "username", app.GetUsername())
+	app.Info("DLS0", "DeleteExampleList invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -499,7 +491,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	// Return success
 	data := map[string]interface{}{"message": "Examples deleted successfully", "exampleIdList": deletedIDList}
 	wrapper := model.DataWrapper{Data: data}
-	writeJSON(w, http.StatusOK, wrapper, logger)
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 
-	logger.Info("BDR0", fmt.Sprintf("Deleted %d examples", len(idList)), "username", app.GetUsername())
+	app.Info("BDR0", fmt.Sprintf("Deleted %d examples", len(idList)))
 }

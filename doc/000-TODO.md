@@ -3,15 +3,17 @@
 - table sorting
 - add error boundary
 - lots of unknown users coming into the api server logs
-- need to add MFA onboarding for users, 
-- MFAreset for admin. 
-- redo the auth2 handler opencode deleted
-- need to add password reset for admin, maybe a modal on the user edit page.
-- Need to add password change for users
 
+- MFA
+  - add MFA onboarding for users, 
+  - MFAreset for admin. 
+  - redo the auth2 handler opencode deleted
 
-- adding a user needs to hash the password and should require the admin to enter it twice to confirm. 
-- add a button to generate a good password, let you view the passwords as you type it. may be nice to let it copy the password to the clipboard.
+- password
+  - add password reset for admin, maybe a modal on the user edit page.
+  - add password change for users
+  - adding a user needs to hash the password and should require the admin to enter it twice to confirm. 
+  - add a button to generate a good password, let you view the passwords as you type it. may be nice to let it copy the password to the clipboard.
 
 - page number on the user list page should be part of state so a refresh or link takes to same place.
 
@@ -26,10 +28,13 @@
 
 - Check on all repo functions, they should be receving the security context from users jwt claims.
 
+
+
 # API Server
 - TOTP implementation, open to do in auth_handler.go also lots of impacts to the react app. Needs to be part of the login flow, and also need to have a way to onboard users with TOTP, and reset TOTP for users that lost their device. Admin should be able to reset TOTP for users.
-- database change user_group -> app_user_group
 - account lockout after failed login attempts, need to track failed login attempts and lock the account for a period of time after too many failed attempts.
+- It is currently possible for someone with user update rights to add a group ID outside their context and gain access to another context.  The groups need to be checked to make sure they are within the users security context.
+- need to compare https with http in the load test.
 
 
 # database
@@ -53,4 +58,4 @@ also need to add a binary that checks website health (probably just status) and 
 
 
 # Starting prompt
-make sure you look at my styles and quirks in the instructions. we are building a template CRUD app in Go and React. in the doc file is an 811 file that describes how to construct a new entity, we're currently building the first entity, "example", and documenting what's important to facilitate future new entity create.
+make sure you look at my styles and quirks in the instructions. we are building a template CRUD app in Go and React. in the doc file is an 810 file that describes how to construct a new entity, we're currently building the first entity, "example", and documenting what's important to facilitate future new entity create.

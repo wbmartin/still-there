@@ -29,9 +29,6 @@ func NewAppUserGroupHandler(appServices *app_lib.AppServices,
 // RetrieveAppUserGroupList handles GET /userGroupList
 func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 	r *http.Request) {
-	logger := h.appsrv.Logger
-	logger.Info("URS0", "ReadUserGroupList invoked")
-
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
@@ -42,6 +39,8 @@ func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 	if !app.CheckAllChecksComplete() {
 		return
 	}
+
+	app.Info("URS0", "ReadUserGroupList invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -54,7 +53,7 @@ func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 		return
 	}
 
-	logger.Debug("UGD0", "User groups retrieved")
+	app.Debug("UGD0", "User groups retrieved")
 
 	// Ensure groups is never nil
 	if groups == nil {
@@ -62,16 +61,13 @@ func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 	}
 
 	wrapper := model.DataWrapper{Data: groups}
-	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("UGD1", "User group list retrieval completed")
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.Info("UGD1", "User group list retrieval completed")
 }
 
 // CreateAppUserGroup handles POST /userGroup
 func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
-	logger := h.appsrv.Logger
-	logger.Info("UCS0", "CreateUserGroup invoked")
-
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
@@ -83,6 +79,8 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 		return
 	}
 
+	app.Info("UCS0", "CreateUserGroup invoked")
+
 	jwtClaims := app.GetClaims()
 
 	// Parse request body
@@ -92,7 +90,7 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 		return
 	}
 
-	logger.Debug("UCP0", "User group create request parsed")
+	app.Debug("UCP0", "User group create request parsed")
 
 	// Validate required fields
 	if group.GroupName == "" {
@@ -116,18 +114,15 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 		return
 	}
 
-	logger.Debug("UCD0", "User group created")
+	app.Debug("UCD0", "User group created")
 	wrapper := model.DataWrapper{Data: createdGroup}
-	writeJSON(w, http.StatusCreated, wrapper, logger)
-	logger.Info("UCD1", "User group creation completed")
+	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
+	app.Info("UCD1", "User group creation completed")
 }
 
 // UpdateAppUserGroup handles PUT /userGroup
 func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
-	logger := h.appsrv.Logger
-	logger.Info("UUS0", "UpdateUserGroup invoked")
-
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
@@ -139,6 +134,8 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 		return
 	}
 
+	app.Info("UUS0", "UpdateUserGroup invoked")
+
 	jwtClaims := app.GetClaims()
 
 	// Parse request body
@@ -148,7 +145,7 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 		return
 	}
 
-	logger.Debug("UUP0", "User group update request parsed")
+	app.Debug("UUP0", "User group update request parsed")
 
 	// Validate required fields
 	if group.AppUserGroupID == 0 || group.GroupName == "" {
@@ -180,18 +177,15 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 		return
 	}
 
-	logger.Debug("UUD0", "User group updated")
+	app.Debug("UUD0", "User group updated")
 	wrapper := model.DataWrapper{Data: group}
-	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("UUD1", "User group update completed")
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.Info("UUD1", "User group update completed")
 }
 
 // DeleteAppUserGroup handles DELETE /userGroup
 func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
-	logger := h.appsrv.Logger
-	logger.Info("UDS0", "DeleteUserGroup invoked")
-
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
@@ -202,6 +196,8 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 	if !app.CheckAllChecksComplete() {
 		return
 	}
+
+	app.Info("UDS0", "DeleteUserGroup invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -243,6 +239,6 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 	data := map[string]interface{}{
 		"message": "User group deleted successfully", "userGroupId": deletedID}
 	wrapper := model.DataWrapper{Data: data}
-	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("UDD0", "User group deletion completed")
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.Info("UDD0", "User group deletion completed")
 }

@@ -33,7 +33,7 @@ class TestBasicUserAuthorization:
 
     def test_create_user_group_denied(self, basic_user_client):
         """Basic user should get 403 when trying to create a user group"""
-        response = basic_user_client.make_request("POST", "/userGroup", json={
+        response = basic_user_client.make_request("POST", "/appUserGroup", json={
             "groupName": "Test Group",
             "userGrantList": [1001]
         })
@@ -41,16 +41,16 @@ class TestBasicUserAuthorization:
 
     def test_update_user_group_denied(self, basic_user_client):
         """Basic user should get 403 when trying to update a user group"""
-        response = basic_user_client.make_request("PUT", "/userGroup", json={
-            "userGroupId": 1,
+        response = basic_user_client.make_request("PUT", "/appUserGroup", json={
+            "appUserGroupId": 1,
             "groupName": "Updated Group"
         })
         assert response.status_code == 403
 
     def test_delete_user_group_denied(self, basic_user_client):
         """Basic user should get 403 when trying to delete a user group"""
-        response = basic_user_client.make_request("DELETE", "/userGroup", params={
-            "userGroupIdList": "999",
+        response = basic_user_client.make_request("DELETE", "/appUserGroup", params={
+            "appUserGroupId": "999",
             "updateTs": "1234567890.123"
         })
         assert response.status_code == 403

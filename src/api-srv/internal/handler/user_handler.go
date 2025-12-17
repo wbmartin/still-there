@@ -26,9 +26,6 @@ func NewUserHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 
 // RetrieveUserList handles GET /userList
 func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
-	logger := h.appsrv.Logger
-	logger.Info("ULS0", "ReadUserList invoked")
-
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
@@ -39,6 +36,8 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 	if !app.CheckAllChecksComplete() {
 		return
 	}
+
+	app.Info("ULS0", "ReadUserList invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -62,23 +61,22 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("ULD0", "Users read")
+	app.Debug("ULD0", "Users read")
 
 	// Ensure users is never nil
 	if users == nil {
 		users = []*model.AppUserModel{}
 	}
 
+	// Return as JSON
 	wrapper := model.DataWrapper{Data: users}
-	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("ULD1", "User list read completed")
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+
+	app.Info("ULD1", "User list read completed")
 }
 
 // RetrieveGrantList handles GET /grantList
 func (h *UserHandler) RetrieveGrantList(w http.ResponseWriter, r *http.Request) {
-	logger := h.appsrv.Logger
-	logger.Info("RLS0", "ReadGrantList invoked")
-
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
@@ -89,6 +87,8 @@ func (h *UserHandler) RetrieveGrantList(w http.ResponseWriter, r *http.Request) 
 	if !app.CheckAllChecksComplete() {
 		return
 	}
+
+	app.Info("RLS0", "ReadGrantList invoked")
 
 	// Convert GrantIDToShortCodeMap to array of objects
 	grantList := make([]map[string]interface{}, 0, len(model.GrantIDToShortCodeMap))
@@ -99,17 +99,14 @@ func (h *UserHandler) RetrieveGrantList(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
-	logger.Debug("GLD0", "Grant list read")
+	app.Debug("GLD0", "Grant list read")
 	wrapper := model.DataWrapper{Data: grantList}
-	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("GLD1", "Grant list read completed")
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.Info("GLD1", "Grant list read completed")
 }
 
 // CreateUser handles POST /user
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	logger := h.appsrv.Logger
-	logger.Info("UCS0", "CreateUser invoked")
-
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
@@ -121,6 +118,8 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app.Info("UCS0", "CreateUser invoked")
+
 	jwtClaims := app.GetClaims()
 
 	// Parse request body
@@ -130,7 +129,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("UCP0", "User creation request parsed")
+	app.Debug("UCP0", "User creation request parsed")
 
 	// Validate required fields
 	if user.UserName == "" || user.FirstName == "" || user.LastName == "" || user.Email == "" {
@@ -163,27 +162,26 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("UCD0", "User created")
+	app.Debug("UCD0", "User created")
 	wrapper := model.DataWrapper{Data: createdUser}
-	writeJSON(w, http.StatusCreated, wrapper, logger)
-	logger.Info("UCD1", "User creation completed")
+	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
+	app.Info("UCD1", "User creation completed")
 }
 
 // UpdateUser handles PUT /user
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	logger := h.appsrv.Logger
-	logger.Info("UUS0", "UpdateUser invoked")
-
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserChangePassword) // Assuming change grant
+	app.CheckAuthorization(model.GrantUserCreate)
 
 	if !app.CheckAllChecksComplete() {
 		return
 	}
+
+	app.Info("UUS0", "UpdateUser invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -194,7 +192,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("UUP0", "User update request parsed")
+	app.Debug("UUP0", "User update request parsed")
 
 	// Validate required fields
 	if user.AppUserID == 0 || user.UserName == "" {
@@ -223,27 +221,26 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("UUD0", "User updated")
+	app.Debug("UUD0", "User updated")
 	wrapper := model.DataWrapper{Data: user}
-	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("UUD1", "User update completed")
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.Info("UUD1", "User update completed")
 }
 
 // DeleteUser handles DELETE /user
 func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
-	logger := h.appsrv.Logger
-	logger.Info("UDS0", "DeleteUser invoked")
-
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserBlock) // Assuming delete grant
+	app.CheckAuthorization(model.GrantUserCreate)
 
 	if !app.CheckAllChecksComplete() {
 		return
 	}
+
+	app.Info("UDS0", "DeleteUser invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -277,25 +274,24 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	data := map[string]interface{}{"message": "User deleted successfully", "appUserId": deletedID}
 	wrapper := model.DataWrapper{Data: data}
-	writeJSON(w, http.StatusOK, wrapper, logger)
-	logger.Info("UDD0", "User deletion completed")
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.Info("UDD0", "User deletion completed")
 }
 
 // AddUserListToGroupHandler handles POST /addUserListToGroup
 func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.Request) {
-	logger := h.appsrv.Logger
-	logger.Info("AUG0", "AddUserListToGroup invoked")
-
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantAddUserToGroup)
+	app.CheckAuthorization(model.GrantUserGroupUpdate)
 
 	if !app.CheckAllChecksComplete() {
 		return
 	}
+
+	app.Info("AUG0", "AddUserListToGroup invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -326,26 +322,25 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	logger.Info("AGS0", "Users added to group successfully")
+	app.Info("AGS0", "Users added to group successfully")
 	wrapper := model.DataWrapper{Data: updatedUsers}
-	writeJSON(w, http.StatusOK, wrapper, logger)
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 }
 
 // RemoveUserListFromGroupHandler handles POST /removeUserListFromGroup
 func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *http.Request) {
-	logger := h.appsrv.Logger
-	logger.Info("RUG0", "RemoveUserListFromGroup invoked")
-
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantRemoveUserFromGroup)
+	app.CheckAuthorization(model.GrantUserGroupUpdate)
 
 	if !app.CheckAllChecksComplete() {
 		return
 	}
+
+	app.Info("RUG0", "RemoveUserListFromGroup invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -376,7 +371,7 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	logger.Info("RGS0", "Users removed from group successfully")
+	app.Info("RGS0", "Users removed from group successfully")
 	wrapper := model.DataWrapper{Data: updatedUsers}
-	writeJSON(w, http.StatusOK, wrapper, logger)
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 }
