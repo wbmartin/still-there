@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ROUTES } from "../constants/routes";
+import { grants as grantConstants } from "../constants/grants";
 import {
   TextInput,
   Button,
@@ -23,7 +24,7 @@ import { defaultAppUserGroupFormData } from "../types/app-user-group-type";
 function AppUserGroupEditPage() {
   const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
-  const { createUserGroup, updateUserGroup, deleteUserGroup, readGrantList } =
+  const { createAppUserGroup, updateAppUserGroup, deleteAppUserGroup } =
     useAppUserGroupStore();
   const {
     userList,
@@ -43,24 +44,14 @@ function AppUserGroupEditPage() {
     defaultAppUserGroupFormData,
   );
 
-  const [grants, setGrants] = useState<{ id: number; text: string }[]>([]);
+  const grants = grantConstants.getGrantList();
 
   const hasFetched = useRef(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [userModalMode, setUserModalMode] = useState<"add" | "remove">("add");
 
-  useEffect(() => {
-    const fetchGrants = async () => {
-      try {
-        const grantList = await readGrantList();
-        setGrants(grantList);
-      } catch (error) {
-        console.error("Failed to fetch grants:", error);
-      }
-    };
-    void fetchGrants();
-  }, [readGrantList]);
+
 
   useEffect(() => {
     if (!hasFetched.current && numericId) {
@@ -100,7 +91,7 @@ function AppUserGroupEditPage() {
 
     try {
       if (isNew) {
-        await createUserGroup({
+        await createAppUserGroup({
           groupName: formData.groupName,
           userGrantList: formData.userGrantList,
         });
@@ -112,7 +103,7 @@ function AppUserGroupEditPage() {
           withCloseButton: false,
         });
       } else {
-        await updateUserGroup(Number(appUserGroupId), data);
+        await updateAppUserGroup(Number(appUserGroupId), data);
         notifications.show({
           title: "Success",
           message: "User group updated successfully",
@@ -141,7 +132,7 @@ function AppUserGroupEditPage() {
   const handleDeleteConfirm = async () => {
     if (numericId && !isNew) {
       try {
-        await deleteUserGroup(numericId);
+        await deleteAppUserGroup(numericId);
         notifications.show({
           title: "Success",
           message: "User group deleted successfully",

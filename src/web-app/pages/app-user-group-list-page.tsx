@@ -12,7 +12,7 @@ import type { AppUserGroup } from "../types/app-user-group-type";
 function AppUserGroupListPage() {
   const authState = useAuthGuard();
   const { grantList } = useAuthStore();
-  const { appUserGroupList, loading, retrieveAppUserGroupList, deleteUserGroup } =
+  const { appUserGroupList, loading, retrieveAppUserGroupList, deleteAppUserGroup } =
     useAppUserGroupStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -50,7 +50,7 @@ function AppUserGroupListPage() {
   const handleDeleteConfirm = async () => {
     if (deleteId !== null) {
       try {
-        await deleteUserGroup(deleteId);
+        await deleteAppUserGroup(deleteId);
       } catch (error) {
         console.error("Error deleting user group:", error);
       }
