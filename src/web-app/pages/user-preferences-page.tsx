@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { Button, Title, Group, Text, Select, Alert } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/auth-store";
+import { useExamplesStore } from "../stores/examples-store";
+import { useAppUserStore } from "../stores/app-user-store";
+import { useAppUserGroupStore } from "../stores/app-user-group-store";
+import { ROUTES } from "../constants/routes";
 import useAuthGuard from "../hooks/use-auth-guard";
 
 function UserPreferencesPage() {
   const authState = useAuthGuard();
+  const navigate = useNavigate();
   const {
     userName,
     securityContext,
@@ -17,6 +24,17 @@ function UserPreferencesPage() {
     securityContext.toString(),
   );
 
+  const handleClearCache = () => {
+    useExamplesStore.getState().clearCache();
+    useAppUserStore.getState().clearCache();
+    useAppUserGroupStore.getState().clearCache();
+    notifications.show({
+      title: "Cache Cleared",
+      message: "All cached data has been cleared. Data will be refetched on next access.",
+      color: "green",
+    });
+  };
+
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
   }
@@ -25,6 +43,12 @@ function UserPreferencesPage() {
     const newContext = parseInt(selectedContext);
     if (newContext !== securityContext) {
       await changeSecurityContext(newContext);
+      // Clear all caches after successful context change
+      useExamplesStore.getState().clearCache();
+      useAppUserStore.getState().clearCache();
+      useAppUserGroupStore.getState().clearCache();
+      // Navigate to dashboard
+      void navigate(`/${ROUTES.DASHBOARD}`);
     }
   };
 
@@ -65,7 +89,7 @@ function UserPreferencesPage() {
               style={{ minWidth: "200px" }}
             />
             <Button
-              onClick={handleContextChange}
+              onClick={() => void handleContextChange()}
               loading={loading}
               disabled={parseInt(selectedContext) === securityContext}
             >
@@ -82,6 +106,21 @@ function UserPreferencesPage() {
       {availableSecurityContexts.length <= 1 && (
         <Text c="dimmed">No additional security contexts available.</Text>
       )}
+
+      <div style={{ marginTop: "2rem" }}>
+        <Title order={3} mb="sm">
+          Cache Management
+        </Title>
+        <Group mb="md">
+          <Button onClick={() => void handleClearCache()} variant="outline">
+            Clear Cache
+          </Button>
+        </Group>
+        <Text size="sm" c="dimmed">
+          Clear all cached data. This will force fresh data to be loaded on next
+          access.
+        </Text>
+      </div>
 
       {error && (
         <Alert color="red" mt="md">

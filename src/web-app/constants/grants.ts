@@ -17,7 +17,9 @@ export const grants = {
 
   // Utility methods
   idToName(id: number): string {
-    const name = Object.keys(this).find(key => this[key as keyof typeof this] === id);
+    const name = Object.keys(this).find(
+      (key) => this[key as keyof typeof this] === id,
+    );
     return name || `???`;
   },
 
@@ -27,6 +29,6 @@ export const grants = {
 
   // Get all grant IDs
   getAllIds(): number[] {
-    return Object.values(this).filter(val => typeof val === 'number') as number[];
-  }
+    return Object.values(this).filter((val) => typeof val === "number");
+  },
 };

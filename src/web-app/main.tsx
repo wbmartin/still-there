@@ -9,7 +9,7 @@ import App from './App.tsx'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <MantineProvider>
-      <Notifications position="bottom-right" />
+       <Notifications position="bottom-right" />
       <App />
     </MantineProvider>
   </StrictMode>,

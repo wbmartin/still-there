@@ -22,7 +22,11 @@ function UserEditPage() {
   const [searchParams] = useSearchParams();
   const { retrieveUserById, createUser, updateUser, deleteUser } =
     useAppUserStore();
-  const { retrieveAppUserGroupList, appUserGroupList, loading: groupsLoading } = useAppUserGroupStore();
+  const {
+    retrieveAppUserGroupList,
+    appUserGroupList,
+    loading: groupsLoading,
+  } = useAppUserGroupStore();
   const navigate = useNavigate();
 
   const id = searchParams.get("appUserId") || "";
@@ -38,7 +42,7 @@ function UserEditPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-       void retrieveAppUserGroupList();
+      void retrieveAppUserGroupList();
       if (numericId && !isNew) {
         // Fetch the user directly
         void retrieveUserById(numericId).then((user) => {
@@ -87,7 +91,7 @@ function UserEditPage() {
       firstName: formData.firstName,
       lastName: formData.lastName,
       email: formData.email,
-              appUserGroupMembershipList: formData.appUserGroupMembershipList,
+      appUserGroupMembershipList: formData.appUserGroupMembershipList,
       mfaExempt: formData.mfaExempt,
       pwHash: formData.pwHash || undefined,
       updateTs: !isNew ? Number(formData.updateTs) : undefined,
@@ -141,7 +145,7 @@ function UserEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-      void navigate(`/${ROUTES.APP_USER_LIST}`);
+        void navigate(`/${ROUTES.APP_USER_LIST}`);
       } catch (error) {
         console.error("Error deleting user:", error);
         notifications.show({
@@ -165,14 +169,12 @@ function UserEditPage() {
     label: g.groupName,
   }));
 
-
-
   return (
     <div style={{ padding: "2rem" }}>
       <Title order={1} mb="lg">
         {isNew ? "Add User" : "Edit User"}
       </Title>
-       <form onSubmit={(e) => void handleSubmit(e)}>
+      <form onSubmit={(e) => void handleSubmit(e)}>
         <TextInput
           label="Username"
           value={formData.userName}

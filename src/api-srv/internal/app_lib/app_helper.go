@@ -89,27 +89,27 @@ func (ah *AppHelper) GetUsername() string {
 
 // Debug logs at debug level with automatic username attachment
 func (ah *AppHelper) Debug(code, message string) {
-	ah.appServices.Logger.Debug(code, message, "username", ah.username)
+	ah.appServices.Logger.ErrorWithCallerSkip("DEBG", message, 3, "username", ah.username)
 }
 
 // Info logs at info level with automatic username attachment
 func (ah *AppHelper) Info(code, message string) {
-	ah.appServices.Logger.Info(code, message, "username", ah.username)
+	ah.appServices.Logger.ErrorWithCallerSkip("INFO", message, 3, "username", ah.username)
 }
 
 // Warn logs at warn level with automatic username attachment
 func (ah *AppHelper) Warn(code, message string) {
-	ah.appServices.Logger.Warn(code, message, "username", ah.username)
+	ah.appServices.Logger.ErrorWithCallerSkip("WARN", message, 3, "username", ah.username)
 }
 
 // Error logs at error level with automatic username attachment
 func (ah *AppHelper) Error(code, message string) {
-	ah.appServices.Logger.Error(code, message, "username", ah.username)
+	ah.appServices.Logger.ErrorWithCallerSkip("ERRO", message, 3, "username", ah.username)
 }
 
-// ErrorWithCallerSkip logs at error level with custom caller skip
+// ErrorWithCallerSkip logs at error level with custom caller skip and automatic username
 func (ah *AppHelper) ErrorWithCallerSkip(code, message string, skip int) {
-	ah.appServices.Logger.ErrorWithCallerSkip(code, message, skip, "username", ah.username)
+	ah.appServices.Logger.ErrorWithCallerSkip(code, message, skip+1, "username", ah.username)
 }
 
 // writeJSON writes a JSON response

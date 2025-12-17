@@ -35,7 +35,9 @@ function AppUserGroupEditPage() {
 
   const appUserGroupId = searchParams.get("appUserGroupId") || "";
   const isNew = appUserGroupId === "new";
-  const numericId = isNaN(Number(appUserGroupId)) ? null : Number(appUserGroupId);
+  const numericId = isNaN(Number(appUserGroupId))
+    ? null
+    : Number(appUserGroupId);
 
   const [formData, setFormData] = useState<AppUserGroupFormData>(
     defaultAppUserGroupFormData,
@@ -65,7 +67,9 @@ function AppUserGroupEditPage() {
       hasFetched.current = true;
       // Find group from store
       const groups = useAppUserGroupStore.getState().appUserGroupList;
-      const existingGroup = groups.find((g: AppUserGroup) => g.appUserGroupId === numericId);
+      const existingGroup = groups.find(
+        (g: AppUserGroup) => g.appUserGroupId === numericId,
+      );
       if (existingGroup) {
         setTimeout(() => {
           setFormData({
@@ -145,7 +149,7 @@ function AppUserGroupEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-      void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`);
+        void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`);
       } catch (error) {
         console.error("Error deleting user group:", error);
         notifications.show({
@@ -167,7 +171,7 @@ function AppUserGroupEditPage() {
   const handleUserModalConfirm = async (userIds: number[]) => {
     if (!numericId) return;
     const updateTsList = userIds.map(
-      id => userList.find(u => u.appUserId === id)!.updateTs
+      (id) => userList.find((u) => u.appUserId === id)!.updateTs,
     );
     try {
       if (userModalMode === "add") {
