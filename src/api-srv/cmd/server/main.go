@@ -83,6 +83,7 @@ func main() {
 	exampleHandler := handler.NewExampleHandler(appServices, exampleRepo)
 	userHandler := handler.NewUserHandler(appServices, userRepo)
 	appUserGroupHandler := handler.NewAppUserGroupHandler(appServices, appUserGroupRepo)
+	errorReportHandler := handler.NewErrorReportHandler(appServices)
 
 	// Setup routes
 	mux := http.NewServeMux()
@@ -128,6 +129,9 @@ func main() {
 	mux.HandleFunc("POST /appUserGroup", appUserGroupHandler.CreateAppUserGroup)
 	mux.HandleFunc("PUT /appUserGroup", appUserGroupHandler.UpdateAppUserGroup)
 	mux.HandleFunc("DELETE /appUserGroup", appUserGroupHandler.DeleteAppUserGroup)
+
+	// Error reporting (no auth required)
+	mux.HandleFunc("POST /error-report", errorReportHandler.HandleErrorReport)
 
 	// Create server
 	server := &http.Server{
