@@ -5,9 +5,10 @@ import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
+import { grants } from "../constants/grants";
 
 function ExampleListPage() {
-  const authState = useAuthGuard();
+  const authState = useAuthGuard([grants.READ_EXAMPLE]);
   const {
     exampleList,
     loading,

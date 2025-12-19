@@ -16,27 +16,35 @@ type UserGrantModelTestSuite struct {
 
 func (s *UserGrantModelTestSuite) TestGrantConstants() {
 	// Test that grant constants are defined and have expected values
+	s.Equal(1, GrantLogon)
 	s.Equal(1001, GrantExampleRead)
 	s.Equal(1002, GrantExampleCreate)
 	s.Equal(1003, GrantExampleUpdate)
 	s.Equal(1004, GrantExampleDelete)
 	s.Equal(8001, GrantChangeOwnPassword)
 	s.Equal(9001, GrantUserCreate)
+	s.Equal(9004, GrantUserRead)
+	s.Equal(9005, GrantUserUpdate)
+	s.Equal(9006, GrantUserDelete)
 	s.Equal(9002, GrantUserBlock)
-	s.Equal(9003, GrantUserChangePassword)
+	s.Equal(9009, GrantUserChangePassword)
 }
 
 func (s *UserGrantModelTestSuite) TestAllKnownGrantsMap() {
 	// Test that AllKnownGrants map contains all expected grants
 	expectedGrants := map[string]int{
+		"LOGON":                  1,
 		"READ_EXAMPLE":           1001,
 		"CREATE_EXAMPLE":         1002,
 		"UPDATE_EXAMPLE":         1003,
 		"DELETE_EXAMPLE":         1004,
 		"CHG_OWN_PW":             8001,
 		"CREATE_USER":            9001,
+		"READ_USER":              9004,
+		"UPDATE_USER":            9005,
+		"DELETE_USER":            9006,
 		"BLOCK_USER":             9002,
-		"CHANGE_USER_PW":         9003,
+		"CHANGE_USER_PW":         9009,
 		"READ_USER_GROUP":        9010,
 		"CREATE_USER_GROUP":      9011,
 		"UPDATE_USER_GROUP":      9012,
@@ -61,14 +69,18 @@ func (s *UserGrantModelTestSuite) TestAllKnownGrantsMap() {
 func (s *UserGrantModelTestSuite) TestGrantIDToShortCodeMap() {
 	// Test that GrantIDToShortCodeMap contains all expected mappings
 	expectedMappings := map[int]string{
+		1:    "LOGON",
 		1001: "READ_EXAMPLE",
 		1002: "CREATE_EXAMPLE",
 		1003: "UPDATE_EXAMPLE",
 		1004: "DELETE_EXAMPLE",
 		8001: "CHG_OWN_PW",
 		9001: "CREATE_USER",
+		9004: "READ_USER",
+		9005: "UPDATE_USER",
+		9006: "DELETE_USER",
 		9002: "BLOCK_USER",
-		9003: "CHANGE_USER_PW",
+		9009: "CHANGE_USER_PW",
 		9010: "READ_USER_GROUP",
 		9011: "CREATE_USER_GROUP",
 		9012: "UPDATE_USER_GROUP",

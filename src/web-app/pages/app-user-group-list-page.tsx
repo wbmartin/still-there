@@ -10,7 +10,7 @@ import { grants } from "../constants/grants";
 import type { AppUserGroup } from "../types/app-user-group-type";
 
 function AppUserGroupListPage() {
-  const authState = useAuthGuard();
+  const authState = useAuthGuard([grants.READ_USER_GROUP]);
   const { grantList } = useAuthStore();
   const { appUserGroupList, loading, retrieveAppUserGroupList, deleteAppUserGroup } =
     useAppUserGroupStore();

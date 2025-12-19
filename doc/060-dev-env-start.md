@@ -30,3 +30,6 @@ psql
 ./bin/215-run-api-srv
 #visual confirm it's running
 ```
+
+#In a new shell 
+~/Code/ProtoStack-ReactGo/bin/220-run-web-app

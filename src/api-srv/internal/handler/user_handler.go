@@ -31,7 +31,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserCreate)
+	app.CheckAuthorization(model.GrantUserRead)
 
 	if !app.CheckAllChecksComplete() {
 		return
@@ -175,7 +175,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserCreate)
+	app.CheckAuthorization(model.GrantUserUpdate)
 
 	if !app.CheckAllChecksComplete() {
 		return
@@ -234,7 +234,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserCreate)
+	app.CheckAuthorization(model.GrantUserDelete)
 
 	if !app.CheckAllChecksComplete() {
 		return
@@ -374,4 +374,77 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *h
 	app.Info("RGS0", "Users removed from group successfully")
 	wrapper := model.DataWrapper{Data: updatedUsers}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+}
+
+// ChangeOtherUserPassword handles POST /changeUserPassword
+func (h *UserHandler) ChangeOtherUserPassword(w http.ResponseWriter, r *http.Request) {
+	// Security checks
+	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app.CheckJWT()
+	app.CheckRateLimitAndUserBlock()
+	app.CheckCSRF()
+	app.CheckAuthorization(model.GrantUserChangePassword)
+
+	if !app.CheckAllChecksComplete() {
+		return
+	}
+
+	app.Info("CPWS", "Change user password invoked")
+
+	jwtClaims := app.GetClaims()
+
+	// Parse request body
+	var req struct {
+		UserID      int    `json:"userId"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BRQ0", nil)
+		return
+	}
+
+	// Validate required fields
+	if req.UserID == 0 || req.NewPassword == "" {
+		app.WriteError(w, http.StatusBadRequest, "userId and newPassword are required", "BRQ0", nil)
+		return
+	}
+
+	// Basic password validation (minimum length)
+	if len(req.NewPassword) < 8 {
+		app.WriteError(w, http.StatusBadRequest, "New password must be at least 8 characters long", "BRQ0", nil)
+		return
+	}
+
+	// Verify the user exists and get their details for logging
+	users, err := h.userRepo.RetrieveUserList(r.Context(), jwtClaims.SecurityContext, []int{req.UserID}, 0)
+	if err != nil {
+		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve user", "USF0", err)
+		return
+	}
+	if len(users) == 0 {
+		app.WriteError(w, http.StatusNotFound, "User not found", "NFN0", nil)
+		return
+	}
+	user := users[0]
+
+	// Hash new password
+	hashedPassword, err := app_lib.HashPassword(req.NewPassword)
+	if err != nil {
+		app.WriteError(w, http.StatusInternalServerError, "Failed to process password", "UCH0", err)
+		return
+	}
+
+	// Update password
+	now := CurrentTimestamp()
+	err = h.userRepo.UpdateUserPassword(r.Context(), req.UserID, hashedPassword, now, jwtClaims.UserID)
+	if err != nil {
+		app.WriteError(w, http.StatusInternalServerError, "Failed to update password", "UUF0", err)
+		return
+	}
+
+	app.Debug("CPWD", "Password updated for user: "+user.UserName)
+
+	wrapper := model.DataWrapper{Data: map[string]string{"message": "Password changed successfully"}}
+	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.Info("CPWD", "User password change completed")
 }

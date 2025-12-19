@@ -78,6 +78,7 @@ func main() {
 	authHandler := handler.AuthHandler(appServices, userRepo, appUserGroupRepo)
 	refreshHandler := handler.RefreshHandler(appServices, userRepo, appUserGroupRepo)
 	changeSecurityContextHandler := handler.ChangeSecurityContextHandler(appServices, userRepo, appUserGroupRepo)
+	changeOwnPasswordHandler := handler.ChangeOwnPasswordHandler(appServices, userRepo)
 	logoffHandler := handler.LogoffHandler(appServices)
 
 	exampleHandler := handler.NewExampleHandler(appServices, exampleRepo)
@@ -98,6 +99,7 @@ func main() {
 	mux.HandleFunc("POST /auth", authHandler)
 	mux.HandleFunc("GET /refresh", refreshHandler)
 	mux.HandleFunc("POST /changeSecurityContext", changeSecurityContextHandler)
+	mux.HandleFunc("POST /changeOwnPassword", changeOwnPasswordHandler)
 	mux.HandleFunc("POST /logoff", logoffHandler)
 
 	// Example CRUD
@@ -117,6 +119,7 @@ func main() {
 	mux.HandleFunc("POST /user", userHandler.CreateUser)
 	mux.HandleFunc("PUT /user", userHandler.UpdateUser)
 	mux.HandleFunc("DELETE /user", userHandler.DeleteUser)
+	mux.HandleFunc("POST /changeUserPassword", userHandler.ChangeOtherUserPassword)
 	mux.HandleFunc("POST /addUserListToGroup",
 		userHandler.AddUserListToGroupHandler)
 	mux.HandleFunc("POST /removeUserListFromGroup",

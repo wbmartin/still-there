@@ -6,10 +6,11 @@ import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
+import { grants } from "../constants/grants";
 import type { User } from "../types/user-type";
 
 function UserAdminPage() {
-  const authState = useAuthGuard();
+  const authState = useAuthGuard([grants.READ_USER]);
   const { userList, loading, retrieveUserList, deleteUser } = useAppUserStore();
   const { getGroupName, retrieveAppUserGroupList } = useAppUserGroupStore();
   const navigate = useNavigate();

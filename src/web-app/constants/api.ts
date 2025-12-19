@@ -2,6 +2,8 @@ export const API_ENDPOINTS = {
 	// User
 	USER_LIST: '/userList',
 	USER: '/user',
+	CHANGE_OWN_PASSWORD: '/changeOwnPassword',
+	CHANGE_USER_PASSWORD: '/changeUserPassword',
 	ADD_USER_LIST_TO_GROUP: '/addUserListToGroup',
 	REMOVE_USER_LIST_FROM_GROUP: '/removeUserListFromGroup',
 

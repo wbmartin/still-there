@@ -22,8 +22,11 @@ import type { AppUserGroupFormData } from "../types/app-user-group-type";
 import { defaultAppUserGroupFormData } from "../types/app-user-group-type";
 
 function AppUserGroupEditPage() {
-  const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
+  const appUserGroupId = searchParams.get("appUserGroupId") || "";
+  const isNew = appUserGroupId === "new";
+  const requiredGrant = isNew ? grantConstants.CREATE_USER_GROUP : grantConstants.UPDATE_USER_GROUP;
+  const authState = useAuthGuard([requiredGrant]);
   const { createAppUserGroup, updateAppUserGroup, deleteAppUserGroup } =
     useAppUserGroupStore();
   const {
@@ -34,8 +37,6 @@ function AppUserGroupEditPage() {
   } = useAppUserStore();
   const navigate = useNavigate();
 
-  const appUserGroupId = searchParams.get("appUserGroupId") || "";
-  const isNew = appUserGroupId === "new";
   const numericId = isNaN(Number(appUserGroupId))
     ? null
     : Number(appUserGroupId);

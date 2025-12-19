@@ -28,6 +28,7 @@ interface AppUserState {
   ) => Promise<void>;
   updateUser: (id: number, data: Partial<User>) => Promise<void>;
   deleteUser: (id: number) => Promise<void>;
+  changeUserPassword: (userId: number, newPassword: string) => Promise<void>;
   clearCache: () => void;
 }
 
@@ -266,8 +267,28 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
        const errorMessage = err instanceof Error ? err.message : "Unknown error";
        set({ error: errorMessage });
        throw new Error(errorMessage);
-     }
+      }
     },
+
+  changeUserPassword: async (userId: number, newPassword: string) => {
+    set({ error: null });
+    try {
+      const response = await apiRequest(API_ENDPOINTS.CHANGE_USER_PASSWORD, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, newPassword }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to change password");
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to change password";
+      set({ error: errorMessage });
+      throw new Error(errorMessage);
+    }
+  },
+
   clearCache: () => {
     set({ userList: [], maxAppUserUpdateTs: 0 });
   },

@@ -4,7 +4,7 @@ import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 
 function Dashboard() {
-  const authState = useAuthGuard();
+  const authState = useAuthGuard([]);
   const { exampleList, loading, retrieveExampleList } = useExamplesStore();
   const hasFetched = useRef(false);
 

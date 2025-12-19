@@ -16,6 +16,7 @@ interface AuthStore extends Omit<AuthState, "csrfToken"> {
   authenticateWithAuthToken: () => Promise<void>;
   logout: () => Promise<void>;
   changeSecurityContext: (newContext: number) => Promise<void>;
+  changeOwnPassword: (oldPassword: string, newPassword: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
@@ -134,6 +135,28 @@ export const useAuthStore = create<AuthStore>((set) => ({
       set({
         error: err instanceof Error ? err.message : "Context change failed",
       });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  changeOwnPassword: async (oldPassword: string, newPassword: string) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await apiRequest("/changeOwnPassword", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldPassword, newPassword }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Password change failed");
+      }
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : "Password change failed",
+      });
+      throw err; // Re-throw so the component can handle it
     } finally {
       set({ loading: false });
     }

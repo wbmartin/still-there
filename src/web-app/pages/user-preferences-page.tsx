@@ -8,21 +8,27 @@ import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { ROUTES } from "../constants/routes";
 import useAuthGuard from "../hooks/use-auth-guard";
+import { grants } from "../constants/grants";
+import { ChangePasswordModal } from "../components/ChangePasswordModal";
 
 function UserPreferencesPage() {
-  const authState = useAuthGuard();
+  const authState = useAuthGuard([grants.LOGON]);
   const navigate = useNavigate();
   const {
     userName,
     securityContext,
     availableSecurityContextList: availableSecurityContexts,
     changeSecurityContext,
+    changeOwnPassword,
     loading,
     error,
   } = useAuthStore();
   const [selectedContext, setSelectedContext] = useState<string>(
     securityContext.toString(),
   );
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
+  const [passwordChangeError, setPasswordChangeError] = useState<string | undefined>();
 
   const handleClearCache = () => {
     useExamplesStore.getState().clearCache();
@@ -49,6 +55,24 @@ function UserPreferencesPage() {
       useAppUserGroupStore.getState().clearCache();
       // Navigate to dashboard
       void navigate(`/${ROUTES.DASHBOARD}`);
+    }
+  };
+
+  const handlePasswordChange = async (oldPassword: string, newPassword: string) => {
+    setPasswordChangeLoading(true);
+    setPasswordChangeError(undefined);
+    try {
+      await changeOwnPassword(oldPassword, newPassword);
+      setPasswordModalOpen(false);
+      notifications.show({
+        title: "Success",
+        message: "Password changed successfully",
+        color: "green",
+      });
+    } catch (err) {
+      setPasswordChangeError(err instanceof Error ? err.message : "Failed to change password");
+    } finally {
+      setPasswordChangeLoading(false);
     }
   };
 
@@ -109,6 +133,20 @@ function UserPreferencesPage() {
 
       <div style={{ marginTop: "2rem" }}>
         <Title order={3} mb="sm">
+          Password Management
+        </Title>
+        <Group mb="md">
+          <Button onClick={() => setPasswordModalOpen(true)} variant="outline">
+            Change Password
+          </Button>
+        </Group>
+        <Text size="sm" c="dimmed">
+          Change your account password. You will need to enter your current password.
+        </Text>
+      </div>
+
+      <div style={{ marginTop: "2rem" }}>
+        <Title order={3} mb="sm">
           Cache Management
         </Title>
         <Group mb="md">
@@ -127,6 +165,18 @@ function UserPreferencesPage() {
           {error}
         </Alert>
       )}
+
+      <ChangePasswordModal
+        isOpen={passwordModalOpen}
+        onConfirm={handlePasswordChange}
+        onCancel={() => {
+          setPasswordModalOpen(false);
+          setPasswordChangeError(undefined);
+        }}
+        mode="own"
+        loading={passwordChangeLoading}
+        error={passwordChangeError}
+      />
     </div>
   );
 }

@@ -1,0 +1,3 @@
+pushd ~/Code/ProtoStack-ReactGo/src/web-app
+npm run dev
+popd

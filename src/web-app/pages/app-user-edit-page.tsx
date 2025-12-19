@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   TextInput,
+  PasswordInput,
   Button,
   Title,
   Group,
@@ -13,14 +14,15 @@ import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { ChangePasswordModal } from "../components/ChangePasswordModal";
 import { ROUTES } from "../constants/routes";
 import type { UserFormData } from "../types/user-type";
 import { defaultUserFormData } from "../types/user-type";
+import { grants } from "../constants/grants";
 
 function UserEditPage() {
-  const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
-  const { retrieveUserById, createUser, updateUser, deleteUser } =
+  const { retrieveUserById, createUser, updateUser, deleteUser, changeUserPassword } =
     useAppUserStore();
   const {
     retrieveAppUserGroupList,
@@ -35,9 +37,14 @@ function UserEditPage() {
   const [formData, setFormData] = useState<UserFormData>(defaultUserFormData);
 
   const isNew = id === "new";
+  const requiredGrant = isNew ? grants.CREATE_USER : grants.UPDATE_USER;
+  const authState = useAuthGuard([requiredGrant]);
   const [userLoading, setUserLoading] = useState(!isNew && numericId !== null);
   const hasFetched = useRef(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
+  const [passwordChangeError, setPasswordChangeError] = useState<string | undefined>();
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
@@ -164,6 +171,26 @@ function UserEditPage() {
     setDeleteModalOpen(false);
   };
 
+  const handlePasswordChange = async (_oldPassword: string, newPassword: string) => {
+    if (!numericId) return;
+
+    setPasswordChangeLoading(true);
+    setPasswordChangeError(undefined);
+    try {
+      await changeUserPassword(numericId, newPassword);
+      setPasswordModalOpen(false);
+      notifications.show({
+        title: "Success",
+        message: "Password changed successfully",
+        color: "green",
+      });
+    } catch (err) {
+      setPasswordChangeError(err instanceof Error ? err.message : "Failed to change password");
+    } finally {
+      setPasswordChangeLoading(false);
+    }
+  };
+
   const groupOptions = appUserGroupList.map((g) => ({
     value: g.appUserGroupId.toString(),
     label: g.groupName,
@@ -210,9 +237,8 @@ function UserEditPage() {
           mb="md"
         />
         {isNew && (
-          <TextInput
+          <PasswordInput
             label="Password"
-            type="password"
             value={formData.pwHash}
             onChange={(e) =>
               setFormData({ ...formData, pwHash: e.target.value })
@@ -243,25 +269,41 @@ function UserEditPage() {
           mb="md"
         />
         <Group>
-          <Button type="submit">Save</Button>
-          {!isNew && (
-            <Button color="red" onClick={handleDeleteClick}>
-              Delete
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            onClick={() => void navigate(`/${ROUTES.APP_USER_LIST}`)}
-          >
-            Cancel
-          </Button>
-        </Group>
+           <Button type="submit">Save</Button>
+           {!isNew && (
+             <Button variant="outline" onClick={() => setPasswordModalOpen(true)}>
+               Change Password
+             </Button>
+           )}
+           {!isNew && (
+             <Button color="red" onClick={handleDeleteClick}>
+               Delete
+             </Button>
+           )}
+           <Button
+             variant="outline"
+             onClick={() => void navigate(`/${ROUTES.APP_USER_LIST}`)}
+           >
+             Cancel
+           </Button>
+         </Group>
       </form>
       <DeleteConfirmModal
         isOpen={deleteModalOpen}
         onConfirm={() => void handleDeleteConfirm()}
         onCancel={handleDeleteCancel}
         entityType="user"
+      />
+      <ChangePasswordModal
+        isOpen={passwordModalOpen}
+        onConfirm={handlePasswordChange}
+        onCancel={() => {
+          setPasswordModalOpen(false);
+          setPasswordChangeError(undefined);
+        }}
+        mode="other"
+        loading={passwordChangeLoading}
+        error={passwordChangeError}
       />
     </div>
   );

@@ -13,12 +13,16 @@ import { ROUTES } from "../constants/routes";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { grants } from "../constants/grants";
 import type { ExampleFormData } from "../types/example-type";
 import { defaultExampleFormData } from "../types/example-type";
 
 function ExampleEditPage() {
-  const authState = useAuthGuard();
   const [searchParams] = useSearchParams();
+  const id = searchParams.get("exampleId") || "";
+  const isNew = id === "new";
+  const requiredGrant = isNew ? grants.CREATE_EXAMPLE : grants.UPDATE_EXAMPLE;
+  const authState = useAuthGuard([requiredGrant]);
   const {
     retrieveExampleById,
     createExample,
@@ -27,13 +31,10 @@ function ExampleEditPage() {
   } = useExamplesStore();
   const navigate = useNavigate();
 
-  const id = searchParams.get("exampleId") || "";
   const numericId = isNaN(Number(id)) ? null : Number(id);
 
   const [formData, setFormData] =
     useState<ExampleFormData>(defaultExampleFormData);
-
-  const isNew = id === "new";
   const [exampleLoading, setExampleLoading] = useState(
     !isNew && numericId !== null,
   );

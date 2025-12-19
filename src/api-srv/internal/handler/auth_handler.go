@@ -344,6 +344,85 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 	}
 }
 
+// ChangeOwnPasswordHandler handles changing the current user's password
+func ChangeOwnPasswordHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Security checks
+		app := app_lib.NewAppHelper(w, r, appServices)
+		app.CheckJWT()
+		app.CheckRateLimitAndUserBlock()
+		app.CheckCSRF()
+		app.CheckAuthorization(model.GrantChangeOwnPassword)
+
+		if !app.CheckAllChecksComplete() {
+			return
+		}
+
+		appServices.Logger.Info("CPWS", "Change own password request started", "username", app.GetUsername())
+
+		jwtClaims := app.GetClaims()
+
+		// Parse request body
+		var req struct {
+			OldPassword string `json:"oldPassword"`
+			NewPassword string `json:"newPassword"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
+			return
+		}
+
+		// Validate required fields
+		if req.OldPassword == "" || req.NewPassword == "" {
+			app.WriteError(w, http.StatusBadRequest, "oldPassword and newPassword are required", "BRQ0", nil)
+			return
+		}
+
+		// Basic password validation (minimum length)
+		if len(req.NewPassword) < 8 {
+			app.WriteError(w, http.StatusBadRequest, "New password must be at least 8 characters long", "BRQ0", nil)
+			return
+		}
+
+		// Retrieve current user
+		user, err := userRepo.RetrieveUserByUserName(r.Context(), jwtClaims.Subject)
+		if err != nil {
+			appServices.Logger.Error("USLK", "User lookup failed during password change for user: "+jwtClaims.Subject+", error: "+err.Error(), "username", jwtClaims.Subject)
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			return
+		}
+
+		// Verify old password
+		if !app_lib.CheckPasswordHash(req.OldPassword, user.PwHash) {
+			appServices.Logger.Warn("PSFL", "Old password verification failed for user: "+jwtClaims.Subject)
+			app.WriteError(w, http.StatusUnauthorized, "Old password is incorrect", "ICRD", nil)
+			return
+		}
+
+		// Hash new password
+		hashedPassword, err := app_lib.HashPassword(req.NewPassword)
+		if err != nil {
+			appServices.Logger.Error("PSHS", "Failed to hash new password for user: "+jwtClaims.Subject+", error: "+err.Error())
+			app.WriteError(w, http.StatusInternalServerError, "Failed to process password", "UCH0", err)
+			return
+		}
+
+		// Update password
+		now := CurrentTimestamp()
+		err = userRepo.UpdateUserPassword(r.Context(), jwtClaims.UserID, hashedPassword, now, jwtClaims.UserID)
+		if err != nil {
+			appServices.Logger.Error("PSUP", "Failed to update password for user: "+jwtClaims.Subject+", error: "+err.Error())
+			app.WriteError(w, http.StatusInternalServerError, "Failed to update password", "UUF0", err)
+			return
+		}
+
+		appServices.Logger.Info("CPWS", "Password changed successfully for user: "+jwtClaims.Subject, "username", jwtClaims.Subject)
+
+		wrapper := model.DataWrapper{Data: map[string]string{"message": "Password changed successfully"}}
+		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+	}
+}
+
 // createJWTForUser creates a JWT token for the authenticated user
 func createJWTForUser(user *model.AppUserModel, grantList []int, appServices *app_lib.AppServices) (string, string, error) {
 	// Generate session ID
