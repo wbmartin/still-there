@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -28,7 +29,7 @@ func AuthHandler(
 		// Parse request
 		var req model.AuthRequestModel
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "INV_REQ_BODY", err)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body for auth: %v", err), "INV_REQ_BODY", err)
 			return
 		}
 
@@ -57,7 +58,7 @@ func AuthHandler(
 			// Generate temp token for MFA
 			tempTokenBytes := make([]byte, 32)
 			if _, err := rand.Read(tempTokenBytes); err != nil {
-				app.WriteError(w, http.StatusInternalServerError, "Internal server error", "TMP_TKN_GEN", err)
+				app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to generate temp token for MFA: username=%s", req.UserName), "TMP_TKN_GEN", err)
 				return
 			}
 			tempToken := hex.EncodeToString(tempTokenBytes)
@@ -65,7 +66,7 @@ func AuthHandler(
 			// Store temp token in key-value store with expiration
 			tempTokenKey := "TEMP_AUTH_SUCCESS_" + tempToken
 			if err := appServices.KV.Set(tempTokenKey, req.UserName, "10min"); err != nil {
-				app.WriteError(w, http.StatusInternalServerError, "Failed to set up MFA", "TMP_TKN_STORE", err)
+				app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to set up MFA for user: username=%s", req.UserName), "TMP_TKN_STORE", err)
 				return
 			}
 
@@ -90,7 +91,7 @@ func AuthHandler(
 		// Get all grants for user's groups
 		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.AppUserGroupMembershipList)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "GRT_FETCH_FAIL", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get grants for auth: username=%s", user.UserName), "GRT_FETCH_FAIL", err)
 			return
 		}
 
@@ -103,7 +104,7 @@ func AuthHandler(
 		// Issue full JWT
 		jwt, sessionID, err := createJWTForUser(user, grantsMap[user.SecurityContext], appServices)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "JWT_GEN_FAIL", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to generate JWT for auth: username=%s", user.UserName), "JWT_GEN_FAIL", err)
 			return
 		}
 		// Set JWT cookie
@@ -157,14 +158,14 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		// Read user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), jwtClaims.Subject)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "USR_LKUP_FAIL", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to lookup user for refresh: username=%s", jwtClaims.Subject), "USR_LKUP_FAIL", err)
 			return
 		}
 
 		// Get all grants for user's groups
 		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.AppUserGroupMembershipList)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "GRT_FETCH_FAIL", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get grants for refresh: username=%s", jwtClaims.Subject), "GRT_FETCH_FAIL", err)
 			return
 		}
 
@@ -178,7 +179,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		// Issue updated JWT
 		jwt, sessionID, err := createJWTForUser(user, grantsMap[user.SecurityContext], appServices)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "JWT_GEN_FAIL", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to generate JWT for refresh: username=%s", jwtClaims.Subject), "JWT_GEN_FAIL", err)
 			return
 		}
 
@@ -220,7 +221,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 		// Parse request first to get security context
 		var req model.ChangeSecurityContextRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "INV_REQ_BODY", err)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body for context change: %v", err), "INV_REQ_BODY", err)
 			return
 		}
 
@@ -251,7 +252,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), dbUser.AppUserGroupMembershipList)
 		if err != nil {
 			appServices.Logger.Error("GRT_FETCH_FAIL", "Failed to get grants for context change: "+err.Error(), "username", app.GetUsername())
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_SERVER_ERROR", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get grants for context change: username=%s", userName), "INTERNAL_SERVER_ERROR", err)
 			return
 		}
 
@@ -275,7 +276,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 		// Issue new JWT with updated context
 		jwt, sessionID, err := createJWTForUser(&updatedUser, grantsMap[req.SecurityContext], appServices)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "JWT_GEN_FAIL", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to generate JWT for context change: username=%s, context=%d", userName, req.SecurityContext), "JWT_GEN_FAIL", err)
 			return
 		}
 
@@ -366,7 +367,7 @@ func ChangeOwnPasswordHandler(appServices *app_lib.AppServices, userRepo *reposi
 			NewPassword string `json:"newPassword"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "INV_REQ_BODY", err)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body for password change: %v", err), "INV_REQ_BODY", err)
 			return
 		}
 
@@ -378,14 +379,14 @@ func ChangeOwnPasswordHandler(appServices *app_lib.AppServices, userRepo *reposi
 
 		// Basic password validation (minimum length)
 		if len(req.NewPassword) < 8 {
-			app.WriteError(w, http.StatusBadRequest, "New password must be at least 8 characters long", "BAD_REQUEST", nil)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("New password must be at least 8 characters long: len=%d", len(req.NewPassword)), "BAD_REQUEST", nil)
 			return
 		}
 
 		// Retrieve current user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), jwtClaims.Subject)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "USR_LKUP_FAIL", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to lookup user for password change: username=%s", jwtClaims.Subject), "USR_LKUP_FAIL", err)
 			return
 		}
 
@@ -399,7 +400,7 @@ func ChangeOwnPasswordHandler(appServices *app_lib.AppServices, userRepo *reposi
 		// Hash new password
 		hashedPassword, err := app_lib.HashPassword(req.NewPassword)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to process password", "PWD_HASH_FAIL", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to process password for user: username=%s", jwtClaims.Subject), "PWD_HASH_FAIL", err)
 			return
 		}
 
@@ -407,7 +408,7 @@ func ChangeOwnPasswordHandler(appServices *app_lib.AppServices, userRepo *reposi
 		now := CurrentTimestamp()
 		err = userRepo.UpdateUserPassword(r.Context(), jwtClaims.UserID, hashedPassword, now, jwtClaims.UserID)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to update password", "PWD_UPD_FAIL", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to update password for user: username=%s, user_id=%d", jwtClaims.Subject, jwtClaims.UserID), "PWD_UPD_FAIL", err)
 			return
 		}
 

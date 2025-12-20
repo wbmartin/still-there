@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -121,7 +122,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 	// Read users (filtered by security context, optional idList, and afterUpdateTs)
 	users, err := h.userRepo.RetrieveUserList(r.Context(), jwtClaims.SecurityContext, idList, afterUpdateTs)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve users", "ULF0", err)
+		app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to retrieve users: idList=%v, afterUpdateTs=%v", idList, afterUpdateTs), "ULF0", err)
 		return
 	}
 
@@ -189,7 +190,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Parse request body into CreateUserRequest
 	var req model.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body for create user: %v", err), "BRQ0", nil)
 		return
 	}
 
@@ -197,13 +198,13 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if req.UserName == "" || req.FirstName == "" || req.LastName == "" || req.Email == "" {
-		app.WriteError(w, http.StatusBadRequest, "userName, firstName, lastName, and email are required", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Required fields missing for create user: userName='%s', firstName='%s', lastName='%s', email='%s'", req.UserName, req.FirstName, req.LastName, req.Email), "BRQ0", nil)
 		return
 	}
 
 	// Validate password length
 	if len(req.PwRaw) < 8 {
-		app.WriteError(w, http.StatusBadRequest, "Password must be at least 8 characters long", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Password must be at least 8 characters long: len=%d", len(req.PwRaw)), "BRQ0", nil)
 		return
 	}
 
@@ -226,7 +227,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Hash password
 	hashed, err := app_lib.HashPassword(req.PwRaw)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, "Failed to process password", "UCH0", err)
+		app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to process password for user: username=%s", req.UserName), "UCH0", err)
 		return
 	}
 	user.PwHash = hashed
@@ -234,7 +235,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Create user
 	createdUser, err := h.userRepo.CreateUser(r.Context(), &user)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, "Failed to create user", "UCF0", err)
+		app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create user: username=%s", req.UserName), "UCF0", err)
 		return
 	}
 
@@ -264,7 +265,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	var user model.AppUserModel
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body for update user: %v", err), "BRQ0", nil)
 		return
 	}
 
@@ -272,7 +273,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if user.AppUserID == 0 || user.UserName == "" {
-		app.WriteError(w, http.StatusBadRequest, "appUserId and userName are required", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("appUserId and userName are required for update: appUserId=%d, userName='%s'", user.AppUserID, user.UserName), "BRQ0", nil)
 		return
 	}
 
@@ -288,11 +289,11 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict, "User was modified by another user", "CONFLICT_ERROR", err)
+			app.WriteError(w, http.StatusConflict, fmt.Sprintf("User was modified by another user: user_id=%d", user.AppUserID), "CONFLICT_ERROR", err)
 		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, "User not found", "NOT_FOUND_ERROR", err)
+			app.WriteError(w, http.StatusNotFound, fmt.Sprintf("User not found: user_id=%d", user.AppUserID), "NOT_FOUND_ERROR", err)
 		default:
-			app.WriteError(w, http.StatusInternalServerError, "Failed to delete user", "USR_DEL_FAIL", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to update user: user_id=%d", user.AppUserID), "USR_UPD_FAIL", err)
 		}
 		return
 	}
@@ -339,11 +340,11 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict, "User was modified by another user", "CNF0", nil)
+			app.WriteError(w, http.StatusConflict, fmt.Sprintf("User was modified by another user: user_id=%d", userID), "CNF0", nil)
 		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, "User not found", "NFN0", nil)
+			app.WriteError(w, http.StatusNotFound, fmt.Sprintf("User not found: user_id=%d", userID), "NFN0", nil)
 		default:
-			app.WriteError(w, http.StatusInternalServerError, "Failed to delete user", "UDF0", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to delete user: user_id=%d", userID), "UDF0", err)
 		}
 		return
 	}
@@ -378,12 +379,12 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 		UpdateTsList []float64 `json:"updateTsList"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body for add users to group: %v", err), "BRQ0", nil)
 		return
 	}
 
 	if len(req.UserIds) == 0 || len(req.UpdateTsList) != len(req.UserIds) {
-		app.WriteError(w, http.StatusBadRequest, "userIds and updateTsList must be provided and have matching lengths", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("userIds and updateTsList must be provided and have matching lengths: userIds=%d, updateTsList=%d", len(req.UserIds), len(req.UpdateTsList)), "BRQ0", nil)
 		return
 	}
 
@@ -391,10 +392,10 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 	updatedUsers, err := h.userRepo.AddUserListToGroup(r.Context(), req.UserIds, req.GroupId, req.UpdateTsList, jwtClaims.UserID, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrConflict) {
-			app.WriteError(w, http.StatusConflict, "Concurrent update detected", "CONFLICT_ERROR", err)
+			app.WriteError(w, http.StatusConflict, fmt.Sprintf("Concurrent update detected for add to group: group_id=%d, user_ids=%v", req.GroupId, req.UserIds), "CONFLICT_ERROR", err)
 			return
 		}
-		app.WriteError(w, http.StatusInternalServerError, "Failed to add users to group", "ADD_GRP_FAIL", err)
+		app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to add users to group: group_id=%d, user_count=%d", req.GroupId, len(req.UserIds)), "ADD_GRP_FAIL", err)
 		return
 	}
 

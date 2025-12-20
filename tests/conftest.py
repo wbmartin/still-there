@@ -114,9 +114,9 @@ class TestClient:
             self.created_examples.clear()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="class")
 def test_client():
-    """Session-scoped test client with admin authentication"""
+    """Class-scoped test client with admin authentication"""
     # Get base URL from environment variable set by test script
     base_url = os.environ.get("TEST_BASE_URL")
     if not base_url:
@@ -139,7 +139,7 @@ def test_client():
     client.cleanup_examples()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def basic_user_client():
     """Session-scoped test client with basic user authentication"""
     # Get base URL from environment variable set by test script

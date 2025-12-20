@@ -1,4 +1,5 @@
 import os
+
 import pytest
 import requests
 
@@ -20,7 +21,7 @@ class TestAuthentication:
         user = response["user"]
         assert user["userName"] == "admin"
         assert user["firstName"] == "System"
-        assert user["lastName"] == "Administrator2"
+        assert user["lastName"] == "Administrator"
         assert user["securityContext"] == 1
 
     def test_invalid_credentials(self):
@@ -33,22 +34,28 @@ class TestAuthentication:
     def test_csrf_protection(self, test_client):
         """Test that CSRF protection is working"""
         # Try request without CSRF token
-        response = test_client.session.post(f"{test_client.base_url}/example",
-            json={"exampleText": "Test", "securityContext": 1})
+        response = test_client.session.post(
+            f"{test_client.base_url}/example",
+            json={"exampleText": "Test", "securityContext": 1},
+        )
         assert response.status_code == 403  # Should be forbidden
 
         # Try request with invalid CSRF token
-        response = test_client.session.post(f"{test_client.base_url}/example",
+        response = test_client.session.post(
+            f"{test_client.base_url}/example",
             json={"exampleText": "Test", "securityContext": 1},
-            headers={"X-CSRF-Token": "invalid"})
+            headers={"X-CSRF-Token": "invalid"},
+        )
         assert response.status_code == 403
 
     def test_authenticated_request_without_csrf(self, test_client):
         """Test that authenticated requests still need CSRF for state changes"""
         # This should fail even with valid JWT because CSRF is required for POST
-        response = test_client.session.post(f"{test_client.base_url}/example",
+        response = test_client.session.post(
+            f"{test_client.base_url}/example",
             json={"exampleText": "Test", "securityContext": 1},
-            cookies={"auth": test_client.jwt_token})
+            cookies={"auth": test_client.jwt_token},
+        )
         assert response.status_code == 403
 
     def test_get_request_no_csrf_needed(self, test_client):
@@ -64,12 +71,16 @@ class TestAuthentication:
 
         # Missing password
         with pytest.raises(requests.HTTPError):
-            response = client.session.post(f"{client.base_url}/auth", json={"userName": "admin"})
+            response = client.session.post(
+                f"{client.base_url}/auth", json={"userName": "admin"}
+            )
             response.raise_for_status()
 
         # Missing username
         with pytest.raises(requests.HTTPError):
-            response = client.session.post(f"{client.base_url}/auth", json={"password": "admin123!"})
+            response = client.session.post(
+                f"{client.base_url}/auth", json={"password": "admin123!"}
+            )
             response.raise_for_status()
 
         # Empty request body
@@ -85,7 +96,9 @@ class TestAuthentication:
 
         data = response.json()
         inner_data = data.get("data", {})
-        assert "status" in inner_data or "message" in inner_data  # Health check response format
+        assert (
+            "status" in inner_data or "message" in inner_data
+        )  # Health check response format
 
 
 # Import TestClient for use in this module

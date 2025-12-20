@@ -71,7 +71,7 @@ echo "Running integration tests..."
 export TEST_BASE_URL="$BASE_URL"
 
 # Run tests with verbose output and generate HTML report
-python3 -m pytest -v --tb=short --html=tests/reports/integration_test_report.html --self-contained-html
+python3 -m pytest --maxfail=1 -v --tb=short --html=tests/reports/integration_test_report.html --self-contained-html
 
 echo ""
 echo "✅ Integration tests completed!"

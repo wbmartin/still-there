@@ -229,6 +229,7 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 			default:
 				app.WriteError(w, http.StatusInternalServerError, "Failed to delete user group", "DEL_UGRP_FAIL", err)
 			}
+		}
 		return
 	}
 
