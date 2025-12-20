@@ -12,6 +12,7 @@ import {
   ActionIcon,
   Tooltip,
   Image,
+  Box,
 } from "@mantine/core";
 import { IconCopy, IconCheck } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
@@ -78,26 +79,26 @@ function MFAOnboardingPage() {
       if (!response.ok) {
         throw new Error("MFA verification failed");
       }
-       // On success, update auth state and navigate
-       const data = (await response.json()) as LoginResponse;
-       if (data.user) {
-         // Update auth store with user data
-         useAuthStore.setState({
-           authState: "YES",
-           grantList: data.user.grantList || [],
-           availableSecurityContextList:
-             data.user.availableSecurityContextList || [],
-           userName: data.user.userName || "",
-           securityContext: data.user.securityContext || 0,
-           mfaRequired: data.user.mfaRequired || false,
-         });
-       }
-       notifications.show({
-         title: "Success",
-         message: "MFA setup completed successfully",
-         color: "green",
-       });
-       void navigate("/dashboard");
+      // On success, update auth state and navigate
+      const data = (await response.json()) as LoginResponse;
+      if (data.user) {
+        // Update auth store with user data
+        useAuthStore.setState({
+          authState: "YES",
+          grantList: data.user.grantList || [],
+          availableSecurityContextList:
+            data.user.availableSecurityContextList || [],
+          userName: data.user.userName || "",
+          securityContext: data.user.securityContext || 0,
+          mfaRequired: data.user.mfaRequired || false,
+        });
+      }
+      notifications.show({
+        title: "Success",
+        message: "MFA setup completed successfully",
+        color: "green",
+      });
+      void navigate("/dashboard");
     } catch (err) {
       notifications.show({
         title: "Verification Failed",
@@ -135,7 +136,14 @@ function MFAOnboardingPage() {
 
         {qrCodeImage && (
           <Group justify="center" mb="md">
-            <Image src={qrCodeImage} alt="QR Code" width={100} fit="contain" />
+            <Box h="250" w="250">
+              <Image
+                src={qrCodeImage}
+                alt="QR Code"
+                width={100}
+                fit="contain"
+              />
+            </Box>
           </Group>
         )}
 
@@ -163,11 +171,16 @@ function MFAOnboardingPage() {
           mb="md"
         />
 
-         <Group justify="center">
-           <Button onClick={() => { void handleVerify(); }} loading={verifying}>
-             Verify and Complete Setup
-           </Button>
-         </Group>
+        <Group justify="center">
+          <Button
+            onClick={() => {
+              void handleVerify();
+            }}
+            loading={verifying}
+          >
+            Verify and Complete Setup
+          </Button>
+        </Group>
       </Paper>
     </Container>
   );

@@ -101,7 +101,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info("ULS0", "ReadUserList invoked")
+	app.Info("USR_LIST_STRT", "ReadUserList invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -125,7 +125,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Debug("ULD0", "Users read")
+	app.Debug("USR_LIST_READ", "Users read")
 
 	// Ensure users is never nil
 	if users == nil {
@@ -136,7 +136,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 	wrapper := model.DataWrapper{Data: users}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 
-	app.Info("ULD1", "User list read completed")
+	app.Info("USR_LIST_READ_DONE", "User list read completed")
 }
 
 // RetrieveGrantList handles GET /grantList
@@ -152,7 +152,7 @@ func (h *UserHandler) RetrieveGrantList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	app.Info("RLS0", "ReadGrantList invoked")
+	app.Info("RD_GRT_LST_ST", "ReadGrantList invoked")
 
 	// Convert GrantIDToShortCodeMap to array of objects
 	grantList := make([]map[string]interface{}, 0, len(model.GrantIDToShortCodeMap))
@@ -163,10 +163,10 @@ func (h *UserHandler) RetrieveGrantList(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
-	app.Debug("GLD0", "Grant list read")
+	app.Debug("GRT_LST_READ", "Grant list read")
 	wrapper := model.DataWrapper{Data: grantList}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("GLD1", "Grant list read completed")
+	app.Info("GRT_LST_RD_DN", "Grant list read completed")
 }
 
 // CreateUser handles POST /user
@@ -288,11 +288,11 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict, "User was modified by another user", "CNF0", nil)
+			app.WriteError(w, http.StatusConflict, "User was modified by another user", "CONFLICT_ERROR", err)
 		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, "User not found", "NFN0", nil)
+			app.WriteError(w, http.StatusNotFound, "User not found", "NOT_FOUND_ERROR", err)
 		default:
-			app.WriteError(w, http.StatusInternalServerError, "Failed to update user", "UUF0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Failed to delete user", "USR_DEL_FAIL", err)
 		}
 		return
 	}
@@ -367,7 +367,7 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	app.Info("AUG0", "AddUserListToGroup invoked")
+	app.Info("ADD_USR_GRP_S", "AddUserListToGroup invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -391,14 +391,14 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 	updatedUsers, err := h.userRepo.AddUserListToGroup(r.Context(), req.UserIds, req.GroupId, req.UpdateTsList, jwtClaims.UserID, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrConflict) {
-			app.WriteError(w, http.StatusConflict, "Concurrent update detected", "CNF0", nil)
+			app.WriteError(w, http.StatusConflict, "Concurrent update detected", "CONFLICT_ERROR", err)
 			return
 		}
-		app.WriteError(w, http.StatusInternalServerError, "Failed to add users to group", "AGF0", err)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to add users to group", "ADD_GRP_FAIL", err)
 		return
 	}
 
-	app.Info("AGS0", "Users added to group successfully")
+	app.Info("ADD_USR_GRP_D", "Users added to group successfully")
 	wrapper := model.DataWrapper{Data: updatedUsers}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 }
@@ -416,7 +416,7 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	app.Info("RUG0", "RemoveUserListFromGroup invoked")
+	app.Info("REM_USR_GRP_S", "RemoveUserListFromGroup invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -440,14 +440,14 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *h
 	updatedUsers, err := h.userRepo.RemoveUserListFromGroup(r.Context(), req.UserIds, req.GroupId, req.UpdateTsList, jwtClaims.UserID, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrConflict) {
-			app.WriteError(w, http.StatusConflict, "Concurrent update detected", "CNF0", nil)
+			app.WriteError(w, http.StatusConflict, "Concurrent update detected", "CONFLICT_ERROR", err)
 			return
 		}
-		app.WriteError(w, http.StatusInternalServerError, "Failed to remove users from group", "RGF0", err)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to remove users from group", "REM_GRP_FAIL", err)
 		return
 	}
 
-	app.Info("RGS0", "Users removed from group successfully")
+	app.Info("REM_USR_GRP_D", "Users removed from group successfully")
 	wrapper := model.DataWrapper{Data: updatedUsers}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 }
@@ -518,11 +518,11 @@ func (h *UserHandler) ChangeOtherUserPassword(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	app.Debug("CPWD", "Password updated for user: "+user.UserName)
+	app.Debug("PW_CHANGED", "Password updated for user: "+user.UserName)
 
 	wrapper := model.DataWrapper{Data: map[string]string{"message": "Password changed successfully"}}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("CPWD", "User password change completed")
+	app.Info("PW_CHANGED", "User password change completed")
 }
 
 // UserSelfCreateHandler handles user self-registration (public endpoint)
@@ -655,7 +655,7 @@ func MFASetupHandler(appServices *app_lib.AppServices, userRepo *repository.User
 			userName = jwtClaims.Subject
 		}
 
-		app.Info("MFS0", "MFA setup request started for user: "+userName)
+		app.Info("MFA_STP_STRT", "MFA setup request started for user: "+userName)
 
 		// Get current user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
@@ -720,7 +720,7 @@ func MFASetupHandler(appServices *app_lib.AppServices, userRepo *repository.User
 
 		wrapper := model.DataWrapper{Data: response}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		app.Info("MFS1", "MFA setup data provided")
+		app.Info("MFA_STP_DATA", "MFA setup data provided")
 	}
 }
 
@@ -764,7 +764,7 @@ func MFAVerifyHandler(appServices *app_lib.AppServices, userRepo *repository.Use
 			userName = jwtClaims.Subject
 		}
 
-		app.Info("MFV0", "MFA verify request started for user: "+userName)
+		app.Info("MFA_VFY_STRT", "MFA verify request started for user: "+userName)
 
 		// Get user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
@@ -841,12 +841,12 @@ func MFAVerifyHandler(appServices *app_lib.AppServices, userRepo *repository.Use
 
 			wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 			writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-			app.Info("MFV1", "MFA onboarding completed for user: "+userName)
+			app.Info("MFA_ONB_CMP", "MFA onboarding completed for user: "+userName)
 		} else {
 			// For logged in users, just confirm
 			wrapper := model.DataWrapper{Data: map[string]string{"message": "MFA verified successfully"}}
 			writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-			app.Info("MFV1", "MFA verification successful for user: "+userName)
+			app.Info("MFA_VFY_OK", "MFA verification successful for user: "+userName)
 		}
 	}
 }
@@ -865,7 +865,7 @@ func AdminResetUserMFAHandler(appServices *app_lib.AppServices, userRepo *reposi
 			return
 		}
 
-		app.Info("ARM0", "Admin reset MFA request started")
+		app.Info("ADM_RST_MFA_S", "Admin reset MFA request started")
 
 		// Parse request
 		var req struct {
@@ -898,6 +898,6 @@ func AdminResetUserMFAHandler(appServices *app_lib.AppServices, userRepo *reposi
 
 		wrapper := model.DataWrapper{Data: map[string]interface{}{"message": "MFA reset successfully", "updateTs": newUpdateTS}}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		app.Info("ARM1", "Admin reset MFA completed for user: "+targetUser.UserName)
+		app.Info("ADM_RST_MFA_D", "Admin reset MFA completed for user: "+targetUser.UserName)
 	}
 }

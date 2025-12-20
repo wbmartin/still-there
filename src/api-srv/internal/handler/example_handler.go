@@ -38,14 +38,14 @@ func (h *ExampleHandler) RetrieveExample(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	app.Info("RTS0", "ReadExample invoked")
+	app.Info("READ_EX_START", "ReadExample invoked")
 
 	jwtClaims := app.GetClaims()
 
 	// Parse query parameters
 	exampleID, err := GetIntFromQuery(r, "exampleId")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, err.Error(), "PARSE_QUERY_FAIL", nil)
 		return
 	}
 
@@ -55,21 +55,21 @@ func (h *ExampleHandler) RetrieveExample(w http.ResponseWriter, r *http.Request)
 	example, err := h.exampleRepo.RetrieveExample(r.Context(), exampleID, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			app.WriteError(w, http.StatusNotFound, "Example not found", "ERR", nil)
+			app.WriteError(w, http.StatusNotFound, "Example not found", "NOT_FOUND_EX", err)
 			return
 		}
 		if errors.Is(err, repository.ErrDeleted) {
-			app.WriteError(w, http.StatusGone, "Example has been deleted", "GON0", nil)
+			app.WriteError(w, http.StatusGone, "Example has been deleted", "EXAMPLE_GONE", err)
 			return
 		}
-		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve example", "GTF0", err)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve example", "GET_EX_FAIL", err)
 		return
 	}
 
-	app.Debug("RET0", fmt.Sprintf("Example retrieved: %+v", example))
+	app.Debug("EX_RETRIEVED", fmt.Sprintf("Example retrieved: %+v", example))
 	wrapper := model.DataWrapper{Data: example}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("GTD0", "Example retrieval completed")
+	app.Info("GET_EX_DONE", "Example retrieval completed")
 }
 
 // CreateExample handles POST /example
@@ -85,22 +85,22 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info("CRS0", "CreateExample invoked")
+	app.Info("EX_CR_START", "CreateExample invoked")
 
 	jwtClaims := app.GetClaims()
 
 	// Parse request body
 	var example model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&example); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BAD_REQUEST", nil)
 		return
 	}
 
-	app.Debug("CRP0", fmt.Sprintf("Example creation request parsed: %+v", example))
+	app.Debug("CREATE_PARSE_REQ", fmt.Sprintf("Example creation request parsed: %+v", example))
 
 	// Validate required fields
 	if example.ExampleText == "" {
-		app.WriteError(w, http.StatusBadRequest, "example_text is required", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, "example_text is required", "BAD_REQUEST", nil)
 		return
 	}
 
@@ -117,14 +117,14 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	// Create example
 	createdExample, err := h.exampleRepo.CreateExample(r.Context(), &example)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, "Failed to create example", "CRF0", err)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to create example", "CREATE_EX_FAIL", err)
 		return
 	}
 
-	app.Debug("CRD0", fmt.Sprintf("Example created: %+v", createdExample))
+	app.Debug("EX_CREATED", fmt.Sprintf("Example created: %+v", createdExample))
 	wrapper := model.DataWrapper{Data: createdExample}
 	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
-	app.Info("CRD1", "Example creation completed")
+	app.Info("EX_CR_DONE", "Example creation completed")
 }
 
 // UpdateExample handles PUT /example
@@ -140,22 +140,22 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info("UPS0", "UpdateExample invoked")
+	app.Info("EX_UP_START", "UpdateExample invoked")
 
 	jwtClaims := app.GetClaims()
 
 	// Parse request body
 	var example model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&example); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BAD_REQUEST", nil)
 		return
 	}
 
-	app.Debug("UPP0", fmt.Sprintf("Example update request parsed: %+v", example))
+	app.Debug("UPDATE_PARSE_REQ", fmt.Sprintf("Example update request parsed: %+v", example))
 
 	// Validate required fields
 	if example.ExampleID == 0 || example.ExampleText == "" {
-		app.WriteError(w, http.StatusBadRequest, "example_id and example_text are required", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, "example_id and example_text are required", "BAD_REQUEST", nil)
 		return
 	}
 
@@ -173,21 +173,21 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict, "Example was modified by another user", "CNF0", nil)
+			app.WriteError(w, http.StatusConflict, "Example was modified by another user", "CONFLICT_ERROR", err)
 		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, "Example not found", "NFN0", nil)
+			app.WriteError(w, http.StatusNotFound, "Example not found", "NOT_FOUND_EX", err)
 		case errors.Is(err, repository.ErrDeleted):
-			app.WriteError(w, http.StatusGone, "Example has been deleted", "GON0", nil)
+			app.WriteError(w, http.StatusGone, "Example has been deleted", "EXAMPLE_GONE", err)
 		default:
-			app.WriteError(w, http.StatusInternalServerError, "Failed to update example", "UPF0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Failed to update example", "UPDATE_EX_FAIL", err)
 		}
 		return
 	}
 
-	app.Debug("UPD0", fmt.Sprintf("Example updated: %+v", example))
+	app.Debug("EX_UPDATED", fmt.Sprintf("Example updated: %+v", example))
 	wrapper := model.DataWrapper{Data: example}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("UPD1", "Example update completed")
+	app.Info("EX_UP_DONE", "Example update completed")
 }
 
 // DeleteExample handles DELETE /example
@@ -203,20 +203,20 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info("DES0", "DeleteExample invoked")
+	app.Info("EX_DEL_START", "DeleteExample invoked")
 
 	jwtClaims := app.GetClaims()
 
 	// Parse query parameters
 	exampleID, err := GetIntFromQuery(r, "exampleId")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, err.Error(), "PARSE_QUERY_FAIL", nil)
 		return
 	}
 
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, err.Error(), "PARSE_QUERY_FAIL", nil)
 		return
 	}
 
@@ -228,13 +228,13 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict, "Example was modified by another user", "CNF0", nil)
+			app.WriteError(w, http.StatusConflict, "Example was modified by another user", "CONFLICT_ERROR", err)
 		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, "Example not found", "NFN0", nil)
+			app.WriteError(w, http.StatusNotFound, "Example not found", "NOT_FOUND_EX", err)
 		case errors.Is(err, repository.ErrDeleted):
-			app.WriteError(w, http.StatusGone, "Example has been deleted", "GON0", nil)
+			app.WriteError(w, http.StatusGone, "Example has been deleted", "EXAMPLE_GONE", err)
 		default:
-			app.WriteError(w, http.StatusInternalServerError, "Failed to delete example", "DLF0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Failed to delete example", "DELETE_EX_FAIL", err)
 		}
 		return
 	}
@@ -242,7 +242,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{"message": "Example deleted successfully", "example_id": deletedID}
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("DLD0", "Example deletion completed")
+	app.Info("EX_DEL_DONE", "Example deletion completed")
 }
 
 // RetrieveExampleList handles GET /exampleList?exampleIdList={comma-separated} (optional, if empty returns all)
@@ -258,27 +258,27 @@ func (h *ExampleHandler) RetrieveExampleList(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	app.Info("RLS0", "ReadExampleList invoked")
+	app.Info("EX_LIST_START", "ReadExampleList invoked")
 
 	jwtClaims := app.GetClaims()
 
 	// Parse query parameters
 	idList, err := GetCommaSeparatedIntListFromQuery(r, "exampleIdList")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, err.Error(), "PARSE_QUERY_FAIL", nil)
 		return
 	}
 
 	afterUpdateTs, err := GetOptionalFloatFromQuery(r, "afterUpdateTs")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, err.Error(), "PARSE_QUERY_FAIL", nil)
 		return
 	}
 
 	// If idList is empty, ReadExampleList returns all or filtered by afterUpdateTs
 	examples, err := h.exampleRepo.RetrieveExampleList(r.Context(), idList, jwtClaims.SecurityContext, afterUpdateTs)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve examples", "LIF0", err)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve examples", "LIST_EX_FAIL", err)
 		return
 	}
 
@@ -291,7 +291,7 @@ func (h *ExampleHandler) RetrieveExampleList(w http.ResponseWriter, r *http.Requ
 	wrapper := model.DataWrapper{Data: examples}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 
-	app.Info("LIR0", fmt.Sprintf("Returned %d examples", len(examples)))
+	app.Info("EX_LIST_RET", fmt.Sprintf("Returned %d examples", len(examples)))
 }
 
 // CreateExampleList handles POST /exampleList
@@ -307,19 +307,19 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	app.Info("CLS0", "CreateExampleList invoked")
+	app.Info("EX_BLK_CR_ST", "CreateExampleList invoked")
 
 	jwtClaims := app.GetClaims()
 
 	// Parse request body
 	var exampleList []model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&exampleList); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BAD_REQUEST", nil)
 		return
 	}
 
 	if len(exampleList) == 0 {
-		app.WriteError(w, http.StatusBadRequest, "At least one example required", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, "At least one example required", "BAD_REQUEST", nil)
 		return
 	}
 
@@ -327,11 +327,11 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	userSecurityContext := jwtClaims.SecurityContext
 	for i, example := range exampleList {
 		if example.SecurityContext != userSecurityContext {
-			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), "BRQ0", nil)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), "BAD_REQUEST", nil)
 			return
 		}
 		if example.ExampleText == "" {
-			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d missing example_text", i), "BRQ0", nil)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d missing example_text", i), "BAD_REQUEST", nil)
 			return
 		}
 	}
@@ -358,7 +358,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	// Create in transaction
 	createdExamples, err := h.exampleRepo.CreateExampleList(r.Context(), examplePtrList)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, "Failed to create examples", "BCF0", err)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to create examples", "BULK_CREATE_FAIL", err)
 		return
 	}
 
@@ -366,7 +366,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	wrapper := model.DataWrapper{Data: createdExamples}
 	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
 
-	app.Info("BCR0", fmt.Sprintf("Created %d examples", len(createdExamples)))
+	app.Info("EX_BLK_CR_RET", fmt.Sprintf("Created %d examples", len(createdExamples)))
 }
 
 // UpdateExampleList handles PUT /exampleList
@@ -382,19 +382,19 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	app.Info("ULS0", "UpdateExampleList invoked")
+	app.Info("EX_BLK_UP_ST", "UpdateExampleList invoked")
 
 	jwtClaims := app.GetClaims()
 
 	// Parse request body
 	var exampleList []model.ExampleModel
 	if err := json.NewDecoder(r.Body).Decode(&exampleList); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BAD_REQUEST", nil)
 		return
 	}
 
 	if len(exampleList) == 0 {
-		app.WriteError(w, http.StatusBadRequest, "At least one example required", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, "At least one example required", "BAD_REQUEST", nil)
 		return
 	}
 
@@ -408,11 +408,11 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 		examplePtrList[i] = &exampleList[i]
 		originalUpdateTSList[i] = exampleList[i].UpdateTS
 		if examplePtrList[i].SecurityContext != jwtClaims.SecurityContext {
-			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), "BRQ0", nil)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d has invalid security context", i), "BAD_REQUEST", nil)
 			return
 		}
 		if examplePtrList[i].ExampleID == 0 {
-			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d missing example_id", i), "BRQ0", nil)
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Example %d missing example_id", i), "BAD_REQUEST", nil)
 			return
 		}
 		exampleList[i].UpdateTS = now
@@ -423,10 +423,10 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	err := h.exampleRepo.UpdateExampleList(r.Context(), examplePtrList, originalUpdateTSList)
 	if err != nil {
 		if errors.Is(err, repository.ErrExpectationFailed) {
-			app.WriteError(w, http.StatusExpectationFailed, "One or more examples could not be updated due to concurrent modifications", "EXF0", nil)
+			app.WriteError(w, http.StatusExpectationFailed, "One or more examples could not be updated due to concurrent modifications", "EXPECTATION_FAIL", err)
 			return
 		}
-		app.WriteError(w, http.StatusInternalServerError, "Failed to update examples", "BUF0", err)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to update examples", "BULK_UPDATE_FAIL", err)
 		return
 	}
 
@@ -435,7 +435,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 
-	app.Info("BUR0", fmt.Sprintf("Updated %d examples", len(exampleList)))
+	app.Info("EX_BLK_UP_RET", fmt.Sprintf("Updated %d examples", len(exampleList)))
 }
 
 // DeleteExampleList handles DELETE /exampleList?exampleIdList={comma-separated}&updateTs={comma-separated}
@@ -451,30 +451,30 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	app.Info("DLS0", "DeleteExampleList invoked")
+	app.Info("EX_BLK_DEL_ST", "DeleteExampleList invoked")
 
 	jwtClaims := app.GetClaims()
 
 	// Parse query parameters
 	idList, err := GetCommaSeparatedIntListFromQuery(r, "exampleIdList")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, err.Error(), "PARSE_QUERY_FAIL", nil)
 		return
 	}
 
 	updateTimestampList, err := GetCommaSeparatedFloats(r, "updateTs")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, err.Error(), "PARSE_QUERY_FAIL", nil)
 		return
 	}
 
 	if len(idList) != len(updateTimestampList) {
-		app.WriteError(w, http.StatusBadRequest, "exampleIdList and updateTs must have the same number of values", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, "exampleIdList and updateTs must have the same number of values", "BAD_REQUEST", nil)
 		return
 	}
 
 	if len(idList) == 0 {
-		app.WriteError(w, http.StatusBadRequest, "At least one id required", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, "At least one id required", "BAD_REQUEST", nil)
 		return
 	}
 
@@ -484,7 +484,7 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	// Delete in transaction
 	deletedIDList, err := h.exampleRepo.DeleteExampleList(r.Context(), idList, updateTimestampList, jwtClaims.SecurityContext, now, jwtClaims.UserID)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, "Failed to delete examples", "BDF0", err)
+		app.WriteError(w, http.StatusInternalServerError, "Failed to delete examples", "BULK_DELETE_FAIL", err)
 		return
 	}
 
@@ -493,5 +493,5 @@ func (h *ExampleHandler) DeleteExampleList(w http.ResponseWriter, r *http.Reques
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 
-	app.Info("BDR0", fmt.Sprintf("Deleted %d examples", len(idList)))
+	app.Info("EX_BLK_DEL_RET", fmt.Sprintf("Deleted %d examples", len(idList)))
 }

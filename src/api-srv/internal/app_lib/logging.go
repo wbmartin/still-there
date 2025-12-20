@@ -233,10 +233,10 @@ func (c *ShrmplLogClient) Log(level, host, code, message string) error {
 		return fmt.Errorf("message must be <= 4096 characters")
 	}
 
-	// Format: [LVL(4)] [HOST(32)] [CODE(4)] [LEN(4)]: [MSG]\n
+	// Format: [LVL(4)] [HOST(32)] [CODE(12)] [LEN(4)]: [MSG]\n
 	paddedHost := fmt.Sprintf("%-32s", host[:min(32, len(host))])
 	paddedLevel := fmt.Sprintf("%-4s", level[:4])
-	paddedCode := fmt.Sprintf("%-4s", code[:4])
+	paddedCode := fmt.Sprintf("%-12s", code[:12])
 	msgLen := fmt.Sprintf("%04d", len(message))
 
 	logLine := fmt.Sprintf("%s %s %s %s: %s\n", paddedLevel, paddedHost,

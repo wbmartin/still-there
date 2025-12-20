@@ -20,7 +20,7 @@ func AuthHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var csrfToken string
-		appServices.Logger.Info("STRT", "Auth request started", "username", "preauth")
+		appServices.Logger.Info("AUTH_REQ_STRT", "Auth request started", "username", "preauth")
 
 		// Create app helper for error handling
 		app := app_lib.NewAppHelper(w, r, appServices)
@@ -28,27 +28,27 @@ func AuthHandler(
 		// Parse request
 		var req model.AuthRequestModel
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
+			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "INV_REQ_BODY", err)
 			return
 		}
 
-		appServices.Logger.Debug("PRSE",
+		appServices.Logger.Debug("AUTH_REQ_PRSE",
 			"Auth request parsed for user: "+req.UserName, "username", req.UserName)
 
 		// Read user from database
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), req.UserName)
 		if err != nil {
-			appServices.Logger.Warn("USLK",
+			appServices.Logger.Warn("USR_LKUP_FAIL",
 				"User lookup failed for user: "+req.UserName+", error: "+err.Error(), "username", req.UserName)
-			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "ICRD", err)
+			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "INVALID_CREDS", err)
 			return
 		}
 
 		// Verify password
 		if !app_lib.CheckPasswordHash(req.Password, user.PwHash) {
-			appServices.Logger.Warn("PSFL",
+			appServices.Logger.Warn("PWD_VFY_FAIL",
 				"Password verification failed for user: "+req.UserName)
-			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "ICRD", nil)
+			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "INVALID_CREDS", nil)
 			return
 		}
 
@@ -57,18 +57,15 @@ func AuthHandler(
 			// Generate temp token for MFA
 			tempTokenBytes := make([]byte, 32)
 			if _, err := rand.Read(tempTokenBytes); err != nil {
-				appServices.Logger.Error("TKGN",
-					"Failed to generate temp token: "+err.Error())
-				app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+				app.WriteError(w, http.StatusInternalServerError, "Internal server error", "TMP_TKN_GEN", err)
 				return
 			}
 			tempToken := hex.EncodeToString(tempTokenBytes)
 
 			// Store temp token in key-value store with expiration
-			tempTokenKey := "TEMP_AUTH_" + tempToken
+			tempTokenKey := "TEMP_AUTH_SUCCESS_" + tempToken
 			if err := appServices.KV.Set(tempTokenKey, req.UserName, "10min"); err != nil {
-				appServices.Logger.Error("TKST", "Failed to store temp token: "+err.Error())
-				app.WriteError(w, http.StatusInternalServerError, "Failed to set up MFA", "MFAF", err)
+				app.WriteError(w, http.StatusInternalServerError, "Failed to set up MFA", "TMP_TKN_STORE", err)
 				return
 			}
 
@@ -85,7 +82,7 @@ func AuthHandler(
 
 			wrapper := model.AuthResponseWrapper{User: response}
 			writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-			appServices.Logger.Info("TKIS",
+			appServices.Logger.Info("TMP_TKN_ISSUED",
 				"Auth temp token issued for user: "+req.UserName)
 			return
 		}
@@ -93,8 +90,7 @@ func AuthHandler(
 		// Get all grants for user's groups
 		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.AppUserGroupMembershipList)
 		if err != nil {
-			appServices.Logger.Error("GRFL", "Failed to get grants for user: "+err.Error())
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "GRT_FETCH_FAIL", err)
 			return
 		}
 
@@ -107,8 +103,7 @@ func AuthHandler(
 		// Issue full JWT
 		jwt, sessionID, err := createJWTForUser(user, grantsMap[user.SecurityContext], appServices)
 		if err != nil {
-			appServices.Logger.Error("JWFL", "Failed to create JWT: "+err.Error())
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "JWT_GEN_FAIL", err)
 			return
 		}
 		// Set JWT cookie
@@ -137,7 +132,7 @@ func AuthHandler(
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		appServices.Logger.Info("AUTH", "Authentication successful for user: "+user.UserName, "username", user.UserName)
+		appServices.Logger.Info("AUTH_SUCCESS", "Authentication successful for user: "+user.UserName, "username", user.UserName)
 	}
 }
 
@@ -155,23 +150,21 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 			return
 		}
 
-		appServices.Logger.Info("RFST", "Refresh request started", "username", app.GetUsername())
+		appServices.Logger.Info("RFRSH_START", "Refresh request started", "username", app.GetUsername())
 
 		jwtClaims := app.GetClaims()
 
 		// Read user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), jwtClaims.Subject)
 		if err != nil {
-			appServices.Logger.Error("USLK", "User lookup failed during refresh for user: "+jwtClaims.Subject+", error: "+err.Error(), "username", jwtClaims.Subject)
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "USR_LKUP_FAIL", err)
 			return
 		}
 
 		// Get all grants for user's groups
 		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.AppUserGroupMembershipList)
 		if err != nil {
-			appServices.Logger.Error("GRFL", "Failed to get grants for refresh: "+err.Error(), "username", app.GetUsername())
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "GRT_FETCH_FAIL", err)
 			return
 		}
 
@@ -185,8 +178,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		// Issue updated JWT
 		jwt, sessionID, err := createJWTForUser(user, grantsMap[user.SecurityContext], appServices)
 		if err != nil {
-			appServices.Logger.Error("JWFL", "Failed to create JWT: "+err.Error(), "username", app.GetUsername())
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "JWT_GEN_FAIL", err)
 			return
 		}
 
@@ -215,7 +207,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		csrfToken := sessionID[len(sessionID)-3:]
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		appServices.Logger.Info("RFSC", "Refresh successful for user: "+user.UserName, "username", user.UserName)
+		appServices.Logger.Info("RFRSH_SUCCESS", "Refresh successful for user: "+user.UserName, "username", user.UserName)
 	}
 }
 
@@ -228,7 +220,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 		// Parse request first to get security context
 		var req model.ChangeSecurityContextRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
+			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "INV_REQ_BODY", err)
 			return
 		}
 
@@ -242,7 +234,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 			return
 		}
 
-		appServices.Logger.Info("CSCS", "Change security context request started", "username", app.GetUsername())
+		appServices.Logger.Info("CHG_CTX_START", "Change security context request started", "username", app.GetUsername())
 
 		jwtClaims := app.GetClaims()
 		userName := jwtClaims.Subject
@@ -250,16 +242,16 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 		// Read current user
 		dbUser, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
 		if err != nil {
-			appServices.Logger.Error("USLK", "User lookup failed during context change for user: "+userName+", error: "+err.Error(), "username", userName)
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			appServices.Logger.Error("USR_LKUP_FAIL", "User lookup failed during context change for user: "+userName+", error: "+err.Error(), "username", userName)
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_SERVER_ERROR", err)
 			return
 		}
 
 		// Get all grants for user's groups
 		grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), dbUser.AppUserGroupMembershipList)
 		if err != nil {
-			appServices.Logger.Error("GRFL", "Failed to get grants for context change: "+err.Error(), "username", app.GetUsername())
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			appServices.Logger.Error("GRT_FETCH_FAIL", "Failed to get grants for context change: "+err.Error(), "username", app.GetUsername())
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_SERVER_ERROR", err)
 			return
 		}
 
@@ -271,8 +263,8 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 
 		// Check if requested context is available
 		if _, exists := grantsMap[req.SecurityContext]; !exists {
-			appServices.Logger.Warn("CSCF", "User "+userName+" attempted to switch to unauthorized context: "+strconv.Itoa(req.SecurityContext), "username", userName)
-			app.WriteError(w, http.StatusForbidden, "Security context not available", "SCNA", nil)
+			appServices.Logger.Warn("CHG_CTX_FAIL", "User "+userName+" attempted to switch to unauthorized context: "+strconv.Itoa(req.SecurityContext), "username", userName)
+			app.WriteError(w, http.StatusForbidden, "Security context not available", "SECURITY_CONTEXT_NOT_AVAILABLE", nil)
 			return
 		}
 
@@ -283,8 +275,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 		// Issue new JWT with updated context
 		jwt, sessionID, err := createJWTForUser(&updatedUser, grantsMap[req.SecurityContext], appServices)
 		if err != nil {
-			appServices.Logger.Error("JWFL", "Failed to create JWT for context change: "+err.Error(), "username", app.GetUsername())
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "JWT_GEN_FAIL", err)
 			return
 		}
 
@@ -315,7 +306,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		appServices.Logger.Info("CSCN", "Security context changed for user: "+userName+" to context: "+strconv.Itoa(req.SecurityContext), "username", userName)
+		appServices.Logger.Info("CHG_CTX_SUCC", "Security context changed for user: "+userName+" to context: "+strconv.Itoa(req.SecurityContext), "username", userName)
 	}
 }
 
@@ -333,7 +324,7 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 			return
 		}
 
-		appServices.Logger.Info("LOST", "Logoff request started", "username", app.GetUsername())
+		appServices.Logger.Info("LOGOFF_START", "Logoff request started", "username", app.GetUsername())
 
 		// Clear the auth cookie
 		http.SetCookie(w, &http.Cookie{
@@ -347,7 +338,7 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 		})
 
 		w.WriteHeader(http.StatusOK)
-		appServices.Logger.Info("LOFN", "Logoff successful", "username", app.GetUsername())
+		appServices.Logger.Info("LOGOFF_SUCC", "Logoff successful", "username", app.GetUsername())
 	}
 }
 
@@ -365,7 +356,7 @@ func ChangeOwnPasswordHandler(appServices *app_lib.AppServices, userRepo *reposi
 			return
 		}
 
-		appServices.Logger.Info("CPWS", "Change own password request started", "username", app.GetUsername())
+		appServices.Logger.Info("CHG_PW_START", "Change own password request started", "username", app.GetUsername())
 
 		jwtClaims := app.GetClaims()
 
@@ -375,42 +366,40 @@ func ChangeOwnPasswordHandler(appServices *app_lib.AppServices, userRepo *reposi
 			NewPassword string `json:"newPassword"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
+			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "INV_REQ_BODY", err)
 			return
 		}
 
 		// Validate required fields
 		if req.OldPassword == "" || req.NewPassword == "" {
-			app.WriteError(w, http.StatusBadRequest, "oldPassword and newPassword are required", "BRQ0", nil)
+			app.WriteError(w, http.StatusBadRequest, "oldPassword and newPassword are required", "BAD_REQUEST", nil)
 			return
 		}
 
 		// Basic password validation (minimum length)
 		if len(req.NewPassword) < 8 {
-			app.WriteError(w, http.StatusBadRequest, "New password must be at least 8 characters long", "BRQ0", nil)
+			app.WriteError(w, http.StatusBadRequest, "New password must be at least 8 characters long", "BAD_REQUEST", nil)
 			return
 		}
 
 		// Retrieve current user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), jwtClaims.Subject)
 		if err != nil {
-			appServices.Logger.Error("USLK", "User lookup failed during password change for user: "+jwtClaims.Subject+", error: "+err.Error(), "username", jwtClaims.Subject)
-			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "ISE0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Internal server error", "USR_LKUP_FAIL", err)
 			return
 		}
 
 		// Verify old password
 		if !app_lib.CheckPasswordHash(req.OldPassword, user.PwHash) {
-			appServices.Logger.Warn("PSFL", "Old password verification failed for user: "+jwtClaims.Subject)
-			app.WriteError(w, http.StatusUnauthorized, "Old password is incorrect", "ICRD", nil)
+			appServices.Logger.Warn("PWD_VFY_FAIL", "Old password verification failed for user: "+jwtClaims.Subject)
+			app.WriteError(w, http.StatusUnauthorized, "Old password is incorrect", "INVALID_CREDS", nil)
 			return
 		}
 
 		// Hash new password
 		hashedPassword, err := app_lib.HashPassword(req.NewPassword)
 		if err != nil {
-			appServices.Logger.Error("PSHS", "Failed to hash new password for user: "+jwtClaims.Subject+", error: "+err.Error())
-			app.WriteError(w, http.StatusInternalServerError, "Failed to process password", "UCH0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Failed to process password", "PWD_HASH_FAIL", err)
 			return
 		}
 
@@ -418,12 +407,11 @@ func ChangeOwnPasswordHandler(appServices *app_lib.AppServices, userRepo *reposi
 		now := CurrentTimestamp()
 		err = userRepo.UpdateUserPassword(r.Context(), jwtClaims.UserID, hashedPassword, now, jwtClaims.UserID)
 		if err != nil {
-			appServices.Logger.Error("PSUP", "Failed to update password for user: "+jwtClaims.Subject+", error: "+err.Error())
-			app.WriteError(w, http.StatusInternalServerError, "Failed to update password", "UUF0", err)
+			app.WriteError(w, http.StatusInternalServerError, "Failed to update password", "PWD_UPD_FAIL", err)
 			return
 		}
 
-		appServices.Logger.Info("CPWS", "Password changed successfully for user: "+jwtClaims.Subject, "username", jwtClaims.Subject)
+		appServices.Logger.Info("CHG_PW_START", "Password changed successfully for user: "+jwtClaims.Subject, "username", jwtClaims.Subject)
 
 		wrapper := model.DataWrapper{Data: map[string]string{"message": "Password changed successfully"}}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)

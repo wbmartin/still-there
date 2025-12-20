@@ -216,7 +216,6 @@ function UserEditPage() {
     setPasswordChangeError(undefined);
     try {
       await resetUserMFA(numericId, formData.updateTs || 0);
-      setFormData((prev) => ({ ...prev, totpSeed: undefined }));
       notifications.show({
         title: "Success",
         message: "MFA reset successfully. User must re-setup MFA on next login.",
