@@ -23,10 +23,10 @@ func (s *UserGrantModelTestSuite) TestGrantConstants() {
 	s.Equal(1004, GrantExampleDelete)
 	s.Equal(8001, GrantChangeOwnPassword)
 	s.Equal(9001, GrantUserCreate)
-	s.Equal(9004, GrantUserRead)
-	s.Equal(9005, GrantUserUpdate)
-	s.Equal(9006, GrantUserDelete)
-	s.Equal(9002, GrantUserBlock)
+	s.Equal(9002, GrantUserRead)
+	s.Equal(9003, GrantUserUpdate)
+	s.Equal(9004, GrantUserDelete)
+	s.Equal(9008, GrantUserBlock)
 	s.Equal(9009, GrantUserChangePassword)
 }
 
@@ -40,10 +40,10 @@ func (s *UserGrantModelTestSuite) TestAllKnownGrantsMap() {
 		"DELETE_EXAMPLE":         1004,
 		"CHG_OWN_PW":             8001,
 		"CREATE_USER":            9001,
-		"READ_USER":              9004,
-		"UPDATE_USER":            9005,
-		"DELETE_USER":            9006,
-		"BLOCK_USER":             9002,
+		"READ_USER":              9002,
+		"UPDATE_USER":            9003,
+		"DELETE_USER":            9004,
+		"BLOCK_USER":             9008,
 		"CHANGE_USER_PW":         9009,
 		"READ_USER_GROUP":        9010,
 		"CREATE_USER_GROUP":      9011,
@@ -76,10 +76,10 @@ func (s *UserGrantModelTestSuite) TestGrantIDToShortCodeMap() {
 		1004: "DELETE_EXAMPLE",
 		8001: "CHG_OWN_PW",
 		9001: "CREATE_USER",
-		9004: "READ_USER",
-		9005: "UPDATE_USER",
-		9006: "DELETE_USER",
-		9002: "BLOCK_USER",
+		9002: "READ_USER",
+		9003: "UPDATE_USER",
+		9004: "DELETE_USER",
+		9008: "BLOCK_USER",
 		9009: "CHANGE_USER_PW",
 		9010: "READ_USER_GROUP",
 		9011: "CREATE_USER_GROUP",

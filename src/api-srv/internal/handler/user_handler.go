@@ -122,9 +122,9 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	jwtClaims := app.GetClaims()
 
-	// Parse request body
-	var user model.AppUserModel
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+	// Parse request body into CreateUserRequest
+	var req model.CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BRQ0", nil)
 		return
 	}
@@ -132,28 +132,40 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	app.Debug("UCP0", "User creation request parsed")
 
 	// Validate required fields
-	if user.UserName == "" || user.FirstName == "" || user.LastName == "" || user.Email == "" {
+	if req.UserName == "" || req.FirstName == "" || req.LastName == "" || req.Email == "" {
 		app.WriteError(w, http.StatusBadRequest, "userName, firstName, lastName, and email are required", "BRQ0", nil)
 		return
 	}
 
-	// Set security context and creation metadata
-	now := CurrentTimestamp()
-	user.SecurityContext = jwtClaims.SecurityContext
-	user.CreateTS = now
-	user.CreateUserID = jwtClaims.UserID
-	user.UpdateTS = now
-	user.UpdateUserID = jwtClaims.UserID
-
-	// Hash password if provided
-	if user.PwHash != "" {
-		hashed, err := app_lib.HashPassword(user.PwHash)
-		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to process password", "UCH0", err)
-			return
-		}
-		user.PwHash = hashed
+	// Validate password length
+	if len(req.PwRaw) < 8 {
+		app.WriteError(w, http.StatusBadRequest, "Password must be at least 8 characters long", "BRQ0", nil)
+		return
 	}
+
+	// Create AppUserModel from request
+	now := CurrentTimestamp()
+	user := model.AppUserModel{
+		UserName:                   req.UserName,
+		FirstName:                  req.FirstName,
+		LastName:                   req.LastName,
+		Email:                      req.Email,
+		AppUserGroupMembershipList: req.AppUserGroupMembershipList,
+		MFAExempt:                  req.MFAExempt,
+		SecurityContext:            jwtClaims.SecurityContext,
+		CreateTS:                   now,
+		CreateUserID:               jwtClaims.UserID,
+		UpdateTS:                   now,
+		UpdateUserID:               jwtClaims.UserID,
+	}
+
+	// Hash password
+	hashed, err := app_lib.HashPassword(req.PwRaw)
+	if err != nil {
+		app.WriteError(w, http.StatusInternalServerError, "Failed to process password", "UCH0", err)
+		return
+	}
+	user.PwHash = hashed
 
 	// Create user
 	createdUser, err := h.userRepo.CreateUser(r.Context(), &user)

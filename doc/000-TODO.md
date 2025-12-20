@@ -11,7 +11,7 @@
   - redo the auth2 handler opencode deleted
   - investigate passcode as second factor
 
-
+- user self creation flow
 
 
 - react forms complaint - maybe should be using a library.
@@ -25,6 +25,9 @@
 
 - Check on all repo functions, they should be receving the security context from users jwt claims.
 - page number on the user list page should be part of state so a refresh or link takes to same place.
+
+
+
 
 
 

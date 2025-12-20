@@ -104,3 +104,14 @@ type AddUserRequest struct {
 	SecurityContext int    `json:"securityContext"`
 	MFAExempt       bool   `json:"mfaExempt"`
 }
+
+// CreateUserRequest represents the request body for creating a new user
+type CreateUserRequest struct {
+	UserName                   string `json:"userName"`
+	PwRaw                      string `json:"pwHash"` // Maps to frontend's pwHash field
+	FirstName                  string `json:"firstName"`
+	LastName                   string `json:"lastName"`
+	Email                      string `json:"email"`
+	AppUserGroupMembershipList []int  `json:"appUserGroupMembershipList"`
+	MFAExempt                  bool   `json:"mfaExempt"`
+}
