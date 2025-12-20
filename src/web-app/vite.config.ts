@@ -5,14 +5,14 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   root: ".",
   plugins: [react()],
-  server: {
-    proxy: {
-      "/api": {
-        target: "https://local-atticus-snipper.teamtaggle.com:8443", // Replace with the actual API URL from etc/loc-api-srv.env
-        changeOrigin: true,
-        secure: false, // Allow self-signed certs in dev
-        rewrite: (path) => path.replace(/^\/api/, ""), // Remove /api prefix when forwarding
-      },
-    },
-  },
+   server: {
+     proxy: {
+       "/api": {
+         target: "http://localhost:8080", // Replace with the actual API URL from etc/loc-api-srv.env
+         changeOrigin: true,
+         secure: false, // Allow self-signed certs in dev
+         rewrite: (path) => path.replace(/^\/api/, ""), // Remove /api prefix when forwarding
+       },
+     },
+   },
 });

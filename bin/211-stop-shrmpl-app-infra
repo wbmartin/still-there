@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# Script to stop all shrmpl app infrastructure services
+# Services: shrmpl-kv-srv, shrmpl-log-srv, shrmpl-vault-srv, proto-go-app, web-app (vite)
+
+set -e
+
+echo "Stopping all shrmpl app infrastructure services..."
+
+# Kill existing processes and track if any were killed
+KILLED_PROCESSES=false
+
+# Stop infrastructure services
+if pkill -f "shrmpl-kv-srv" 2>/dev/null; then
+    echo "Killed shrmpl-kv-srv processes"
+    KILLED_PROCESSES=true
+else
+    echo "No shrmpl-kv-srv processes found"
+fi
+
+if pkill -f "shrmpl-log-srv" 2>/dev/null; then
+    echo "Killed shrmpl-log-srv processes"
+    KILLED_PROCESSES=true
+else
+    echo "No shrmpl-log-srv processes found"
+fi
+
+if pkill -f "shrmpl-vault-srv" 2>/dev/null; then
+    echo "Killed shrmpl-vault-srv processes"
+    KILLED_PROCESSES=true
+else
+    echo "No shrmpl-vault-srv processes found"
+fi
+
+# Stop API server
+if pkill -f "proto-go-app" 2>/dev/null; then
+    echo "Killed proto-go-app processes"
+    KILLED_PROCESSES=true
+else
+    echo "No proto-go-app processes found"
+fi
+
+# Stop web app (Vite dev server)
+if pkill -f "vite" 2>/dev/null; then
+    echo "Killed vite processes"
+    KILLED_PROCESSES=true
+else
+    echo "No vite processes found"
+fi
+
+# Wait for processes to terminate only if we killed any
+if [ "$KILLED_PROCESSES" = true ]; then
+    echo "Waiting for processes to terminate..."
+    sleep 3
+fi
+
+echo "All shrmpl app infrastructure services stopped."

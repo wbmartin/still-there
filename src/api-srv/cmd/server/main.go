@@ -144,15 +144,28 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		logger.Info("STR0",
-			fmt.Sprintf("Server starting on HTTPS port: %d", config.ServerPort),
-			"username", "app-root")
-		err := server.ListenAndServeTLS(config.TLSCertPath, config.TLSKeyPath)
-		if err != nil && err != http.ErrServerClosed {
-			logger.Error("STF0",
-				"Server failed to start: "+err.Error(),
+		if config.EnableTLS {
+			logger.Info("STR0",
+				fmt.Sprintf("Server starting on HTTPS port: %d", config.ServerPort),
 				"username", "app-root")
-			os.Exit(1)
+			err := server.ListenAndServeTLS(config.TLSCertPath, config.TLSKeyPath)
+			if err != nil && err != http.ErrServerClosed {
+				logger.Error("STF0",
+					"Server failed to start: "+err.Error(),
+					"username", "app-root")
+				os.Exit(1)
+			}
+		} else {
+			logger.Info("STR0",
+				fmt.Sprintf("Server starting on HTTP port: %d", config.ServerPort),
+				"username", "app-root")
+			err := server.ListenAndServe()
+			if err != nil && err != http.ErrServerClosed {
+				logger.Error("STF0",
+					"Server failed to start: "+err.Error(),
+					"username", "app-root")
+				os.Exit(1)
+			}
 		}
 	}()
 

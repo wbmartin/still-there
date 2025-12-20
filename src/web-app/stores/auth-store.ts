@@ -7,6 +7,7 @@ import type {
   RefreshResponse,
 } from "../types/auth-type";
 import { apiRequest, setCsrfToken, clearCsrfToken } from "../utils/api";
+import { clearAllCaches } from "../utils/cache-utils";
 
 interface AuthStore extends Omit<AuthState, "csrfToken"> {
   authenticateWithUsernamePassword: (
@@ -101,6 +102,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
       console.error(err);
     }
     clearCsrfToken();
+
+    // Clear all application caches
+    clearAllCaches();
+
     set({
       authState: "NO",
       grantList: [],

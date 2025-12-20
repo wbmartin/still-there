@@ -7,13 +7,35 @@ set -e
 
 echo "Stopping any running shrmpl infrastructure services..."
 
-# Kill existing processes
-pkill -f "shrmpl-kv-srv" || echo "No shrmpl-kv-srv processes found"
-pkill -f "shrmpl-log-srv" || echo "No shrmpl-log-srv processes found"
-pkill -f "shrmpl-vault-srv" || echo "No shrmpl-vault-srv processes found"
+# Kill existing processes and track if any were killed
+KILLED_PROCESSES=false
 
-# Wait a moment for processes to terminate
-sleep 2
+if pkill -f "shrmpl-kv-srv" 2>/dev/null; then
+    echo "Killed shrmpl-kv-srv processes"
+    KILLED_PROCESSES=true
+else
+    echo "No shrmpl-kv-srv processes found"
+fi
+
+if pkill -f "shrmpl-log-srv" 2>/dev/null; then
+    echo "Killed shrmpl-log-srv processes"
+    KILLED_PROCESSES=true
+else
+    echo "No shrmpl-log-srv processes found"
+fi
+
+if pkill -f "shrmpl-vault-srv" 2>/dev/null; then
+    echo "Killed shrmpl-vault-srv processes"
+    KILLED_PROCESSES=true
+else
+    echo "No shrmpl-vault-srv processes found"
+fi
+
+# Wait for processes to terminate only if we killed any
+if [ "$KILLED_PROCESSES" = true ]; then
+    echo "Waiting for processes to terminate..."
+    sleep 3
+fi
 
 echo "Starting shrmpl infrastructure services..."
 

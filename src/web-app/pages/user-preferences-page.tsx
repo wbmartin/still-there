@@ -41,7 +41,11 @@ function UserPreferencesPage() {
     });
   };
 
-  if (authState !== "YES") {
+  //============================^HOOOK LINE ^====================
+  if (authState === "CHECKING") {
+    return <div>Checking permissions...</div>;
+  }
+  if (authState === "NO" || authState === "TBD") {
     return <div>Checking Auth...</div>;
   }
 

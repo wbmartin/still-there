@@ -34,6 +34,9 @@ function UserAdminPage() {
     }, [authState, retrieveUserList, retrieveAppUserGroupList]);
   //============================^HOOOK LINE ^====================
 
+  if (authState === "CHECKING") {
+    return <div>Checking permissions...</div>;
+  }
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
   }

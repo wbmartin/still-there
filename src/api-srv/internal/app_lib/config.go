@@ -19,6 +19,7 @@ type Config struct {
 	KVHostPort            string `json:"kv_host_port"`
 	ServerName            string `json:"server_name"`
 	ServerPort            int    `json:"server_port"`
+	EnableTLS             bool   `json:"enable_tls"`
 	TLSCertPath           string `json:"tls_cert_path"`
 	TLSKeyPath            string `json:"tls_key_path"`
 }
@@ -85,6 +86,16 @@ func LoadConfig(configFilePath string) (*Config, error) {
 		}
 	}
 
+	if enableTLSStr := env["ENABLE_TLS"]; enableTLSStr != "" {
+		if val, err := strconv.ParseBool(enableTLSStr); err == nil {
+			config.EnableTLS = val
+		} else {
+			config.EnableTLS = true // default to true
+		}
+	} else {
+		config.EnableTLS = true // default to true
+	}
+
 	config.TLSCertPath = env["TLS_CERT_PATH"]
 	config.TLSKeyPath = env["TLS_KEY_PATH"]
 
@@ -104,11 +115,13 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	if config.ServerName == "" {
 		return nil, fmt.Errorf("SERVER_NAME is required")
 	}
-	if config.TLSCertPath == "" {
-		return nil, fmt.Errorf("TLS_CERT_PATH is required")
-	}
-	if config.TLSKeyPath == "" {
-		return nil, fmt.Errorf("TLS_KEY_PATH is required")
+	if config.EnableTLS {
+		if config.TLSCertPath == "" {
+			return nil, fmt.Errorf("TLS_CERT_PATH is required when ENABLE_TLS is true")
+		}
+		if config.TLSKeyPath == "" {
+			return nil, fmt.Errorf("TLS_KEY_PATH is required when ENABLE_TLS is true")
+		}
 	}
 
 	return &config, nil

@@ -28,6 +28,10 @@
 
 
 
+We need to create a user self-create function and MFA onboarding flow.  on the login page there should be a link to create a new user.  the user will enter their email address and desired password (twice and the web-app will need to verify it matches).  In the future we will send a confirmation email so leave a TODO for that in the api-server.  The dialog should check with the server to see if a username is available, which will require a new API endpoint that doesn't have any authorization requirmentes, but should be rate limited.  The web-app should only check on lost focus so it doesn't hammer the server.  The submit button should check that we've recieved confirmation the username is available before allowing submission.  Then we need to add the MFA onboarding flow.  After the user is created they should be taken to a page that shows them a QR code and a secret key for TOTP.  They should be required to enter a current TOTP code to confirm they have set it up correctly before being allowed to proceed.  We will need to add an endpoint to the api-server to support this as well.  The user should then be taken to their dashboard.  We will need to add a TOTP seed token to the app_user table.  We will need endpoints to generate the QR code.  There is existing Auth2 code that was started, but may have been deleted. If the user is created from the user admin panel they may have the mfa_exempt set.  Users that have mfa_exempt set should not be required to do the MFA onboarding flow.  We will need to add a way for admin to reset a users MFA settings so they can go through the onboarding flow again if they lose their device.  This should probably be a button on the user edit page in the admin panel.   We should also add a button to generate a strong password that the user can use if they don't want to come up with one themselves.  The generated password should be displayed in a way that the user can easily copy it to their clipboard.  If a user was created in the admin panel and doesn't have MFA exempt set they should be taken to the MFA onboarding flow the first time they log in as well.
+
+
+
 
 
 
@@ -49,4 +53,4 @@ also need to add a binary that checks website health (probably just status) and 
 
 
 # Starting prompt
-make sure you look at my styles and quirks in the instructions. we are building a template CRUD app in Go and React. in the doc file is an 810 file that describes how to construct a new entity, we're currently building the first entity, "example", and documenting what's important to facilitate future new entity create.
+make sure you look at my styles and quirks in the instructions. we are building a template/initial scaffold CRUD app in Go and React. in the doc file is an 810 file that describes how to construct a new entity, we're currently building the first entity, "example", and documenting what's important to facilitate future new entity creation for apps built on this scaffolding.

@@ -78,6 +78,9 @@ function AppUserGroupEditPage() {
 
   //============================^HOOOK LINE ^====================
 
+  if (authState === "CHECKING") {
+    return <div>Checking permissions...</div>;
+  }
   if (authState !== "YES") {
     return <div>Checking Auth...</div>;
   }

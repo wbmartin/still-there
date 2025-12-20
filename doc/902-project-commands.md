@@ -27,6 +27,23 @@ To stop the api server:
 pkill -f "proto-go-app" || kill $(cat tmp/server.pid 2>/dev/null) 2>/dev/null || true
 ```
 
+## Infrastructure Management
+
+To run the shrmpl infrastructure services (kv, log, vault):
+```
+./bin/210-run-shrmpl-app-infra
+```
+
+To stop all shrmpl app infrastructure (services, api server, web app):
+```
+./bin/211-stop-shrmpl-app-infra
+```
+
+To run the web app:
+```
+./bin/220-run-web-app
+```
+
 ## Testing Commands
 
 To test the api server (Unit tests):
