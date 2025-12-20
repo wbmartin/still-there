@@ -19,7 +19,10 @@ interface AuthStore extends Omit<AuthState, "csrfToken"> {
   authenticateWithAuthToken: () => Promise<void>;
   logout: () => Promise<void>;
   changeSecurityContext: (newContext: number) => Promise<void>;
-  changeOwnPassword: (oldPassword: string, newPassword: string) => Promise<void>;
+   changeOwnPassword: (
+     oldPassword: string,
+     newPassword: string,
+   ) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
@@ -170,7 +173,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         body: JSON.stringify({ oldPassword, newPassword }),
       });
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = (await response.json()) as { message: string };
         throw new Error(errorData.message || "Password change failed");
       }
     } catch (err) {

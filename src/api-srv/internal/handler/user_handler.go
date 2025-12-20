@@ -459,7 +459,7 @@ func (h *UserHandler) ChangeOtherUserPassword(w http.ResponseWriter, r *http.Req
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserChangePassword)
+	app.CheckAuthorization(model.GrantChangeOtherUserPassword)
 
 	if !app.CheckAllChecksComplete() {
 		return
@@ -594,7 +594,7 @@ func UserSelfCreateHandler(appServices *app_lib.AppServices, userRepo *repositor
 			FirstName:                  "",
 			LastName:                   "",
 			Email:                      "",
-			SecurityContext:            1,
+			SecurityContext:            0,
 			AppUserGroupMembershipList: []int{1}, // "New User" group
 			MFAExempt:                  false,
 			TOTPSeed:                   nil, // Will be set during MFA setup
@@ -644,7 +644,7 @@ func MFASetupHandler(appServices *app_lib.AppServices, userRepo *repository.User
 			}
 			userName = userNameBytes
 		} else {
-			// JWT path
+			// JWT path, there is no standard authorization/csrf for the temp token path
 			app.CheckJWT()
 			if !app.CheckAllChecksComplete() {
 				return
@@ -702,10 +702,9 @@ func MFASetupHandler(appServices *app_lib.AppServices, userRepo *repository.User
 		// Generate QR code URL
 		processedAppName := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(appServices.Config.AppName, "")
 		qrCodeUrl := "otpauth://totp/" + processedAppName + ":" + userName + "?secret=" + secret + "&issuer=" + appServices.Config.AppName
-		app.Info("MFA QR URL: %s", qrCodeUrl)
 
 		// Generate QR code image
-		png, err := qrcode.Encode(qrCodeUrl, qrcode.High, 256)
+		png, err := qrcode.Encode(qrCodeUrl, qrcode.Medium, 256)
 		if err != nil {
 			app.WriteError(w, http.StatusInternalServerError, "Failed to generate QR code", "QRCG", err)
 			return

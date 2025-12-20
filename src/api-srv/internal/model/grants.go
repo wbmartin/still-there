@@ -15,12 +15,12 @@ const (
 	GrantChangeOwnPassword = 8001
 
 	//Admin User Grants
-	GrantUserCreate         = 9001
-	GrantUserRead           = 9002
-	GrantUserUpdate         = 9003
-	GrantUserDelete         = 9004
-	GrantUserBlock          = 9008
-	GrantUserChangePassword = 9009
+	GrantUserCreate              = 9001
+	GrantUserRead                = 9002
+	GrantUserUpdate              = 9003
+	GrantUserDelete              = 9004
+	GrantUserBlock               = 9008
+	GrantChangeOtherUserPassword = 9009
 
 	// User group grants
 	GrantUserGroupRead       = 9010
@@ -44,7 +44,7 @@ var AllKnownGrants = map[string]int{
 	"UPDATE_USER":            GrantUserUpdate,
 	"DELETE_USER":            GrantUserDelete,
 	"BLOCK_USER":             GrantUserBlock,
-	"CHANGE_USER_PW":         GrantUserChangePassword,
+	"CHANGE_USER_PW":         GrantChangeOtherUserPassword,
 	"READ_USER_GROUP":        GrantUserGroupRead,
 	"CREATE_USER_GROUP":      GrantUserGroupCreate,
 	"UPDATE_USER_GROUP":      GrantUserGroupUpdate,
@@ -62,7 +62,7 @@ var UserGrants = map[string]int{
 	"UPDATE_USER":    GrantUserUpdate,
 	"DELETE_USER":    GrantUserDelete,
 	"BLOCK_USER":     GrantUserBlock,
-	"CHANGE_USER_PW": GrantUserChangePassword,
+	"CHANGE_USER_PW": GrantChangeOtherUserPassword,
 }
 
 // ExampleGrants maps grant short codes to their IDs for the Example entity
@@ -75,22 +75,22 @@ var ExampleGrants = map[string]int{
 
 // GrantIDToShortCodeMap maps grant IDs to their short codes (centralized)
 var GrantIDToShortCodeMap = map[int]string{
-	GrantLogon:               "LOGON",
-	GrantExampleRead:         "READ_EXAMPLE",
-	GrantExampleCreate:       "CREATE_EXAMPLE",
-	GrantExampleUpdate:       "UPDATE_EXAMPLE",
-	GrantExampleDelete:       "DELETE_EXAMPLE",
-	GrantChangeOwnPassword:   "CHG_OWN_PW",
-	GrantUserCreate:          "CREATE_USER",
-	GrantUserRead:            "READ_USER",
-	GrantUserUpdate:          "UPDATE_USER",
-	GrantUserDelete:          "DELETE_USER",
-	GrantUserBlock:           "BLOCK_USER",
-	GrantUserChangePassword:  "CHANGE_USER_PW",
-	GrantUserGroupRead:       "READ_USER_GROUP",
-	GrantUserGroupCreate:     "CREATE_USER_GROUP",
-	GrantUserGroupUpdate:     "UPDATE_USER_GROUP",
-	GrantUserGroupDelete:     "DELETE_USER_GROUP",
-	GrantAddUserToGroup:      "ADD_USER_TO_GROUP",
-	GrantRemoveUserFromGroup: "REMOVE_USER_FROM_GROUP",
+	GrantLogon:                   "LOGON",
+	GrantExampleRead:             "READ_EXAMPLE",
+	GrantExampleCreate:           "CREATE_EXAMPLE",
+	GrantExampleUpdate:           "UPDATE_EXAMPLE",
+	GrantExampleDelete:           "DELETE_EXAMPLE",
+	GrantChangeOwnPassword:       "CHG_OWN_PW",
+	GrantUserCreate:              "CREATE_USER",
+	GrantUserRead:                "READ_USER",
+	GrantUserUpdate:              "UPDATE_USER",
+	GrantUserDelete:              "DELETE_USER",
+	GrantUserBlock:               "BLOCK_USER",
+	GrantChangeOtherUserPassword: "CHANGE_USER_PW",
+	GrantUserGroupRead:           "READ_USER_GROUP",
+	GrantUserGroupCreate:         "CREATE_USER_GROUP",
+	GrantUserGroupUpdate:         "UPDATE_USER_GROUP",
+	GrantUserGroupDelete:         "DELETE_USER_GROUP",
+	GrantAddUserToGroup:          "ADD_USER_TO_GROUP",
+	GrantRemoveUserFromGroup:     "REMOVE_USER_FROM_GROUP",
 }

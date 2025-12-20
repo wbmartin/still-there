@@ -11,7 +11,11 @@ interface UserRegistrationModalProps {
   onSuccess?: () => void;
 }
 
-export function UserRegistrationModal({ opened, onClose, onSuccess }: UserRegistrationModalProps) {
+export function UserRegistrationModal({
+  opened,
+  onClose,
+  onSuccess,
+}: UserRegistrationModalProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -42,10 +46,10 @@ export function UserRegistrationModal({ opened, onClose, onSuccess }: UserRegist
         body: JSON.stringify({ username, password }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Registration failed");
-      }
+       if (!response.ok) {
+         const errorData = (await response.json()) as { message: string };
+         throw new Error(errorData.message || "Registration failed");
+       }
 
       notifications.show({
         title: "Registration Successful",

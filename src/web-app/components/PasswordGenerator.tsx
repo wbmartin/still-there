@@ -7,7 +7,9 @@ interface PasswordGeneratorProps {
   onPasswordGenerated: (password: string) => void;
 }
 
-export function PasswordGenerator({ onPasswordGenerated }: PasswordGeneratorProps) {
+export function PasswordGenerator({
+  onPasswordGenerated,
+}: PasswordGeneratorProps) {
   const [generatedPassword, setGeneratedPassword] = useState("");
 
   const handleGenerate = () => {
@@ -17,8 +19,10 @@ export function PasswordGenerator({ onPasswordGenerated }: PasswordGeneratorProp
   };
 
   return (
-    <Group justify="space-between">
-      <Button variant="outline" onClick={handleGenerate}>
+    <div>
+    <div>Password Generator Component</div>
+    <Group>
+      <Button variant="filled" onClick={handleGenerate}>
         Generate Strong Password
       </Button>
       {generatedPassword && (
@@ -38,5 +42,6 @@ export function PasswordGenerator({ onPasswordGenerated }: PasswordGeneratorProp
         </Group>
       )}
     </Group>
+    </div>
   );
 }

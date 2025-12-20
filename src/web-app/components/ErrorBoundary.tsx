@@ -74,12 +74,13 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
             )}
 
             {reportingStatus === 'failed' && error && (
-              <Alert color="red" variant="light">
-                <Text>
-                  We tried to report this issue but couldn't. Please take a screenshot of this page and
-                  send it to your administrator to help us troubleshoot.
-                </Text>
-              </Alert>
+               <Alert color="red" variant="light">
+                 <Text>
+                   We tried to report this issue but couldn't.
+                   {/* eslint-disable-next-line max-len */}
+                   Please take a screenshot of this page and send it to your administrator to help us troubleshoot.
+                 </Text>
+               </Alert>
             )}
 
             {reportingStatus === 'failed' && error && (

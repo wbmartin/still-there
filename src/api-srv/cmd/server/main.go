@@ -128,7 +128,7 @@ func main() {
 	mux.HandleFunc("POST /user", userHandler.CreateUser)
 	mux.HandleFunc("PUT /user", userHandler.UpdateUser)
 	mux.HandleFunc("DELETE /user", userHandler.DeleteUser)
-	mux.HandleFunc("POST /changeUserPassword", userHandler.ChangeOtherUserPassword)
+	mux.HandleFunc("POST /changeOtherUserPassword", userHandler.ChangeOtherUserPassword)
 	mux.HandleFunc("POST /addUserListToGroup",
 		userHandler.AddUserListToGroupHandler)
 	mux.HandleFunc("POST /removeUserListFromGroup",

@@ -20,7 +20,10 @@ interface AppUserGroupState {
     groupName: string;
     userGrantList: number[];
   }) => Promise<void>;
-  updateAppUserGroup: (id: number, data: Partial<AppUserGroup>) => Promise<void>;
+   updateAppUserGroup: (
+     id: number,
+     data: Partial<AppUserGroup>,
+   ) => Promise<void>;
   deleteAppUserGroup: (id: number) => Promise<void>;
   clearCache: () => void;
 }

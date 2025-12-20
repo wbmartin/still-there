@@ -1,6 +1,6 @@
 # React App
 - password
-  - add password reset for admin, maybe a modal on the user edit page.
+
   - add password change for users
   - adding a user needs to hash the password and should require the admin to enter it twice to confirm. 
   - add a button to generate a good password, let you view the passwords as you type it. may be nice to let it copy the password to the clipboard.

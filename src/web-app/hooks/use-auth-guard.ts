@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../stores/auth-store";
 import { ROUTES } from "../constants/routes";
@@ -9,25 +9,32 @@ const useAuthGuard = (requiredGrants: number[]) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isValidating, setIsValidating] = useState(false);
+  const handleAuthStateNoSingleFireComplete = useRef(false);
 
-   useEffect(() => {
-     if (authState === "TBD" && location.pathname !== ROUTES.LOGIN) {
-       setIsValidating(true);
-       // Trigger refresh - only once per component mount
-       void useAuthStore.getState().authenticateWithAuthToken();
-     } else if (authState === "NO") {
-       setIsValidating(false);
-       // Save destination and redirect to login
-       const currentPath = location.pathname + location.search;
-       useAuthStore.setState({ postAuthDestination: currentPath });
-       navigate(`/${ROUTES.LOGIN}`);
-     } else if (authState === "MFA") {
-       setIsValidating(false);
-       // Allow access to MFA setup
-     } else if (authState === "YES") {
+  useEffect(() => {
+    if (authState === "TBD" && location.pathname !== ROUTES.LOGIN) {
+      setTimeout(() => setIsValidating(true), 0);
+      // Trigger refresh - only once per component mount
+      void useAuthStore
+        .getState()
+        .authenticateWithAuthToken()
+        .catch(console.error);
+    } else if (authState === "NO") {
+      if (!handleAuthStateNoSingleFireComplete.current) {
+        handleAuthStateNoSingleFireComplete.current = true;
+        setIsValidating(false);
+        // Save destination and redirect to login
+        const currentPath = location.pathname + location.search;
+        useAuthStore.setState({ postAuthDestination: currentPath });
+        void navigate(`/${ROUTES.LOGIN}`);
+      }
+    } else if (authState === "MFA") {
+      setIsValidating(false);
+      // Allow access to MFA setup
+    } else if (authState === "YES") {
       // Check grants - user must have ALL required grants
-      const hasAllGrants = requiredGrants.every(grantId =>
-        grantList.includes(grantId)
+      const hasAllGrants = requiredGrants.every((grantId) =>
+        grantList.includes(grantId),
       );
 
       if (!hasAllGrants) {
@@ -35,19 +42,21 @@ const useAuthGuard = (requiredGrants: number[]) => {
         // Show notification about insufficient privileges
         notifications.show({
           title: "Access Denied",
-          message: "You don't have sufficient privileges to access this page. Redirecting to dashboard.",
+          message:
+            "You don't have sufficient privileges to access this page. Redirecting to dashboard.",
           color: "orange",
           autoClose: 4000,
         });
         // Redirect to dashboard
-        navigate(`/${ROUTES.DASHBOARD}`);
+        void navigate(`/${ROUTES.DASHBOARD}`);
       } else {
         setIsValidating(false);
       }
     } else {
       setIsValidating(false);
     }
-  }, [authState]); // Only depend on authState to prevent loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authState, grantList, requiredGrants]);
 
   // Return auth state with loading indicator
   if (isValidating) {

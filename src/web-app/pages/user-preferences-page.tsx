@@ -181,7 +181,9 @@ function UserPreferencesPage() {
 
       <ChangePasswordModal
         isOpen={passwordModalOpen}
-        onConfirm={handlePasswordChange}
+        onConfirm={(oldPassword, newPassword) => {
+          void handlePasswordChange(oldPassword, newPassword);
+        }}
         onCancel={() => {
           setPasswordModalOpen(false);
           setPasswordChangeError(undefined);

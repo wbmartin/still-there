@@ -6,7 +6,7 @@ export const API_ENDPOINTS = {
 	MFA_SETUP: '/mfaSetup',
 	MFA_VERIFY: '/mfaVerify',
 	CHANGE_OWN_PASSWORD: '/changeOwnPassword',
-	CHANGE_USER_PASSWORD: '/changeUserPassword',
+	CHANGE_OTHER_USER_PASSWORD: '/changeOtherUserPassword',
 	ADD_USER_LIST_TO_GROUP: '/addUserListToGroup',
 	REMOVE_USER_LIST_FROM_GROUP: '/removeUserListFromGroup',
 

@@ -28,7 +28,7 @@ function UserEditPage() {
     createUser,
     updateUser,
     deleteUser,
-    changeUserPassword,
+    changeOtherUserPassword,
   } = useAppUserStore();
   const {
     retrieveAppUserGroupList,
@@ -187,7 +187,7 @@ function UserEditPage() {
     setPasswordChangeLoading(true);
     setPasswordChangeError(undefined);
     try {
-      await changeUserPassword(numericId, newPassword);
+      await changeOtherUserPassword(numericId, newPassword);
       setPasswordModalOpen(false);
       notifications.show({
         title: "Success",
@@ -318,7 +318,9 @@ function UserEditPage() {
       />
       <ChangePasswordModal
         isOpen={passwordModalOpen}
-        onConfirm={handlePasswordChange}
+        onConfirm={(oldPassword, newPassword) => {
+          void handlePasswordChange(oldPassword, newPassword);
+        }}
         onCancel={() => {
           setPasswordModalOpen(false);
           setPasswordChangeError(undefined);

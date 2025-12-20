@@ -2,8 +2,9 @@ package model
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/suite"
 	"testing"
+
+	"github.com/stretchr/testify/suite"
 )
 
 func TestUserGrantModel(t *testing.T) {
@@ -27,7 +28,7 @@ func (s *UserGrantModelTestSuite) TestGrantConstants() {
 	s.Equal(9003, GrantUserUpdate)
 	s.Equal(9004, GrantUserDelete)
 	s.Equal(9008, GrantUserBlock)
-	s.Equal(9009, GrantUserChangePassword)
+	s.Equal(9009, GrantChangeOtherUserPassword)
 }
 
 func (s *UserGrantModelTestSuite) TestAllKnownGrantsMap() {

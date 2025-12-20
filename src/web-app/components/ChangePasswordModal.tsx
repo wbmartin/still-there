@@ -1,5 +1,6 @@
 import { Modal, PasswordInput, Button, Group, Alert } from "@mantine/core";
 import { useState } from "react";
+import { PasswordGenerator } from "./PasswordGenerator";
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -47,7 +48,6 @@ export function ChangePasswordModal({
       setValidationError("New passwords do not match");
       return;
     }
-
     onConfirm(oldPassword, newPassword);
 
     // Reset form
@@ -67,7 +67,13 @@ export function ChangePasswordModal({
   };
 
   return (
-    <Modal opened={isOpen} onClose={handleCancel} title="Change Password" centered size="md">
+    <Modal
+      opened={isOpen}
+      onClose={handleCancel}
+      title="Change Password"
+      centered
+      size="lg"
+    >
       <PasswordInput
         label={mode === "own" ? "Current Password" : "New Password"}
         value={mode === "own" ? oldPassword : newPassword}
@@ -90,7 +96,6 @@ export function ChangePasswordModal({
           onChange={(e) => setNewPassword(e.target.value)}
           required
           mb="md"
-          disabled={loading}
         />
       )}
 
@@ -114,6 +119,13 @@ export function ChangePasswordModal({
           {error}
         </Alert>
       )}
+
+      <PasswordGenerator
+        onPasswordGenerated={(password) => {
+          setNewPassword(password);
+          setConfirmPassword(password);
+        }}
+      />
 
       <Group justify="center" mt="md" grow>
         <Button variant="outline" onClick={handleCancel} disabled={loading}>

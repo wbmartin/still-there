@@ -18,6 +18,7 @@ import { notifications } from "@mantine/notifications";
 import { apiRequest } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { useAuthStore } from "../stores/auth-store";
+import { LoginResponse } from "../types/auth-type";
 
 function MFAOnboardingPage() {
   const [secret, setSecret] = useState("");
@@ -74,25 +75,26 @@ function MFAOnboardingPage() {
       if (!response.ok) {
         throw new Error("MFA verification failed");
       }
-      // On success, update auth state and navigate
-      const data = await response.json();
-      if (data.user) {
-        // Update auth store with user data
-        useAuthStore.setState({
-          authState: "YES",
-          grantList: data.user.grantList || [],
-          availableSecurityContextList: data.user.availableSecurityContextList || [],
-          userName: data.user.userName || "",
-          securityContext: data.user.securityContext || 0,
-          mfaRequired: data.user.mfaRequired || false,
-        });
-      }
-      notifications.show({
-        title: "Success",
-        message: "MFA setup completed successfully",
-        color: "green",
-      });
-      navigate("/dashboard");
+       // On success, update auth state and navigate
+       const data = (await response.json()) as LoginResponse;
+       if (data.user) {
+         // Update auth store with user data
+         useAuthStore.setState({
+           authState: "YES",
+           grantList: data.user.grantList || [],
+           availableSecurityContextList:
+             data.user.availableSecurityContextList || [],
+           userName: data.user.userName || "",
+           securityContext: data.user.securityContext || 0,
+           mfaRequired: data.user.mfaRequired || false,
+         });
+       }
+       notifications.show({
+         title: "Success",
+         message: "MFA setup completed successfully",
+         color: "green",
+       });
+       void navigate("/dashboard");
     } catch (err) {
       notifications.show({
         title: "Verification Failed",
@@ -158,11 +160,11 @@ function MFAOnboardingPage() {
           mb="md"
         />
 
-        <Group justify="center">
-          <Button onClick={handleVerify} loading={verifying}>
-            Verify and Complete Setup
-          </Button>
-        </Group>
+         <Group justify="center">
+           <Button onClick={() => { void handleVerify(); }} loading={verifying}>
+             Verify and Complete Setup
+           </Button>
+         </Group>
       </Paper>
     </Container>
   );
