@@ -23,14 +23,6 @@ func writeJSON(w http.ResponseWriter, status int, data interface{},
 	}
 }
 
-// writeError writes an error response
-func writeError(w http.ResponseWriter, status int, message string,
-	logger app_lib.ThisAppLoggerInterface, username string) {
-	logger.Error("ERR", message, "username", username)
-	response := map[string]string{"error": message}
-	writeJSON(w, status, response, logger)
-}
-
 // ParseCommaSeparatedInts parses a comma-separated string of integers
 // into a slice of ints
 func ParseCommaSeparatedInts(s string) ([]int, error) {

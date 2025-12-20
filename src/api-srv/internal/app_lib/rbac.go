@@ -21,7 +21,8 @@ func NewRBACManager(logger ThisAppLoggerInterface,
 	}
 }
 
-// HasGrant checks if a user has a specific grant in their current security context
+// HasGrant checks if a user has a specific grant in their
+// current security context
 func (r *RBACManager) HasGrant(claims *Claims, grantID int,
 	securityContext int) bool {
 	if claims == nil || claims.Grants == nil {
@@ -32,9 +33,16 @@ func (r *RBACManager) HasGrant(claims *Claims, grantID int,
 
 	// Since grants are now context-specific, check if the security context matches
 	if claims.SecurityContext != securityContext {
-		r.logger.Debug("SCT0",
-			fmt.Sprintf("Security context mismatch - requested: %d, user: %d", securityContext, claims.SecurityContext),
-			"username", r.username)
+		r.logger.Debug(
+			"SCT0",
+			fmt.Sprintf(
+				"Security context mismatch - requested: %d, user: %d",
+				securityContext,
+				claims.SecurityContext,
+			),
+			"username",
+			r.username,
+		)
 		return false
 	}
 

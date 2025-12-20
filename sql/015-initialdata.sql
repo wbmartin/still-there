@@ -2,16 +2,23 @@
 -- This includes default user grants, user groups, and an admin user
 
 -- Insert user groups for security context 1
-INSERT INTO app_user_group (group_name, user_grant_list, security_context, create_ts, create_user_id, update_ts, update_user_id)
+-- delete  from app_user_group;
+INSERT INTO app_user_group (app_user_group_id,group_name, user_grant_list, security_context, create_ts, create_user_id, update_ts, update_user_id)
 VALUES
-    ('Basic User', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9010], 1, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0),
-    ('Admin', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9001, 9002, 9009, 9010, 9011, 9012, 9013, 9014, 9015], 1, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0);
+    (1,'Basic User', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9010], 1, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0),
+    (2,'Admin', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9001, 9002, 9009, 9010, 9011, 9012, 9013, 9014, 9015], 1, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0),
+    (3,'New User', ARRAY[1, 1001], 1, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0);
 
 -- Insert user groups for security context 2 (mirroring context 1)
-INSERT INTO app_user_group (group_name, user_grant_list, security_context, create_ts, create_user_id, update_ts, update_user_id)
+INSERT INTO app_user_group (app_user_group_id,group_name, user_grant_list, security_context, create_ts, create_user_id, update_ts, update_user_id)
 VALUES
-    ('Basic2 User', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9010], 2, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0),
-    ('Admin2', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9001, 9002, 9009, 9010, 9011, 9012, 9013, 9014, 9015], 2, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0);
+    (4,'Basic2 User', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9010], 2, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0),
+    (5,'Admin2', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9001, 9002, 9009, 9010, 9011, 9012, 9013, 9014, 9015], 2, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0);
+
+    SELECT setval('app_user_group_app_user_group_id_seq',
+        (SELECT COALESCE(MAX(app_user_group_id), 0) + 1 FROM app_user_group));
+
+
 
 -- Insert admin user (password hash for 'admin123!')
       INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context, app_user_group_membership_list, mfa_exempt, create_ts, create_user_id, update_ts, update_user_id)
@@ -44,8 +51,6 @@ INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security
           EXTRACT(EPOCH FROM NOW()),
           0);
 
--- Add admin user to group 7 for additional context access
-UPDATE app_user SET app_user_group_membership_list = ARRAY[2, 7] WHERE app_user_id = 1;
 
 -- Insert example data
 WITH common_vars AS (

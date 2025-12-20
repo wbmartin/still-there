@@ -33,7 +33,10 @@ interface AppUserState {
   ) => Promise<void>;
   updateUser: (id: number, data: Partial<User>) => Promise<void>;
   deleteUser: (id: number) => Promise<void>;
-  changeUserPassword: (userId: number, newPassword: string) => Promise<void>;
+  changeOtherUserPassword: (
+    userId: number,
+    newPassword: string,
+  ) => Promise<void>;
   clearCache: () => void;
 }
 
@@ -281,16 +284,25 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
     }
   },
 
-  changeUserPassword: async (userId: number, newPassword: string) => {
+  changeOtherUserPassword: async (userId: number, newPassword: string) => {
     set({ error: null });
     try {
-      const response = await apiRequest(API_ENDPOINTS.CHANGE_USER_PASSWORD, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, newPassword }),
-      });
+      console.log(
+        "Changing password for userId:",
+        userId,
+        "to newPassword:",
+        newPassword,
+      );
+      const response = await apiRequest(
+        API_ENDPOINTS.CHANGE_OTHER_USER_PASSWORD,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, newPassword }),
+        },
+      );
       if (!response.ok) {
-        const errorData = await response.json() as { error?: string };
+        const errorData = (await response.json()) as { error?: string };
         throw new Error(errorData.error || "Failed to change password");
       }
     } catch (err: unknown) {

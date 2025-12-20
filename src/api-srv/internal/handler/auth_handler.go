@@ -13,7 +13,11 @@ import (
 )
 
 // AuthHandler handles initial authentication (username/password)
-func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository, appUserGroupRepo *repository.AppUserGroupRepository) http.HandlerFunc {
+func AuthHandler(
+	appServices *app_lib.AppServices,
+	userRepo *repository.UserRepository,
+	appUserGroupRepo *repository.AppUserGroupRepository,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var csrfToken string
 		appServices.Logger.Info("STRT", "Auth request started", "username", "preauth")

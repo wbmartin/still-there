@@ -120,7 +120,11 @@ func main() {
 	}
 
 	log.Printf("Starting load test with %d concurrent users", config.Concurrency)
-	log.Printf("Target: %v duration or %d iterations", config.Duration, config.Iterations)
+	log.Printf(
+		"Target: %v duration or %d iterations",
+		config.Duration,
+		config.Iterations,
+	)
 	log.Printf("Output: %s", config.OutputFile)
 
 	results := runLoadTest(config)
@@ -145,11 +149,26 @@ func parseFlags() Config {
 	var outputFile string
 
 	flag.StringVar(&durationStr, "duration", "2m", "Test duration (e.g., 2m, 30s)")
-	flag.IntVar(&iterations, "iterations", 0, "Number of iterations per user (alternative to duration)")
+	flag.IntVar(
+		&iterations,
+		"iterations",
+		0,
+		"Number of iterations per user (alternative to duration)",
+	)
 	flag.IntVar(&concurrency, "concurrency", 100, "Number of concurrent users")
 	flag.StringVar(&baseURL, "base-url", "", "Base URL of the API server")
-	flag.BoolVar(&monitorServer, "monitor-server", false, "Monitor server CPU and memory usage")
-	flag.StringVar(&outputFile, "output", "", "Output HTML file (auto-generated if empty)")
+	flag.BoolVar(
+		&monitorServer,
+		"monitor-server",
+		false,
+		"Monitor server CPU and memory usage",
+	)
+	flag.StringVar(
+		&outputFile,
+		"output",
+		"",
+		"Output HTML file (auto-generated if empty)",
+	)
 	flag.Parse()
 
 	duration, err := time.ParseDuration(durationStr)
@@ -176,7 +195,9 @@ func runLoadTest(config Config) *TestResults {
 	}
 
 	// Initialize metrics for each operation
-	for _, op := range []Operation{OpLogin, OpCreate, OpUpdate, OpGet, OpDelete, OpLogout} {
+	for _, op := range []Operation{
+		OpLogin, OpCreate, OpUpdate, OpGet, OpDelete, OpLogout,
+	} {
 		results.OperationStats[op] = &Metrics{
 			Operation: op,
 			Errors:    make(map[string]int),
@@ -248,7 +269,12 @@ func runLoadTest(config Config) *TestResults {
 	return results
 }
 
-func runWorker(workerID int, config Config, metricsChan chan<- OperationMetric, stopChan <-chan struct{}) {
+func runWorker(
+	workerID int,
+	config Config,
+	metricsChan chan<- OperationMetric,
+	stopChan <-chan struct{},
+) {
 	client := NewAPIClient(config.BaseURL)
 
 	iteration := 0

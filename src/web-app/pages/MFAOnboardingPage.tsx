@@ -28,9 +28,12 @@ function MFAOnboardingPage() {
   const [verifying, setVerifying] = useState(false);
   const navigate = useNavigate();
   const { tempToken } = useAuthStore();
+  const [hasFetched, setHasFetched] = useState(false);
 
   useEffect(() => {
-    if (!tempToken) return;
+    if (!tempToken || hasFetched) return;
+
+    setHasFetched(true);
 
     const fetchSetup = async () => {
       setLoading(true);
@@ -60,7 +63,7 @@ function MFAOnboardingPage() {
     };
 
     void fetchSetup();
-  }, [tempToken]);
+  }, [tempToken, hasFetched]);
 
   // ^^^^^^^^^^^^^^^^^^^^^^^^ Hook Line  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

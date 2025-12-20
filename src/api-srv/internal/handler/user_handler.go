@@ -588,14 +588,16 @@ func UserSelfCreateHandler(appServices *app_lib.AppServices, userRepo *repositor
 
 		// Create user
 		now := CurrentTimestamp()
+		defaultSecurityContext := 1 // Default security context for self-created users
+		defaultSecurityGroupId := 3 // "New User" group ID
 		newUser := &model.AppUserModel{
 			UserName:                   req.Username,
 			PwHash:                     hashedPassword,
 			FirstName:                  "",
 			LastName:                   "",
 			Email:                      "",
-			SecurityContext:            0,
-			AppUserGroupMembershipList: []int{1}, // "New User" group
+			SecurityContext:            defaultSecurityContext,
+			AppUserGroupMembershipList: []int{defaultSecurityGroupId}, // "New User" group
 			MFAExempt:                  false,
 			TOTPSeed:                   nil, // Will be set during MFA setup
 			CreateTS:                   now,

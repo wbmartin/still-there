@@ -3,8 +3,6 @@ run:
 
 linters:
   enable:
-    - lll  # Line length linter
+    - lll # Line length linter
 
 linters-settings:
-  lll:
-    line-length: 80  # Enforce 80 character line length

@@ -140,7 +140,11 @@ func (l *Logger) Error(code, message string, keyvals ...interface{}) {
 }
 
 // ErrorWithCallerSkip logs at error level with custom caller skip level
-func (l *Logger) ErrorWithCallerSkip(code, message string, skip int, keyvals ...interface{}) {
+func (l *Logger) ErrorWithCallerSkip(
+	code, message string,
+	skip int,
+	keyvals ...interface{},
+) {
 	l.log("ERRO", code, message, skip, keyvals...)
 }
 

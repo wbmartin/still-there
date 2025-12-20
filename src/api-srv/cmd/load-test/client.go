@@ -64,7 +64,11 @@ func (c *APIClient) Login() error {
 	}
 
 	jsonData, _ := json.Marshal(authData)
-	req, err := http.NewRequest("POST", c.baseURL+"/auth", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest(
+		"POST",
+		c.baseURL+"/auth",
+		bytes.NewBuffer(jsonData),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create auth request: %w", err)
 	}
@@ -144,7 +148,11 @@ func (c *APIClient) CreateExample() (int, float64, error) {
 
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
-		return 0, 0, fmt.Errorf("create failed with status %d: %s", resp.StatusCode, string(body))
+		return 0, 0, fmt.Errorf(
+			"create failed with status %d: %s",
+			resp.StatusCode,
+			string(body),
+		)
 	}
 
 	// Parse response to get example ID and update timestamp
@@ -163,7 +171,8 @@ func (c *APIClient) CreateExample() (int, float64, error) {
 }
 
 func (c *APIClient) UpdateExample(exampleID int, updateTs float64) error {
-	// For the update, we just exercise the update operation without changing values
+	// For the update, we just exercise the update operation
+	// without changing values
 	// This tests the update path and optimistic locking
 	exampleData := map[string]interface{}{
 		"exampleId":         exampleID,
@@ -180,18 +189,33 @@ func (c *APIClient) UpdateExample(exampleID int, updateTs float64) error {
 }
 
 func (c *APIClient) GetExample(exampleID int) error {
-	return c.makeRequest("GET", "/example?exampleId="+fmt.Sprintf("%d", exampleID), nil, nil)
+	return c.makeRequest(
+		"GET",
+		"/example?exampleId="+fmt.Sprintf("%d", exampleID),
+		nil,
+		nil,
+	)
 }
 
 func (c *APIClient) DeleteExample(exampleID int, updateTs float64) error {
-	return c.makeRequest("DELETE", "/example?exampleId="+fmt.Sprintf("%d", exampleID)+"&updateTs="+fmt.Sprintf("%.7f", updateTs), nil, nil)
+	return c.makeRequest(
+		"DELETE",
+		"/example?exampleId="+fmt.Sprintf("%d", exampleID)+
+			"&updateTs="+fmt.Sprintf("%.7f", updateTs),
+		nil,
+		nil,
+	)
 }
 
 func (c *APIClient) Logout() error {
 	return c.makeRequest("POST", "/logoff", nil, nil)
 }
 
-func (c *APIClient) makeRequest(method, endpoint string, data interface{}, headers map[string]string) error {
+func (c *APIClient) makeRequest(
+	method, endpoint string,
+	data interface{},
+	headers map[string]string,
+) error {
 	var body io.Reader
 	if data != nil {
 		jsonData, err := json.Marshal(data)
@@ -236,7 +260,11 @@ func (c *APIClient) makeRequest(method, endpoint string, data interface{}, heade
 	// Check for success status codes
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf(
+			"request failed with status %d: %s",
+			resp.StatusCode,
+			string(body),
+		)
 	}
 
 	return nil
