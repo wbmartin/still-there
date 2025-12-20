@@ -31,8 +31,8 @@ function UserAdminPage() {
       void retrieveUserList();
       void retrieveAppUserGroupList();
     }
-    }, [authState, retrieveUserList, retrieveAppUserGroupList]);
-  //============================^HOOOK LINE ^====================
+  }, [authState, retrieveUserList, retrieveAppUserGroupList]);
+  //============================^ HOOK LINE ^====================
 
   if (authState === "CHECKING") {
     return <div>Checking permissions...</div>;
@@ -103,7 +103,8 @@ function UserAdminPage() {
   };
 
   const handleSort = (column: string) => {
-    const newDirection = sortColumn === column && sortDirection === "asc" ? "desc" : "asc";
+    const newDirection =
+      sortColumn === column && sortDirection === "asc" ? "desc" : "asc";
     setSearchParams({ sort: column, dir: newDirection });
     setPage(1); // Reset to first page when sorting
   };
@@ -113,7 +114,9 @@ function UserAdminPage() {
       <Group justify="space-between" mb="lg">
         <Title order={1}>User Admin</Title>
         <Button
-          onClick={() => { void navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=new`); }}
+          onClick={() => {
+            void navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=new`);
+          }}
         >
           Add User
         </Button>
@@ -125,25 +128,31 @@ function UserAdminPage() {
               style={{ cursor: "pointer" }}
               onClick={() => handleSort("appUserId")}
             >
-              ID {sortColumn === "appUserId" && (sortDirection === "asc" ? "↑" : "↓")}
+              ID{" "}
+              {sortColumn === "appUserId" &&
+                (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
               style={{ cursor: "pointer" }}
               onClick={() => handleSort("userName")}
             >
-              Username {sortColumn === "userName" && (sortDirection === "asc" ? "↑" : "↓")}
+              Username{" "}
+              {sortColumn === "userName" &&
+                (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
               style={{ cursor: "pointer" }}
               onClick={() => handleSort("name")}
             >
-              Name {sortColumn === "name" && (sortDirection === "asc" ? "↑" : "↓")}
+              Name{" "}
+              {sortColumn === "name" && (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
               style={{ cursor: "pointer" }}
               onClick={() => handleSort("email")}
             >
-              Email {sortColumn === "email" && (sortDirection === "asc" ? "↑" : "↓")}
+              Email{" "}
+              {sortColumn === "email" && (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th>Groups</Table.Th>
             <Table.Th>Actions</Table.Th>
@@ -178,7 +187,9 @@ function UserAdminPage() {
                   size="xs"
                   color="red"
                   ml="xs"
-                  onClick={() => { handleDeleteClick(user.appUserId); }}
+                  onClick={() => {
+                    handleDeleteClick(user.appUserId);
+                  }}
                 >
                   Delete
                 </Button>

@@ -9,12 +9,8 @@ import { grants } from "../constants/grants";
 
 function ExampleListPage() {
   const authState = useAuthGuard([grants.READ_EXAMPLE]);
-  const {
-    exampleList,
-    loading,
-    retrieveExampleList,
-    deleteExample,
-  } = useExamplesStore();
+  const { exampleList, loading, retrieveExampleList, deleteExample } =
+    useExamplesStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
@@ -27,14 +23,14 @@ function ExampleListPage() {
   const sortColumn = searchParams.get("sort") || "exampleId";
   const sortDirection = (searchParams.get("dir") || "asc") as "asc" | "desc";
 
-   useEffect(() => {
-     if (!hasFetched.current && authState === "YES") {
-       hasFetched.current = true;
-       void retrieveExampleList();
-     }
-   }, [authState, retrieveExampleList]);
+  useEffect(() => {
+    if (!hasFetched.current && authState === "YES") {
+      hasFetched.current = true;
+      void retrieveExampleList();
+    }
+  }, [authState, retrieveExampleList]);
 
-  //============================^HOOOK LINE ^====================
+  //============================^ HOOK LINE ^====================
 
   if (authState === "CHECKING") {
     return <div>Checking permissions...</div>;
@@ -108,7 +104,8 @@ function ExampleListPage() {
   };
 
   const handleSort = (column: string) => {
-    const newDirection = sortColumn === column && sortDirection === "asc" ? "desc" : "asc";
+    const newDirection =
+      sortColumn === column && sortDirection === "asc" ? "desc" : "asc";
     setSearchParams({ sort: column, dir: newDirection });
     setPage(1); // Reset to first page when sorting
   };
@@ -117,7 +114,9 @@ function ExampleListPage() {
     <div style={{ padding: "2rem" }}>
       <Group justify="space-between" mb="lg">
         <Title order={1}>Examples</Title>
-        <Button onClick={() => void navigate(`/${ROUTES.EXAMPLE_EDIT}?exampleId=new`)}>
+        <Button
+          onClick={() => void navigate(`/${ROUTES.EXAMPLE_EDIT}?exampleId=new`)}
+        >
           Add Example
         </Button>
       </Group>
@@ -128,25 +127,33 @@ function ExampleListPage() {
               style={{ cursor: "pointer" }}
               onClick={() => handleSort("exampleId")}
             >
-              ID {sortColumn === "exampleId" && (sortDirection === "asc" ? "↑" : "↓")}
+              ID{" "}
+              {sortColumn === "exampleId" &&
+                (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
               style={{ cursor: "pointer" }}
               onClick={() => handleSort("exampleText")}
             >
-              Text {sortColumn === "exampleText" && (sortDirection === "asc" ? "↑" : "↓")}
+              Text{" "}
+              {sortColumn === "exampleText" &&
+                (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
               style={{ cursor: "pointer" }}
               onClick={() => handleSort("exampleInt")}
             >
-              Int {sortColumn === "exampleInt" && (sortDirection === "asc" ? "↑" : "↓")}
+              Int{" "}
+              {sortColumn === "exampleInt" &&
+                (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
               style={{ cursor: "pointer" }}
               onClick={() => handleSort("exampleFloat")}
             >
-              Float {sortColumn === "exampleFloat" && (sortDirection === "asc" ? "↑" : "↓")}
+              Float{" "}
+              {sortColumn === "exampleFloat" &&
+                (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th>Actions</Table.Th>
           </Table.Tr>
@@ -158,24 +165,26 @@ function ExampleListPage() {
               <Table.Td>{example.exampleText}</Table.Td>
               <Table.Td>{example.exampleInt || ""}</Table.Td>
               <Table.Td>{example.exampleFloat || ""}</Table.Td>
-               <Table.Td>
-                 <Button
-                   size="xs"
-                    onClick={() =>
-                       void navigate(`/${ROUTES.EXAMPLE_EDIT}?exampleId=${example.exampleId}`)
-                    }
-                 >
-                   Edit
-                 </Button>
-                 <Button
-                   size="xs"
-                   color="red"
-                   ml="xs"
-                   onClick={() => handleDeleteClick(example.exampleId)}
-                 >
-                   Delete
-                 </Button>
-               </Table.Td>
+              <Table.Td>
+                <Button
+                  size="xs"
+                  onClick={() =>
+                    void navigate(
+                      `/${ROUTES.EXAMPLE_EDIT}?exampleId=${example.exampleId}`,
+                    )
+                  }
+                >
+                  Edit
+                </Button>
+                <Button
+                  size="xs"
+                  color="red"
+                  ml="xs"
+                  onClick={() => handleDeleteClick(example.exampleId)}
+                >
+                  Delete
+                </Button>
+              </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

@@ -18,10 +18,12 @@ type Config struct {
 	LogReceiverHostPort   string `json:"log_receiver_host_port"`
 	KVHostPort            string `json:"kv_host_port"`
 	ServerName            string `json:"server_name"`
+	AppName               string `json:"app_name"`
 	ServerPort            int    `json:"server_port"`
 	EnableTLS             bool   `json:"enable_tls"`
 	TLSCertPath           string `json:"tls_cert_path"`
 	TLSKeyPath            string `json:"tls_key_path"`
+	TOTPEncryptionKey     string `json:"totp_encryption_key"`
 }
 
 // LoadConfig loads configuration from a .env file
@@ -79,6 +81,7 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	config.LogReceiverHostPort = env["LOG_RECEIVER_HOST_PORT"]
 	config.KVHostPort = env["KV_HOST_PORT"]
 	config.ServerName = env["SERVER_NAME"]
+	config.AppName = env["APP_NAME"]
 
 	if serverPortStr := env["SERVER_PORT"]; serverPortStr != "" {
 		if val, err := strconv.Atoi(serverPortStr); err == nil {
@@ -98,6 +101,7 @@ func LoadConfig(configFilePath string) (*Config, error) {
 
 	config.TLSCertPath = env["TLS_CERT_PATH"]
 	config.TLSKeyPath = env["TLS_KEY_PATH"]
+	config.TOTPEncryptionKey = env["TOTP_ENCRYPTION_KEY"]
 
 	// Validate required configuration
 	if config.DatabaseURL == "" {
@@ -115,6 +119,9 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	if config.ServerName == "" {
 		return nil, fmt.Errorf("SERVER_NAME is required")
 	}
+	if config.AppName == "" {
+		return nil, fmt.Errorf("APP_NAME is required")
+	}
 	if config.EnableTLS {
 		if config.TLSCertPath == "" {
 			return nil, fmt.Errorf("TLS_CERT_PATH is required when ENABLE_TLS is true")
@@ -122,6 +129,9 @@ func LoadConfig(configFilePath string) (*Config, error) {
 		if config.TLSKeyPath == "" {
 			return nil, fmt.Errorf("TLS_KEY_PATH is required when ENABLE_TLS is true")
 		}
+	}
+	if config.TOTPEncryptionKey == "" {
+		return nil, fmt.Errorf("TOTP_ENCRYPTION_KEY is required")
 	}
 
 	return &config, nil

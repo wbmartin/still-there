@@ -28,7 +28,9 @@ function UserPreferencesPage() {
   );
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
-  const [passwordChangeError, setPasswordChangeError] = useState<string | undefined>();
+  const [passwordChangeError, setPasswordChangeError] = useState<
+    string | undefined
+  >();
 
   const handleClearCache = () => {
     useExamplesStore.getState().clearCache();
@@ -36,12 +38,13 @@ function UserPreferencesPage() {
     useAppUserGroupStore.getState().clearCache();
     notifications.show({
       title: "Cache Cleared",
-      message: "All cached data has been cleared. Data will be refetched on next access.",
+      message:
+        "All cached data has been cleared. Data will be refetched on next access.",
       color: "green",
     });
   };
 
-  //============================^HOOOK LINE ^====================
+  //============================^ HOOK LINE ^====================
   if (authState === "CHECKING") {
     return <div>Checking permissions...</div>;
   }
@@ -62,7 +65,10 @@ function UserPreferencesPage() {
     }
   };
 
-  const handlePasswordChange = async (oldPassword: string, newPassword: string) => {
+  const handlePasswordChange = async (
+    oldPassword: string,
+    newPassword: string,
+  ) => {
     setPasswordChangeLoading(true);
     setPasswordChangeError(undefined);
     try {
@@ -74,7 +80,9 @@ function UserPreferencesPage() {
         color: "green",
       });
     } catch (err) {
-      setPasswordChangeError(err instanceof Error ? err.message : "Failed to change password");
+      setPasswordChangeError(
+        err instanceof Error ? err.message : "Failed to change password",
+      );
     } finally {
       setPasswordChangeLoading(false);
     }
@@ -145,7 +153,8 @@ function UserPreferencesPage() {
           </Button>
         </Group>
         <Text size="sm" c="dimmed">
-          Change your account password. You will need to enter your current password.
+          Change your account password. You will need to enter your current
+          password.
         </Text>
       </div>
 

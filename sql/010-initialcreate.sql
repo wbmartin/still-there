@@ -37,6 +37,7 @@ CREATE TABLE app_user (
     security_context INTEGER NOT NULL,
     app_user_group_membership_list INTEGER[],
     mfa_exempt BOOLEAN NOT NULL,
+    totp_seed varchar(255) NULL,
     create_ts NUMERIC(17,7) NOT NULL,
     create_user_id INTEGER NOT NULL,
     update_ts NUMERIC(17,7) NOT NULL,

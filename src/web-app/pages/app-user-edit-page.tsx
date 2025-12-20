@@ -19,11 +19,17 @@ import { ROUTES } from "../constants/routes";
 import type { UserFormData } from "../types/user-type";
 import { defaultUserFormData } from "../types/user-type";
 import { grants } from "../constants/grants";
+import { PasswordGenerator } from "../components/PasswordGenerator";
 
 function UserEditPage() {
   const [searchParams] = useSearchParams();
-  const { retrieveUserById, createUser, updateUser, deleteUser, changeUserPassword } =
-    useAppUserStore();
+  const {
+    retrieveUserById,
+    createUser,
+    updateUser,
+    deleteUser,
+    changeUserPassword,
+  } = useAppUserStore();
   const {
     retrieveAppUserGroupList,
     appUserGroupList,
@@ -38,13 +44,15 @@ function UserEditPage() {
 
   const isNew = id === "new";
   const requiredGrant = isNew ? grants.CREATE_USER : grants.UPDATE_USER;
-  const authState = useAuthGuard([requiredGrant]);
+  const authState = useAuthGuard([requiredGrant, grants.READ_USER]);
   const [userLoading, setUserLoading] = useState(!isNew && numericId !== null);
   const hasFetched = useRef(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
-  const [passwordChangeError, setPasswordChangeError] = useState<string | undefined>();
+  const [passwordChangeError, setPasswordChangeError] = useState<
+    string | undefined
+  >();
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
@@ -77,7 +85,7 @@ function UserEditPage() {
     }
   }, [authState, numericId, isNew, retrieveAppUserGroupList, retrieveUserById]);
 
-  //============================^HOOOK LINE ^====================
+  //============================^ HOOK LINE ^====================
 
   if (authState === "CHECKING") {
     return <div>Checking permissions...</div>;
@@ -170,7 +178,10 @@ function UserEditPage() {
     setDeleteModalOpen(false);
   };
 
-  const handlePasswordChange = async (_oldPassword: string, newPassword: string) => {
+  const handlePasswordChange = async (
+    _oldPassword: string,
+    newPassword: string,
+  ) => {
     if (!numericId) return;
 
     setPasswordChangeLoading(true);
@@ -184,7 +195,9 @@ function UserEditPage() {
         color: "green",
       });
     } catch (err) {
-      setPasswordChangeError(err instanceof Error ? err.message : "Failed to change password");
+      setPasswordChangeError(
+        err instanceof Error ? err.message : "Failed to change password",
+      );
     } finally {
       setPasswordChangeLoading(false);
     }
@@ -236,15 +249,22 @@ function UserEditPage() {
           mb="md"
         />
         {isNew && (
-          <PasswordInput
-            label="Password"
-            value={formData.pwHash}
-            onChange={(e) =>
-              setFormData({ ...formData, pwHash: e.target.value })
-            }
-            required
-            mb="md"
-          />
+          <>
+            <PasswordInput
+              label="Password"
+              value={formData.pwHash}
+              onChange={(e) =>
+                setFormData({ ...formData, pwHash: e.target.value })
+              }
+              required
+              mb="md"
+            />
+            <PasswordGenerator
+              onPasswordGenerated={(pwd) =>
+                setFormData({ ...formData, pwHash: pwd })
+              }
+            />
+          </>
         )}
         <MultiSelect
           label="Groups"
@@ -268,24 +288,27 @@ function UserEditPage() {
           mb="md"
         />
         <Group>
-           <Button type="submit">Save</Button>
-           {!isNew && (
-             <Button variant="outline" onClick={() => setPasswordModalOpen(true)}>
-               Change Password
-             </Button>
-           )}
-           {!isNew && (
-             <Button color="red" onClick={handleDeleteClick}>
-               Delete
-             </Button>
-           )}
-           <Button
-             variant="outline"
-             onClick={() => void navigate(`/${ROUTES.APP_USER_LIST}`)}
-           >
-             Cancel
-           </Button>
-         </Group>
+          <Button type="submit">Save</Button>
+          {!isNew && (
+            <Button
+              variant="outline"
+              onClick={() => setPasswordModalOpen(true)}
+            >
+              Change Password
+            </Button>
+          )}
+          {!isNew && (
+            <Button color="red" onClick={handleDeleteClick}>
+              Delete
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => void navigate(`/${ROUTES.APP_USER_LIST}`)}
+          >
+            Cancel
+          </Button>
+        </Group>
       </form>
       <DeleteConfirmModal
         isOpen={deleteModalOpen}

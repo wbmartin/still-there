@@ -39,6 +39,7 @@ type Auth2ResponseModel struct {
 	SecurityContext              int    `json:"securityContext"`
 	GrantList                    []int  `json:"grantList"`
 	AvailableSecurityContextList []int  `json:"availableSecurityContextList"`
+	MFARequired                  bool   `json:"mfaRequired"`
 }
 
 // Auth2ResponseWrapper wraps the auth2 response for consistency

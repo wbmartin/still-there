@@ -1,10 +1,12 @@
-export type AuthStateType = "YES" | "NO" | "CHECKING" | "TBD";
+export type AuthStateType = "YES" | "NO" | "CHECKING" | "TBD" | "MFA";
 
 export interface User {
   userName: string;
   grantList: number[];
   availableSecurityContextList: number[];
   securityContext: number;
+  mfaRequired?: boolean;
+  tempToken?: string;
 }
 
 export interface LoginRequest {

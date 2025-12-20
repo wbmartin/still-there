@@ -25,7 +25,9 @@ function AppUserGroupEditPage() {
   const [searchParams] = useSearchParams();
   const appUserGroupId = searchParams.get("appUserGroupId") || "";
   const isNew = appUserGroupId === "new";
-  const requiredGrant = isNew ? grantConstants.CREATE_USER_GROUP : grantConstants.UPDATE_USER_GROUP;
+  const requiredGrant = isNew
+    ? grantConstants.CREATE_USER_GROUP
+    : grantConstants.UPDATE_USER_GROUP;
   const authState = useAuthGuard([requiredGrant]);
   const { createAppUserGroup, updateAppUserGroup, deleteAppUserGroup } =
     useAppUserGroupStore();
@@ -52,8 +54,6 @@ function AppUserGroupEditPage() {
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [userModalMode, setUserModalMode] = useState<"add" | "remove">("add");
 
-
-
   useEffect(() => {
     if (!hasFetched.current && numericId) {
       hasFetched.current = true;
@@ -76,7 +76,7 @@ function AppUserGroupEditPage() {
     }
   }, [numericId, retrieveUserList]);
 
-  //============================^HOOOK LINE ^====================
+  //============================^ HOOK LINE ^====================
 
   if (authState === "CHECKING") {
     return <div>Checking permissions...</div>;

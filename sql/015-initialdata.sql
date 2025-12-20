@@ -71,3 +71,27 @@ FROM common_vars,
 
 -- Reset the sequence to the next available ID
 SELECT setval('example_example_id_seq', (SELECT COALESCE(MAX(example_id), 0) + 1 FROM example));
+
+
+
+
+-- Insert "New User" group with minimal privileges (only LOGON grant) Example
+-- INSERT INTO app_user_group (
+--     app_user_group_id,
+--     security_context,
+--     group_name,
+--     user_grant_list,
+--     create_ts,
+--     update_ts,
+--     create_user_id,
+--     update_user_id
+-- ) VALUES (
+--     1, -- Assuming starting ID, adjust if needed
+--     0,
+--     'New User',
+--     '[1]'::jsonb, -- LOGON grant only
+--     extract(epoch from NOW()) * 1000000 + (extract(microseconds from NOW()) % 1000000),
+--     extract(epoch from NOW()) * 1000000 + (extract(microseconds from NOW()) % 1000000),
+--     0,
+--     0
+-- );

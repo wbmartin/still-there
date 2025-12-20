@@ -166,7 +166,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/handler" // Assuming BaseHandler is accessible
+	"github.com/wbmartin/starter-api/internal/handler"
 )
 
 // SecurityHelper encapsulates request-specific security checks and state.

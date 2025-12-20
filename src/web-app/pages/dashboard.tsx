@@ -11,11 +11,11 @@ function Dashboard() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-       void retrieveExampleList();
+      void retrieveExampleList();
     }
   }, [authState, retrieveExampleList]);
 
-  //============================^HOOOK LINE ^====================
+  //============================^ HOOK LINE ^====================
   if (authState === "CHECKING") {
     return <div>Checking permissions...</div>;
   }

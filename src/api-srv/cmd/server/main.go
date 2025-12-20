@@ -80,13 +80,15 @@ func main() {
 	changeSecurityContextHandler := handler.ChangeSecurityContextHandler(appServices, userRepo, appUserGroupRepo)
 	changeOwnPasswordHandler := handler.ChangeOwnPasswordHandler(appServices, userRepo)
 	logoffHandler := handler.LogoffHandler(appServices)
-
 	exampleHandler := handler.NewExampleHandler(appServices, exampleRepo)
 	userHandler := handler.NewUserHandler(appServices, userRepo)
 	appUserGroupHandler := handler.NewAppUserGroupHandler(appServices, appUserGroupRepo)
 	errorReportHandler := handler.NewErrorReportHandler(appServices)
+	userSelfCreateHandler := handler.UserSelfCreateHandler(appServices, userRepo)
+	mfaSetupHandler := handler.MFASetupHandler(appServices, userRepo)
+	mfaVerifyHandler := handler.MFAVerifyHandler(appServices, userRepo)
 
-	// Setup routes
+	// Setup routes & map handlers
 	mux := http.NewServeMux()
 
 	// Apply security headers middleware to all routes
@@ -114,6 +116,13 @@ func main() {
 	mux.HandleFunc("PUT /exampleList", exampleHandler.UpdateExampleList)
 	mux.HandleFunc("DELETE /exampleList", exampleHandler.DeleteExampleList)
 
+	// User self-create (public)
+	mux.HandleFunc("POST /userSelfCreate", userSelfCreateHandler)
+
+	// MFA
+	mux.HandleFunc("POST /mfaSetup", mfaSetupHandler)
+	mux.HandleFunc("POST /mfaVerify", mfaVerifyHandler)
+
 	// User CRUD
 	mux.HandleFunc("GET /userList", userHandler.RetrieveUserList)
 	mux.HandleFunc("POST /user", userHandler.CreateUser)
@@ -125,6 +134,12 @@ func main() {
 	mux.HandleFunc("POST /removeUserListFromGroup",
 		userHandler.RemoveUserListFromGroupHandler)
 
+	// Admin reset MFA
+	adminResetMFAHandler := handler.AdminResetUserMFAHandler(appServices, userRepo)
+	mux.HandleFunc("POST /admin/resetUserMFA", adminResetMFAHandler)
+
+	// Receive Grant list is available, but shouldn't be used in most cases.  Clients will have their own copy of it.
+	// This is an intentional coupling point, mitigated by most changes being additive only.
 	mux.HandleFunc("GET /grantList", userHandler.RetrieveGrantList)
 
 	// User groups

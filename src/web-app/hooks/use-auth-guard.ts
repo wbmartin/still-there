@@ -10,18 +10,21 @@ const useAuthGuard = (requiredGrants: number[]) => {
   const location = useLocation();
   const [isValidating, setIsValidating] = useState(false);
 
-  useEffect(() => {
-    if (authState === "TBD") {
-      setIsValidating(true);
-      // Trigger refresh - only once per component mount
-      void useAuthStore.getState().authenticateWithAuthToken();
-    } else if (authState === "NO") {
-      setIsValidating(false);
-      // Save destination and redirect to login
-      const currentPath = location.pathname + location.search;
-      useAuthStore.setState({ postAuthDestination: currentPath });
-      navigate(`/${ROUTES.LOGIN}`);
-    } else if (authState === "YES") {
+   useEffect(() => {
+     if (authState === "TBD" && location.pathname !== ROUTES.LOGIN) {
+       setIsValidating(true);
+       // Trigger refresh - only once per component mount
+       void useAuthStore.getState().authenticateWithAuthToken();
+     } else if (authState === "NO") {
+       setIsValidating(false);
+       // Save destination and redirect to login
+       const currentPath = location.pathname + location.search;
+       useAuthStore.setState({ postAuthDestination: currentPath });
+       navigate(`/${ROUTES.LOGIN}`);
+     } else if (authState === "MFA") {
+       setIsValidating(false);
+       // Allow access to MFA setup
+     } else if (authState === "YES") {
       // Check grants - user must have ALL required grants
       const hasAllGrants = requiredGrants.every(grantId =>
         grantList.includes(grantId)

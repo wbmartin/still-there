@@ -10,6 +10,8 @@ import { apiRequest, setCsrfToken, clearCsrfToken } from "../utils/api";
 import { clearAllCaches } from "../utils/cache-utils";
 
 interface AuthStore extends Omit<AuthState, "csrfToken"> {
+  mfaRequired: boolean;
+  tempToken?: string;
   authenticateWithUsernamePassword: (
     userName: string,
     password: string,
@@ -29,6 +31,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
   postAuthDestination: "",
   loading: false,
   error: null,
+  mfaRequired: false,
+  tempToken: undefined,
   //============================^FUNCTION LINE ^============================
   authenticateWithUsernamePassword: async (
     userName: string,
@@ -45,15 +49,26 @@ export const useAuthStore = create<AuthStore>((set) => ({
       if (!response.ok) throw new Error("Login failed");
       const data = (await response.json()) as LoginResponse;
       if (data.user) {
-        setCsrfToken(data.csrfToken);
-        set({
-          authState: "YES",
-          grantList: data.user.grantList || [],
-          availableSecurityContextList:
-            data.user.availableSecurityContextList || [],
-          userName: data.user.userName || "",
-          securityContext: data.user.securityContext || 0,
-        });
+        if (data.user.tempToken) {
+          // MFA required
+          set({
+            authState: "MFA",
+            mfaRequired: true,
+            tempToken: data.user.tempToken,
+            userName: data.user.userName || "",
+          });
+        } else {
+          setCsrfToken(data.csrfToken);
+          set({
+            authState: "YES",
+            grantList: data.user.grantList || [],
+            availableSecurityContextList:
+              data.user.availableSecurityContextList || [],
+            userName: data.user.userName || "",
+            securityContext: data.user.securityContext || 0,
+            mfaRequired: data.user.mfaRequired || false,
+          });
+        }
       }
     } catch (err) {
       set({
@@ -113,6 +128,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       userName: "",
       securityContext: 0,
       postAuthDestination: "",
+      mfaRequired: false,
     });
   },
 

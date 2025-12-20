@@ -9,6 +9,7 @@ import AppUserEditPage from './pages/app-user-edit-page'
 import AppUserGroupListPage from './pages/app-user-group-list-page'
 import AppUserGroupEditPage from './pages/app-user-group-edit-page'
 import UserPreferencesPage from './pages/user-preferences-page'
+import MFAOnboardingPage from './pages/MFAOnboardingPage'
 
 import { useAuthStore } from './stores/auth-store'
 import { ROUTES } from './constants/routes'
@@ -23,14 +24,18 @@ const router = createBrowserRouter([
         index: true,
         element: <Login />,
       },
-       {
-         path: ROUTES.LOGIN,
-         element: <Login />,
-       },
-       {
-         path: ROUTES.DASHBOARD,
-         element: <Dashboard />,
-       },
+        {
+          path: ROUTES.LOGIN,
+          element: <Login />,
+        },
+        {
+          path: '/mfa-setup',
+          element: <MFAOnboardingPage />,
+        },
+        {
+          path: ROUTES.DASHBOARD,
+          element: <Dashboard />,
+        },
        {
          path: ROUTES.EXAMPLE_LIST,
          element: <ExampleListPage />,

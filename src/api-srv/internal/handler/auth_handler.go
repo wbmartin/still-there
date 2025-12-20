@@ -62,9 +62,9 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 
 			// Store temp token in key-value store with expiration
 			tempTokenKey := "TEMP_AUTH_" + tempToken
-			if err := appServices.KV.Set(tempTokenKey, req.UserName, "10m"); err != nil {
+			if err := appServices.KV.Set(tempTokenKey, req.UserName, "10min"); err != nil {
 				appServices.Logger.Error("TKST", "Failed to store temp token: "+err.Error())
-				app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
+				app.WriteError(w, http.StatusInternalServerError, "Failed to set up MFA", "MFAF", err)
 				return
 			}
 
@@ -128,6 +128,7 @@ func AuthHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepo
 			SecurityContext:              user.SecurityContext,
 			GrantList:                    grantsMap[user.SecurityContext],
 			AvailableSecurityContextList: availableContextList,
+			MFARequired:                  !user.MFAExempt && (user.TOTPSeed == nil || *user.TOTPSeed == ""),
 		}
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
@@ -204,6 +205,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 			SecurityContext:              user.SecurityContext,
 			GrantList:                    grantsMap[user.SecurityContext],
 			AvailableSecurityContextList: availableContextList,
+			MFARequired:                  !user.MFAExempt && (user.TOTPSeed == nil || *user.TOTPSeed == ""),
 		}
 
 		csrfToken := sessionID[len(sessionID)-3:]
@@ -304,6 +306,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 			SecurityContext:              req.SecurityContext,
 			GrantList:                    grantsMap[req.SecurityContext],
 			AvailableSecurityContextList: availableContextList,
+			MFARequired:                  !dbUser.MFAExempt && (dbUser.TOTPSeed == nil || *dbUser.TOTPSeed == ""),
 		}
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}

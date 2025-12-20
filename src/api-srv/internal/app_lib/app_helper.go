@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/wbmartin/starter-api/internal/model"
 )
 
 // contextKey is a custom type for context keys to avoid collisions
@@ -404,8 +406,12 @@ func (sh *AppHelper) CheckAuthorization(requiredGrantID int) *AppHelper {
 				fmt.Sprintf("Authorization failed - required grant: %d, "+
 					"security context: %d",
 					requiredGrantID, sh.claims.SecurityContext))
+			shortCode := model.GrantIDToShortCodeMap[requiredGrantID]
+			if shortCode == "" {
+				shortCode = fmt.Sprintf("%d", requiredGrantID)
+			}
 			sh.failAndRespond(http.StatusForbidden,
-				fmt.Sprintf("Permission denied (grant %d required)", requiredGrantID))
+				fmt.Sprintf("Permission denied (grant \"%s\" required)", shortCode))
 			return sh
 		}
 	}
@@ -488,9 +494,5 @@ func (sh *AppHelper) failAndRespond(statusCode int, reason string) {
 	}
 
 	sh.blocked = true
-	sh.appServices.Logger.Warn("CHF0",
-		fmt.Sprintf("Security check failed - status: %d, reason: %s",
-			statusCode, reason))
-
-	http.Error(sh.w, reason, statusCode)
+	sh.WriteError(sh.w, statusCode, reason, "SECF", nil)
 }

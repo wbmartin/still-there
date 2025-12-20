@@ -1,6 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Table, Button, Title, Group, Pagination, Badge, Flex } from "@mantine/core";
+import {
+  Table,
+  Button,
+  Title,
+  Group,
+  Pagination,
+  Badge,
+  Flex,
+} from "@mantine/core";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAuthStore } from "../stores/auth-store";
 import useAuthGuard from "../hooks/use-auth-guard";
@@ -12,8 +20,12 @@ import type { AppUserGroup } from "../types/app-user-group-type";
 function AppUserGroupListPage() {
   const authState = useAuthGuard([grants.READ_USER_GROUP]);
   const { grantList } = useAuthStore();
-  const { appUserGroupList, loading, retrieveAppUserGroupList, deleteAppUserGroup } =
-    useAppUserGroupStore();
+  const {
+    appUserGroupList,
+    loading,
+    retrieveAppUserGroupList,
+    deleteAppUserGroup,
+  } = useAppUserGroupStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const itemsPerPage = 15;
@@ -26,9 +38,9 @@ function AppUserGroupListPage() {
       hasFetched.current = true;
       void retrieveAppUserGroupList();
     }
-    }, [authState, retrieveAppUserGroupList]);
+  }, [authState, retrieveAppUserGroupList]);
 
-  //============================^HOOOK LINE ^====================
+  //============================^ HOOK LINE ^====================
 
   if (authState === "CHECKING") {
     return <div>Checking permissions...</div>;
@@ -78,7 +90,9 @@ function AppUserGroupListPage() {
         <Title order={1}>User Group Admin</Title>
         {canCreateUserGroup && (
           <Button
-            onClick={() => void navigate(`/${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=new`)}
+            onClick={() =>
+              void navigate(`/${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=new`)
+            }
           >
             Add User Group
           </Button>
@@ -98,39 +112,39 @@ function AppUserGroupListPage() {
             <Table.Tr key={group.appUserGroupId}>
               <Table.Td>{group.appUserGroupId}</Table.Td>
               <Table.Td>{group.groupName}</Table.Td>
-               <Table.Td>
-                 <Flex gap="xs" wrap="wrap">
-                   {group.userGrantList.map(id => (
-                     <Badge key={id} variant="light" size="sm">
-                       {grants.idToName(id)}
-                     </Badge>
-                   ))}
-                 </Flex>
-               </Table.Td>
-               <Table.Td>
-                 {canUpdateUserGroup && (
-                   <Button
-                     size="xs"
-                     onClick={() =>
-                       void navigate(
-                         `/${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=${group.appUserGroupId}`,
-                       )
-                     }
-                   >
-                     Edit
-                   </Button>
-                 )}
-                 {canDeleteUserGroup && (
-                   <Button
-                     size="xs"
-                     color="red"
-                     ml="xs"
-                     onClick={() => handleDeleteClick(group.appUserGroupId)}
-                   >
-                     Delete
-                   </Button>
-                 )}
-               </Table.Td>
+              <Table.Td>
+                <Flex gap="xs" wrap="wrap">
+                  {group.userGrantList.map((id) => (
+                    <Badge key={id} variant="light" size="sm">
+                      {grants.idToName(id)}
+                    </Badge>
+                  ))}
+                </Flex>
+              </Table.Td>
+              <Table.Td>
+                {canUpdateUserGroup && (
+                  <Button
+                    size="xs"
+                    onClick={() =>
+                      void navigate(
+                        `/${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=${group.appUserGroupId}`,
+                      )
+                    }
+                  >
+                    Edit
+                  </Button>
+                )}
+                {canDeleteUserGroup && (
+                  <Button
+                    size="xs"
+                    color="red"
+                    ml="xs"
+                    onClick={() => handleDeleteClick(group.appUserGroupId)}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

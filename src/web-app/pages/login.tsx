@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   TextInput,
@@ -7,45 +7,46 @@ import {
   Paper,
   Title,
   Container,
+  Text,
+  Anchor,
 } from "@mantine/core";
 import { useAuthStore } from "../stores/auth-store";
 import { notifications } from "@mantine/notifications";
+import { UserRegistrationModal } from "../components/UserRegistrationModal";
 
 function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const {
-    authenticateWithUsernamePassword,
-    authState,
-    postAuthDestination,
-    error,
-  } = useAuthStore();
-  const navigate = useNavigate();
-  const refreshCalled = useRef(false);
+  const [registrationModalOpened, setRegistrationModalOpened] = useState(false);
+   const {
+     authenticateWithUsernamePassword,
+     authState,
+     postAuthDestination,
+   } = useAuthStore();
+   const navigate = useNavigate();
 
   useEffect(() => {
-    if (authState === "TBD" && !refreshCalled.current) {
-      refreshCalled.current = true;
-      // Try refresh
-       void useAuthStore.getState().authenticateWithAuthToken();
-    } else if (authState === "YES") {
-      // Navigate to postAuthDestination or dashboard
-      const destination = postAuthDestination || "/dashboard";
-      void navigate(destination);
-    }
-  }, [authState, postAuthDestination, navigate]);
+     if (authState === "YES") {
+       // Navigate to postAuthDestination or dashboard
+       const destination = postAuthDestination || "/dashboard";
+       void navigate(destination);
+     }
+   }, [authState, postAuthDestination, navigate]);
 
-  //============================^HOOOK LINE ^====================
+  //============================^ HOOK LINE ^====================
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await authenticateWithUsernamePassword(username, password);
     // username is userName
     const state = useAuthStore.getState();
-    if (state.authState !== "YES") {
+    if (state.authState === "MFA") {
+      // MFA required, navigate to setup
+      void navigate("/mfa-setup");
+    } else if (state.authState !== "YES") {
       notifications.show({
         title: "Login Failed",
-        message: error || "Invalid credentials",
+        message: state.error || "Invalid credentials",
         color: "red",
       });
     }
@@ -84,8 +85,22 @@ function Login() {
               Login
             </Button>
           </form>
+          <Text ta="center" mt="md">
+            Don't have an account?{" "}
+            <Anchor
+              component="button"
+              type="button"
+              onClick={() => setRegistrationModalOpened(true)}
+            >
+              Create one here
+            </Anchor>
+          </Text>
         </Paper>
       </Container>
+      <UserRegistrationModal
+        opened={registrationModalOpened}
+        onClose={() => setRegistrationModalOpened(false)}
+      />
     </div>
   );
 }

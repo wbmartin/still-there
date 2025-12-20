@@ -23,18 +23,15 @@ function ExampleEditPage() {
   const isNew = id === "new";
   const requiredGrant = isNew ? grants.CREATE_EXAMPLE : grants.UPDATE_EXAMPLE;
   const authState = useAuthGuard([requiredGrant]);
-  const {
-    retrieveExampleById,
-    createExample,
-    updateExample,
-    deleteExample,
-  } = useExamplesStore();
+  const { retrieveExampleById, createExample, updateExample, deleteExample } =
+    useExamplesStore();
   const navigate = useNavigate();
 
   const numericId = isNaN(Number(id)) ? null : Number(id);
 
-  const [formData, setFormData] =
-    useState<ExampleFormData>(defaultExampleFormData);
+  const [formData, setFormData] = useState<ExampleFormData>(
+    defaultExampleFormData,
+  );
   const [exampleLoading, setExampleLoading] = useState(
     !isNew && numericId !== null,
   );
@@ -77,13 +74,9 @@ function ExampleEditPage() {
           setExampleLoading(false);
         });
     }
-  }, [
-    numericId,
-    isNew,
-    retrieveExampleById,
-  ]);
+  }, [numericId, isNew, retrieveExampleById]);
 
-  //============================^HOOOK LINE ^====================
+  //============================^ HOOK LINE ^====================
   if (authState === "CHECKING") {
     return <div>Checking permissions...</div>;
   }
@@ -227,19 +220,19 @@ function ExampleEditPage() {
           mb="md"
         />
         <Group>
-           <Button type="submit">Save</Button>
-           {!isNew && (
-             <Button color="red" onClick={handleDeleteClick}>
-               Delete
-             </Button>
-           )}
-           <Button
-             variant="outline"
-              onClick={() => void navigate("/exampleList")}
-           >
-             Cancel
-           </Button>
-         </Group>
+          <Button type="submit">Save</Button>
+          {!isNew && (
+            <Button color="red" onClick={handleDeleteClick}>
+              Delete
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => void navigate("/exampleList")}
+          >
+            Cancel
+          </Button>
+        </Group>
       </form>
       <DeleteConfirmModal
         isOpen={deleteModalOpen}
