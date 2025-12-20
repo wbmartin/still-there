@@ -889,20 +889,11 @@ func AdminResetUserMFAHandler(appServices *app_lib.AppServices, userRepo *reposi
 
 		targetUser := users[0]
 
-		// Reset MFA
+		// Reset MFA seed only
 		newUpdateTS, err := userRepo.UpdateUserTOTPSeed(r.Context(), targetUser.AppUserID, "", targetUser.UpdateTS, app.GetClaims().UserID)
 		if err != nil {
 			app.WriteError(w, http.StatusInternalServerError, "Failed to reset MFA", "MFRE", err)
 			return
-		}
-
-		// Also reset MFA exempt if it was set
-		if targetUser.MFAExempt {
-			newUpdateTS, err = userRepo.UpdateUserMFAExempt(r.Context(), targetUser.AppUserID, false, newUpdateTS, app.GetClaims().UserID)
-			if err != nil {
-				app.WriteError(w, http.StatusInternalServerError, "Failed to reset MFA exempt", "MFER", err)
-				return
-			}
 		}
 
 		wrapper := model.DataWrapper{Data: map[string]interface{}{"message": "MFA reset successfully", "updateTs": newUpdateTS}}

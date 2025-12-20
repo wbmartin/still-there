@@ -8,11 +8,14 @@ import {
   Group,
   Checkbox,
   MultiSelect,
+  Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { modals } from "@mantine/modals";
 import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
+import { useAuthStore } from "../stores/auth-store";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ChangePasswordModal } from "../components/ChangePasswordModal";
 import { ROUTES } from "../constants/routes";
@@ -29,6 +32,7 @@ function UserEditPage() {
     updateUser,
     deleteUser,
     changeOtherUserPassword,
+    resetUserMFA,
   } = useAppUserStore();
   const {
     retrieveAppUserGroupList,
@@ -42,17 +46,19 @@ function UserEditPage() {
 
   const [formData, setFormData] = useState<UserFormData>(defaultUserFormData);
 
-  const isNew = id === "new";
-  const requiredGrant = isNew ? grants.CREATE_USER : grants.UPDATE_USER;
-  const authState = useAuthGuard([requiredGrant, grants.READ_USER]);
+   const isNew = id === "new";
+   const requiredGrant = isNew ? grants.CREATE_USER : grants.UPDATE_USER;
+   const authState = useAuthGuard([requiredGrant, grants.READ_USER]);
+   const grantList = useAuthStore.getState().grantList;
   const [userLoading, setUserLoading] = useState(!isNew && numericId !== null);
   const hasFetched = useRef(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
-  const [passwordChangeError, setPasswordChangeError] = useState<
-    string | undefined
-  >();
+   const [passwordChangeError, setPasswordChangeError] = useState<
+     string | undefined
+   >();
+   const [resetMFALoading, setResetMFALoading] = useState(false);
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
@@ -203,6 +209,34 @@ function UserEditPage() {
     }
   };
 
+  const handleResetMFA = async () => {
+    if (!numericId) return;
+
+    setResetMFALoading(true);
+    setPasswordChangeError(undefined);
+    try {
+      await resetUserMFA(numericId, formData.updateTs || 0);
+      setFormData((prev) => ({ ...prev, totpSeed: undefined }));
+      notifications.show({
+        title: "Success",
+        message: "MFA reset successfully. User must re-setup MFA on next login.",
+        color: "green",
+      });
+      // Refresh user data
+      if (numericId) {
+        await retrieveUserById(numericId);
+      }
+    } catch (err) {
+      notifications.show({
+        title: "Error",
+        message: err instanceof Error ? err.message : "Failed to reset MFA",
+        color: "red",
+      });
+    } finally {
+      setResetMFALoading(false);
+    }
+  };
+
   const groupOptions = appUserGroupList.map((g) => ({
     value: g.appUserGroupId.toString(),
     label: g.groupName,
@@ -289,19 +323,41 @@ function UserEditPage() {
         />
         <Group>
           <Button type="submit">Save</Button>
-          {!isNew && (
-            <Button
-              variant="outline"
-              onClick={() => setPasswordModalOpen(true)}
-            >
-              Change Password
-            </Button>
-          )}
-          {!isNew && (
-            <Button color="red" onClick={handleDeleteClick}>
-              Delete
-            </Button>
-          )}
+           {!isNew && (
+             <Button
+               variant="outline"
+               onClick={() => setPasswordModalOpen(true)}
+             >
+               Change Password
+             </Button>
+           )}
+           {!isNew && grantList.includes(grants.RESET_MFA_TOKEN) && (
+             <Button
+               color="orange"
+               loading={resetMFALoading}
+               onClick={() =>
+                 modals.openConfirmModal({
+                   title: "Reset MFA",
+                   children: (
+                     <Text size="sm">
+                       {/* eslint-disable-next-line max-len */}
+                       This will clear the user's MFA setup, requiring them to re-configure it on their next login. This action cannot be undone. Are you sure?
+                     </Text>
+                   ),
+                   labels: { confirm: "Reset MFA", cancel: "Cancel" },
+                   confirmProps: { color: "orange" },
+                   onConfirm: () => void handleResetMFA(),
+                 })
+               }
+             >
+               Reset MFA
+             </Button>
+           )}
+           {!isNew && (
+             <Button color="red" onClick={handleDeleteClick}>
+               Delete
+             </Button>
+           )}
           <Button
             variant="outline"
             onClick={() => void navigate(`/${ROUTES.APP_USER_LIST}`)}

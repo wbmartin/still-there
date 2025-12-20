@@ -91,8 +91,8 @@ func (ah *AppHelper) GetUsername() string {
 
 // Debug logs at debug level with automatic username attachment
 func (ah *AppHelper) Debug(code, message string) {
-	ah.appServices.Logger.ErrorWithCallerSkip(
-		"DEBG",
+	ah.appServices.Logger.DebugWithCallerSkip(
+		code,
 		message,
 		3,
 		"username",
@@ -102,23 +102,59 @@ func (ah *AppHelper) Debug(code, message string) {
 
 // Info logs at info level with automatic username attachment
 func (ah *AppHelper) Info(code, message string) {
-	ah.appServices.Logger.ErrorWithCallerSkip("INFO", message, 3, "username", ah.username)
+	ah.appServices.Logger.InfoWithCallerSkip(code, message, 3, "username", ah.username)
 }
 
 // Warn logs at warn level with automatic username attachment
 func (ah *AppHelper) Warn(code, message string) {
-	ah.appServices.Logger.ErrorWithCallerSkip("WARN", message, 3, "username", ah.username)
+	ah.appServices.Logger.WarnWithCallerSkip(code, message, 3, "username", ah.username)
 }
 
 // Error logs at error level with automatic username attachment
 func (ah *AppHelper) Error(code, message string) {
-	ah.appServices.Logger.ErrorWithCallerSkip("ERRO", message, 3, "username", ah.username)
+	ah.appServices.Logger.ErrorWithCallerSkip(code, message, 3, "username", ah.username)
 }
 
 // ErrorWithCallerSkip logs at error level with custom caller skip
 // and automatic username
 func (ah *AppHelper) ErrorWithCallerSkip(code, message string, skip int) {
 	ah.appServices.Logger.ErrorWithCallerSkip(
+		code,
+		message,
+		skip+1,
+		"username",
+		ah.username,
+	)
+}
+
+// InfoWithCallerSkip logs at info level with custom caller skip
+// and automatic username
+func (ah *AppHelper) InfoWithCallerSkip(code, message string, skip int) {
+	ah.appServices.Logger.InfoWithCallerSkip(
+		code,
+		message,
+		skip+1,
+		"username",
+		ah.username,
+	)
+}
+
+// DebugWithCallerSkip logs at debug level with custom caller skip
+// and automatic username
+func (ah *AppHelper) DebugWithCallerSkip(code, message string, skip int) {
+	ah.appServices.Logger.DebugWithCallerSkip(
+		code,
+		message,
+		skip+1,
+		"username",
+		ah.username,
+	)
+}
+
+// WarnWithCallerSkip logs at warn level with custom caller skip
+// and automatic username
+func (ah *AppHelper) WarnWithCallerSkip(code, message string, skip int) {
+	ah.appServices.Logger.WarnWithCallerSkip(
 		code,
 		message,
 		skip+1,

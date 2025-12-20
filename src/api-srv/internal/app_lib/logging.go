@@ -17,6 +17,9 @@ type ThisAppLoggerInterface interface {
 	Warn(code, message string, keyvals ...interface{})
 	Error(code, message string, keyvals ...interface{})
 	ErrorWithCallerSkip(code, message string, skip int, keyvals ...interface{})
+	InfoWithCallerSkip(code, message string, skip int, keyvals ...interface{})
+	DebugWithCallerSkip(code, message string, skip int, keyvals ...interface{})
+	WarnWithCallerSkip(code, message string, skip int, keyvals ...interface{})
 	Close()
 }
 
@@ -146,6 +149,33 @@ func (l *Logger) ErrorWithCallerSkip(
 	keyvals ...interface{},
 ) {
 	l.log("ERRO", code, message, skip, keyvals...)
+}
+
+// InfoWithCallerSkip logs at info level with custom caller skip level
+func (l *Logger) InfoWithCallerSkip(
+	code, message string,
+	skip int,
+	keyvals ...interface{},
+) {
+	l.log("INFO", code, message, skip, keyvals...)
+}
+
+// DebugWithCallerSkip logs at debug level with custom caller skip level
+func (l *Logger) DebugWithCallerSkip(
+	code, message string,
+	skip int,
+	keyvals ...interface{},
+) {
+	l.log("DEBG", code, message, skip, keyvals...)
+}
+
+// WarnWithCallerSkip logs at warn level with custom caller skip level
+func (l *Logger) WarnWithCallerSkip(
+	code, message string,
+	skip int,
+	keyvals ...interface{},
+) {
+	l.log("WARN", code, message, skip, keyvals...)
 }
 
 // ShrmplLogClient represents a client for the shrmpl-log service

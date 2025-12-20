@@ -37,6 +37,7 @@ interface AppUserState {
     userId: number,
     newPassword: string,
   ) => Promise<void>;
+  resetUserMFA: (userId: number, updateTs: number) => Promise<void>;
   clearCache: () => void;
 }
 
@@ -308,6 +309,26 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
     } catch (err: unknown) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to change password";
+      set({ error: errorMessage });
+      throw new Error(errorMessage);
+    }
+  },
+
+  resetUserMFA: async (userId: number, updateTs: number) => {
+    set({ error: null });
+    try {
+      const response = await apiRequest("/admin/resetUserMFA", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, updateTs }),
+      });
+      if (!response.ok) {
+        const errorData = (await response.json()) as { error?: string };
+        throw new Error(errorData.error || "Failed to reset MFA");
+      }
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to reset MFA";
       set({ error: errorMessage });
       throw new Error(errorMessage);
     }

@@ -1,23 +1,14 @@
 # React App
-
-
 - MFA
-  - add MFA onboarding for users, 
   - MFAreset for admin. 
-  - redo the auth2 handler opencode deleted
   - investigate passcode as second factor
   
-
 - Need to update all the 4 digit log codes to <12 digit codes to avoid collisions and increase clarity.
-- APP_NAME="Proto App" added to etc, the App may have multiple servers running it and we need a friendly name, e.g. on the user_hanlder mfa URL name
-
-- user self creation flow
 
 
 - react forms complaint - maybe should be using a library.
 - user profile page
   - preferences 
-  - modal user can change their own password.  
   - upload avatar button.  
   
   
