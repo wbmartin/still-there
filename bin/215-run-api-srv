@@ -90,7 +90,6 @@ else
     echo "Stop server: kill $SERVER_PID"
 
     # Wait briefly for startup message, then exit
-    # The server is ready once "Server starting on HTTPS port: 8443" appears
     sleep 2
     echo "Server startup initiated. You can continue working."
 fi

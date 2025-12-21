@@ -10,23 +10,24 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	DatabaseURL                      string `json:"database_url"`
-	JWTSecret                        string `json:"jwt_secret"`
-	JWTSessionExpireHours            int    `json:"jwt_session_expire_hours"`
-	MaxUserReqPerMin                 int    `json:"max_user_req_per_min"`
-	MaxUnauthReqPerMin               int    `json:"max_unauth_req_per_min"`
-	LogReceiverHostPort              string `json:"log_receiver_host_port"`
-	KVHostPort                       string `json:"kv_host_port"`
-	ServerName                       string `json:"server_name"`
-	AppName                          string `json:"app_name"`
-	ServerPort                       int    `json:"server_port"`
-	EnableTLS                        bool   `json:"enable_tls"`
-	TLSCertPath                      string `json:"tls_cert_path"`
-	TLSKeyPath                       string `json:"tls_key_path"`
-	TOTPEncryptionKey                string `json:"totp_encryption_key"`
-	FailedLoginAttemptThreshold      int    `json:"failed_login_attempt_threshold"`
-	FailedLoginAttemptWindowDuration string `json:"failed_login_attempt_window_duration"`
-	FailedLoginLockoutDuration       string `json:"failed_login_lockout_duration"`
+	DatabaseURL                      string   `json:"database_url"`
+	JWTSecret                        string   `json:"jwt_secret"`
+	JWTSessionExpireHours            int      `json:"jwt_session_expire_hours"`
+	MaxUserReqPerMin                 int      `json:"max_user_req_per_min"`
+	MaxUnauthReqPerMin               int      `json:"max_unauth_req_per_min"`
+	LogReceiverHostPort              string   `json:"log_receiver_host_port"`
+	KVHostPort                       string   `json:"kv_host_port"`
+	ServerName                       string   `json:"server_name"`
+	AppName                          string   `json:"app_name"`
+	ServerPort                       int      `json:"server_port"`
+	EnableTLS                        bool     `json:"enable_tls"`
+	TLSCertPath                      string   `json:"tls_cert_path"`
+	TLSKeyPath                       string   `json:"tls_key_path"`
+	TOTPEncryptionKey                string   `json:"totp_encryption_key"`
+	FailedLoginAttemptThreshold      int      `json:"failed_login_attempt_threshold"`
+	FailedLoginAttemptWindowDuration string   `json:"failed_login_attempt_window_duration"`
+	FailedLoginLockoutDuration       string   `json:"failed_login_lockout_duration"`
+	CorsAllowedOrigins               []string `json:"cors_allowed_origins"`
 }
 
 // LoadConfig loads configuration from a .env file
@@ -89,17 +90,21 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	if serverPortStr := env["SERVER_PORT"]; serverPortStr != "" {
 		if val, err := strconv.Atoi(serverPortStr); err == nil {
 			config.ServerPort = val
+		} else {
+			return nil, fmt.Errorf("SERVER_PORT must be a valid integer")
 		}
+	} else {
+		return nil, fmt.Errorf("SERVER_PORT is required")
 	}
 
 	if enableTLSStr := env["ENABLE_TLS"]; enableTLSStr != "" {
 		if val, err := strconv.ParseBool(enableTLSStr); err == nil {
 			config.EnableTLS = val
 		} else {
-			config.EnableTLS = true // default to true
+			return nil, fmt.Errorf("ENABLE_TLS must be a valid boolean (true/false)")
 		}
 	} else {
-		config.EnableTLS = true // default to true
+		return nil, fmt.Errorf("ENABLE_TLS is required")
 	}
 
 	config.TLSCertPath = env["TLS_CERT_PATH"]
@@ -124,6 +129,16 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	config.FailedLoginLockoutDuration = env["FAILED_LOGIN_LOCKOUT_DURATION"]
 	if config.FailedLoginLockoutDuration == "" {
 		return nil, fmt.Errorf("FAILED_LOGIN_LOCKOUT_DURATION is required")
+	}
+
+	if corsOriginsStr := env["CORS_ALLOWED_ORIGINS"]; corsOriginsStr != "" {
+		origins := strings.Split(corsOriginsStr, ",")
+		for i, origin := range origins {
+			origins[i] = strings.TrimSpace(origin)
+		}
+		config.CorsAllowedOrigins = origins
+	} else {
+		config.CorsAllowedOrigins = []string{} // default to no CORS
 	}
 
 	// Validate required configuration
@@ -159,6 +174,10 @@ func LoadConfig(configFilePath string) (*Config, error) {
 
 	if config.FailedLoginAttemptThreshold <= 0 {
 		return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_THRESHOLD must be greater than 0")
+	}
+
+	if config.ServerPort <= 0 {
+		return nil, fmt.Errorf("SERVER_PORT must be greater than 0")
 	}
 
 	if config.FailedLoginAttemptWindowDuration == "" {

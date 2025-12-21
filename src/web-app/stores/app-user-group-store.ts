@@ -167,7 +167,7 @@ export const useAppUserGroupStore = create<AppUserGroupState>((set, get) => ({
           (g: AppUserGroup) => g.appUserGroupId !== id,
         );
         const groupIdToName = rebuildGroupMap(updatedGroupList);
-        return { userGroupList: updatedGroupList, groupIdToName };
+        return { appUserGroupList: updatedGroupList, groupIdToName };
       });
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });

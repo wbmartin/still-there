@@ -2,6 +2,7 @@ package app_lib
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
 	"strings"
@@ -76,18 +77,8 @@ func CheckPasswordHash(password, encodedHash string) bool {
 	hash := argon2.IDKey([]byte(password), salt, argon2Time,
 		argon2Memory, argon2Threads, argon2KeyLen)
 
-	// Compare hashes
-	if len(hash) != len(expectedHash) {
-		return false
-	}
-
-	for i := range hash {
-		if hash[i] != expectedHash[i] {
-			return false
-		}
-	}
-
-	return true
+	// Compare hashes using constant-time comparison to prevent timing attacks
+	return subtle.ConstantTimeCompare(hash, expectedHash) == 1
 }
 
 // GenerateJWT creates a new JWT token

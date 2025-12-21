@@ -94,6 +94,11 @@ func main() {
 	// Apply security headers middleware to all routes
 	securedMux := app_lib.SecurityHeadersMiddleware(mux)
 
+	// Apply CORS middleware if origins are configured
+	if len(config.CorsAllowedOrigins) > 0 {
+		securedMux = app_lib.CORSMiddleware(config.CorsAllowedOrigins)(securedMux)
+	}
+
 	// Health check
 	mux.HandleFunc("GET /health", healthHandler)
 

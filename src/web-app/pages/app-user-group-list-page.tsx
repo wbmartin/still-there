@@ -10,6 +10,7 @@ import {
   Flex,
   Container,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAuthStore } from "../stores/auth-store";
 import useAuthGuard from "../hooks/use-auth-guard";
@@ -67,8 +68,18 @@ function AppUserGroupListPage() {
     if (deleteId !== null) {
       try {
         await deleteAppUserGroup(deleteId);
+        notifications.show({
+          title: "Success",
+          message: "User group deleted successfully",
+          color: "green",
+        });
       } catch (error) {
         console.error("Error deleting user group:", error);
+        notifications.show({
+          title: "Error",
+          message: "Failed to delete user group",
+          color: "red",
+        });
       }
     }
     setDeleteModalOpen(false);

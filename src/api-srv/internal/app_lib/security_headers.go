@@ -95,6 +95,7 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 					"Content-Type, X-CSRF-Token, Authorization",
 				)
 				w.Header().Set("Access-Control-Max-Age", "86400") // 24 hours
+				w.Header().Set("Vary", "Origin")                  // For proper caching
 			}
 
 			// Handle preflight requests

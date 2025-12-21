@@ -16,17 +16,12 @@
 
 - move the database connection string, JWT, and the TOTP code to a shrmple vault.
 
-- The `ExecuteWithRetry` logic is an excellent feature for handling transient database errors but is only applied to a single repository method. It should be applied to all external database calls.
-
-- The `CORSMiddleware` is defined but not used in `main.go`.
-
  - The project uses a hand-rolled TCP client to send logs to a custom service (`shrmpl-log`) in a custom, fixed-width text format. This reinvents the wheel of structured logging, is likely not as performant or robust (e.g., reconnection logic is not thread-safe) as standard libraries, and creates a dependency on a non-standard service.
  
  - The hand-rolled `.env` parser is fragile and doesn't handle common cases like quoted values. Using a standard library like `joho/godotenv` would be more robust.
  
  - The `.golangci.yml` file exists but is empty, defeating its purpose. A good starter project should include a recommended set of linters.
- 
- - The `CheckPasswordHash` function should use `subtle.ConstantTimeCompare` to prevent potential timing attacks.
+
 
  - **Introduce Unit Testing:** Use mocking frameworks (e.g., `pgxmock` for the database interface, or define a repository interface and mock it) to test handlers and other logic in isolation.
 - **Complete Repository Coverage:** Address the "test environment issues" to un-skip the tests for `AddUserListToGroup` and `RemoveUserListFromGroup`.
@@ -75,3 +70,9 @@ Thought to be complete
 
 
 - Add account lockout after failed login attempts, need to track failed login attempts and lock the account for a period of time after too many failed attempts.  When a user fails a login attempt we need to increment two entries to the KV store that tracks both the IP address of the failed attempt and the username.  the keys could be something like "loginfail-ip-<ip address>" and "loginfail-user-<username>".  each failed attempt increments the count and sets an expiration time of say 5 minutes.  if either the IP address or the username exceeds a threshold (say 7 failed attempts) then we lock the account for a period of time (say 5 minutes).  during the lockout period any login attempts for that username or from that IP address are rejected immediately.  That means the login handler needs to check the KV store for both keys before attempting to validate the password. we'll als need to create test for this feature.
+
+- The `CORSMiddleware` is defined but not used in `main.go`.
+
+- The `ExecuteWithRetry` logic is an excellent feature for handling transient database errors but is only applied to a single repository method. It should be applied to all external database calls.
+
+ - The `CheckPasswordHash` function should use `subtle.ConstantTimeCompare` to prevent potential timing attacks.

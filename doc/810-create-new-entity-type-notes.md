@@ -11,6 +11,7 @@ This document outlines the steps and key points for creating a new entity type i
  - **CRITICAL**: Always use query string parameters with entity-specific names (e.g., `?appUserId=123`, `?appUserGroupId=456`, `?exampleId=789`) for edit and delete operations instead of path parameters (e.g., `/entity/123`) to maintain URL flexibility and avoid changing route patterns. This ensures consistency and prevents routing issues. Do not use generic names like `?entityId=`; always use the specific entity name followed by `Id`.
 - **Configuration**: Do not supply default values in config parsing code. All required configuration values must be explicitly set in the environment file to ensure correct setup and easier troubleshooting. Defaults can mask configuration issues.
 - Test CRUD operations thoroughly.
+- **UI Feedback**: Add success and error toast notifications for all CRUD operations in the respective page components (not in stores). Use the app's notification system (e.g., Mantine notifications) to provide user feedback for create, update, and delete operations.
 
 ## Naming Conventions
 - **Methods**: Use "Read" for list retrieval (e.g., `ReadUserList`) and single-entity retrieval (e.g., `ReadUser`). Use Create/Update/Delete for mutations.
