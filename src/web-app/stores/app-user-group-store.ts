@@ -89,9 +89,24 @@ export const useAppUserGroupStore = create<AppUserGroupState>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!response.ok) throw new Error("Failed to create user group");
-      // Refresh the list to get the new group with ID
-      await get().retrieveAppUserGroupList();
+    if (!response.ok) throw new Error("Failed to create user group");
+    const result = await response.json() as ApiResponse<ApiAppUserGroupModel>;
+    const apiGroup = result.data;
+    const newGroup: AppUserGroup = {
+      appUserGroupId: apiGroup.appUserGroupId,
+      groupName: apiGroup.groupName,
+      userGrantList: apiGroup.userGrantList,
+      securityContext: apiGroup.securityContext,
+      createTs: apiGroup.createTs,
+      createUserId: apiGroup.createUserId,
+      updateTs: apiGroup.updateTs,
+      updateUserId: apiGroup.updateUserId,
+    };
+    set((state) => {
+      const updatedList = [...state.appUserGroupList, newGroup];
+      const groupIdToName = rebuildGroupMap(updatedList);
+      return { appUserGroupList: updatedList, groupIdToName };
+    });
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
       throw err;

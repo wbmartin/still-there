@@ -15,55 +15,77 @@ import { useAuthStore } from './stores/auth-store'
 import { ROUTES } from './constants/routes'
 import { grants } from './constants/grants'
 
+// Simple error page for route errors
+function ErrorPage() {
+  return (
+    <div style={{ padding: '2rem', textAlign: 'center' }}>
+      <h1>Something went wrong</h1>
+      <p>Please try refreshing the page or contact support if the problem persists.</p>
+    </div>
+  );
+}
+
 const router = createBrowserRouter([
   {
     path: '/',
     element: <AppLayout />,
+    errorElement: <ErrorPage />,
     children: [
       {
         index: true,
         element: <Login />,
+        errorElement: <ErrorPage />,
       },
         {
           path: ROUTES.LOGIN,
           element: <Login />,
+          errorElement: <ErrorPage />,
         },
         {
           path: ROUTES.MFA_SETUP,
           element: <MFAOnboardingPage />,
+          errorElement: <ErrorPage />,
         },
         {
           path: ROUTES.DASHBOARD,
           element: <Dashboard />,
+          errorElement: <ErrorPage />,
         },
-       {
-         path: ROUTES.EXAMPLE_LIST,
-         element: <ExampleListPage />,
-       },
+        {
+          path: ROUTES.EXAMPLE_LIST,
+          element: <ExampleListPage />,
+          errorElement: <ErrorPage />,
+        },
+           {
+             path: ROUTES.EXAMPLE_EDIT,
+             element: <ExampleEditPage />,
+             errorElement: <ErrorPage />,
+           },
           {
-            path: ROUTES.EXAMPLE_EDIT,
-            element: <ExampleEditPage />,
-          },
-         {
-           path: ROUTES.APP_USER_LIST,
-           element: <AppUserListPage />,
-         },
-         {
-           path: ROUTES.APP_USER_EDIT,
-           element: <AppUserEditPage />,
-         },
-         {
-           path: ROUTES.APP_USER_GROUP_LIST,
-           element: <AppUserGroupListPage />,
-         },
-          {
-            path: ROUTES.APP_USER_GROUP_EDIT,
-            element: <AppUserGroupEditPage />,
+            path: ROUTES.APP_USER_LIST,
+            element: <AppUserListPage />,
+            errorElement: <ErrorPage />,
           },
           {
-            path: ROUTES.USER_PREFERENCES,
-            element: <UserPreferencesPage />,
+            path: ROUTES.APP_USER_EDIT,
+            element: <AppUserEditPage />,
+            errorElement: <ErrorPage />,
           },
+          {
+            path: ROUTES.APP_USER_GROUP_LIST,
+            element: <AppUserGroupListPage />,
+            errorElement: <ErrorPage />,
+          },
+           {
+             path: ROUTES.APP_USER_GROUP_EDIT,
+             element: <AppUserGroupEditPage />,
+             errorElement: <ErrorPage />,
+           },
+           {
+             path: ROUTES.USER_PREFERENCES,
+             element: <UserPreferencesPage />,
+             errorElement: <ErrorPage />,
+           },
     ],
   },
 ])

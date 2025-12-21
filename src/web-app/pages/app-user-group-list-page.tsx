@@ -113,39 +113,40 @@ function AppUserGroupListPage() {
             <Table.Tr key={group.appUserGroupId}>
               <Table.Td>{group.appUserGroupId}</Table.Td>
               <Table.Td>{group.groupName}</Table.Td>
-              <Table.Td>
-                <Flex gap="xs" wrap="wrap">
-                  {group.userGrantList.map((id) => (
-                    <Badge key={id} variant="light" size="sm">
-                      {grants.idToName(id)}
-                    </Badge>
-                  ))}
-                </Flex>
-              </Table.Td>
-              <Table.Td>
-                {canUpdateUserGroup && (
-                  <Button
-                    size="xs"
-                    onClick={() =>
-                      void navigate(
-                        `/${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=${group.appUserGroupId}`,
-                      )
-                    }
-                  >
-                    Edit
-                  </Button>
-                )}
-                {canDeleteUserGroup && (
-                  <Button
-                    size="xs"
-                    color="red"
-                    ml="xs"
-                    onClick={() => handleDeleteClick(group.appUserGroupId)}
-                  >
-                    Delete
-                  </Button>
-                )}
-              </Table.Td>
+               <Table.Td style={{ maxWidth: '300px' }}>
+                 <Flex gap="xs" wrap="wrap">
+                   {group.userGrantList.map((id) => (
+                     <Badge key={id} variant="light" size="sm">
+                       {grants.idToName(id)}
+                     </Badge>
+                   ))}
+                 </Flex>
+               </Table.Td>
+               <Table.Td>
+                 <Group gap="xs">
+                   {canUpdateUserGroup && (
+                     <Button
+                       size="xs"
+                       onClick={() =>
+                         void navigate(
+                           `/${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=${group.appUserGroupId}`,
+                         )
+                       }
+                     >
+                       Edit
+                     </Button>
+                   )}
+                   {canDeleteUserGroup && (
+                     <Button
+                       size="xs"
+                       color="red"
+                       onClick={() => handleDeleteClick(group.appUserGroupId)}
+                     >
+                       Delete
+                     </Button>
+                   )}
+                 </Group>
+               </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

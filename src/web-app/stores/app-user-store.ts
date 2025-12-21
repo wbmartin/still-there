@@ -52,7 +52,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
     try {
       let url = API_ENDPOINTS.USER_LIST;
       if (idList && idList.length > 0) {
-        url += `?userIdList=${idList.join(",")}`;
+        url += `?appUserIdList=${idList.join(",")}`;
       }
       const response = await apiRequest(url);
       if (!response.ok) throw new Error("Failed to fetch users");
@@ -86,7 +86,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
   },
   retrieveUserById: async (id: number) => {
     const maxTs = get().maxAppUserUpdateTs;
-    const url = `${API_ENDPOINTS.USER_LIST}?userIdList=${id}&afterUpdateTs=${maxTs}`;
+    const url = `${API_ENDPOINTS.USER_LIST}?appUserIdList=${id}&afterUpdateTs=${maxTs}`;
     try {
       const response = await apiRequest(url);
       if (!response.ok) throw new Error("Failed to fetch user");
@@ -238,7 +238,7 @@ export const useAppUserStore = create<AppUserState>((set, get) => ({
       const user = state.userList.find((u) => u.appUserId === id);
       if (!user) throw new Error("User not found");
       const response = await apiRequest(
-        API_ENDPOINTS.USER + `?userId=${id}&updateTs=${user.updateTs}`,
+        API_ENDPOINTS.USER + `?appUserId=${id}&updateTs=${user.updateTs}`,
         {
           method: "DELETE",
         },

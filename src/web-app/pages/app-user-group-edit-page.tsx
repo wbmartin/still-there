@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useForm } from "@mantine/form";
 import { ROUTES } from "../constants/routes";
 import { grants as grantConstants } from "../constants/grants";
 import {
@@ -20,7 +21,6 @@ import useAuthGuard from "../hooks/use-auth-guard";
 import type { AppUserGroup } from "../types/app-user-group-type";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import AddRemoveUsersFromGroupModal from "../components/AddRemoveUsersFromGroupModal";
-import type { AppUserGroupFormData } from "../types/app-user-group-type";
 import { defaultAppUserGroupFormData } from "../types/app-user-group-type";
 
 function AppUserGroupEditPage() {
@@ -45,9 +45,12 @@ function AppUserGroupEditPage() {
     ? null
     : Number(appUserGroupId);
 
-  const [formData, setFormData] = useState<AppUserGroupFormData>(
-    defaultAppUserGroupFormData,
-  );
+  const form = useForm<typeof defaultAppUserGroupFormData>({
+    initialValues: defaultAppUserGroupFormData,
+    validate: {
+      groupName: (value) => (value.length < 1 ? 'Group name is required' : null),
+    },
+  });
 
   const grants = grantConstants.getGrantList();
 
@@ -66,7 +69,7 @@ function AppUserGroupEditPage() {
       );
       if (existingGroup) {
         setTimeout(() => {
-          setFormData({
+          form.setValues({
             groupName: existingGroup.groupName,
             userGrantList: existingGroup.userGrantList,
             updateTs: existingGroup.updateTs.toString(),
@@ -87,19 +90,18 @@ function AppUserGroupEditPage() {
     return <div>Checking Auth...</div>;
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (values: typeof defaultAppUserGroupFormData) => {
     const data = {
-      groupName: formData.groupName,
-      userGrantList: formData.userGrantList,
-      updateTs: Number(formData.updateTs),
+      groupName: values.groupName,
+      userGrantList: values.userGrantList,
+      updateTs: Number(values.updateTs),
     };
 
     try {
       if (isNew) {
         await createAppUserGroup({
-          groupName: formData.groupName,
-          userGrantList: formData.userGrantList,
+          groupName: values.groupName,
+          userGrantList: values.userGrantList,
         });
         notifications.show({
           title: "Success",
@@ -199,23 +201,17 @@ function AppUserGroupEditPage() {
       <Title order={1} mb="lg">
         Edit User Group
       </Title>
-      <form onSubmit={(e) => void handleSubmit(e)}>
+      <form onSubmit={form.onSubmit(handleSubmit)}>
         <TextInput
           label="Group Name"
-          value={formData.groupName}
-          onChange={(e) =>
-            setFormData({ ...formData, groupName: e.target.value })
-          }
-          required
+          {...form.getInputProps('groupName')}
           mb="md"
         />
         <MultiSelect
           label="Roles"
           data={grants.map((g) => ({ value: g.id.toString(), label: g.text }))}
-          value={formData.userGrantList.map(String)}
-          onChange={(values) =>
-            setFormData({ ...formData, userGrantList: values.map(Number) })
-          }
+          value={form.values.userGrantList.map(String)}
+          onChange={(values) => form.setFieldValue('userGrantList', values.map(Number))}
           mb="md"
         />
         <Group>

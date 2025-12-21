@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useForm } from "@mantine/form";
+import { zodResolver } from "mantine-form-zod-resolver";
+import { loginSchema } from "../schemas/form-schemas";
 import {
   TextInput,
   PasswordInput,
@@ -17,9 +20,15 @@ import { UserRegistrationModal } from "../components/UserRegistrationModal";
 import { ROUTES } from "../constants/routes";
 
 function Login() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [registrationModalOpened, setRegistrationModalOpened] = useState(false);
+
+  const form = useForm({
+    initialValues: {
+      username: '',
+      password: '',
+    },
+    validate: zodResolver(loginSchema),
+  });
    const {
      authenticateWithUsernamePassword,
      authState,
@@ -37,9 +46,8 @@ function Login() {
 
   //============================^ HOOK LINE ^====================
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await authenticateWithUsernamePassword(username, password);
+  const handleSubmit = form.onSubmit(async (values) => {
+    await authenticateWithUsernamePassword(values.username, values.password);
     // username is userName
     const state = useAuthStore.getState();
     if (state.authState === "MFA") {
@@ -52,7 +60,7 @@ function Login() {
         color: "red",
       });
     }
-  };
+  });
 
   return (
     <Center style={{ height: '100vh' }}>
@@ -61,19 +69,15 @@ function Login() {
           <Title order={2} mb="md" ta="center">
             Login to Proto
           </Title>
-          <form onSubmit={(e) => void handleSubmit(e)}>
+          <form onSubmit={handleSubmit}>
             <TextInput
               label="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
+              {...form.getInputProps('username')}
               mb="md"
             />
             <PasswordInput
               label="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
+              {...form.getInputProps('password')}
               mb="md"
             />
             <Button type="submit" fullWidth loading={authState === "CHECKING"}>

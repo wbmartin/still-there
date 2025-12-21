@@ -180,13 +180,9 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         updateTs: apiExample.updateTs,
         updateUserId: apiExample.updateUserId,
       };
-      set((state) => ({
-        exampleList: [...state.exampleList, newExample],
-        maxExampleUpdateTs: Math.max(
-          state.maxExampleUpdateTs,
-          newExample.updateTs
-        ),
-      }));
+       set((state) => ({
+         exampleList: [...state.exampleList, newExample],
+       }));
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       set({ error: errorMessage });
@@ -211,9 +207,13 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!response.ok) throw new Error("Failed to update example");
-      // Optionally refetch or update local state
-      await get().retrieveExampleList();
+    if (!response.ok) throw new Error("Failed to update example");
+    // Update local state
+    set((state) => ({
+      exampleList: state.exampleList.map((e) =>
+        e.exampleId === id ? { ...e, ...data } : e,
+      ),
+    }));
     } catch (err: unknown) {
       set({ error: err instanceof Error ? err.message : "Unknown error" });
     }

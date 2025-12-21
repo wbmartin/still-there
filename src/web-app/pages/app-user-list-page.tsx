@@ -172,28 +172,28 @@ function UserAdminPage() {
                   .map((id) => getGroupName(id))
                   .join(", ")}
               </Table.Td>
-              <Table.Td>
-                <Button
-                  size="xs"
-                  onClick={() => {
-                    void navigate(
-                      `/${ROUTES.APP_USER_EDIT}?appUserId=${user.appUserId}`,
-                    );
-                  }}
-                >
-                  Edit
-                </Button>
-                <Button
-                  size="xs"
-                  color="red"
-                  ml="xs"
-                  onClick={() => {
-                    handleDeleteClick(user.appUserId);
-                  }}
-                >
-                  Delete
-                </Button>
-              </Table.Td>
+               <Table.Td style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>
+                 <Button
+                   size="xs"
+                   onClick={() => {
+                     void navigate(
+                       `/${ROUTES.APP_USER_EDIT}?appUserId=${user.appUserId}`,
+                     );
+                   }}
+                 >
+                   Edit
+                 </Button>
+                 <Button
+                   size="xs"
+                   color="red"
+                   ml="xs"
+                   onClick={() => {
+                     handleDeleteClick(user.appUserId);
+                   }}
+                 >
+                   Delete
+                 </Button>
+               </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

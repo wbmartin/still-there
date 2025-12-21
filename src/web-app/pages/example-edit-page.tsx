@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useForm } from "@mantine/form";
 import {
   TextInput,
   NumberInput,
@@ -15,7 +16,6 @@ import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { grants } from "../constants/grants";
-import type { ExampleFormData } from "../types/example-type";
 import { defaultExampleFormData } from "../types/example-type";
 
 function ExampleEditPage() {
@@ -30,9 +30,12 @@ function ExampleEditPage() {
 
   const numericId = isNaN(Number(id)) ? null : Number(id);
 
-  const [formData, setFormData] = useState<ExampleFormData>(
-    defaultExampleFormData,
-  );
+  const form = useForm<typeof defaultExampleFormData>({
+    initialValues: defaultExampleFormData,
+    validate: {
+      exampleText: (value) => (value.length < 1 ? 'Example text is required' : null),
+    },
+  });
   const [exampleLoading, setExampleLoading] = useState(
     !isNew && numericId !== null,
   );
@@ -45,7 +48,7 @@ function ExampleEditPage() {
       void retrieveExampleById(numericId)
         .then((existingExample) => {
           if (existingExample) {
-            const newFormData = {
+            form.setValues({
               exampleText: existingExample.exampleText,
               exampleInt: existingExample.exampleInt?.toString() || "",
               exampleFloat: existingExample.exampleFloat?.toString() || "",
@@ -54,20 +57,6 @@ function ExampleEditPage() {
               exampleFloatArray:
                 existingExample.exampleFloatArray?.join(", ") || "",
               updateTs: existingExample.updateTs.toString(),
-            };
-            setFormData((prev) => {
-              // Only update if different to prevent cascading renders
-              if (
-                prev.exampleText !== newFormData.exampleText ||
-                prev.exampleInt !== newFormData.exampleInt ||
-                prev.exampleFloat !== newFormData.exampleFloat ||
-                prev.exampleIntArray !== newFormData.exampleIntArray ||
-                prev.exampleFloatArray !== newFormData.exampleFloatArray ||
-                prev.updateTs !== newFormData.updateTs
-              ) {
-                return newFormData;
-              }
-              return prev;
             });
           }
         })
@@ -89,21 +78,20 @@ function ExampleEditPage() {
     return <div>Loading example...</div>;
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (values: typeof defaultExampleFormData) => {
     const data = {
-      exampleText: formData.exampleText,
-      exampleInt: formData.exampleInt ? Number(formData.exampleInt) : undefined,
-      exampleFloat: formData.exampleFloat
-        ? Number(formData.exampleFloat)
+      exampleText: values.exampleText,
+      exampleInt: values.exampleInt ? Number(values.exampleInt) : undefined,
+      exampleFloat: values.exampleFloat
+        ? Number(values.exampleFloat)
         : undefined,
-      exampleIntArray: formData.exampleIntArray
-        ? formData.exampleIntArray.split(",").map(Number)
+      exampleIntArray: values.exampleIntArray
+        ? values.exampleIntArray.split(",").map(Number)
         : undefined,
-      exampleFloatArray: formData.exampleFloatArray
-        ? formData.exampleFloatArray.split(",").map(Number)
+      exampleFloatArray: values.exampleFloatArray
+        ? values.exampleFloatArray.split(",").map(Number)
         : undefined,
-      updateTs: !isNew ? Number(formData.updateTs) : undefined,
+      updateTs: !isNew ? Number(values.updateTs) : undefined,
     };
 
     try {
@@ -154,7 +142,7 @@ function ExampleEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-        void navigate(`/${ROUTES.EXAMPLE_LIST}`);
+      void navigate(`/${ROUTES.EXAMPLE_LIST}`);
       } catch (error) {
         console.error("Error deleting example:", error);
         notifications.show({
@@ -178,46 +166,30 @@ function ExampleEditPage() {
       <Title order={1} mb="lg">
         {isNew ? "Add Example" : "Edit Example"}
       </Title>
-      <form onSubmit={(e) => void handleSubmit(e)}>
+      <form onSubmit={form.onSubmit(handleSubmit)}>
         <TextInput
           label="Text"
-          value={formData.exampleText}
-          onChange={(e) =>
-            setFormData({ ...formData, exampleText: e.target.value })
-          }
-          required
+          {...form.getInputProps('exampleText')}
           mb="md"
         />
         <NumberInput
           label="Int"
-          value={formData.exampleInt}
-          onChange={(value) =>
-            setFormData({ ...formData, exampleInt: value?.toString() || "" })
-          }
+          {...form.getInputProps('exampleInt')}
           mb="md"
         />
         <NumberInput
           label="Float"
-          value={formData.exampleFloat}
-          onChange={(value) =>
-            setFormData({ ...formData, exampleFloat: value?.toString() || "" })
-          }
+          {...form.getInputProps('exampleFloat')}
           mb="md"
         />
         <Textarea
           label="Int Array (comma-separated)"
-          value={formData.exampleIntArray}
-          onChange={(e) =>
-            setFormData({ ...formData, exampleIntArray: e.target.value })
-          }
+          {...form.getInputProps('exampleIntArray')}
           mb="md"
         />
         <Textarea
           label="Float Array (comma-separated)"
-          value={formData.exampleFloatArray}
-          onChange={(e) =>
-            setFormData({ ...formData, exampleFloatArray: e.target.value })
-          }
+          {...form.getInputProps('exampleFloatArray')}
           mb="md"
         />
         <Group>

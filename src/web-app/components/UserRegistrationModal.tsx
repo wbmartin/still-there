@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal, TextInput, PasswordInput, Button, Group, Text } from "@mantine/core";
+import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { apiRequest } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
@@ -16,34 +17,34 @@ export function UserRegistrationModal({
   onClose,
   onSuccess,
 }: UserRegistrationModalProps) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const form = useForm({
+    initialValues: {
+      username: '',
+      password: '',
+      confirmPassword: '',
+    },
+    validate: {
+      username: (value) => (value.length < 1 ? 'Username is required' : null),
+      password: (value) => (value.length < 8 ? 'Password must be at least 8 characters' : null),
+      confirmPassword: (value, values) =>
+        value !== values.password ? 'Passwords do not match' : null,
+    },
+  });
 
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+
+  const handleSubmit = async (values: { username: string; password: string; confirmPassword: string }) => {
     setError("");
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long");
-      return;
-    }
-
     setLoading(true);
+
     try {
       const response = await apiRequest(API_ENDPOINTS.USER_SELF_CREATE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: values.username, password: values.password }),
       });
 
        if (!response.ok) {
@@ -67,9 +68,7 @@ export function UserRegistrationModal({
   };
 
   const resetForm = () => {
-    setUsername("");
-    setPassword("");
-    setConfirmPassword("");
+    form.reset();
     setError("");
   };
 
@@ -80,38 +79,32 @@ export function UserRegistrationModal({
 
   return (
     <Modal opened={opened} onClose={handleClose} title="Create Account" size="md">
-      <form onSubmit={(e) => void handleSubmit(e)}>
+      <form onSubmit={form.onSubmit(handleSubmit)}>
         <TextInput
           label="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          required
+          {...form.getInputProps('username')}
           mb="md"
           placeholder="Enter your username"
         />
 
         <PasswordInput
           label="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
+          {...form.getInputProps('password')}
           mb="md"
           placeholder="Enter your password"
         />
 
         <PasswordInput
           label="Confirm Password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          required
+          {...form.getInputProps('confirmPassword')}
           mb="md"
           placeholder="Confirm your password"
         />
 
             <PasswordGenerator
               onPasswordGenerated={(pwd) => {
-                setPassword(pwd);
-                setConfirmPassword(pwd);
+                form.setFieldValue('password', pwd);
+                form.setFieldValue('confirmPassword', pwd);
               }}
             />
 

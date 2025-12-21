@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useForm } from "@mantine/form";
 import {
   TextInput,
   PasswordInput,
@@ -20,10 +21,10 @@ import { useAuthStore } from "../stores/auth-store";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ChangePasswordModal } from "../components/ChangePasswordModal";
 import { ROUTES } from "../constants/routes";
-import type { UserFormData } from "../types/user-type";
 import { defaultUserFormData } from "../types/user-type";
 import { grants } from "../constants/grants";
 import { PasswordGenerator } from "../components/PasswordGenerator";
+
 
 function UserEditPage() {
   const [searchParams] = useSearchParams();
@@ -44,10 +45,17 @@ function UserEditPage() {
 
   const id = searchParams.get("appUserId") || "";
   const numericId = isNaN(Number(id)) ? null : Number(id);
+  const isNew = id === "new";
 
-  const [formData, setFormData] = useState<UserFormData>(defaultUserFormData);
-
-   const isNew = id === "new";
+  const form = useForm<typeof defaultUserFormData>({
+    initialValues: defaultUserFormData,
+    validate: {
+      userName: (value) => (value.length < 3 ? 'Username must be at least 3 characters' : null),
+      firstName: (value) => (value.length < 1 ? 'First name is required' : null),
+      lastName: (value) => (value.length < 1 ? 'Last name is required' : null),
+      email: (value) => (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? 'Invalid email address' : null),
+    },
+  });
    const requiredGrant = isNew ? grants.CREATE_USER : grants.UPDATE_USER;
    const authState = useAuthGuard([requiredGrant, grants.READ_USER]);
    const grantList = useAuthStore.getState().grantList;
@@ -69,7 +77,7 @@ function UserEditPage() {
         // Fetch the user directly
         void retrieveUserById(numericId).then((user) => {
           if (user) {
-            setFormData({
+            form.setValues({
               userName: user.userName,
               firstName: user.firstName,
               lastName: user.lastName,
@@ -105,17 +113,16 @@ function UserEditPage() {
     return <div>Loading user...</div>;
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (values: typeof defaultUserFormData) => {
     const data = {
-      userName: formData.userName,
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      email: formData.email,
-      appUserGroupMembershipList: formData.appUserGroupMembershipList,
-      mfaExempt: formData.mfaExempt,
-      pwHash: formData.pwHash || undefined,
-      updateTs: !isNew ? Number(formData.updateTs) : undefined,
+      userName: values.userName,
+      firstName: values.firstName,
+      lastName: values.lastName,
+      email: values.email,
+      appUserGroupMembershipList: values.appUserGroupMembershipList,
+      mfaExempt: values.mfaExempt,
+      pwHash: values.pwHash || undefined,
+      updateTs: !isNew ? Number(values.updateTs) : undefined,
     };
 
     try {
@@ -216,7 +223,7 @@ function UserEditPage() {
     setResetMFALoading(true);
     setPasswordChangeError(undefined);
     try {
-      await resetUserMFA(numericId!, parseFloat(formData.updateTs) || 0);
+      await resetUserMFA(numericId!, parseFloat(form.values.updateTs) || 0);
       notifications.show({
         title: "Success",
         message: "MFA reset successfully. User must re-setup MFA on next login.",
@@ -247,55 +254,37 @@ function UserEditPage() {
       <Title order={1} mb="lg">
         {isNew ? "Add User" : "Edit User"}
       </Title>
-      <form onSubmit={(e) => void handleSubmit(e)}>
+      <form onSubmit={form.onSubmit(handleSubmit)}>
         <TextInput
           label="Username"
-          value={formData.userName}
-          onChange={(e) =>
-            setFormData({ ...formData, userName: e.target.value })
-          }
-          required
+          {...form.getInputProps('userName')}
           mb="md"
         />
         <TextInput
           label="First Name"
-          value={formData.firstName}
-          onChange={(e) =>
-            setFormData({ ...formData, firstName: e.target.value })
-          }
-          required
+          {...form.getInputProps('firstName')}
           mb="md"
         />
         <TextInput
           label="Last Name"
-          value={formData.lastName}
-          onChange={(e) =>
-            setFormData({ ...formData, lastName: e.target.value })
-          }
-          required
+          {...form.getInputProps('lastName')}
           mb="md"
         />
         <TextInput
           label="Email"
-          value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          required
+          {...form.getInputProps('email')}
           mb="md"
         />
         {isNew && (
           <>
             <PasswordInput
               label="Password"
-              value={formData.pwHash}
-              onChange={(e) =>
-                setFormData({ ...formData, pwHash: e.target.value })
-              }
-              required
+              {...form.getInputProps('pwHash')}
               mb="md"
             />
             <PasswordGenerator
               onPasswordGenerated={(pwd) =>
-                setFormData({ ...formData, pwHash: pwd })
+                form.setFieldValue('pwHash', pwd)
               }
             />
           </>
@@ -303,22 +292,14 @@ function UserEditPage() {
         <MultiSelect
           label="Groups"
           data={groupOptions}
-          value={formData.appUserGroupMembershipList.map(String)}
-          onChange={(values) =>
-            setFormData({
-              ...formData,
-              appUserGroupMembershipList: values.map(Number),
-            })
-          }
+          value={form.values.appUserGroupMembershipList.map(String)}
+          onChange={(values) => form.setFieldValue('appUserGroupMembershipList', values.map(Number))}
           disabled={groupsLoading}
           mb="md"
         />
         <Checkbox
           label="MFA Exempt"
-          checked={formData.mfaExempt}
-          onChange={(e) =>
-            setFormData({ ...formData, mfaExempt: e.target.checked })
-          }
+          {...form.getInputProps('mfaExempt')}
           mb="md"
         />
         <Group>
