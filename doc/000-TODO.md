@@ -1,10 +1,6 @@
 # React App
 - MFA
-  - investigate passcode as second factor
-  -  QR code is too big
-  
-- Need to update all the 4 digit log codes to <12 digit codes to avoid collisions and increase clarity.
-
+  - investigate passcode as second factor - doc in 120
 
 - react forms complaint - maybe should be using a library.
 - user profile page
