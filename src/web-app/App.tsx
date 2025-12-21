@@ -29,7 +29,7 @@ const router = createBrowserRouter([
           element: <Login />,
         },
         {
-          path: '/mfa-setup',
+          path: ROUTES.MFA_SETUP,
           element: <MFAOnboardingPage />,
         },
         {
@@ -40,10 +40,10 @@ const router = createBrowserRouter([
          path: ROUTES.EXAMPLE_LIST,
          element: <ExampleListPage />,
        },
-         {
-           path: 'example',
-           element: <ExampleEditPage />,
-         },
+          {
+            path: ROUTES.EXAMPLE_EDIT,
+            element: <ExampleEditPage />,
+          },
          {
            path: ROUTES.APP_USER_LIST,
            element: <AppUserListPage />,

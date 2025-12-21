@@ -7,10 +7,11 @@ export const ROUTES = {
   APP_USER_GROUP_LIST: 'appUserGroupList',
   APP_USER_GROUP_EDIT: 'appUserGroupEdit', // Base path; append ?id
 
-   // Other
-   DASHBOARD: 'dashboard',
-   EXAMPLE_LIST: 'exampleList',
-   EXAMPLE_EDIT: 'example', // Base path; append ?exampleId
-   LOGIN: 'login',
-   USER_PREFERENCES: 'userPreferences',
+    // Other
+    DASHBOARD: 'dashboard',
+    EXAMPLE_LIST: 'exampleList',
+    EXAMPLE_EDIT: 'example', // Base path; append ?exampleId
+    LOGIN: 'login',
+    USER_PREFERENCES: 'userPreferences',
+    MFA_SETUP: 'mfa-setup',
 } as const;

@@ -13,6 +13,7 @@ import {
 import { useAuthStore } from "../stores/auth-store";
 import { notifications } from "@mantine/notifications";
 import { UserRegistrationModal } from "../components/UserRegistrationModal";
+import { ROUTES } from "../constants/routes";
 
 function Login() {
   const [username, setUsername] = useState("");
@@ -28,7 +29,7 @@ function Login() {
   useEffect(() => {
      if (authState === "YES") {
        // Navigate to postAuthDestination or dashboard
-       const destination = postAuthDestination || "/dashboard";
+        const destination = postAuthDestination || `/${ROUTES.DASHBOARD}`;
        void navigate(destination);
      }
    }, [authState, postAuthDestination, navigate]);
@@ -42,7 +43,7 @@ function Login() {
     const state = useAuthStore.getState();
     if (state.authState === "MFA") {
       // MFA required, navigate to setup
-      void navigate("/mfa-setup");
+      void navigate(`/${ROUTES.MFA_SETUP}`);
     } else if (state.authState !== "YES") {
       notifications.show({
         title: "Login Failed",

@@ -125,7 +125,7 @@ function ExampleEditPage() {
           withCloseButton: false,
         });
       }
-      void navigate("/exampleList");
+      void navigate(`/${ROUTES.EXAMPLE_LIST}`);
     } catch (error) {
       console.error("Error saving example:", error);
       notifications.show({
@@ -228,7 +228,7 @@ function ExampleEditPage() {
           )}
           <Button
             variant="outline"
-            onClick={() => void navigate("/exampleList")}
+            onClick={() => void navigate(`/${ROUTES.EXAMPLE_LIST}`)}
           >
             Cancel
           </Button>

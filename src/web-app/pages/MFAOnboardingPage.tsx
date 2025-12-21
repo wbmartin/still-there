@@ -19,6 +19,7 @@ import { notifications } from "@mantine/notifications";
 import { apiRequest } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { useAuthStore } from "../stores/auth-store";
+import { ROUTES } from "../constants/routes";
 import type { LoginResponse } from "../types/auth-type";
 
 function MFAOnboardingPage() {
@@ -98,7 +99,7 @@ function MFAOnboardingPage() {
         message: "MFA setup completed successfully",
         color: "green",
       });
-      void navigate("/dashboard");
+      void navigate(`/${ROUTES.DASHBOARD}`);
     } catch (err) {
       notifications.show({
         title: "Verification Failed",
