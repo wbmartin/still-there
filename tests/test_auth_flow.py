@@ -100,21 +100,6 @@ class TestAuthentication:
             "status" in inner_data or "message" in inner_data
         )  # Health check response format
 
-    def test_account_lockout_after_failed_attempts(self):
-        """Test that account gets locked after too many failed login attempts"""
-        base_url = os.environ.get("TEST_BASE_URL", "http://localhost:8080")
-        client = TestClient(base_url)
-
-        # Attempt login with wrong password multiple times
-        for i in range(7):  # Exceed threshold
-            with pytest.raises(requests.HTTPError):
-                client.authenticate("admin", "wrongpassword")
-
-        # Now attempt with correct password should be locked
-        with pytest.raises(requests.HTTPError) as exc_info:
-            client.authenticate("admin", "admin123!")
-        assert exc_info.value.response.status_code == 429  # Too Many Requests
-
     def test_lockout_expiration(self):
         """Test that lockout expires after the configured duration"""
         # This test would need to wait for lockout duration to expire

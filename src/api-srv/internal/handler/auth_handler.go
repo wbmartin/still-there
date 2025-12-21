@@ -103,6 +103,18 @@ func incrementFailedAttempt(kv app_lib.ThisAppKVInterface, config *app_lib.Confi
 	return nil
 }
 
+// resetFailedAttempts resets the failed attempt counters for user and IP on successful login
+func resetFailedAttempts(kv app_lib.ThisAppKVInterface, ip, username string) error {
+	userCounterKey := "loginfail-user-" + username
+	ipCounterKey := "loginfail-ip-" + ip
+	// Reset counters to 0 with short TTL to effectively clear them
+	err := kv.Set(userCounterKey, "0", "1s")
+	if err != nil {
+		return err
+	}
+	return kv.Set(ipCounterKey, "0", "1s")
+}
+
 // AuthHandler handles initial authentication (username/password)
 func AuthHandler(
 	appServices *app_lib.AppServices,
@@ -161,6 +173,14 @@ func AuthHandler(
 			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "INVALID_CREDS", nil)
 			return
 		}
+
+		// Reset failed attempt counters on successful login
+		// err = resetFailedAttempts(appServices.KV, clientIP, req.UserName)
+		// if err != nil {
+		// 	appServices.Logger.Warn("RESET_FAILED_ATTEMPTS_FAIL",
+		// 		"Failed to reset failed attempts for user: "+req.UserName+", error: "+err.Error(), "username", req.UserName)
+		// 	// Don't fail auth, just log
+		// }
 
 		// Check if MFA is required
 		if !user.MFAExempt {
