@@ -31,24 +31,29 @@ go test -v ./internal/model/...
 # Create reports directory if it doesn't exist
 mkdir -p ../../tests/reports
 
+# Generate timestamp for report filenames
+TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+COVERAGE_OUT="../../tests/reports/repo_model_coverage_$TIMESTAMP.out"
+COVERAGE_HTML="../../tests/reports/repo_model_coverage_$TIMESTAMP.html"
+
 # Generate coverage report for repository and model only
 echo "Generating coverage report..."
-go test -coverprofile=../../tests/reports/repo_model_coverage.out ./internal/repository/... ./internal/model/...
+go test -coverprofile="$COVERAGE_OUT" ./internal/repository/... ./internal/model/...
 
 # Display coverage summary
 echo ""
 echo "Coverage Summary:"
-go tool cover -func=../../tests/reports/repo_model_coverage.out
+go tool cover -func="$COVERAGE_OUT"
 
 # Optional: Generate HTML coverage report
 echo ""
 echo "Generating HTML coverage report..."
-go tool cover -html=../../tests/reports/repo_model_coverage.out -o ../../tests/reports/repo_model_coverage.html
+go tool cover -html="$COVERAGE_OUT" -o "$COVERAGE_HTML"
 
 echo ""
 echo "Tests completed successfully!"
-echo "Coverage report: ../../tests/reports/repo_model_coverage.html"
-echo "Coverage data: ../../tests/reports/repo_model_coverage.out"
+echo "Coverage report: $COVERAGE_HTML"
+echo "Coverage data: $COVERAGE_OUT"
 
 # Return to original directory
 popd > /dev/null

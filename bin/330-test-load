@@ -33,9 +33,20 @@ if [ ! -x "dist/load-test" ]; then
     exit 1
 fi
 
-# Run the load test with all passed arguments
-echo "Running load test..."
-"./dist/load-test" "$@"
+# Read configuration from env file
+if [ -f "etc/loc-api-srv.env" ]; then
+    # Extract TEST_BASE_URL from env file, default to http://localhost:8080 if not found
+    TEST_BASE_URL=$(grep -E "^TEST_BASE_URL=" etc/loc-api-srv.env | cut -d'=' -f2 || echo "http://localhost:8080")
+else
+    TEST_BASE_URL="http://localhost:8080"
+fi
+
+# Set default arguments
+DEFAULT_ARGS="--base-url $TEST_BASE_URL --duration 1m"
+
+# Run the load test with defaults plus any additional arguments
+echo "Running load test with base URL: $TEST_BASE_URL"
+"./dist/load-test" $DEFAULT_ARGS "$@"
 
 # Return to original directory
 popd > /dev/null

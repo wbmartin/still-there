@@ -241,6 +241,19 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 		return sh
 	}
 
+	// Try to parse JWT if present (even if JWT check was skipped)
+	if sh.claims == nil {
+		cookie, err := sh.r.Cookie("auth")
+		if err == nil {
+			tokenString := cookie.Value
+			claims, err := ValidateJWT(tokenString, sh.appServices.Config.JWTSecret)
+			if err == nil {
+				sh.claims = claims
+				sh.username = claims.Subject
+			}
+		}
+	}
+
 	// Exempt admin user from rate limiting
 	if sh.claims != nil && sh.claims.Subject == "admin" {
 		return sh

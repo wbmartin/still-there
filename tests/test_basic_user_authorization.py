@@ -6,11 +6,13 @@ class TestBasicUserAuthorization:
 
     def test_create_user_denied(self, basic_user_client):
         """Basic user should get 403 when trying to create a user"""
+        import uuid
+        suffix = uuid.uuid4().hex
         response = basic_user_client.make_request("POST", "/user", json={
-            "userName": "testuser",
+            "userName": f"testuser{suffix}",
             "firstName": "Test",
             "lastName": "User",
-            "email": "test@example.com",
+            "email": f"test{suffix}@example.com",
             "password": "test123!"
         })
         assert response.status_code == 403
@@ -18,7 +20,7 @@ class TestBasicUserAuthorization:
     def test_block_user_denied(self, basic_user_client):
         """Basic user should get 403 when trying to block a user"""
         response = basic_user_client.make_request("DELETE", "/user", params={
-            "userIdList": "99999",
+            "appUserId": "99999",
             "updateTs": "1234567890.123"
         })
         assert response.status_code == 403
@@ -26,8 +28,8 @@ class TestBasicUserAuthorization:
     def test_change_user_password_denied(self, basic_user_client):
         """Basic user should get 403 when trying to change another user's password"""
         response = basic_user_client.make_request("PUT", "/user", json={
-            "userId": 1,
-            "password": "newpass123!"
+            "appUserId": 1,
+            "newPassword": "newpass123!"
         })
         assert response.status_code == 403
 

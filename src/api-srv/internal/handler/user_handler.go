@@ -106,12 +106,13 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 
 	jwtClaims := app.GetClaims()
 
-	// Parse optional userIdList query parameter
-	idList, err := GetCommaSeparatedIntListFromQuery(r, "userIdList")
+	// Parse optional appUserIdList query parameter
+	idList, err := GetCommaSeparatedIntListFromQuery(r, "appUserIdList")
 	if err != nil {
 		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
 		return
 	}
+	app.Info("USR_LIST_PARAMS", fmt.Sprintf("appUserIdList param: %s, idList: %v", r.URL.Query().Get("appUserIdList"), idList))
 
 	// Parse optional afterUpdateTs query parameter
 	afterUpdateTs, err := GetFloatFromQuery(r, "afterUpdateTs")
@@ -126,7 +127,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Debug("USR_LIST_READ", "Users read")
+	app.Debug("USR_LIST_READ", fmt.Sprintf("Users read: idList=%v, count=%d", idList, len(users)))
 
 	// Ensure users is never nil
 	if users == nil {
@@ -235,6 +236,11 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Create user
 	createdUser, err := h.userRepo.CreateUser(r.Context(), &user)
 	if err != nil {
+		// Check if it's a validation error
+		if strings.Contains(err.Error(), "username must contain only") {
+			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid username: %s", err.Error()), "BRQ0", nil)
+			return
+		}
 		app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create user: username=%s", req.UserName), "UCF0", err)
 		return
 	}
@@ -289,11 +295,11 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict, fmt.Sprintf("User was modified by another user: user_id=%d", user.AppUserID), "CONFLICT_ERROR", err)
+			app.WriteError(w, http.StatusConflict, fmt.Sprintf("User was modified by another user: app_user_id=%d", user.AppUserID), "CONFLICT_ERROR", err)
 		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, fmt.Sprintf("User not found: user_id=%d", user.AppUserID), "NOT_FOUND_ERROR", err)
+			app.WriteError(w, http.StatusNotFound, fmt.Sprintf("User not found: app_user_id=%d", user.AppUserID), "NOT_FOUND_ERROR", err)
 		default:
-			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to update user: user_id=%d", user.AppUserID), "USR_UPD_FAIL", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to update user: app_user_id=%d", user.AppUserID), "USR_UPD_FAIL", err)
 		}
 		return
 	}
@@ -322,7 +328,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	jwtClaims := app.GetClaims()
 
 	// Parse query parameters
-	userID, err := GetIntFromQuery(r, "userId")
+	userID, err := GetIntFromQuery(r, "appUserId")
 	if err != nil {
 		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
 		return
@@ -340,11 +346,11 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict, fmt.Sprintf("User was modified by another user: user_id=%d", userID), "CNF0", nil)
+			app.WriteError(w, http.StatusConflict, fmt.Sprintf("User was modified by another user: app_user_id=%d", userID), "CNF0", nil)
 		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, fmt.Sprintf("User not found: user_id=%d", userID), "NFN0", nil)
+			app.WriteError(w, http.StatusNotFound, fmt.Sprintf("User not found: app_user_id=%d", userID), "NFN0", nil)
 		default:
-			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to delete user: user_id=%d", userID), "UDF0", err)
+			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to delete user: app_user_id=%d", userID), "UDF0", err)
 		}
 		return
 	}
@@ -392,7 +398,7 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 	updatedUsers, err := h.userRepo.AddUserListToGroup(r.Context(), req.UserIds, req.GroupId, req.UpdateTsList, jwtClaims.UserID, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrConflict) {
-			app.WriteError(w, http.StatusConflict, fmt.Sprintf("Concurrent update detected for add to group: group_id=%d, user_ids=%v", req.GroupId, req.UserIds), "CONFLICT_ERROR", err)
+			app.WriteError(w, http.StatusConflict, fmt.Sprintf("Concurrent update detected for add to group: group_id=%d, app_user_ids=%v", req.GroupId, req.UserIds), "CONFLICT_ERROR", err)
 			return
 		}
 		app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to add users to group: group_id=%d, user_count=%d", req.GroupId, len(req.UserIds)), "ADD_GRP_FAIL", err)
@@ -453,7 +459,7 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *h
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 }
 
-// ChangeOtherUserPassword handles POST /changeUserPassword
+// ChangeOtherUserPassword handles POST /changeOtherUserPassword
 func (h *UserHandler) ChangeOtherUserPassword(w http.ResponseWriter, r *http.Request) {
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
@@ -472,7 +478,7 @@ func (h *UserHandler) ChangeOtherUserPassword(w http.ResponseWriter, r *http.Req
 
 	// Parse request body
 	var req struct {
-		UserID      int    `json:"userId"`
+		UserID      int    `json:"appUserId"`
 		NewPassword string `json:"newPassword"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -482,7 +488,7 @@ func (h *UserHandler) ChangeOtherUserPassword(w http.ResponseWriter, r *http.Req
 
 	// Validate required fields
 	if req.UserID == 0 || req.NewPassword == "" {
-		app.WriteError(w, http.StatusBadRequest, "userId and newPassword are required", "BRQ0", nil)
+		app.WriteError(w, http.StatusBadRequest, "appUserId and newPassword are required", "BRQ0", nil)
 		return
 	}
 

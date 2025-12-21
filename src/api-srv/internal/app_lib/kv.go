@@ -208,16 +208,18 @@ func (kv *KV) Batch(commands []string) ([]string, error) {
 
 // ShrmplKVClient represents a client for the shrmpl-kv service
 type ShrmplKVClient struct {
-	host string
-	port int
-	conn net.Conn
+	host    string
+	port    int
+	conn    net.Conn
+	timeout time.Duration
 }
 
 // NewShrmplKVClient creates a new shrmpl-kv client
 func NewShrmplKVClient(host string, port int) *ShrmplKVClient {
 	return &ShrmplKVClient{
-		host: host,
-		port: port,
+		host:    host,
+		port:    port,
+		timeout: 2 * time.Second, // 2 second timeout for operations
 	}
 }
 
@@ -231,6 +233,8 @@ func (c *ShrmplKVClient) Connect() error {
 
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
 		_ = tcpConn.SetNoDelay(true)
+		// Set read timeout on the connection
+		_ = tcpConn.SetReadDeadline(time.Now().Add(c.timeout))
 	}
 
 	c.conn = conn
@@ -350,6 +354,11 @@ func (kv *KV) Close() {
 func (c *ShrmplKVClient) sendCommand(cmd string) (string, error) {
 	if c.conn == nil {
 		return "", fmt.Errorf("not connected")
+	}
+
+	// Set read deadline for this operation
+	if tcpConn, ok := c.conn.(*net.TCPConn); ok {
+		_ = tcpConn.SetReadDeadline(time.Now().Add(c.timeout))
 	}
 
 	_, err := c.conn.Write([]byte(cmd + "\n"))

@@ -112,8 +112,8 @@ func (r *UserRepository) GetGrantsForGroups(
 func (r *UserRepository) CreateUser(
 	ctx context.Context, user *model.AppUserModel,
 ) (*model.AppUserModel, error) {
-	if !regexp.MustCompile(`^[a-zA-Z0-9-]+$`).MatchString(user.UserName) {
-		return nil, fmt.Errorf("username must contain only alphanumeric characters")
+	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(user.UserName) {
+		return nil, fmt.Errorf("username must contain only alphanumeric characters, hyphens, and underscores")
 	}
 
 	query := `

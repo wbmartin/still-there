@@ -27,6 +27,7 @@ class TestClient:
         self.jwt_token: Optional[str] = None
         self.csrf_token: Optional[str] = None
         self.created_examples: List[Tuple[int, float]] = []  # (id, update_ts) pairs
+        self.created_users: List[Tuple[int, float]] = []  # (id, update_ts) pairs
 
     def authenticate(self, username: str = "admin", password: str = "admin123!") -> Dict:
         """Authenticate and store JWT/CSRF tokens"""
@@ -79,39 +80,70 @@ class TestClient:
                 headers["X-CSRF-Token"] = self.csrf_token
             kwargs["headers"] = headers
 
+        # For GET requests, append params to url since session.request may not
+        if method.upper() == "GET" and "params" in kwargs:
+            from urllib.parse import urlencode
+            param_str = urlencode(kwargs["params"])
+            if param_str:
+                separator = "&" if "?" in url else "?"
+                url += separator + param_str
+            del kwargs["params"]
+
         return self.session.request(method, url, **kwargs)
 
     def track_example(self, example_id: int, update_ts: float):
         """Track a created example for cleanup"""
         self.created_examples.append((example_id, update_ts))
 
+    def track_user(self, app_user_id: int, update_ts: float):
+        """Track a created user for cleanup"""
+        self.created_users.append((app_user_id, update_ts))
+
     def cleanup_examples(self):
-        """Clean up all tracked examples"""
-        if not self.created_examples:
-            return
+        """Clean up all tracked examples and users"""
+        # Clean up examples
+        if self.created_examples:
+            ids = []
+            update_timestamps = []
 
-        # Group examples for bulk delete
-        ids = []
-        update_timestamps = []
+            for example_id, update_ts in self.created_examples:
+                ids.append(str(example_id))
+                update_timestamps.append(f"{update_ts:.7f}")
 
-        for example_id, update_ts in self.created_examples:
-            ids.append(str(example_id))
-            update_timestamps.append(f"{update_ts:.7f}")
+            try:
+                response = self.make_request("DELETE", "/exampleList",
+                    params={
+                        "exampleIdList": ",".join(ids),
+                        "updateTs": ",".join(update_timestamps)
+                    })
+                if response.status_code == 200:
+                    print(f"Cleaned up {len(self.created_examples)} test examples")
+                else:
+                    print(f"Warning: Example cleanup failed with status {response.status_code}")
+            except Exception as e:
+                print(f"Warning: Example cleanup failed with error: {e}")
+            finally:
+                self.created_examples.clear()
 
-        try:
-            response = self.make_request("DELETE", "/exampleList",
-                params={
-                    "exampleIdList": ",".join(ids),
-                    "updateTs": ",".join(update_timestamps)
-                })
-            if response.status_code == 200:
-                print(f"Cleaned up {len(self.created_examples)} test examples")
-            else:
-                print(f"Warning: Cleanup failed with status {response.status_code}")
-        except Exception as e:
-            print(f"Warning: Cleanup failed with error: {e}")
-        finally:
-            self.created_examples.clear()
+        # Clean up users (single delete for each)
+        if self.created_users:
+            cleaned = 0
+            for app_user_id, update_ts in self.created_users:
+                try:
+                    response = self.make_request("DELETE", "/user",
+                        params={
+                            "appUserId": str(app_user_id),
+                            "updateTs": f"{update_ts:.7f}"
+                        })
+                    if response.status_code == 200:
+                        cleaned += 1
+                    else:
+                        print(f"Warning: Failed to clean user {app_user_id}, status {response.status_code}")
+                except Exception as e:
+                    print(f"Warning: User cleanup failed for {app_user_id}: {e}")
+            if cleaned > 0:
+                print(f"Cleaned up {cleaned} test users")
+            self.created_users.clear()
 
 
 @pytest.fixture(scope="class")
@@ -134,9 +166,6 @@ def test_client():
     # Authenticate once per test session as admin
     client.authenticate()
     yield client
-
-    # Cleanup all created examples
-    client.cleanup_examples()
 
 
 @pytest.fixture(scope="function")

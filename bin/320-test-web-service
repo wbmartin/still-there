@@ -70,12 +70,16 @@ echo "Running integration tests..."
 # Set environment variable for test base URL
 export TEST_BASE_URL="$BASE_URL"
 
+# Generate timestamp for report filename
+TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+REPORT_FILE="tests/reports/integration_test_report_$TIMESTAMP.html"
+
 # Run tests with verbose output and generate HTML report
-python3 -m pytest --maxfail=1 -v --tb=short --html=tests/reports/integration_test_report.html --self-contained-html
+python3 -m pytest --maxfail=1 -v --tb=short --html="$REPORT_FILE" --self-contained-html
 
 echo ""
 echo "✅ Integration tests completed!"
-echo "📊 HTML Report: $PROJECT_ROOT/tests/reports/integration_test_report.html"
+echo "📊 HTML Report: $PROJECT_ROOT/$REPORT_FILE"
 
 # Deactivate virtual environment
 deactivate
