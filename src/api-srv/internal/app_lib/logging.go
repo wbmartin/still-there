@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,6 +29,7 @@ type Logger struct {
 	shrmplLogClient *ShrmplLogClient
 	service         string
 	hostPort        string
+	mu              sync.Mutex
 }
 
 // NewLogger creates a logger that uses shrmpl-log
@@ -94,7 +96,8 @@ func (l *Logger) log(level string, code string, message string, skip int,
 	// Append caller info to message
 	fullMessage := formattedMsg + callerInfo
 
-	// Ensure connection to shrmpl-log
+	// Ensure connection to shrmpl-log (thread-safe)
+	l.mu.Lock()
 	if l.shrmplLogClient == nil {
 		shrmplLogClient, err := NewShrmplLogClient(l.hostPort)
 		if err == nil {
@@ -104,17 +107,24 @@ func (l *Logger) log(level string, code string, message string, skip int,
 			}
 		}
 	}
+	shrmplLogClient := l.shrmplLogClient
+	l.mu.Unlock()
 
 	// Send to shrmpl-log
-	if l.shrmplLogClient != nil {
+	if shrmplLogClient != nil {
 		// fmt.Fprintf(os.Stderr, "DEBUG: Sending log to shrmpl-log: [%s] %s\n",
 		//	level, fullMessage)
-		if err := l.shrmplLogClient.Log(level, l.service, "0000",
+		if err := shrmplLogClient.Log(level, l.service, "0000",
 			fullMessage); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: Failed to send log to shrmpl-log: %s\n",
 				err.Error())
-			l.shrmplLogClient.Close()
-			l.shrmplLogClient = nil
+			shrmplLogClient.Close()
+			// Thread-safe: set to nil while holding lock
+			l.mu.Lock()
+			if l.shrmplLogClient == shrmplLogClient {
+				l.shrmplLogClient = nil
+			}
+			l.mu.Unlock()
 		}
 	}
 

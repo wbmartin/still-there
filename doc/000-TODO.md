@@ -10,21 +10,21 @@
 # API Server
 - It is currently possible for someone with user update rights to add a group ID outside their context and gain access to another context.  The groups need to be checked to make sure they are within the users security context.
 
-- Check on all repo functions, they should be receving the security context from users jwt claims.
+- **Complete Repository Coverage:** Address the "test environment issues" to un-skip the tests for `AddUserListToGroup` and `RemoveUserListFromGroup`.
 
-- page number on the user list page should be part of state so a refresh or link takes to same place.
+- Check on all repo functions, they should be receving the security context from users jwt claims.
 
 - move the database connection string, JWT, and the TOTP code to a shrmple vault.
 
- - The project uses a hand-rolled TCP client to send logs to a custom service (`shrmpl-log`) in a custom, fixed-width text format. This reinvents the wheel of structured logging, is likely not as performant or robust (e.g., reconnection logic is not thread-safe) as standard libraries, and creates a dependency on a non-standard service.
+ - The project uses a hand-rolled TCP client to send logs to a custom service (`shrmpl-log`) in a custom, fixed-width text format. This reinvents the wheel of structured logging, is likely not as performant or robust  as standard libraries, and creates a dependency on a non-standard service.
  
  - The hand-rolled `.env` parser is fragile and doesn't handle common cases like quoted values. Using a standard library like `joho/godotenv` would be more robust.
  
  - The `.golangci.yml` file exists but is empty, defeating its purpose. A good starter project should include a recommended set of linters.
-
+ 
+ - page number on the user list page should be part of state so a refresh or link takes to same place.
 
  - **Introduce Unit Testing:** Use mocking frameworks (e.g., `pgxmock` for the database interface, or define a repository interface and mock it) to test handlers and other logic in isolation.
-- **Complete Repository Coverage:** Address the "test environment issues" to un-skip the tests for `AddUserListToGroup` and `RemoveUserListFromGroup`.
 
 # Architectural Todos
 - **shrmpl-chk and shrmpl-mon** need to add rust web server that listens to a port (may not need to be https) and receives health information, only in the query string. reads a cronitor type schedule and makes slack calls when things go wrong. needs to get slack webhook url from the shrmpl key server
@@ -52,10 +52,6 @@ Please perform a detailed code review of the WEB APP in the src/api-srv folder.
 
 
 
-
-
-
-
 =====
 Thought to be complete
 
@@ -76,3 +72,5 @@ Thought to be complete
 - The `ExecuteWithRetry` logic is an excellent feature for handling transient database errors but is only applied to a single repository method. It should be applied to all external database calls.
 
  - The `CheckPasswordHash` function should use `subtle.ConstantTimeCompare` to prevent potential timing attacks.
+
+ - shrmple log client reconnection logic is not thread-safe)
