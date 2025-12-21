@@ -9,6 +9,7 @@ This document outlines the steps and key points for creating a new entity type i
 - Grants: Create entity-specific grants in grants.go starting at appropriate numbers (e.g., 1001+ for typical new entities, 9000+ for user/security groups. each new entity should start with ###0 for READ, ###1 for CREATE, ###2 UPDATE, ###3 for DELETE so that the 10s place groups them together with room in between for additional grants). Use CRUD verbs: Read, Create, Update, Delete.
 - Separate list and edit pages for better UX and navigation.
  - **CRITICAL**: Always use query string parameters with entity-specific names (e.g., `?appUserId=123`, `?appUserGroupId=456`, `?exampleId=789`) for edit and delete operations instead of path parameters (e.g., `/entity/123`) to maintain URL flexibility and avoid changing route patterns. This ensures consistency and prevents routing issues. Do not use generic names like `?entityId=`; always use the specific entity name followed by `Id`.
+- **Configuration**: Do not supply default values in config parsing code. All required configuration values must be explicitly set in the environment file to ensure correct setup and easier troubleshooting. Defaults can mask configuration issues.
 - Test CRUD operations thoroughly.
 
 ## Naming Conventions

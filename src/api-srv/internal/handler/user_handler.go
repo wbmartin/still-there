@@ -796,9 +796,28 @@ func MFAVerifyHandler(appServices *app_lib.AppServices, userRepo *repository.Use
 			return
 		}
 
+		// Check for account lockout
+		clientIP := getClientIP(r)
+		locked, err := isAccountLocked(appServices.KV, clientIP, userName)
+		if err != nil {
+			app.WriteError(w, http.StatusInternalServerError, "Failed to check account lockout", "LOCKOUT_CHECK_FAIL", err)
+			return
+		}
+		if locked {
+			app.WriteError(w, http.StatusTooManyRequests, "Account is temporarily locked due to too many failed login attempts", "ACCOUNT_LOCKED", nil)
+			return
+		}
+
 		// Validate TOTP code
 		valid := totp.Validate(req.TOTPCode, decryptedSecret)
 		if !valid {
+			// Increment failed attempt counters
+			err := incrementFailedAttempt(appServices.KV, appServices.Config, clientIP, userName)
+			if err != nil {
+				appServices.Logger.Error("FAILED_ATTEMPT_INCR_FAIL",
+					"Failed to increment failed attempts for user: "+userName+", error: "+err.Error(), "username", userName)
+				// Don't fail the request, just log
+			}
 			app.WriteError(w, http.StatusUnauthorized, "Invalid TOTP code", "ITCC", nil)
 			return
 		}

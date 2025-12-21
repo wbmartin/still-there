@@ -10,20 +10,23 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	DatabaseURL           string `json:"database_url"`
-	JWTSecret             string `json:"jwt_secret"`
-	JWTSessionExpireHours int    `json:"jwt_session_expire_hours"`
-	MaxUserReqPerMin      int    `json:"max_user_req_per_min"`
-	MaxUnauthReqPerMin    int    `json:"max_unauth_req_per_min"`
-	LogReceiverHostPort   string `json:"log_receiver_host_port"`
-	KVHostPort            string `json:"kv_host_port"`
-	ServerName            string `json:"server_name"`
-	AppName               string `json:"app_name"`
-	ServerPort            int    `json:"server_port"`
-	EnableTLS             bool   `json:"enable_tls"`
-	TLSCertPath           string `json:"tls_cert_path"`
-	TLSKeyPath            string `json:"tls_key_path"`
-	TOTPEncryptionKey     string `json:"totp_encryption_key"`
+	DatabaseURL                      string `json:"database_url"`
+	JWTSecret                        string `json:"jwt_secret"`
+	JWTSessionExpireHours            int    `json:"jwt_session_expire_hours"`
+	MaxUserReqPerMin                 int    `json:"max_user_req_per_min"`
+	MaxUnauthReqPerMin               int    `json:"max_unauth_req_per_min"`
+	LogReceiverHostPort              string `json:"log_receiver_host_port"`
+	KVHostPort                       string `json:"kv_host_port"`
+	ServerName                       string `json:"server_name"`
+	AppName                          string `json:"app_name"`
+	ServerPort                       int    `json:"server_port"`
+	EnableTLS                        bool   `json:"enable_tls"`
+	TLSCertPath                      string `json:"tls_cert_path"`
+	TLSKeyPath                       string `json:"tls_key_path"`
+	TOTPEncryptionKey                string `json:"totp_encryption_key"`
+	FailedLoginAttemptThreshold      int    `json:"failed_login_attempt_threshold"`
+	FailedLoginAttemptWindowDuration string `json:"failed_login_attempt_window_duration"`
+	FailedLoginLockoutDuration       string `json:"failed_login_lockout_duration"`
 }
 
 // LoadConfig loads configuration from a .env file
@@ -103,6 +106,26 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	config.TLSKeyPath = env["TLS_KEY_PATH"]
 	config.TOTPEncryptionKey = env["TOTP_ENCRYPTION_KEY"]
 
+	if thresholdStr := env["FAILED_LOGIN_ATTEMPT_THRESHOLD"]; thresholdStr != "" {
+		if val, err := strconv.Atoi(thresholdStr); err == nil {
+			config.FailedLoginAttemptThreshold = val
+		} else {
+			return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_THRESHOLD must be a valid integer")
+		}
+	} else {
+		return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_THRESHOLD is required")
+	}
+
+	config.FailedLoginAttemptWindowDuration = env["FAILED_LOGIN_ATTEMPT_WINDOW_DURATION"]
+	if config.FailedLoginAttemptWindowDuration == "" {
+		return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_WINDOW_DURATION is required")
+	}
+
+	config.FailedLoginLockoutDuration = env["FAILED_LOGIN_LOCKOUT_DURATION"]
+	if config.FailedLoginLockoutDuration == "" {
+		return nil, fmt.Errorf("FAILED_LOGIN_LOCKOUT_DURATION is required")
+	}
+
 	// Validate required configuration
 	if config.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
@@ -132,6 +155,18 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	}
 	if config.TOTPEncryptionKey == "" {
 		return nil, fmt.Errorf("TOTP_ENCRYPTION_KEY is required")
+	}
+
+	if config.FailedLoginAttemptThreshold <= 0 {
+		return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_THRESHOLD must be greater than 0")
+	}
+
+	if config.FailedLoginAttemptWindowDuration == "" {
+		return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_WINDOW_DURATION is required")
+	}
+
+	if config.FailedLoginLockoutDuration == "" {
+		return nil, fmt.Errorf("FAILED_LOGIN_LOCKOUT_DURATION is required")
 	}
 
 	return &config, nil

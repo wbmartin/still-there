@@ -5,13 +5,103 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/repository"
 )
+
+// getClientIP extracts the client IP address from the request, checking X-Forwarded-For header first
+func getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header (for proxies)
+	xff := r.Header.Get("X-Forwarded-For")
+	if xff != "" {
+		// Take the first IP in the list
+		ips := strings.Split(xff, ",")
+		ip := strings.TrimSpace(ips[0])
+		if net.ParseIP(ip) != nil {
+			return ip
+		}
+	}
+
+	// Fall back to RemoteAddr
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr // fallback if parsing fails
+	}
+	return ip
+}
+
+// isAccountLocked checks if the IP or username is currently locked out
+func isAccountLocked(kv app_lib.ThisAppKVInterface, ip, username string) (bool, error) {
+	ipLockKey := "loginlock-ip-" + ip
+	userLockKey := "loginlock-user-" + username
+
+	// Check if lockout keys exist
+	ipVal, err := kv.Get(ipLockKey)
+	if err != nil {
+		return false, err
+	}
+	if ipVal == "1" {
+		return true, nil
+	}
+
+	userVal, err := kv.Get(userLockKey)
+	if err != nil {
+		return false, err
+	}
+	return userVal == "1", nil
+}
+
+// incrementFailedAttempt increments the failed attempt counters and sets lockout if threshold exceeded
+func incrementFailedAttempt(kv app_lib.ThisAppKVInterface, config *app_lib.Config, ip, username string) error {
+	ipCounterKey := "loginfail-ip-" + ip
+	userCounterKey := "loginfail-user-" + username
+
+	// Batch increment both counters with TTL
+	commands := []string{
+		fmt.Sprintf("INCR %s %s", ipCounterKey, config.FailedLoginAttemptWindowDuration),
+		fmt.Sprintf("INCR %s %s", userCounterKey, config.FailedLoginAttemptWindowDuration),
+	}
+
+	results, err := kv.Batch(commands)
+	if err != nil {
+		return err
+	}
+
+	// Parse results to int
+	ipCount, err := strconv.Atoi(results[0])
+	if err != nil {
+		return err
+	}
+	userCount, err := strconv.Atoi(results[1])
+	if err != nil {
+		return err
+	}
+
+	// Check if either counter exceeded threshold
+	if ipCount >= config.FailedLoginAttemptThreshold {
+		ipLockKey := "loginlock-ip-" + ip
+		err = kv.Set(ipLockKey, "1", config.FailedLoginLockoutDuration)
+		if err != nil {
+			return err
+		}
+	}
+
+	if userCount >= config.FailedLoginAttemptThreshold {
+		userLockKey := "loginlock-user-" + username
+		err = kv.Set(userLockKey, "1", config.FailedLoginLockoutDuration)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 // AuthHandler handles initial authentication (username/password)
 func AuthHandler(
@@ -36,6 +126,18 @@ func AuthHandler(
 		appServices.Logger.Debug("AUTH_REQ_PRSE",
 			"Auth request parsed for user: "+req.UserName, "username", req.UserName)
 
+		// Check for account lockout
+		clientIP := getClientIP(r)
+		locked, err := isAccountLocked(appServices.KV, clientIP, req.UserName)
+		if err != nil {
+			app.WriteError(w, http.StatusInternalServerError, "Failed to check account lockout", "LOCKOUT_CHECK_FAIL", err)
+			return
+		}
+		if locked {
+			app.WriteError(w, http.StatusTooManyRequests, "Account is temporarily locked due to too many failed login attempts", "ACCOUNT_LOCKED", nil)
+			return
+		}
+
 		// Read user from database
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), req.UserName)
 		if err != nil {
@@ -49,6 +151,13 @@ func AuthHandler(
 		if !app_lib.CheckPasswordHash(req.Password, user.PwHash) {
 			appServices.Logger.Warn("PWD_VFY_FAIL",
 				"Password verification failed for user: "+req.UserName)
+			// Increment failed attempt counters
+			err := incrementFailedAttempt(appServices.KV, appServices.Config, clientIP, req.UserName)
+			if err != nil {
+				appServices.Logger.Error("FAILED_ATTEMPT_INCR_FAIL",
+					"Failed to increment failed attempts for user: "+req.UserName+", error: "+err.Error(), "username", req.UserName)
+				// Don't fail the request, just log
+			}
 			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "INVALID_CREDS", nil)
 			return
 		}
