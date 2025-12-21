@@ -39,7 +39,7 @@ func main() {
 	// Create the logger (it will handle shrmpl-log internally)
 	logger := app_lib.NewLogger(config)
 	defer logger.Close()
-	logger.Info("INI0", "Starting API server", "username", "app-root")
+	logger.Info("SERVER_INIT", "Starting API server", "username", "app-root")
 
 	// Initialize database
 	dbPool, err := pgxpool.New(context.Background(), config.DatabaseURL)
@@ -50,7 +50,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer dbPool.Close()
-	logger.Info("DBI1", "Database connected", "username", "app-root")
+	logger.Info("DB_INIT", "Database connected", "username", "app-root")
 
 	// Test the connection
 	if err := dbPool.Ping(context.Background()); err != nil {
@@ -160,7 +160,7 @@ func main() {
 	// Start server in goroutine
 	go func() {
 		if config.EnableTLS {
-			logger.Info("STR0",
+			logger.Info("SERVER_START",
 				fmt.Sprintf("Server starting on HTTPS port: %d", config.ServerPort),
 				"username", "app-root")
 			err := server.ListenAndServeTLS(config.TLSCertPath, config.TLSKeyPath)
@@ -171,7 +171,7 @@ func main() {
 				os.Exit(1)
 			}
 		} else {
-			logger.Info("STR0",
+			logger.Info("SERVER_START",
 				fmt.Sprintf("Server starting on HTTP port: %d", config.ServerPort),
 				"username", "app-root")
 			err := server.ListenAndServe()
@@ -189,7 +189,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	logger.Info("SHD0", "Shutting down server", "username", "app-root")
+	logger.Info("SERVER_SHUTDOWN", "Shutting down server", "username", "app-root")
 
 	// Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -202,5 +202,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger.Info("STP0", "Server stopped", "username", "app-root")
+	logger.Info("SERVER_STOP", "Server stopped", "username", "app-root")
 }

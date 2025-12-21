@@ -11,13 +11,13 @@ import (
 func HealthHandler(deps *app_lib.AppServices) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := "PreAuth"
-		deps.Logger.Info("RQST", "Health check requested", "username", username)
+		deps.Logger.Info("HEALTH_REQUEST", "Health check requested", "username", username)
 
 		// Simple health check - just return OK
 		data := map[string]string{"status": "ok"}
 		wrapper := model.DataWrapper{Data: data}
 		writeJSON(w, http.StatusOK, wrapper, deps.Logger)
 
-		deps.Logger.Info("RESP", "Health check completed", "username", username)
+		deps.Logger.Info("HEALTH_RESPONSE", "Health check completed", "username", username)
 	}
 }

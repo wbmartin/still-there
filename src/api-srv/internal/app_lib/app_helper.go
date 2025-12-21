@@ -287,7 +287,7 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 
 	count, err := sh.appServices.KV.Incr(shrmplKey, "1min")
 	if err != nil {
-		sh.appServices.Logger.Info("RLF0",
+		sh.appServices.Logger.Info("RATE_LIMIT_FAIL",
 			"Rate limit check encountered KV error, failing open ("+
 				shrmplKey+") "+err.Error())
 		// Fail open on shrmpl-kv errors
@@ -295,7 +295,7 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 	}
 
 	if count > limit {
-		sh.appServices.Logger.Warn("RLE0",
+		sh.appServices.Logger.Warn("RATE_LIMIT_EXCEED",
 			fmt.Sprintf("Rate limit exceeded - key: %s, count: %d, limit: %d",
 				shrmplKey, count, limit))
 		sh.failAndRespond(http.StatusTooManyRequests, "Rate limit exceeded")
@@ -343,7 +343,7 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 	// Execute batch
 	results, err := sh.appServices.KV.Batch(commands)
 	if err != nil {
-		sh.appServices.Logger.Info("RLF0",
+		sh.appServices.Logger.Info("RATE_LIMIT_FAIL",
 			"Batch check failed, failing open: "+err.Error())
 		// Fail open on errors
 		return sh

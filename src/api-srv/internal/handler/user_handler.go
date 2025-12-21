@@ -102,7 +102,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info("USR_LIST_STRT", "ReadUserList invoked")
+	app.Info("USR_LIST_START", "ReadUserList invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -112,7 +112,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
 		return
 	}
-	app.Info("USR_LIST_PARAMS", fmt.Sprintf("appUserIdList param: %s, idList: %v", r.URL.Query().Get("appUserIdList"), idList))
+	app.Info("USR_LIST_PARAMS", fmt.Sprintf("ReadUserList with appUserIdList='%s', idCount=%d", r.URL.Query().Get("appUserIdList"), len(idList)))
 
 	// Parse optional afterUpdateTs query parameter
 	afterUpdateTs, err := GetFloatFromQuery(r, "afterUpdateTs")
@@ -138,7 +138,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 	wrapper := model.DataWrapper{Data: users}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 
-	app.Info("USR_LIST_READ_DONE", "User list read completed")
+	app.Info("USR_LIST_DONE", "User list read completed")
 }
 
 // RetrieveGrantList handles GET /grantList
@@ -154,7 +154,7 @@ func (h *UserHandler) RetrieveGrantList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	app.Info("RD_GRT_LST_ST", "ReadGrantList invoked")
+	app.Info("GRT_LIST_START", "ReadGrantList invoked")
 
 	// Convert GrantIDToShortCodeMap to array of objects
 	grantList := make([]map[string]interface{}, 0, len(model.GrantIDToShortCodeMap))
@@ -168,7 +168,7 @@ func (h *UserHandler) RetrieveGrantList(w http.ResponseWriter, r *http.Request) 
 	app.Debug("GRT_LST_READ", "Grant list read")
 	wrapper := model.DataWrapper{Data: grantList}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("GRT_LST_RD_DN", "Grant list read completed")
+	app.Info("GRT_LIST_DONE", "Grant list read completed")
 }
 
 // CreateUser handles POST /user
@@ -184,7 +184,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info("UCS0", "CreateUser invoked")
+	app.Info("USR_CREATE_START", "CreateUser invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -248,7 +248,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	app.Debug("UCD0", "User created")
 	wrapper := model.DataWrapper{Data: createdUser}
 	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
-	app.Info("UCD1", "User creation completed")
+	app.Info("USR_CREATE_DONE", fmt.Sprintf("User creation completed for userId=%d, username='%s'", createdUser.AppUserID, createdUser.UserName))
 }
 
 // UpdateUser handles PUT /user
@@ -264,7 +264,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info("UUS0", "UpdateUser invoked")
+	app.Info("USR_UPDATE_START", "UpdateUser invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -282,6 +282,8 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("appUserId and userName are required for update: appUserId=%d, userName='%s'", user.AppUserID, user.UserName), "BRQ0", nil)
 		return
 	}
+
+	app.Info("USR_UPDATE_PARAMS", fmt.Sprintf("UpdateUser for userId=%d, username='%s'", user.AppUserID, user.UserName))
 
 	// Set update metadata
 	clientUpdateTS := user.UpdateTS
@@ -307,7 +309,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	app.Debug("UUD0", "User updated")
 	wrapper := model.DataWrapper{Data: user}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("UUD1", "User update completed")
+	app.Info("USR_UPDATE_DONE", fmt.Sprintf("User update completed for userId=%d, username='%s'", user.AppUserID, user.UserName))
 }
 
 // DeleteUser handles DELETE /user
@@ -323,7 +325,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info("UDS0", "DeleteUser invoked")
+	app.Info("USR_DELETE_START", "DeleteUser invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -333,6 +335,8 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
 		return
 	}
+
+	app.Info("USR_DELETE_PARAMS", fmt.Sprintf("DeleteUser for userId=%d", userID))
 
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
@@ -358,7 +362,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{"message": "User deleted successfully", "appUserId": deletedID}
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("UDD0", "User deletion completed")
+	app.Info("USR_DELETE_DONE", fmt.Sprintf("User deletion completed for userId=%d", deletedID))
 }
 
 // AddUserListToGroupHandler handles POST /addUserListToGroup

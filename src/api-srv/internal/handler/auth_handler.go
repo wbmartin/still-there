@@ -151,7 +151,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 			return
 		}
 
-		appServices.Logger.Info("RFRSH_START", "Refresh request started", "username", app.GetUsername())
+		appServices.Logger.Info("REFRESH_START", "Refresh request started", "username", app.GetUsername())
 
 		jwtClaims := app.GetClaims()
 
@@ -208,7 +208,7 @@ func RefreshHandler(appServices *app_lib.AppServices, userRepo *repository.UserR
 		csrfToken := sessionID[len(sessionID)-3:]
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		appServices.Logger.Info("RFRSH_SUCCESS", "Refresh successful for user: "+user.UserName, "username", user.UserName)
+		appServices.Logger.Info("REFRESH_SUCCESS", "Refresh successful for user: "+user.UserName, "username", user.UserName)
 	}
 }
 
@@ -235,7 +235,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 			return
 		}
 
-		appServices.Logger.Info("CHG_CTX_START", "Change security context request started", "username", app.GetUsername())
+		appServices.Logger.Info("CHANGE_CTX_START", "Change security context request started", "username", app.GetUsername())
 
 		jwtClaims := app.GetClaims()
 		userName := jwtClaims.Subject
@@ -307,7 +307,7 @@ func ChangeSecurityContextHandler(appServices *app_lib.AppServices, userRepo *re
 
 		wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		appServices.Logger.Info("CHG_CTX_SUCC", "Security context changed for user: "+userName+" to context: "+strconv.Itoa(req.SecurityContext), "username", userName)
+		appServices.Logger.Info("CHANGE_CTX_SUCCESS", "Security context changed for user: "+userName+" to context: "+strconv.Itoa(req.SecurityContext), "username", userName)
 	}
 }
 
@@ -339,7 +339,7 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 		})
 
 		w.WriteHeader(http.StatusOK)
-		appServices.Logger.Info("LOGOFF_SUCC", "Logoff successful", "username", app.GetUsername())
+		appServices.Logger.Info("LOGOFF_SUCCESS", "Logoff successful", "username", app.GetUsername())
 	}
 }
 
@@ -357,7 +357,7 @@ func ChangeOwnPasswordHandler(appServices *app_lib.AppServices, userRepo *reposi
 			return
 		}
 
-		appServices.Logger.Info("CHG_PW_START", "Change own password request started", "username", app.GetUsername())
+		appServices.Logger.Info("CHANGE_PW_START", "Change own password request started", "username", app.GetUsername())
 
 		jwtClaims := app.GetClaims()
 
@@ -412,7 +412,7 @@ func ChangeOwnPasswordHandler(appServices *app_lib.AppServices, userRepo *reposi
 			return
 		}
 
-		appServices.Logger.Info("CHG_PW_START", "Password changed successfully for user: "+jwtClaims.Subject, "username", jwtClaims.Subject)
+		appServices.Logger.Info("CHANGE_PW_SUCCESS", "Password changed successfully for user: "+jwtClaims.Subject, "username", jwtClaims.Subject)
 
 		wrapper := model.DataWrapper{Data: map[string]string{"message": "Password changed successfully"}}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)

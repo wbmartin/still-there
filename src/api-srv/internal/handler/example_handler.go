@@ -128,7 +128,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	app.Debug("EX_CREATED", fmt.Sprintf("Example created: %+v", createdExample))
 	wrapper := model.DataWrapper{Data: createdExample}
 	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
-	app.Info("EX_CR_DONE", "Example creation completed")
+	app.Info("EX_CR_DONE", fmt.Sprintf("Example creation completed for exampleId=%d", createdExample.ExampleID))
 }
 
 // UpdateExample handles PUT /example
@@ -163,11 +163,13 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate security context
-	if example.SecurityContext != 0 && example.SecurityContext != jwtClaims.SecurityContext {
-		app.WriteError(w, http.StatusForbidden, fmt.Sprintf("Invalid security context for update example: example_id=%d, provided=%d, expected=%d", example.ExampleID, example.SecurityContext, jwtClaims.SecurityContext), "SEC_CTX_INVALID", nil)
+	// Validate required fields
+	if example.ExampleID == 0 || example.ExampleText == "" {
+		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("example_id and example_text are required for update: example_id=%d, example_text='%s'", example.ExampleID, example.ExampleText), "BAD_REQUEST", nil)
 		return
 	}
+
+	app.Info("EX_UP_PARAMS", fmt.Sprintf("UpdateExample for exampleId=%d", example.ExampleID))
 
 	// Set update metadata
 	clientUpdateTS := example.UpdateTS
@@ -197,7 +199,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	app.Debug("EX_UPDATED", fmt.Sprintf("Example updated: %+v", example))
 	wrapper := model.DataWrapper{Data: example}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("EX_UP_DONE", "Example update completed")
+	app.Info("EX_UP_DONE", fmt.Sprintf("Example update completed for exampleId=%d", example.ExampleID))
 }
 
 // DeleteExample handles DELETE /example
@@ -223,6 +225,8 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		app.WriteError(w, http.StatusBadRequest, err.Error(), "PARSE_QUERY_FAIL", nil)
 		return
 	}
+
+	app.Info("EX_DEL_PARAMS", fmt.Sprintf("DeleteExample for exampleId=%d", exampleID))
 
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
@@ -252,7 +256,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{"message": "Example deleted successfully", "example_id": deletedID}
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("EX_DEL_DONE", "Example deletion completed")
+	app.Info("EX_DEL_DONE", fmt.Sprintf("Example deletion completed for exampleId=%d", deletedID))
 }
 
 // RetrieveExampleList handles GET /exampleList?exampleIdList={comma-separated} (optional, if empty returns all)

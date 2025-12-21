@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -117,7 +118,7 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 	app.Debug("UGRP_CREATED", "User group created")
 	wrapper := model.DataWrapper{Data: createdGroup}
 	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
-	app.Info("CR_UGRP_DONE", "User group creation completed")
+	app.Info("CR_UGRP_DONE", fmt.Sprintf("User group creation completed for groupId=%d, groupName='%s'", createdGroup.AppUserGroupID, createdGroup.GroupName))
 }
 
 // UpdateAppUserGroup handles PUT /userGroup
@@ -154,6 +155,8 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 		return
 	}
 
+	app.Info("UP_UGRP_PARAMS", fmt.Sprintf("UpdateUserGroup for groupId=%d, groupName='%s'", group.AppUserGroupID, group.GroupName))
+
 	// Set update metadata
 	clientUpdateTS := group.UpdateTS
 	now := CurrentTimestamp()
@@ -180,7 +183,7 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 	app.Debug("UGRP_UPDATED", "User group updated")
 	wrapper := model.DataWrapper{Data: group}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("UP_UGRP_DONE", "User group update completed")
+	app.Info("UP_UGRP_DONE", fmt.Sprintf("User group update completed for groupId=%d, groupName='%s'", group.AppUserGroupID, group.GroupName))
 }
 
 // DeleteAppUserGroup handles DELETE /userGroup
@@ -214,6 +217,8 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 		return
 	}
 
+	app.Info("DEL_UGRP_PARAMS", fmt.Sprintf("DeleteUserGroup for groupId=%d", groupID))
+
 	// Delete user group with optimistic locking and assignment check
 	now := CurrentTimestamp()
 	deletedID, err := h.appUserGroupRepo.DeleteAppUserGroup(r.Context(), groupID, jwtClaims.SecurityContext, updateTS, now, jwtClaims.UserID)
@@ -237,5 +242,5 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 		"message": "User group deleted successfully", "userGroupId": deletedID}
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("DEL_UGRP_DONE", "User group deletion completed")
+	app.Info("DEL_UGRP_DONE", fmt.Sprintf("User group deletion completed for groupId=%d", deletedID))
 }
