@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Table, Button, Title, Group, Pagination } from "@mantine/core";
+import { Table, Button, Title, Group, Pagination, Container } from "@mantine/core";
 import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
@@ -110,7 +110,7 @@ function UserAdminPage() {
   };
 
   return (
-    <div style={{ padding: "2rem" }}>
+    <Container p="2rem">
       <Group justify="space-between" mb="lg">
         <Title order={1}>User Admin</Title>
         <Button
@@ -209,7 +209,7 @@ function UserAdminPage() {
         onCancel={handleDeleteCancel}
         entityType="user"
       />
-    </div>
+    </Container>
   );
 }
 

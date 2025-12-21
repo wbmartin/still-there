@@ -8,6 +8,7 @@ import {
   Pagination,
   Badge,
   Flex,
+  Container,
 } from "@mantine/core";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAuthStore } from "../stores/auth-store";
@@ -85,7 +86,7 @@ function AppUserGroupListPage() {
   const canDeleteUserGroup = grantList.includes(grants.DELETE_USER_GROUP);
 
   return (
-    <div style={{ padding: "2rem" }}>
+    <Container p="2rem">
       <Group justify="space-between" mb="lg">
         <Title order={1}>User Group Admin</Title>
         {canCreateUserGroup && (
@@ -160,7 +161,7 @@ function AppUserGroupListPage() {
         onCancel={handleDeleteCancel}
         entityType="user group"
       />
-    </div>
+    </Container>
   );
 }
 

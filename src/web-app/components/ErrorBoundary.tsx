@@ -1,6 +1,6 @@
 import React, { Component } from 'react';
 import type { ReactNode } from 'react';
-import { Alert, Button, Collapse, Group, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Collapse, Group, Stack, Text, Title, Container } from '@mantine/core';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -61,7 +61,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       const { error, reportingStatus } = this.state;
 
       return (
-        <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
+        <Container p="2rem" maw="600px" m="0 auto">
           <Stack gap="lg">
             <Title order={1} ta="center">Something went wrong</Title>
 
@@ -111,7 +111,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
               </Button>
             </Group>
           </Stack>
-        </div>
+        </Container>
       );
     }
 

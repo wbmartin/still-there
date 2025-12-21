@@ -9,6 +9,7 @@ import {
   Checkbox,
   MultiSelect,
   Text,
+  Container,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { modals } from "@mantine/modals";
@@ -242,7 +243,7 @@ function UserEditPage() {
   }));
 
   return (
-    <div style={{ padding: "2rem" }}>
+    <Container p="2rem">
       <Title order={1} mb="lg">
         {isNew ? "Add User" : "Edit User"}
       </Title>
@@ -384,7 +385,7 @@ function UserEditPage() {
         loading={passwordChangeLoading}
         error={passwordChangeError}
       />
-    </div>
+    </Container>
   );
 }
 

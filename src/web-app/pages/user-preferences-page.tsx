@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Title, Group, Text, Select, Alert } from "@mantine/core";
+import { Button, Title, Group, Text, Select, Alert, Container, Stack } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/auth-store";
@@ -94,7 +94,7 @@ function UserPreferencesPage() {
   }));
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "600px" }}>
+    <Container p="2rem" maw="600px">
       <Title order={1} mb="lg">
         User Preferences
       </Title>
@@ -110,7 +110,7 @@ function UserPreferencesPage() {
       </Group>
 
       {availableSecurityContexts.length > 1 && (
-        <div>
+        <Stack>
           <Title order={3} mb="sm">
             Change Security Context
           </Title>
@@ -122,7 +122,7 @@ function UserPreferencesPage() {
                 setSelectedContext(value || securityContext.toString())
               }
               placeholder="Select context"
-              style={{ minWidth: "200px" }}
+              miw="200px"
             />
             <Button
               onClick={() => void handleContextChange()}
@@ -133,17 +133,17 @@ function UserPreferencesPage() {
             </Button>
           </Group>
           <Text size="sm" c="dimmed">
-            Changing context will update your permissions and available
-            features.
-          </Text>
-        </div>
+             Changing context will update your permissions and available
+             features.
+         </Text>
+       </Stack>
       )}
 
       {availableSecurityContexts.length <= 1 && (
         <Text c="dimmed">No additional security contexts available.</Text>
       )}
 
-      <div style={{ marginTop: "2rem" }}>
+      <Stack mt="2rem">
         <Title order={3} mb="sm">
           Password Management
         </Title>
@@ -156,9 +156,9 @@ function UserPreferencesPage() {
           Change your account password. You will need to enter your current
           password.
         </Text>
-      </div>
+      </Stack>
 
-      <div style={{ marginTop: "2rem" }}>
+      <Stack mt="2rem">
         <Title order={3} mb="sm">
           Cache Management
         </Title>
@@ -171,7 +171,7 @@ function UserPreferencesPage() {
           Clear all cached data. This will force fresh data to be loaded on next
           access.
         </Text>
-      </div>
+      </Stack>
 
       {error && (
         <Alert color="red" mt="md">
@@ -192,7 +192,7 @@ function UserPreferencesPage() {
         loading={passwordChangeLoading}
         error={passwordChangeError}
       />
-    </div>
+    </Container>
   );
 }
 

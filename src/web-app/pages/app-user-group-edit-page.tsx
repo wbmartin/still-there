@@ -10,6 +10,8 @@ import {
   MultiSelect,
   List,
   Text,
+  Container,
+  Stack,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
@@ -193,7 +195,7 @@ function AppUserGroupEditPage() {
   };
 
   return (
-    <div style={{ padding: "2rem" }}>
+    <Container p="2rem">
       <Title order={1} mb="lg">
         Edit User Group
       </Title>
@@ -231,7 +233,7 @@ function AppUserGroupEditPage() {
       </form>
 
       {/* User Management Section */}
-      <div style={{ marginTop: "2rem" }}>
+      <Stack mt="2rem">
         <Title order={2} mb="md">
           Group Members
         </Title>
@@ -272,7 +274,7 @@ function AppUserGroupEditPage() {
             Remove Users
           </Button>
         </Group>
-      </div>
+      </Stack>
 
       <DeleteConfirmModal
         isOpen={deleteModalOpen}
@@ -287,7 +289,7 @@ function AppUserGroupEditPage() {
         mode={userModalMode}
         onConfirm={handleUserModalConfirm}
       />
-    </div>
+    </Container>
   );
 }
 

@@ -1,5 +1,5 @@
 import { createBrowserRouter, RouterProvider, Outlet, Link, useNavigate } from 'react-router-dom'
-import { NavLink, Button, Stack } from '@mantine/core'
+import { NavLink, Button, Stack, Center, Container, Flex } from '@mantine/core'
 import Login from './pages/login'
 import Dashboard from './pages/dashboard'
 import ExampleListPage from './pages/example-list-page'
@@ -82,27 +82,29 @@ function AppLayout() {
   const canManageUserGroups = grantList.includes(grants.CREATE_USER_GROUP);
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-      <div style={{ display: 'flex', maxWidth: '1024px', width: '100%' }}>
-        {authState === 'YES' && (
-        <nav style={{ width: '200px', padding: '1rem', borderRight: '1px solid #ccc' }}>
-          <Stack gap="xs">
-            <NavLink component={Link} to={`/${ROUTES.DASHBOARD}`} label="Dashboard" />
-            <NavLink component={Link} to={`/${ROUTES.EXAMPLE_LIST}`} label="Examples" />
-            {canManageUsers && <NavLink component={Link} to={`/${ROUTES.APP_USER_LIST}`} label="User Admin" />}
-            {canManageUserGroups && <NavLink component={Link} to={`/${ROUTES.APP_USER_GROUP_LIST}`} label="User Groups" />}
-            <NavLink component={Link} to={`/${ROUTES.USER_PREFERENCES}`} label="Preferences" />
-             <Button variant="subtle" onClick={() => void handleLogout()} fullWidth style={{ justifyContent: 'flex-start' }}>
-               Logout
-             </Button>
-           </Stack>
-        </nav>
-        )}
-        <main style={{ flex: 1, padding: '1rem' }}>
-          <Outlet />
-        </main>
-      </div>
-    </div>
+    <Center w="100%">
+      <Container size="xl" w="100%">
+        <Flex>
+          {authState === 'YES' && (
+            <nav style={{ width: '200px', padding: '1rem', borderRight: '1px solid var(--mantine-color-default-border)' }}>
+              <Stack gap="xs">
+                <NavLink component={Link} to={`/${ROUTES.DASHBOARD}`} label="Dashboard" />
+                <NavLink component={Link} to={`/${ROUTES.EXAMPLE_LIST}`} label="Examples" />
+                {canManageUsers && <NavLink component={Link} to={`/${ROUTES.APP_USER_LIST}`} label="User Admin" />}
+                {canManageUserGroups && <NavLink component={Link} to={`/${ROUTES.APP_USER_GROUP_LIST}`} label="User Groups" />}
+                <NavLink component={Link} to={`/${ROUTES.USER_PREFERENCES}`} label="Preferences" />
+                <Button variant="subtle" onClick={() => void handleLogout()} fullWidth justify="flex-start">
+                  Logout
+                </Button>
+              </Stack>
+            </nav>
+          )}
+          <main style={{ flex: 1, padding: '1rem' }}>
+            <Outlet />
+          </main>
+        </Flex>
+      </Container>
+    </Center>
   )
 }
 

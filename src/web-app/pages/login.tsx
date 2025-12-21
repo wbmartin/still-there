@@ -9,6 +9,7 @@ import {
   Container,
   Text,
   Anchor,
+  Center,
 } from "@mantine/core";
 import { useAuthStore } from "../stores/auth-store";
 import { notifications } from "@mantine/notifications";
@@ -54,14 +55,7 @@ function Login() {
   };
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -50%)",
-      }}
-    >
+    <Center style={{ height: '100vh' }}>
       <Container size="sm">
         <Paper shadow="md" p="xl">
           <Title order={2} mb="md" ta="center">
@@ -102,7 +96,7 @@ function Login() {
         opened={registrationModalOpened}
         onClose={() => setRegistrationModalOpened(false)}
       />
-    </div>
+    </Center>
   );
 }
 

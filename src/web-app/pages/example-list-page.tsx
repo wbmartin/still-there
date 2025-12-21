@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Table, Button, Title, Group, Pagination } from "@mantine/core";
+import { Table, Button, Title, Group, Pagination, Container } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
@@ -111,7 +111,7 @@ function ExampleListPage() {
   };
 
   return (
-    <div style={{ padding: "2rem" }}>
+    <Container p="2rem">
       <Group justify="space-between" mb="lg">
         <Title order={1}>Examples</Title>
         <Button
@@ -200,7 +200,7 @@ function ExampleListPage() {
         onCancel={handleDeleteCancel}
         entityType="example"
       />
-    </div>
+    </Container>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Group, Text, CopyButton, ActionIcon, Tooltip } from "@mantine/core";
+import { Button, Group, Text, CopyButton, ActionIcon, Tooltip, Stack } from "@mantine/core";
 import { IconCopy, IconCheck } from "@tabler/icons-react";
 import { generateStrongPassword } from "../utils/password-utils";
 
@@ -19,9 +19,9 @@ export function PasswordGenerator({
   };
 
   return (
-    <div>
-    <div>Password Generator Component</div>
-    <Group>
+    <Stack>
+      <Text>Password Generator Component</Text>
+      <Group>
       <Button variant="filled" onClick={handleGenerate}>
         Generate Strong Password
       </Button>
@@ -42,6 +42,6 @@ export function PasswordGenerator({
         </Group>
       )}
     </Group>
-    </div>
+    </Stack>
   );
 }
