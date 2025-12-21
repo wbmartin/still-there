@@ -44,6 +44,15 @@ To run the web app:
 ./bin/220-run-web-app
 ```
 
+To build and package the web app for deployment:
+```
+./bin/222-build-web-app
+```
+- Builds the web app using `npm run build`
+- Creates a timestamped tar.gz archive (e.g., `web-app_20251221_074106.tar.gz`)
+- Archive contains all built files ready for deployment
+- Copy the archive to your web server and extract with `tar -xzf filename.tar.gz`
+
 ## Testing Commands
 
 To test the api server (Unit tests):

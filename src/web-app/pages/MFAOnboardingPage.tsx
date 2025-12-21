@@ -19,7 +19,7 @@ import { notifications } from "@mantine/notifications";
 import { apiRequest } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { useAuthStore } from "../stores/auth-store";
-import { LoginResponse } from "../types/auth-type";
+import type { LoginResponse } from "../types/auth-type";
 
 function MFAOnboardingPage() {
   const [secret, setSecret] = useState("");
