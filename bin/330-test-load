@@ -42,7 +42,10 @@ else
 fi
 
 # Set default arguments
-DEFAULT_ARGS="--base-url $TEST_BASE_URL --duration 1m"
+DEFAULT_ARGS="--base-url $TEST_BASE_URL --iterations 80 --concurrency 5"
+
+#--duration 10s
+# --iterations 800
 
 # Run the load test with defaults plus any additional arguments
 echo "Running load test with base URL: $TEST_BASE_URL"

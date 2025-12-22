@@ -41,20 +41,21 @@ func isAccountLocked(kv app_lib.ThisAppKVInterface, ip, username string) (bool, 
 	ipLockKey := "loginlock-ip-" + ip
 	userLockKey := "loginlock-user-" + username
 
-	// Check if lockout keys exist
-	ipVal, err := kv.Get(ipLockKey)
+	// Batch check both lockout keys
+	commands := []string{
+		"GET " + ipLockKey,
+		"GET " + userLockKey,
+	}
+	results, err := kv.Batch(commands)
 	if err != nil {
 		return false, err
-	}
-	if ipVal == "1" {
-		return true, nil
 	}
 
-	userVal, err := kv.Get(userLockKey)
-	if err != nil {
-		return false, err
-	}
-	return userVal == "1", nil
+	// Check if either is locked (value "1")
+	ipLocked := len(results) > 0 && results[0] == "1"
+	userLocked := len(results) > 1 && results[1] == "1"
+
+	return ipLocked || userLocked, nil
 }
 
 // incrementFailedAttempt increments the failed attempt counters and sets lockout if threshold exceeded
