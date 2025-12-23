@@ -33,11 +33,11 @@ func main() {
 	}
 
 	// Initialize key-value store
-	kv := app_lib.NewKV(config)
+	kv := app_lib.NewKV(config.KVHostPort)
 	defer kv.Close()
 
 	// Create the logger (it will handle shrmpl-log internally)
-	logger := app_lib.NewLogger(config)
+	logger := app_lib.NewLogger(config.ServerName, config.LogReceiverHostPort)
 	defer logger.Close()
 	logger.Info("SERVER_INIT", "Starting API server", "username", "app-root")
 

@@ -33,11 +33,11 @@ type Logger struct {
 }
 
 // NewLogger creates a logger that uses shrmpl-log
-func NewLogger(config *Config) *Logger {
+func NewLogger(serverName, logReceiverHostPort string) *Logger {
 	fmt.Fprintf(os.Stderr, "DEBUG: Creating shrmpl-log client for %s\n",
-		config.LogReceiverHostPort)
+		logReceiverHostPort)
 	// Create shrmpl-log client internally
-	shrmplLogClient, err := NewShrmplLogClient(config.LogReceiverHostPort)
+	shrmplLogClient, err := NewShrmplLogClient(logReceiverHostPort)
 	if err != nil {
 		// If we can't create the client, we'll log to console and continue
 		// The Log method will handle the case where shrmplLogClient is nil
@@ -45,8 +45,8 @@ func NewLogger(config *Config) *Logger {
 			err.Error())
 		return &Logger{
 			shrmplLogClient: nil,
-			service:         config.ServerName,
-			hostPort:        config.LogReceiverHostPort,
+			service:         serverName,
+			hostPort:        logReceiverHostPort,
 		}
 	}
 
@@ -55,15 +55,15 @@ func NewLogger(config *Config) *Logger {
 		fmt.Fprintf(os.Stderr, "Failed to connect to shrmpl-log: %s\n", err.Error())
 		return &Logger{
 			shrmplLogClient: nil,
-			service:         config.ServerName,
-			hostPort:        config.LogReceiverHostPort,
+			service:         serverName,
+			hostPort:        logReceiverHostPort,
 		}
 	}
 	fmt.Fprintf(os.Stderr, "DEBUG: Connected to shrmpl-log successfully\n")
 	return &Logger{
 		shrmplLogClient: shrmplLogClient,
-		service:         config.ServerName,
-		hostPort:        config.LogReceiverHostPort,
+		service:         serverName,
+		hostPort:        logReceiverHostPort,
 	}
 }
 

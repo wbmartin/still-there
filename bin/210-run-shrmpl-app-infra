@@ -31,6 +31,13 @@ else
     echo "No shrmpl-vault-srv processes found"
 fi
 
+if pkill -f "shrmpl-kv-cli" 2>/dev/null; then
+    echo "Killed shrmpl-kv-cli processes"
+    KILLED_PROCESSES=true
+else
+    echo "No shrmpl-kv-cli processes found"
+fi
+
 # Wait for processes to terminate only if we killed any
 if [ "$KILLED_PROCESSES" = true ]; then
     echo "Waiting for processes to terminate..."
@@ -66,7 +73,7 @@ echo "✓ Vault server started"
 
 echo ""
 echo "All services started in the background."
-echo "To stop them, run: pkill -f 'shrmpl-kv-srv|shrmpl-log-srv|shrmpl-vault-srv'"
+echo "To stop them, run: pkill -f 'shrmpl-kv-srv|shrmpl-log-srv|shrmpl-vault-srv|shrmpl-kv-cli'"
 
 # Return to original directory
 popd > /dev/null

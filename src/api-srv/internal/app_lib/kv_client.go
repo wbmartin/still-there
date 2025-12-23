@@ -39,18 +39,18 @@ func parseHostPort(hostPort string) (string, string, error) {
 }
 
 // NewKV creates a key-value store client
-func NewKV(config *Config) ThisAppKVInterface {
+func NewKV(kvHostPort string) ThisAppKVInterface {
 	// Parse the combined host:port string
-	host, portStr, err := parseHostPort(config.KVHostPort)
+	host, portStr, err := parseHostPort(kvHostPort)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse kv_host_port: %s\n", err.Error())
-		return &KV{shrmplKVClient: nil, hostPort: config.KVHostPort}
+		return &KV{shrmplKVClient: nil, hostPort: kvHostPort}
 	}
 
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Invalid port in kv_host_port: %s\n", err.Error())
-		return &KV{shrmplKVClient: nil, hostPort: config.KVHostPort}
+		return &KV{shrmplKVClient: nil, hostPort: kvHostPort}
 	}
 
 	shrmplKV := NewShrmplKVClient(host, port)
@@ -58,19 +58,17 @@ func NewKV(config *Config) ThisAppKVInterface {
 		// If we can't connect, we'll return a client that logs errors
 		// The operations will fail gracefully
 		fmt.Fprintf(os.Stderr, "Failed to connect to shrmpl-kv: %s\n", err.Error())
-		return &KV{shrmplKVClient: nil, hostPort: config.KVHostPort}
+		return &KV{shrmplKVClient: nil, hostPort: kvHostPort}
 	}
 
 	return &KV{
 		shrmplKVClient: shrmplKV,
-		hostPort:       config.KVHostPort,
+		hostPort:       kvHostPort,
 	}
 }
 
 // tryReconnect attempts to reconnect to the KV server
 func (kv *KV) tryReconnect() {
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
 	host, portStr, err := parseHostPort(kv.hostPort)
 	if err != nil {
 		return
@@ -88,25 +86,19 @@ func (kv *KV) tryReconnect() {
 // Get retrieves a value from the key-value store
 func (kv *KV) Get(key string) (string, error) {
 	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
 	if kv.shrmplKVClient == nil {
-		kv.mu.Unlock()
 		kv.tryReconnect()
-		kv.mu.Lock()
 	}
-	if kv.shrmplKVClient == nil { //try again after reconnect
-		kv.mu.Unlock()
+	if kv.shrmplKVClient == nil {
 		return "", fmt.Errorf("key-value store not available")
 	}
-	client := kv.shrmplKVClient
-	kv.mu.Unlock()
-	val, err := client.Get(key)
+
+	val, err := kv.shrmplKVClient.Get(key)
 	if err != nil {
-		kv.mu.Lock()
-		if kv.shrmplKVClient == client {
-			kv.shrmplKVClient.Close()
-			kv.shrmplKVClient = nil
-		}
-		kv.mu.Unlock()
+		kv.shrmplKVClient.Close()
+		kv.shrmplKVClient = nil
 		return "", err
 	}
 	return val, nil
@@ -115,25 +107,19 @@ func (kv *KV) Get(key string) (string, error) {
 // Set stores a key-value pair with optional TTL
 func (kv *KV) Set(key, value, ttl string) error {
 	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
 	if kv.shrmplKVClient == nil {
-		kv.mu.Unlock()
 		kv.tryReconnect()
-		kv.mu.Lock()
 	}
-	if kv.shrmplKVClient == nil { //try again after reconnect
-		kv.mu.Unlock()
+	if kv.shrmplKVClient == nil {
 		return fmt.Errorf("key-value store not available")
 	}
-	client := kv.shrmplKVClient
-	kv.mu.Unlock()
-	err := client.Set(key, value, ttl)
+
+	err := kv.shrmplKVClient.Set(key, value, ttl)
 	if err != nil {
-		kv.mu.Lock()
-		if kv.shrmplKVClient == client {
-			kv.shrmplKVClient.Close()
-			kv.shrmplKVClient = nil
-		}
-		kv.mu.Unlock()
+		kv.shrmplKVClient.Close()
+		kv.shrmplKVClient = nil
 		return err
 	}
 	return nil
@@ -142,25 +128,19 @@ func (kv *KV) Set(key, value, ttl string) error {
 // Incr increments a counter and returns the new value
 func (kv *KV) Incr(key string, ttl string) (int, error) {
 	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
 	if kv.shrmplKVClient == nil {
-		kv.mu.Unlock()
 		kv.tryReconnect()
-		kv.mu.Lock()
 	}
-	if kv.shrmplKVClient == nil { //try again after reconnect
-		kv.mu.Unlock()
+	if kv.shrmplKVClient == nil {
 		return 0, fmt.Errorf("key-value store not available")
 	}
-	client := kv.shrmplKVClient
-	kv.mu.Unlock()
-	val, err := client.Incr(key, ttl)
+
+	val, err := kv.shrmplKVClient.Incr(key, ttl)
 	if err != nil {
-		kv.mu.Lock()
-		if kv.shrmplKVClient == client {
-			kv.shrmplKVClient.Close()
-			kv.shrmplKVClient = nil
-		}
-		kv.mu.Unlock()
+		kv.shrmplKVClient.Close()
+		kv.shrmplKVClient = nil
 		return 0, err
 	}
 	return val, nil
@@ -171,30 +151,22 @@ func (kv *KV) Batch(commands []string) ([]string, error) {
 	if len(commands) > 3 {
 		return nil, fmt.Errorf("batch cannot exceed 3 commands")
 	}
+
 	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
 	if kv.shrmplKVClient == nil {
-		kv.mu.Unlock()
 		kv.tryReconnect()
-		kv.mu.Lock()
 	}
 	if kv.shrmplKVClient == nil {
-		kv.mu.Unlock()
 		return nil, fmt.Errorf("key-value store not available")
 	}
-	client := kv.shrmplKVClient
-	kv.mu.Unlock()
 
 	batchCmd := "BATCH " + strings.Join(commands, ";")
-	// fmt.Printf("DEBUG: Sending batchCmd: %s\n", batchCmd)
-	response, err := client.sendCommand(batchCmd)
-	// fmt.Printf("DEBUG: Received response: %s\n", response)
+	response, err := kv.shrmplKVClient.sendCommand(batchCmd)
 	if err != nil {
-		kv.mu.Lock()
-		if kv.shrmplKVClient == client {
-			kv.shrmplKVClient.Close()
-			kv.shrmplKVClient = nil
-		}
-		kv.mu.Unlock()
+		kv.shrmplKVClient.Close()
+		kv.shrmplKVClient = nil
 		return nil, err
 	}
 
@@ -204,6 +176,16 @@ func (kv *KV) Batch(commands []string) ([]string, error) {
 
 	results := strings.Split(strings.TrimSpace(response), ";")
 	return results, nil
+}
+
+// Close closes the underlying KV client connection
+func (kv *KV) Close() {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	if kv.shrmplKVClient != nil {
+		kv.shrmplKVClient.Close()
+		kv.shrmplKVClient = nil
+	}
 }
 
 // ShrmplKVClient represents a client for the shrmpl-kv service
@@ -219,7 +201,7 @@ func NewShrmplKVClient(host string, port int) *ShrmplKVClient {
 	return &ShrmplKVClient{
 		host:    host,
 		port:    port,
-		timeout: 5 * time.Second, // 2 second timeout for operations
+		timeout: 5 * time.Second,
 	}
 }
 
@@ -233,7 +215,6 @@ func (c *ShrmplKVClient) Connect() error {
 
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
 		_ = tcpConn.SetNoDelay(true)
-		// Set read timeout on the connection
 		_ = tcpConn.SetReadDeadline(time.Now().Add(c.timeout))
 	}
 
@@ -317,20 +298,6 @@ func (c *ShrmplKVClient) Incr(key string, ttl string) (int, error) {
 	return result, nil
 }
 
-// Ping checks if shrmpl-kv is responsive
-func (c *ShrmplKVClient) Ping() error {
-	response, err := c.sendCommand("PING")
-	if err != nil {
-		return err
-	}
-
-	if response != "PONG" {
-		return fmt.Errorf("unexpected ping response: %s", response)
-	}
-
-	return nil
-}
-
 // Close closes the connection to shrmpl-kv
 func (c *ShrmplKVClient) Close() {
 	if c == nil || c.conn == nil {
@@ -338,16 +305,6 @@ func (c *ShrmplKVClient) Close() {
 	}
 	c.conn.Close()
 	c.conn = nil
-}
-
-// Close closes the underlying KV client connection
-func (kv *KV) Close() {
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
-	if kv.shrmplKVClient != nil {
-		kv.shrmplKVClient.Close()
-		kv.shrmplKVClient = nil
-	}
 }
 
 // sendCommand sends a command and returns the response

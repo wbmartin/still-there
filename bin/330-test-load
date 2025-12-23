@@ -42,7 +42,7 @@ else
 fi
 
 # Set default arguments
-DEFAULT_ARGS="--base-url $TEST_BASE_URL --duration 3s --concurrency 5"
+DEFAULT_ARGS="--base-url $TEST_BASE_URL --duration 60s --concurrency 100"
 
 #--duration 10s
 # --iterations 800
