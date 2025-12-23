@@ -253,14 +253,19 @@ func runLoadTest(config Config) *TestResults {
 
 	// Wait for test completion
 	if config.Iterations > 0 {
+		log.Printf("Waiting for %d iterations to complete across %d workers...", config.Iterations*config.Concurrency, config.Concurrency)
 		// Wait for all iterations to complete
 		wg.Wait()
+		log.Printf("All iterations completed. Stopping workers...")
 	} else {
+		log.Printf("Running load test for duration %v with %d concurrent workers...", config.Duration, config.Concurrency)
 		// Wait for duration
 		time.Sleep(config.Duration)
+		log.Printf("Duration %v completed. Stopping workers...", config.Duration)
 	}
 	close(stopChan)
 	wg.Wait()
+	log.Printf("All workers stopped. Generating report...")
 
 	// Close metrics channel
 	close(metricsChan)
@@ -305,9 +310,9 @@ func runCycle(client *APIClient, metricsChan chan<- OperationMetric) {
 	errorType := ""
 	if err != nil {
 		errorType = err.Error()
-		// Stop the entire test on authentication failure
 		if errorType != "" {
-			log.Fatalf("Authentication failed: %v", err)
+			log.Printf("Authentication failed (continuing): %v", err)
+
 		}
 	}
 

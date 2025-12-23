@@ -219,7 +219,7 @@ func NewShrmplKVClient(host string, port int) *ShrmplKVClient {
 	return &ShrmplKVClient{
 		host:    host,
 		port:    port,
-		timeout: 2 * time.Second, // 2 second timeout for operations
+		timeout: 5 * time.Second, // 2 second timeout for operations
 	}
 }
 

@@ -30,6 +30,8 @@
 - **shrmpl-chk and shrmpl-mon** need to add rust web server that listens to a port (may not need to be https) and receives health information, only in the query string. reads a cronitor type schedule and makes slack calls when things go wrong. needs to get slack webhook url from the shrmpl key server
 also need to add a binary that checks website health (probably just status) and records the checkins to shrmpl-mon.
 - shrmpl-kv client is not handling list correctly right now.
+- you need to do a load test on shrmpl-kv.
+
 
 
 - **S3 replacement**Non Sensitive file storing -There will be an nginx server running on the server and we should use it to server static non sensitive files. we need to explore what is the right way to do this.

@@ -46,8 +46,10 @@ func isAccountLocked(kv app_lib.ThisAppKVInterface, ip, username string) (bool, 
 		"GET " + ipLockKey,
 		"GET " + userLockKey,
 	}
+
 	results, err := kv.Batch(commands)
 	if err != nil {
+		// fmt.Print("A %s B %s", starttime, time.Now().UnixNano())
 		return false, err
 	}
 
