@@ -1,62 +1,140 @@
-# Code Review: `src/api-srv`
+# API Server Code Review
 
-**Generated:** 2025-12-21
+- **Date:** 2025-12-24
+- **Reviewer:** Gemini CLI
 
-## Overall Assessment
+## 1. Executive Summary
 
-The project is a solid, functional API server with a strong emphasis on security and data integrity. It makes a clear architectural tradeoff: **minimize dependencies in favor of using the Go standard library and hand-rolled solutions**. This makes the project transparent and self-contained but comes at the cost of not using common, powerful libraries that could improve robustness and developer experience.
+This code review of the Go API server found a well-structured project with a clear separation of concerns (handler, repository, model). The code demonstrates a strong awareness of several security best practices, including the use of the `argon2id` password hashing algorithm, constant-time comparisons to prevent timing attacks, and the implementation of security headers.
 
-The data model and repository layers are strong, while the web/handler layer and overall testing strategy have the most significant areas for improvement. The code is generally easy to read and understand.
+However, the review identified one **critical architectural flaw** and several **high-risk security vulnerabilities** that undermine these positive aspects. The core issue is the complete absence of a standard middleware pattern for handling cross-cutting concerns like authentication, authorization, and CSRF protection. Instead, this logic is manually orchestrated within each HTTP handler using a stateful `AppHelper` object, a pattern that is brittle, error-prone, and a significant departure from idiomatic Go practices.
 
-## Key Strengths (Best Practices)
+The most urgent recommendations are to **refactor the security model to use a standard middleware chain** and to **remediate the insecure handling of MFA TOTP seeds**.
 
--   **Security Posture:** The project demonstrates a strong commitment to security.
-    -   **Password Hashing:** Use of `argon2id` is the current best practice.
-    -   **HTTP Headers:** A comprehensive set of security headers is applied via middleware.
-    -   **Session Management:** Standard JWTs are used for authentication tokens.
-    -   **Data Serialization:** Sensitive fields like `PwHash` are correctly marked with `json:"-"` to prevent them from ever being serialized into API responses.
--   **Data Integrity & Access Layer:** The data layer is well-designed and robust.
-    -   **Optimistic Locking:** Update and delete operations use the `update_ts` field to prevent lost updates in concurrent situations. This is implemented correctly.
-    -   **Transactions:** Batch operations (e.g., `AddUserListToGroup`) correctly use database transactions to ensure atomicity.
-    -   **Soft Deletes:** The use of `delete_ts` and `delete_user_id` is a solid implementation of the soft delete pattern.
-    -   **Sentinel Errors:** Defining package-level errors like `ErrNotFound` and `ErrConflict` is an excellent practice that allows calling code to handle specific error cases cleanly.
--   **Permissions Model:** The `grants.go` file provides a clear, centralized, and auditable model for Role-Based Access Control (RBAC).
+## 2. Critical & High-Risk Findings
 
-## Primary Areas for Improvement
+### 2.1. Critical: Absence of a Middleware Pattern for Security
 
-### 1. Web Layer Architecture (Handlers & Middleware)
+**Observation:**
+The application does not use a middleware chain for handling security. Instead, each authenticated HTTP handler relies on an `app_lib.AppHelper` object and is responsible for manually invoking a series of security checks in the correct order:
 
--   **Finding:** The project avoids web frameworks and instead implements a custom "check" pattern inside every handler (e.g., `app.CheckJWT()`, `app.CheckCSRF()`, etc.) rather than using a standard middleware chain.
--   **Impact:** This pattern is non-idiomatic, verbose, and error-prone. A developer adding a new handler could easily forget a critical check, leading to a security vulnerability. The flow of control (`CheckAllChecksComplete`) is also not immediately obvious.
--   **Recommendation:** Refactor to use a standard middleware pattern. This is perfectly achievable with the standard `net/http` library by creating functions that wrap `http.Handler`s. This would centralize authentication, authorization, rate-limiting, and logging logic cleanly and apply it consistently to all relevant endpoints, removing duplication from the handlers.
+*File: `src/api-srv/internal/handler/user_handler.go`*
+```go
+// Boilerplate code at the start of every authenticated handler
+app := app_lib.NewAppHelper(w, r, h.appsrv)
+app.CheckJWT()
+app.CheckRateLimitAndUserBlock()
+app.CheckCSRF()
+app.CheckAuthorization(model.GrantUserRead)
 
-### 2. Testing Strategy
+if !app.CheckAllChecksComplete() {
+    return
+}
+```
 
--   **Finding:** The project contains repository-level **integration tests** that connect to a live database, which is valuable. However, it appears to lack **unit tests** entirely. Logic within the HTTP handlers and `app_lib` is untested. Furthermore, coverage is incomplete, with key repository tests for batch operations explicitly skipped.
--   **Impact:** Business logic is not tested in isolation, making refactoring or adding new features risky. Without handler tests, it's impossible to verify that security checks and routing are correctly configured.
--   **Recommendation:**
-    1.  **Introduce Unit Testing:** Use mocking frameworks (e.g., `pgxmock` for the database interface, or define a repository interface and mock it) to test handlers and other logic in isolation.
-    2.  **Complete Repository Coverage:** Address the "test environment issues" to un-skip the tests for `AddUserListToGroup` and `RemoveUserListFromGroup`.
-    3.  **Improve Test Cleanup:** Switch from manual `DELETE` statements to wrapping each test in a database transaction that is rolled back at the end. This provides perfect test isolation.
+**Impact:**
+This pattern is a critical design flaw for several reasons:
+- **Error-Prone:** A developer can easily forget a check, misorder them, or fail to call `CheckAllChecksComplete()`, creating a security vulnerability.
+- **Violation of DRY (Don't Repeat Yourself):** The same block of security boilerplate is repeated across all handlers, leading to code bloat and making universal changes difficult.
+- **Maintenance Nightmare:** Adding a new global security check (e.g., a new logging step) requires modifying every single handler in the codebase.
+- **Un-idiomatic:** This approach is contrary to the standard, established practice of using `http.Handler` middleware chains in Go for managing request lifecycles.
 
-### 3. Data Scanning in Repository (Brittle Code)
+**Recommendation:**
+Refactor the application to use a standard middleware architecture.
+1.  Create individual middleware functions for each security concern (e.g., `JWTMiddleware`, `CSRFMiddleware`, `RBACMiddleware`).
+2.  In `main.go`, wrap the protected routes with this middleware chain. This declaratively and reliably enforces security on all relevant endpoints.
 
--   **Finding:** The repositories use manual `row.Scan(&field1, &field2, ...)` calls to populate model structs. The models themselves have `db` tags which are currently unused.
--   **Impact:** This code is brittle. If a developer changes the column order in a `SELECT` statement or adds a column without perfectly matching the `Scan` call, the application will fail at runtime.
--   **Recommendation:** Introduce a lightweight library like `sqlx`. A single call to `sqlx.Get(&user, ...)` or `sqlx.Select(&users, ...)` can safely and automatically scan data into structs using the existing `db` tags. This would make the data access code much more robust, readable, and maintainable.
+**Example of a middleware-based approach:**
+```go
+// In main.go
+authedMux := http.NewServeMux()
+authedMux.HandleFunc("/user", userHandler.RetrieveUserList)
+// ... other protected routes
 
-### 4. Custom Logging Implementation
+// Chain the middleware
+var protectedHandler http.Handler = authedMux
+protectedHandler = rbacMiddleware(protectedHandler, model.GrantUserRead) // Innermost
+protectedHandler = csrfMiddleware(protectedHandler)
+protectedHandler = jwtAuthMiddleware(protectedHandler) // Outermost
 
--   **Finding:** The project uses a hand-rolled TCP client to send logs to a custom service (`shrmpl-log`) in a custom, fixed-width text format.
--   **Impact:** This reinvents the wheel of structured logging, is likely not as performant or robust (e.g., reconnection logic is not thread-safe) as standard libraries, and creates a dependency on a non-standard service.
--   **Recommendation:** Replace the custom logger with the standard library's `slog` (available in Go 1.21+). It can be configured to output structured JSON to `stdout`, which is a more flexible and conventional approach that integrates with any standard log aggregation tool (Fluentd, Logstash, Vector, etc.).
+mux.Handle("/user", protectedHandler)
+```
 
-## Secondary Findings & Inconsistencies
+### 2.2. High: Insecure Encryption of MFA TOTP Seeds
 
--   **Configuration Loading:** The hand-rolled `.env` parser is fragile and doesn't handle common cases like quoted values. Using a standard library like `joho/godotenv` would be more robust.
--   **Linter Configuration:** The `.golangci.yml` file exists but is empty, defeating its purpose. A good starter project should include a recommended set of linters.
--   **Inconsistent Resiliency:** The `ExecuteWithRetry` logic is an excellent feature for handling transient database errors but is only applied to a single repository method. It should be applied to all external database calls.
--   **Unused Code:** The `CORSMiddleware` is defined but not used in `main.go`.
--   **Non-RESTful Routing:** API routes like `GET /exampleList` and `POST /userSelfCreate` are not RESTful. A more standard approach would be `GET /examples` and `POST /users`.
--   **Timestamps:** The use of `float64` for timestamps is unusual. The idiomatic Go type is `time.Time`, which provides better type safety and functionality.
--   **Constant-Time Comparison:** The `CheckPasswordHash` function should use `subtle.ConstantTimeCompare` to prevent potential timing attacks.
+**Observation:**
+The MFA TOTP seeds, which are critical security secrets, are encrypted using AES-GCM with a single, global encryption key stored in the application's configuration file.
+
+*File: `src/api-srv/internal/handler/user_handler.go`*
+```go
+// Encryption call
+encrypted, err := encryptTOTPSeed(secret, appServices.Config.TOTPEncryptionKey)
+
+// Decryption call
+decryptedSecret, err := decryptTOTPSeed(
+    *user.TOTPSeed,
+    appServices.Config.TOTPEncryptionKey,
+)
+```
+
+**Impact:**
+If an attacker gains read-access to the server's environment or configuration file, they can retrieve this global `TOTPEncryptionKey`. With this key, they can decrypt the `totp_seed` for **every user in the database**, completely bypassing the MFA protection for the entire application.
+
+**Recommendation:**
+Do not use a single, static key for encrypting all user secrets. Consider one of the following approaches:
+- **Use a Key Management Service (KMS):** Integrate with a service like AWS KMS, Google Cloud KMS, or HashiCorp Vault to manage encryption keys. This is the most secure option.
+- **Derive a User-Specific Key:** Derive the encryption key from a combination of a global application secret (a "pepper") and a value unique to the user (like the user's password hash or a dedicated secret). This ensures that compromising the global secret alone is not enough to decrypt all user data.
+
+### 2.3. High: Weak CSRF Token Generation
+
+**Observation:**
+The Cross-Site Request Forgery (CSRF) token is generated from a predictable, low-entropy substring of the session ID stored in the JWT.
+
+*File: `src/api-srv/internal/app_lib/app_helper.go`*
+```go
+expectedToken := sh.claims.SessionID[len(sh.claims.SessionID)-3:]
+```
+
+**Impact:**
+A CSRF token's security relies on its randomness and unpredictability. By using only the last 3 characters of the session ID, the token's entropy is drastically reduced, making it potentially guessable and weakening the protection it offers.
+
+**Recommendation:**
+Implement the standard "double-submit cookie" pattern for CSRF protection.
+1.  Upon login, generate a high-entropy, random string to be the CSRF token.
+2.  Store this token in a `HttpOnly=false`, `SameSite=Strict` cookie that is accessible to the frontend JavaScript.
+3.  The frontend must read this token from the cookie and include it in a request header (e.g., `X-CSRF-Token`) for all state-changing requests (`POST`, `PUT`, `DELETE`).
+4.  The server-side middleware then simply checks if the value in the cookie matches the value in the header.
+
+## 3. Other Findings & Recommendations
+
+### 3.1. Code Structure & Best Practices
+
+- **Handler Cohesion (Medium):** Files like `user_handler.go` are overly large and violate the Single Responsibility Principle. They manage user CRUD, MFA setup, password changes, and more.
+    - **Recommendation:** Split these large handlers into smaller, more focused files (e.g., `mfa_handler.go`, `password_handler.go`).
+
+- **Password Hash Verification (Low):** The `CheckPasswordHash` function in `auth.go` does not parse the Argon2 parameters from the hash string. It uses hardcoded constants.
+    - **Impact:** This prevents future upgrades to the hashing parameters (e.g., increasing memory/time cost) without invalidating all existing user passwords.
+    - **Recommendation:** Modify `CheckPasswordHash` to parse the `m=`, `t=`, and `p=` values from the hash string and use them during verification.
+
+- **Symmetric JWT Algorithm (Low - Tradeoff):** The server uses `HS256` for JWT signing.
+    - **Tradeoff:** `HS256` is a symmetric algorithm, meaning the same key is used to sign and verify tokens. While simple and acceptable for a monolithic service, an asymmetric algorithm (like `RS256` or `ES256`) is more secure and scalable, as it allows verification with a public key without exposing the private signing key. This was likely a deliberate tradeoff for simplicity. No immediate action is required, but it's worth noting for future architecture decisions.
+
+- **Hardcoded Rate Limit (Low):** The `CheckRateLimitAndUserBlock` function in `app_helper.go` contains a hardcoded rate limit of `100`, which is inconsistent with the configurable limit used elsewhere.
+    - **Recommendation:** Remove the hardcoded value and read the limit from the `appServices.Config` object to ensure consistency.
+
+### 3.2. Security Context Enforcement
+
+- **Redundant Validation (Low):** Handlers frequently contain code to validate that all entities in a request belong to the operator's current `SecurityContext`.
+    - **Observation:** This suggests a lack of trust in the repository layer. The repository should be the ultimate authority for data isolation. A query to the repository should *never* be able to return data from outside the provided security context.
+    - **Recommendation:** Move all `SecurityContext` enforcement logic into the repository layer. The handlers should not need to perform these redundant checks. This will simplify handler logic and strengthen the data isolation guarantee.
+
+## 4. Conclusion
+
+The API server has a solid foundation but is undermined by the decision to forgo a standard middleware architecture. The current `AppHelper` pattern is a critical flaw that is insecure, difficult to maintain, and a source of further bugs and vulnerabilities.
+
+**Priority of actions should be:**
+1.  **Remediate the critical flaws:** Replace the `AppHelper` with a proper middleware chain and fix the insecure TOTP seed encryption.
+2.  **Fix the high-risk CSRF vulnerability.**
+3.  Address the other findings, such as improving handler cohesion and strengthening data layer enforcement of security contexts.
+
+By adopting a standard middleware pattern, the project will become significantly more secure, robust, and easier to maintain.
