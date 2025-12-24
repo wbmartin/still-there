@@ -603,7 +603,7 @@ func MFAVerifyHandler(
 					[]int,
 					0,
 					len(grantsMap),
-				), // TODO: populate
+				),
 				MFARequired: false, // Now verified
 			}
 			for ctx := range grantsMap {

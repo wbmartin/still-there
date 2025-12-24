@@ -141,22 +141,22 @@ func (l *Logger) log(level string, code string, message string, skip int,
 
 // Debug logs at debug level
 func (l *Logger) Debug(code, message string, keyvals ...interface{}) {
-	l.log("DEBG", code, message, 2, keyvals...)
+	l.DebugWithCallerSkip(code, message, 2, keyvals...)
 }
 
 // Info logs at info level
 func (l *Logger) Info(code, message string, keyvals ...interface{}) {
-	l.log("INFO", code, message, 2, keyvals...)
+	l.InfoWithCallerSkip(code, message, 2, keyvals...)
 }
 
 // Warn logs at warn level
 func (l *Logger) Warn(code, message string, keyvals ...interface{}) {
-	l.log("WARN", code, message, 2, keyvals...)
+	l.WarnWithCallerSkip(code, message, 2, keyvals...)
 }
 
 // Error logs at error level
 func (l *Logger) Error(code, message string, keyvals ...interface{}) {
-	l.log("ERRO", code, message, 2, keyvals...)
+	l.ErrorWithCallerSkip(code, message, 2, keyvals...)
 }
 
 // ErrorWithCallerSkip logs at error level with custom caller skip level

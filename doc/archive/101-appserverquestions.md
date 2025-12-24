@@ -80,7 +80,7 @@ keep it.
 
 18. **Soft Deletes**: The specs require soft deletes with `delete_ts` and `delete_user_id`. Should all deletes be soft deletes in this system?
 
-Yes, assum soft deletes.
+Yes, assume soft deletes.
 
 ## Development Workflow
 
