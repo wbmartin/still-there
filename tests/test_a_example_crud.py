@@ -1,5 +1,6 @@
-import pytest
 import time
+
+import pytest
 
 
 class TestExampleCRUD:
@@ -21,7 +22,7 @@ class TestExampleCRUD:
             "exampleFloat": 3.14159,
             "exampleIntArray": [1, 2, 3],
             "exampleFloatArray": [1.1, 2.2, 3.3],
-            "securityContext": 1
+            "securityContext": 1,
         }
 
         response = self.client.make_request("POST", "/example", json=example_data)
@@ -41,8 +42,9 @@ class TestExampleCRUD:
         """Test retrieving the created example"""
         assert self.example_id is not None, "Example must be created first"
 
-        response = self.client.make_request("GET", "/example",
-            params={"exampleId": self.example_id})
+        response = self.client.make_request(
+            "GET", "/example", params={"exampleId": self.example_id}
+        )
         assert response.status_code == 200
 
         data = response.json()["data"]
@@ -55,8 +57,9 @@ class TestExampleCRUD:
         assert self.example_id is not None, "Example must be created first"
 
         # Get current update timestamp for optimistic locking
-        response = self.client.make_request("GET", "/example",
-            params={"exampleId": self.example_id})
+        response = self.client.make_request(
+            "GET", "/example", params={"exampleId": self.example_id}
+        )
         assert response.status_code == 200
         current_update_ts = response.json()["data"]["updateTs"]
 
@@ -68,15 +71,16 @@ class TestExampleCRUD:
             "exampleIntArray": [1, 2, 3, 4],
             "exampleFloatArray": [1.1, 2.2, 3.3, 4.4],
             "updateTs": current_update_ts,
-            "securityContext": 1
+            "securityContext": 1,
         }
 
         response = self.client.make_request("PUT", "/example", json=update_data)
         assert response.status_code == 200
 
         # Verify the update
-        response = self.client.make_request("GET", "/example",
-            params={"exampleId": self.example_id})
+        response = self.client.make_request(
+            "GET", "/example", params={"exampleId": self.example_id}
+        )
         assert response.status_code == 200
 
         data = response.json()["data"]
@@ -89,21 +93,23 @@ class TestExampleCRUD:
         assert self.example_id is not None, "Example must be created first"
 
         # Get current update timestamp for optimistic locking
-        response = self.client.make_request("GET", "/example",
-            params={"exampleId": self.example_id})
+        response = self.client.make_request(
+            "GET", "/example", params={"exampleId": self.example_id}
+        )
         assert response.status_code == 200
         update_ts = response.json()["data"]["updateTs"]
 
-        response = self.client.make_request("DELETE", "/example",
-            params={
-                "exampleId": self.example_id,
-                "updateTs": f"{update_ts:.7f}"
-            })
+        response = self.client.make_request(
+            "DELETE",
+            "/example",
+            params={"exampleId": self.example_id, "updateTs": f"{update_ts:.7f}"},
+        )
         assert response.status_code == 200
 
         # Verify deletion (soft delete returns 410)
-        response = self.client.make_request("GET", "/example",
-            params={"exampleId": self.example_id})
+        response = self.client.make_request(
+            "GET", "/example", params={"exampleId": self.example_id}
+        )
         assert response.status_code == 410
 
         # Reset class variable
@@ -116,13 +122,13 @@ class TestExampleCRUD:
             {
                 "exampleText": "Bulk Test Example 1",
                 "exampleInt": 100,
-                "securityContext": 1
+                "securityContext": 1,
             },
             {
                 "exampleText": "Bulk Test Example 2",
                 "exampleInt": 200,
-                "securityContext": 1
-            }
+                "securityContext": 1,
+            },
         ]
 
         response = self.client.make_request("POST", "/exampleList", json=examples)
@@ -145,23 +151,26 @@ class TestExampleCRUD:
                 "exampleText": "Updated Bulk Test Example 1",
                 "exampleInt": 101,
                 "updateTs": update_timestamps[0],
-                "securityContext": 1
+                "securityContext": 1,
             },
             {
                 "exampleId": example_ids[1],
                 "exampleText": "Updated Bulk Test Example 2",
                 "exampleInt": 201,
                 "updateTs": update_timestamps[1],
-                "securityContext": 1
-            }
+                "securityContext": 1,
+            },
         ]
 
         response = self.client.make_request("PUT", "/exampleList", json=updates)
         assert response.status_code == 200
 
         # Verify updates
-        response = self.client.make_request("GET", "/exampleList",
-            params={"exampleIdList": f"{example_ids[0]},{example_ids[1]}"})
+        response = self.client.make_request(
+            "GET",
+            "/exampleList",
+            params={"exampleIdList": f"{example_ids[0]},{example_ids[1]}"},
+        )
         assert response.status_code == 200
 
         retrieved_data = response.json()["data"]
@@ -176,37 +185,42 @@ class TestExampleCRUD:
                 assert ex["exampleInt"] == 201
 
         # Delete them (cleanup is handled by fixture)
-        response = self.client.make_request("DELETE", "/exampleList",
+        response = self.client.make_request(
+            "DELETE",
+            "/exampleList",
             params={
                 "exampleIdList": f"{example_ids[0]},{example_ids[1]}",
-                "updateTs": f"{update_timestamps[0]:.7f},{update_timestamps[1]:.7f}"
-            })
+                "updateTs": f"{update_timestamps[0]:.7f},{update_timestamps[1]:.7f}",
+            },
+        )
         assert response.status_code == 200
 
     def test_error_scenarios(self):
         """Test various error scenarios"""
         # Try to get non-existent example
-        response = self.client.make_request("GET", "/example", params={"exampleId": 99999})
+        response = self.client.make_request(
+            "GET", "/example", params={"exampleId": 2147483646}
+        )
         assert response.status_code == 404
 
         # Try to update non-existent example
         update_data = {
-            "exampleId": 99999,
+            "exampleId": 2147483646,
             "exampleText": "This should fail",
-            "securityContext": 1
+            "securityContext": 1,
         }
         response = self.client.make_request("PUT", "/example", json=update_data)
         assert response.status_code == 404
 
         # Try to delete non-existent example
-        response = self.client.make_request("DELETE", "/example",
-            params={"exampleId": 99999, "updateTs": "0.000000"})
+        response = self.client.make_request(
+            "DELETE",
+            "/example",
+            params={"exampleId": 2147483646, "updateTs": "0.000000"},
+        )
         assert response.status_code == 404
 
         # Try to create example with missing required field
-        invalid_data = {
-            "exampleInt": 42,
-            "securityContext": 1
-        }
+        invalid_data = {"exampleInt": 42, "securityContext": 1}
         response = self.client.make_request("POST", "/example", json=invalid_data)
         assert response.status_code == 400
