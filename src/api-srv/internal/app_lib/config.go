@@ -3,7 +3,9 @@ package app_lib
 import (
 	"bufio"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -62,9 +64,29 @@ func (c *VaultClient) Connect() (bool, error) {
 		return false, fmt.Errorf("failed to load certificates: %v", err)
 	}
 
+	// Load vault server certificate for verification
+	serverCertPath := "/Users/brandon/Code/ProtoStack-ReactGo/etc/crt/shrmpl_vault_server_fullchain.pem"
+	serverCertPEM, err := os.ReadFile(serverCertPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to load server certificate: %v", err)
+	}
+	block, _ := pem.Decode(serverCertPEM)
+	if block == nil {
+		return false, fmt.Errorf("failed to decode PEM block from server certificate")
+	}
+	serverCert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse server certificate: %v", err)
+	}
+
+	// Create cert pool with server cert as CA (assuming self-signed)
+	caCertPool := x509.NewCertPool()
+	caCertPool.AddCert(serverCert)
+
 	// Create TLS config
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
 	}
 
 	// Create HTTP client

@@ -23,19 +23,33 @@ pushd "$PROJECT_ROOT" > /dev/null
 
 echo "Starting Log server in Project Root $PROJECT_ROOT..."
 ./bin/tools/shrmpl-log-srv ./etc/loc-shrmpl-log-srv.env &
-echo "✓ Log server started"
-
 sleep 1
+if ps aux | grep -q "[s]hrmpl-log-srv"; then
+    echo "✓ Log server started"
+else
+    echo -e "\033[31m❌❌❌ Log server failed to start\033[0m"
+    exit 1
+fi
 
 echo "Starting KV server..."
 ./bin/tools/shrmpl-kv-srv ./etc/loc-shrmpl-kv-srv.env &
-echo "✓ KV server started"
-
-
+sleep 1
+if ps aux | grep -q "[s]hrmpl-kv-srv"; then
+    echo "✓ KV server started"
+else
+    echo -e "\033[31m❌❌❌ KV server failed to start\033[0m"
+    exit 1
+fi
 
 echo "Starting Vault server..."
 ./bin/tools/shrmpl-vault-srv ./etc/loc-shrmpl-vault-srv.env &
-echo "✓ Vault server started"
+sleep 1
+if ps aux | grep -q "[s]hrmpl-vault-srv"; then
+    echo "✓ Vault server started"
+else
+    echo -e "\033[31m❌❌❌ Vault server failed to start\033[0m"
+    exit 1
+fi
 
 echo ""
 echo "Infrastructure services started in the background."

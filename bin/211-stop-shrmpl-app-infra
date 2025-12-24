@@ -51,7 +51,7 @@ fi
 # Wait for processes to terminate only if we killed any
 if [ "$KILLED_PROCESSES" = true ]; then
     echo "Waiting for processes to terminate..."
-    sleep 3
+    sleep 4
 fi
 
 echo "All shrmpl app infrastructure services stopped."
