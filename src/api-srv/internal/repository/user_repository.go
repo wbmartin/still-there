@@ -118,10 +118,15 @@ func (r *UserRepository) GetGrantsForGroups(
 	return grants, nil
 }
 
-// CreateUser creates a new user
+// CreateUser creates a new user within a security context
 func (r *UserRepository) CreateUser(
-	ctx context.Context, user *model.AppUserModel,
+	ctx context.Context, user *model.AppUserModel, securityContext int,
 ) (*model.AppUserModel, error) {
+	// Validate that the user can only be created in the user's security context
+	if user.SecurityContext != securityContext {
+		return nil, fmt.Errorf("cannot create user in different security context")
+	}
+
 	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(user.UserName) {
 		return nil, fmt.Errorf("username must contain only alphanumeric characters, hyphens, and underscores")
 	}
@@ -294,16 +299,16 @@ func (r *UserRepository) RetrieveUserList(
 	return users, nil
 }
 
-// UpdateUser updates a user with optimistic locking
+// UpdateUser updates a user with optimistic locking within a security context
 func (r *UserRepository) UpdateUser(
-	ctx context.Context, user *model.AppUserModel, clientUpdateTS float64,
+	ctx context.Context, user *model.AppUserModel, clientUpdateTS float64, securityContext int,
 ) error {
 	query := `
 		UPDATE app_user
 		SET user_name = $1, first_name = $2, last_name = $3, email = $4,
 		    app_user_group_membership_list = $5, mfa_exempt = $6,
 		    update_ts = $7, update_user_id = $8
-		WHERE app_user_id = $9 AND update_ts = $10 AND delete_user_id IS NULL`
+		WHERE app_user_id = $9 AND security_context = $10 AND update_ts = $11 AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
@@ -312,7 +317,7 @@ func (r *UserRepository) UpdateUser(
 			user.UserName, user.FirstName, user.LastName, user.Email,
 			user.AppUserGroupMembershipList, user.MFAExempt,
 			user.UpdateTS, user.UpdateUserID,
-			user.AppUserID, clientUpdateTS)
+			user.AppUserID, securityContext, clientUpdateTS)
 		return execErr
 	})
 	if err != nil {

@@ -119,7 +119,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	// Caller information automatically added to log messages
 
 	// Create example
-	createdExample, err := h.exampleRepo.CreateExample(r.Context(), &example)
+	createdExample, err := h.exampleRepo.CreateExample(r.Context(), &example, jwtClaims.SecurityContext)
 	if err != nil {
 		app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create example: example_text='%s' len=%d", example.ExampleText, len(example.ExampleText)), "CREATE_EX_FAIL", err)
 		return
@@ -370,7 +370,7 @@ func (h *ExampleHandler) CreateExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Create in transaction
-	createdExamples, err := h.exampleRepo.CreateExampleList(r.Context(), examplePtrList)
+	createdExamples, err := h.exampleRepo.CreateExampleList(r.Context(), examplePtrList, jwtClaims.SecurityContext)
 	if err != nil {
 		exampleTexts := make([]string, len(examplePtrList))
 		for i, ex := range examplePtrList {
@@ -442,7 +442,7 @@ func (h *ExampleHandler) UpdateExampleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Update in transaction
-	err := h.exampleRepo.UpdateExampleList(r.Context(), examplePtrList, originalUpdateTSList)
+	err := h.exampleRepo.UpdateExampleList(r.Context(), examplePtrList, originalUpdateTSList, jwtClaims.SecurityContext)
 	if err != nil {
 		if errors.Is(err, repository.ErrExpectationFailed) {
 			app.WriteError(w, http.StatusExpectationFailed, fmt.Sprintf("One or more examples could not be updated due to concurrent modifications: count=%d", len(examplePtrList)), "EXPECTATION_FAIL", err)

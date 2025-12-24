@@ -15,8 +15,8 @@ type MockUserRepository struct {
 	mock.Mock
 }
 
-func (m *MockUserRepository) CreateUser(ctx context.Context, user *model.AppUserModel) (*model.AppUserModel, error) {
-	args := m.Called(ctx, user)
+func (m *MockUserRepository) CreateUser(ctx context.Context, user *model.AppUserModel, securityContext int) (*model.AppUserModel, error) {
+	args := m.Called(ctx, user, securityContext)
 	return args.Get(0).(*model.AppUserModel), args.Error(1)
 }
 
@@ -30,8 +30,8 @@ func (m *MockUserRepository) RetrieveUserList(ctx context.Context, securityConte
 	return args.Get(0).([]*model.AppUserModel), args.Error(1)
 }
 
-func (m *MockUserRepository) UpdateUser(ctx context.Context, user *model.AppUserModel, clientUpdateTS float64) error {
-	args := m.Called(ctx, user, clientUpdateTS)
+func (m *MockUserRepository) UpdateUser(ctx context.Context, user *model.AppUserModel, clientUpdateTS float64, securityContext int) error {
+	args := m.Called(ctx, user, clientUpdateTS, securityContext)
 	return args.Error(0)
 }
 
@@ -74,9 +74,19 @@ type MockAppUserGroupRepository struct {
 	mock.Mock
 }
 
-func (m *MockAppUserGroupRepository) RetrieveAppUserGroupListByIDList(ctx context.Context, groupIDs []int) ([]*model.AppUserGroupModel, error) {
-	args := m.Called(ctx, groupIDs)
+func (m *MockAppUserGroupRepository) RetrieveAppUserGroupListByIDList(ctx context.Context, groupIDs []int, securityContext int) ([]*model.AppUserGroupModel, error) {
+	args := m.Called(ctx, groupIDs, securityContext)
 	return args.Get(0).([]*model.AppUserGroupModel), args.Error(1)
+}
+
+func (m *MockAppUserGroupRepository) UpdateAppUserGroup(ctx context.Context, group *model.AppUserGroupModel, clientUpdateTS float64, securityContext int) error {
+	args := m.Called(ctx, group, clientUpdateTS, securityContext)
+	return args.Error(0)
+}
+
+func (m *MockAppUserGroupRepository) CreateAppUserGroup(ctx context.Context, group *model.AppUserGroupModel, securityContext int) (*model.AppUserGroupModel, error) {
+	args := m.Called(ctx, group, securityContext)
+	return args.Get(0).(*model.AppUserGroupModel), args.Error(1)
 }
 
 func TestValidateGroupsSecurityContext(t *testing.T) {
@@ -149,7 +159,7 @@ func TestValidateGroupsSecurityContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRepo := new(MockAppUserGroupRepository)
 			if len(tt.groupIDs) > 0 {
-				mockRepo.On("RetrieveAppUserGroupListByIDList", mock.Anything, tt.groupIDs).Return(tt.mockGroups, tt.mockError)
+				mockRepo.On("RetrieveAppUserGroupListByIDList", mock.Anything, tt.groupIDs, mock.AnythingOfType("int")).Return(tt.mockGroups, tt.mockError)
 			}
 
 			handler := &UserHandler{
@@ -360,7 +370,7 @@ func TestCreateUser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockUserRepo := new(MockUserRepository)
 			if tt.expectCall {
-				mockUserRepo.On("CreateUser", mock.Anything, &tt.inputUser).Return(tt.mockResult, tt.mockError)
+				mockUserRepo.On("CreateUser", mock.Anything, &tt.inputUser, mock.AnythingOfType("int")).Return(tt.mockResult, tt.mockError)
 			}
 
 			handler := &UserHandler{
@@ -369,7 +379,7 @@ func TestCreateUser(t *testing.T) {
 
 			// Simulate HTTP request for context
 			req := httptest.NewRequest("POST", "/user", nil)
-			result, err := handler.userRepo.CreateUser(req.Context(), &tt.inputUser)
+			result, err := handler.userRepo.CreateUser(req.Context(), &tt.inputUser, 1)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -455,7 +465,7 @@ func TestUpdateUser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockUserRepo := new(MockUserRepository)
 			if tt.expectCall {
-				mockUserRepo.On("UpdateUser", mock.Anything, &tt.inputUser, tt.clientUpdateTS).Return(tt.mockError)
+				mockUserRepo.On("UpdateUser", mock.Anything, &tt.inputUser, tt.clientUpdateTS, mock.AnythingOfType("int")).Return(tt.mockError)
 			}
 
 			handler := &UserHandler{
@@ -464,7 +474,7 @@ func TestUpdateUser(t *testing.T) {
 
 			// Simulate HTTP request for context
 			req := httptest.NewRequest("PUT", "/user", nil)
-			err := handler.userRepo.UpdateUser(req.Context(), &tt.inputUser, tt.clientUpdateTS)
+			err := handler.userRepo.UpdateUser(req.Context(), &tt.inputUser, tt.clientUpdateTS, 1)
 
 			if tt.expectedError {
 				assert.Error(t, err)

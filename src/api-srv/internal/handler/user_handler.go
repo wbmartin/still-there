@@ -26,10 +26,10 @@ import (
 
 // UserRepositoryInterface defines the methods needed by UserHandler
 type UserRepositoryInterface interface {
-	CreateUser(ctx context.Context, user *model.AppUserModel) (*model.AppUserModel, error)
+	CreateUser(ctx context.Context, user *model.AppUserModel, securityContext int) (*model.AppUserModel, error)
 	RetrieveUserByUserName(ctx context.Context, username string) (*model.AppUserModel, error)
 	RetrieveUserList(ctx context.Context, securityContext int, idList []int, updateTs float64) ([]*model.AppUserModel, error)
-	UpdateUser(ctx context.Context, user *model.AppUserModel, clientUpdateTS float64) error
+	UpdateUser(ctx context.Context, user *model.AppUserModel, clientUpdateTS float64, securityContext int) error
 	DeleteUser(ctx context.Context, userID int, securityContext int, updateTS float64, now float64, updateUserID int) (int, error)
 	UpdateUserPassword(ctx context.Context, userID int, hashedPassword string, now float64, updateUserID int) error
 	UpdateUserTOTPSeed(ctx context.Context, userID int, totpSeed string, updateTS float64, updateUserID int) (float64, error)
@@ -41,7 +41,9 @@ type UserRepositoryInterface interface {
 
 // AppUserGroupRepositoryInterface defines the methods needed by UserHandler
 type AppUserGroupRepositoryInterface interface {
-	RetrieveAppUserGroupListByIDList(ctx context.Context, groupIDs []int) ([]*model.AppUserGroupModel, error)
+	RetrieveAppUserGroupListByIDList(ctx context.Context, groupIDs []int, securityContext int) ([]*model.AppUserGroupModel, error)
+	UpdateAppUserGroup(ctx context.Context, group *model.AppUserGroupModel, clientUpdateTS float64, securityContext int) error
+	CreateAppUserGroup(ctx context.Context, group *model.AppUserGroupModel, securityContext int) (*model.AppUserGroupModel, error)
 }
 
 // encryptTOTPSeed encrypts a TOTP seed using AES-GCM
@@ -118,7 +120,7 @@ func (h *UserHandler) validateGroupsSecurityContext(groupIDs []int, expectedSecu
 		return true, nil
 	}
 
-	groups, err := h.appUserGroupRepo.RetrieveAppUserGroupListByIDList(ctx, groupIDs)
+	groups, err := h.appUserGroupRepo.RetrieveAppUserGroupListByIDList(ctx, groupIDs, expectedSecurityContext)
 	if err != nil {
 		return false, fmt.Errorf("failed to retrieve groups for validation: %w", err)
 	}
@@ -311,7 +313,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	user.PwHash = hashed
 
 	// Create user
-	createdUser, err := h.userRepo.CreateUser(r.Context(), &user)
+	createdUser, err := h.userRepo.CreateUser(r.Context(), &user, jwtClaims.SecurityContext)
 	if err != nil {
 		// Check if it's a validation error
 		if strings.Contains(err.Error(), "username must contain only") {
@@ -376,7 +378,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	user.UpdateUserID = jwtClaims.UserID
 
 	// Update user with optimistic locking
-	err := h.userRepo.UpdateUser(r.Context(), &user, clientUpdateTS)
+	err := h.userRepo.UpdateUser(r.Context(), &user, clientUpdateTS, jwtClaims.SecurityContext)
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
@@ -712,7 +714,7 @@ func UserSelfCreateHandler(appServices *app_lib.AppServices, userRepo *repositor
 			UpdateUserID:               0, // System
 		}
 
-		userID, err := userRepo.CreateUser(r.Context(), newUser)
+		userID, err := userRepo.CreateUser(r.Context(), newUser, 1) // Self-created users go in security context 1
 		if err != nil {
 			app.WriteError(w, http.StatusInternalServerError, "Failed to create user", "UCF0", err)
 			return

@@ -69,7 +69,7 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserByUserName() {
 		UpdateUserID:               1,
 	}
 
-	created, err := s.repo.CreateUser(context.Background(), testUser)
+	created, err := s.repo.CreateUser(context.Background(), testUser, 1)
 	s.NoError(err)
 	s.NotNil(created)
 
@@ -161,7 +161,7 @@ func (s *UserRepositoryTestSuite) TestCreateUser() {
 		UpdateUserID:               1,
 	}
 
-	created, err := s.repo.CreateUser(context.Background(), user)
+	created, err := s.repo.CreateUser(context.Background(), user, 1)
 	s.NoError(err)
 	s.NotNil(created)
 	s.NotZero(created.AppUserID)
@@ -188,7 +188,7 @@ func (s *UserRepositoryTestSuite) TestCreateUserInvalidUsername() {
 		UpdateUserID:               1,
 	}
 
-	created, err := s.repo.CreateUser(context.Background(), user)
+	created, err := s.repo.CreateUser(context.Background(), user, 1)
 	s.Error(err)
 	s.Nil(created)
 	s.Contains(err.Error(), "username must contain only alphanumeric characters, hyphens, and underscores")
@@ -211,7 +211,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserPassword() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user)
+	created, _ := s.repo.CreateUser(context.Background(), user, 1)
 
 	// Update password
 	newHash := "$2a$10$new.hash.for.testing"
@@ -282,8 +282,8 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserList() {
 		UpdateUserID:               1,
 	}
 
-	created1, _ := s.repo.CreateUser(context.Background(), user1)
-	created2, _ := s.repo.CreateUser(context.Background(), user2)
+	created1, _ := s.repo.CreateUser(context.Background(), user1, 1)
+	created2, _ := s.repo.CreateUser(context.Background(), user2, 1)
 
 	// Test retrieve all users in security context 1
 	users, err := s.repo.RetrieveUserList(context.Background(), 1, nil, 0)
@@ -329,7 +329,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserTOTPSeed() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user)
+	created, _ := s.repo.CreateUser(context.Background(), user, 1)
 
 	// Update TOTP seed
 	newSeed := "JBSWY3DPEHPK3PXP"
@@ -372,7 +372,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserMFAExempt() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user)
+	created, _ := s.repo.CreateUser(context.Background(), user, 1)
 
 	// Update MFA exempt to true
 	expectedUpdateTS := created.UpdateTS
@@ -409,7 +409,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUser() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user)
+	created, _ := s.repo.CreateUser(context.Background(), user, 1)
 
 	// Update user details
 	updatedUser := &model.AppUserModel{
@@ -424,7 +424,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUser() {
 		UpdateUserID:               2,
 	}
 
-	err := s.repo.UpdateUser(context.Background(), updatedUser, created.UpdateTS)
+	err := s.repo.UpdateUser(context.Background(), updatedUser, created.UpdateTS, 1)
 	s.NoError(err)
 
 	// Verify update
@@ -436,7 +436,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUser() {
 	s.Contains(retrieved.AppUserGroupMembershipList, 2)
 
 	// Test update with stale timestamp
-	err = s.repo.UpdateUser(context.Background(), updatedUser, created.UpdateTS)
+	err = s.repo.UpdateUser(context.Background(), updatedUser, created.UpdateTS, 1)
 	s.Error(err)
 	s.Equal(ErrConflict, err)
 
@@ -446,7 +446,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUser() {
 		UserName:  "nonexistent",
 		UpdateTS:  1234567890.123,
 	}
-	err = s.repo.UpdateUser(context.Background(), nonExistent, 1234567890.123)
+	err = s.repo.UpdateUser(context.Background(), nonExistent, 1234567890.123, 1)
 	s.Error(err)
 	s.Equal(ErrNotFound, err)
 }
@@ -468,7 +468,7 @@ func (s *UserRepositoryTestSuite) TestDeleteUser() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user)
+	created, _ := s.repo.CreateUser(context.Background(), user, 1)
 
 	// Delete user
 	deleteTS := 1234567892.789
@@ -524,8 +524,8 @@ func (s *UserRepositoryTestSuite) TestAddUserListToGroup() {
 		UpdateUserID:               1,
 	}
 
-	created1, _ := s.repo.CreateUser(context.Background(), user1)
-	created2, _ := s.repo.CreateUser(context.Background(), user2)
+	created1, _ := s.repo.CreateUser(context.Background(), user1, 1)
+	created2, _ := s.repo.CreateUser(context.Background(), user2, 1)
 
 	// Verify users start with empty group membership
 	var groups1, groups2 []int
@@ -585,7 +585,7 @@ func (s *UserRepositoryTestSuite) TestRemoveUserListFromGroup() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user)
+	created, _ := s.repo.CreateUser(context.Background(), user, 1)
 
 	// Remove user from group 1
 	updatedUsers, err := s.repo.RemoveUserListFromGroup(context.Background(), []int{created.AppUserID}, 1, []float64{created.UpdateTS}, 2, 1)

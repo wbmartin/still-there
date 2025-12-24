@@ -54,7 +54,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExample() {
 		UpdateUserID:    1,
 	}
 
-	created, err := s.repo.CreateExample(context.Background(), example)
+	created, err := s.repo.CreateExample(context.Background(), example, 1)
 	s.NoError(err)
 	s.NotNil(created)
 	s.NotZero(created.ExampleID)
@@ -72,7 +72,7 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExample() {
 		UpdateUserID:    1,
 	}
 
-	created, _ := s.repo.CreateExample(context.Background(), example)
+	created, _ := s.repo.CreateExample(context.Background(), example, 1)
 
 	// Test retrieval
 	retrieved, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
@@ -92,7 +92,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExample() {
 		UpdateUserID:    1,
 	}
 
-	created, _ := s.repo.CreateExample(context.Background(), example)
+	created, _ := s.repo.CreateExample(context.Background(), example, 1)
 
 	// Update it
 	created.ExampleText = "RepoTest Updated Example"
@@ -118,7 +118,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExample() {
 		UpdateUserID:    1,
 	}
 
-	created, _ := s.repo.CreateExample(context.Background(), example)
+	created, _ := s.repo.CreateExample(context.Background(), example, 1)
 
 	// Delete it
 	deletedID, err := s.repo.DeleteExample(context.Background(), created.ExampleID, 1, 1234567890.123, 1234567892.789, 2)
@@ -151,7 +151,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExampleList() {
 		},
 	}
 
-	created, err := s.repo.CreateExampleList(context.Background(), examples)
+	created, err := s.repo.CreateExampleList(context.Background(), examples, 1)
 	s.NoError(err)
 	s.Len(created, 2)
 	s.NotZero(created[0].ExampleID)
@@ -177,8 +177,8 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExampleList() {
 		UpdateUserID:    1,
 	}
 
-	created1, _ := s.repo.CreateExample(context.Background(), example1)
-	created2, _ := s.repo.CreateExample(context.Background(), example2)
+	created1, _ := s.repo.CreateExample(context.Background(), example1, 1)
+	created2, _ := s.repo.CreateExample(context.Background(), example2, 1)
 
 	// Test list retrieval
 	ids := []int{created1.ExampleID, created2.ExampleID}
@@ -208,7 +208,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExampleList() {
 		},
 	}
 
-	created, _ := s.repo.CreateExampleList(context.Background(), examples)
+	created, _ := s.repo.CreateExampleList(context.Background(), examples, 1)
 
 	// Update them
 	created[0].ExampleText = "RepoTest Updated List 1"
@@ -219,7 +219,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExampleList() {
 	created[1].UpdateUserID = 2
 
 	originalUpdateTSList := []float64{1234567890.123, 1234567890.123}
-	err := s.repo.UpdateExampleList(context.Background(), created, originalUpdateTSList)
+	err := s.repo.UpdateExampleList(context.Background(), created, originalUpdateTSList, 1)
 	s.NoError(err)
 }
 
@@ -244,7 +244,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExampleList() {
 		},
 	}
 
-	created, _ := s.repo.CreateExampleList(context.Background(), examples)
+	created, _ := s.repo.CreateExampleList(context.Background(), examples, 1)
 	ids := []int{created[0].ExampleID, created[1].ExampleID}
 	updateTs := []float64{1234567890.123, 1234567890.123}
 

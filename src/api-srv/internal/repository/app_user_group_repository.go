@@ -20,9 +20,9 @@ func NewAppUserGroupRepository(db *pgxpool.Pool) *AppUserGroupRepository {
 	return &AppUserGroupRepository{db: db}
 }
 
-// RetrieveAppUserGroupListByIDList retrieves user groups by IDs
+// RetrieveAppUserGroupListByIDList retrieves user groups by IDs within a security context
 func (r *AppUserGroupRepository) RetrieveAppUserGroupListByIDList(
-	ctx context.Context, groupIDs []int,
+	ctx context.Context, groupIDs []int, securityContext int,
 ) ([]*model.AppUserGroupModel, error) {
 	if len(groupIDs) == 0 {
 		return []*model.AppUserGroupModel{}, nil
@@ -33,11 +33,11 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupListByIDList(
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user_group
-		WHERE app_user_group_id = ANY($1) AND delete_user_id IS NULL`
+		WHERE app_user_group_id = ANY($1) AND security_context = $2 AND delete_user_id IS NULL`
 
 	var groupList []*model.AppUserGroupModel
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		rowList, err := r.db.Query(ctx, query, groupIDs)
+		rowList, err := r.db.Query(ctx, query, groupIDs, securityContext)
 		if err != nil {
 			return err
 		}
@@ -110,10 +110,15 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupList(
 	return groups, nil
 }
 
-// CreateAppUserGroup creates a new user group
+// CreateAppUserGroup creates a new user group within a security context
 func (r *AppUserGroupRepository) CreateAppUserGroup(
-	ctx context.Context, group *model.AppUserGroupModel,
+	ctx context.Context, group *model.AppUserGroupModel, securityContext int,
 ) (*model.AppUserGroupModel, error) {
+	// Validate that the group can only be created in the user's security context
+	if group.SecurityContext != securityContext {
+		return nil, fmt.Errorf("cannot create user group in different security context")
+	}
+
 	query := `
 		INSERT INTO app_user_group (group_name, user_grant_list, security_context,
 		                        create_ts, create_user_id, update_ts, update_user_id)
@@ -135,15 +140,15 @@ func (r *AppUserGroupRepository) CreateAppUserGroup(
 	return group, nil
 }
 
-// UpdateAppUserGroup updates a user group with optimistic locking
+// UpdateAppUserGroup updates a user group with optimistic locking within a security context
 func (r *AppUserGroupRepository) UpdateAppUserGroup(
-	ctx context.Context, group *model.AppUserGroupModel, clientUpdateTS float64,
+	ctx context.Context, group *model.AppUserGroupModel, clientUpdateTS float64, securityContext int,
 ) error {
 	query := `
 		UPDATE app_user_group
 		SET group_name = $1, user_grant_list = $2,
 		    update_ts = $3, update_user_id = $4
-		WHERE app_user_group_id = $5 AND update_ts = $6 AND delete_user_id IS NULL`
+		WHERE app_user_group_id = $5 AND security_context = $6 AND update_ts = $7 AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
@@ -151,7 +156,7 @@ func (r *AppUserGroupRepository) UpdateAppUserGroup(
 		result, execErr = r.db.Exec(ctx, query,
 			group.GroupName, group.UserGrantList,
 			group.UpdateTS, group.UpdateUserID,
-			group.AppUserGroupID, clientUpdateTS)
+			group.AppUserGroupID, securityContext, clientUpdateTS)
 		return execErr
 	})
 	if err != nil {

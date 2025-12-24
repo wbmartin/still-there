@@ -50,8 +50,8 @@ func (s *AppUserGroupRepositoryTestSuite) TestNewAppUserGroupRepository() {
 }
 
 func (s *AppUserGroupRepositoryTestSuite) TestReadAppUserGroupList() {
-	// First, check what groups actually exist in the database
-	allGroups, err := s.db.Query(context.Background(), "SELECT app_user_group_id FROM app_user_group WHERE delete_user_id IS NULL ORDER BY app_user_group_id")
+	// First, check what groups actually exist in the database for security context 1
+	allGroups, err := s.db.Query(context.Background(), "SELECT app_user_group_id FROM app_user_group WHERE security_context = 1 AND delete_user_id IS NULL ORDER BY app_user_group_id")
 	s.NoError(err)
 	defer allGroups.Close()
 
@@ -64,13 +64,13 @@ func (s *AppUserGroupRepositoryTestSuite) TestReadAppUserGroupList() {
 	}
 
 	if len(existingGroupIDList) == 0 {
-		// No groups in database, skip this test
-		s.T().Skip("No user groups found in database - skipping test")
+		// No groups in database for security context 1, skip this test
+		s.T().Skip("No user groups found in database for security context 1 - skipping test")
 		return
 	}
 
 	// Test retrieving existing groups
-	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), existingGroupIDList)
+	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), existingGroupIDList, 1)
 	s.NoError(err)
 	s.NotNil(groups)
 	s.Len(groups, len(existingGroupIDList))
@@ -90,7 +90,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestReadAppUserGroupList() {
 
 func (s *AppUserGroupRepositoryTestSuite) TestRetrieveAppUserGroupListByIDListEmpty() {
 	// Test with empty list
-	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), []int{})
+	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), []int{}, 1)
 	s.NoError(err)
 	s.Equal(0, len(groups))
 	s.Equal([]*model.AppUserGroupModel{}, groups)
@@ -99,7 +99,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestRetrieveAppUserGroupListByIDListEm
 func (s *AppUserGroupRepositoryTestSuite) TestRetrieveAppUserGroupListByIDListNonExistent() {
 	// Test with non-existent IDs
 	groupIDList := []int{99999, 88888}
-	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), groupIDList)
+	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), groupIDList, 1)
 	s.NoError(err)
 	s.Equal(0, len(groups)) // Should return empty slice for non-existent groups
 }
@@ -122,7 +122,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestRetrieveAppUserGroupListByIDListPa
 
 	// Test with mix of existing and non-existing IDs
 	groupIDList := []int{existingID, 99999}
-	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), groupIDList)
+	groups, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), groupIDList, 1)
 	s.NoError(err)
 
 	// Should find only the existing group
@@ -169,7 +169,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestCreateAppUserGroup() {
 		UpdateUserID:    1,
 	}
 
-	created, err := s.repo.CreateAppUserGroup(context.Background(), group)
+	created, err := s.repo.CreateAppUserGroup(context.Background(), group, 1)
 	s.NoError(err)
 	s.NotNil(created)
 	s.NotZero(created.AppUserGroupID)
@@ -205,7 +205,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestUpdateAppUserGroup() {
 		UpdateUserID:    1,
 	}
 
-	created, _ := s.repo.CreateAppUserGroup(context.Background(), group)
+	created, _ := s.repo.CreateAppUserGroup(context.Background(), group, 1)
 
 	// Update the group
 	updatedGroup := &model.AppUserGroupModel{
@@ -216,18 +216,18 @@ func (s *AppUserGroupRepositoryTestSuite) TestUpdateAppUserGroup() {
 		UpdateUserID:   2,
 	}
 
-	err := s.repo.UpdateAppUserGroup(context.Background(), updatedGroup, created.UpdateTS)
+	err := s.repo.UpdateAppUserGroup(context.Background(), updatedGroup, created.UpdateTS, 1)
 	s.NoError(err)
 
 	// Verify update
-	retrieved, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), []int{created.AppUserGroupID})
+	retrieved, err := s.repo.RetrieveAppUserGroupListByIDList(context.Background(), []int{created.AppUserGroupID}, 1)
 	s.NoError(err)
 	s.Len(retrieved, 1)
 	s.Equal("RepoTestUpdatedGroup", retrieved[0].GroupName)
 	s.Equal([]int{1001, 1002, 1003}, retrieved[0].UserGrantList)
 
 	// Test update with stale timestamp
-	err = s.repo.UpdateAppUserGroup(context.Background(), updatedGroup, created.UpdateTS)
+	err = s.repo.UpdateAppUserGroup(context.Background(), updatedGroup, created.UpdateTS, 1)
 	s.Error(err)
 	s.Equal(ErrConflict, err)
 
@@ -237,7 +237,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestUpdateAppUserGroup() {
 		GroupName:      "NonExistent",
 		UpdateTS:       1234567890.123,
 	}
-	err = s.repo.UpdateAppUserGroup(context.Background(), nonExistent, 1234567890.123)
+	err = s.repo.UpdateAppUserGroup(context.Background(), nonExistent, 1234567890.123, 1)
 	s.Error(err)
 	s.Equal(ErrNotFound, err)
 

@@ -78,11 +78,16 @@ func (r *ExampleRepository) RetrieveExample(
 	return &example, nil
 }
 
-// CreateExample creates a new example
+// CreateExample creates a new example within a security context
 func (r *ExampleRepository) CreateExample(
 	ctx context.Context,
-	example *model.ExampleModel,
+	example *model.ExampleModel, securityContext int,
 ) (*model.ExampleModel, error) {
+	// Validate that the example can only be created in the user's security context
+	if example.SecurityContext != securityContext {
+		return nil, fmt.Errorf("cannot create example in different security context")
+	}
+
 	query := `
 		INSERT INTO example (
 			example_text, example_int, example_float, example_int_array,
@@ -292,13 +297,20 @@ func (r *ExampleRepository) RetrieveExampleList(
 	return exampleList, nil
 }
 
-// CreateExampleList creates multiple examples in a transaction
+// CreateExampleList creates multiple examples in a transaction within a security context
 func (r *ExampleRepository) CreateExampleList(
 	ctx context.Context,
-	exampleList []*model.ExampleModel,
+	exampleList []*model.ExampleModel, securityContext int,
 ) ([]*model.ExampleModel, error) {
 	if len(exampleList) == 0 {
 		return []*model.ExampleModel{}, nil
+	}
+
+	// Validate that all examples can only be created in the user's security context
+	for _, example := range exampleList {
+		if example.SecurityContext != securityContext {
+			return nil, fmt.Errorf("cannot create example in different security context")
+		}
 	}
 
 	// Begin transaction
@@ -338,11 +350,12 @@ func (r *ExampleRepository) CreateExampleList(
 	return exampleList, nil
 }
 
-// UpdateExampleList updates multiple examples in a transaction
+// UpdateExampleList updates multiple examples in a transaction within a security context
 func (r *ExampleRepository) UpdateExampleList(
 	ctx context.Context,
 	exampleList []*model.ExampleModel,
 	originalUpdateTSList []float64,
+	securityContext int,
 ) error {
 	if len(exampleList) == 0 {
 		return nil
@@ -364,7 +377,7 @@ func (r *ExampleRepository) UpdateExampleList(
 	for i, example := range exampleList {
 		result, err := tx.Exec(ctx, query,
 			example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
-			example.UpdateTS, example.UpdateUserID, example.ExampleID, example.SecurityContext, originalUpdateTSList[i],
+			example.UpdateTS, example.UpdateUserID, example.ExampleID, securityContext, originalUpdateTSList[i],
 		)
 		if err != nil {
 			return fmt.Errorf("failed to update example %d: %w", example.ExampleID, err)

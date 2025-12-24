@@ -108,7 +108,7 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 	group.UpdateUserID = jwtClaims.UserID
 
 	// Create user group
-	createdGroup, err := h.appUserGroupRepo.CreateAppUserGroup(r.Context(), &group)
+	createdGroup, err := h.appUserGroupRepo.CreateAppUserGroup(r.Context(), &group, jwtClaims.SecurityContext)
 	if err != nil {
 		app.WriteError(w, http.StatusInternalServerError,
 			"Failed to create user group", "CREATE_USER_GROUP_FAIL", err)
@@ -165,7 +165,7 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 	group.UpdateUserID = jwtClaims.UserID
 
 	// Update user group with optimistic locking
-	err := h.appUserGroupRepo.UpdateAppUserGroup(r.Context(), &group, clientUpdateTS)
+	err := h.appUserGroupRepo.UpdateAppUserGroup(r.Context(), &group, clientUpdateTS, jwtClaims.SecurityContext)
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
