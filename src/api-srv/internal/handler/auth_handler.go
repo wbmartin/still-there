@@ -715,7 +715,7 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 			return
 		}
 
-		appServices.Logger.Info(
+		app.Logger().Info(
 			"LOGOFF_START",
 			"Logoff request started",
 			"username",
@@ -734,7 +734,7 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 		})
 
 		w.WriteHeader(http.StatusOK)
-		appServices.Logger.Info(
+		app.Logger().Info(
 			"LOGOFF_SUCCESS",
 			"Logoff successful",
 			"username",

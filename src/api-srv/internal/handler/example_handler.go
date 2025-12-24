@@ -109,7 +109,7 @@ func (h *ExampleHandler) RetrieveExample(
 
 	app.Debug("EX_RETRIEVED", fmt.Sprintf("Example retrieved: %+v", example))
 	wrapper := model.DataWrapper{Data: example}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info("GET_EX_DONE", "Example retrieval completed")
 }
 
@@ -333,7 +333,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 
 	app.Debug("EX_UPDATED", fmt.Sprintf("Example updated: %+v", example))
 	wrapper := model.DataWrapper{Data: example}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info(
 		"EX_UP_DONE",
 		fmt.Sprintf(
@@ -454,7 +454,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		"example_id": deletedID,
 	}
 	wrapper := model.DataWrapper{Data: data}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info(
 		"EX_DEL_DONE",
 		fmt.Sprintf("Example deletion completed for exampleId=%d", deletedID),
@@ -535,7 +535,7 @@ func (h *ExampleHandler) RetrieveExampleList(
 
 	// Return as JSON
 	wrapper := model.DataWrapper{Data: examples}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 
 	app.Info("EX_LIST_RET", fmt.Sprintf("Returned %d examples", len(examples)))
 }
@@ -547,6 +547,7 @@ func (h *ExampleHandler) CreateExampleList(
 ) {
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app.Info("EX_BLK_CR_ST", "CreateExampleList invoked")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -555,8 +556,6 @@ func (h *ExampleHandler) CreateExampleList(
 	if !app.CheckAllChecksComplete() {
 		return
 	}
-
-	app.Info("EX_BLK_CR_ST", "CreateExampleList invoked")
 
 	jwtClaims := app.GetClaims()
 
@@ -774,7 +773,7 @@ func (h *ExampleHandler) UpdateExampleList(
 	// Return success
 	data := map[string]string{"message": "Examples updated successfully"}
 	wrapper := model.DataWrapper{Data: data}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 
 	app.Info(
 		"EX_BLK_UP_RET",
@@ -886,7 +885,7 @@ func (h *ExampleHandler) DeleteExampleList(
 		"exampleIdList": deletedIDList,
 	}
 	wrapper := model.DataWrapper{Data: data}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 
 	app.Info(
 		"EX_BLK_DEL_RET",

@@ -3,8 +3,16 @@
 # Integration tests for web service
 # Tests the full HTTP stack including authentication and CRUD operations
 # Reads the actual port from the config file
+#
+# Usage: ./bin/320-test-web-service [--skip-lint]
 
 set -e
+
+# Parse command line arguments
+SKIP_LINT=false
+if [ "$1" = "--skip-lint" ]; then
+    SKIP_LINT=true
+fi
 
 # Get the directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,9 +21,12 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # Change to project root directory
 pushd "$PROJECT_ROOT" > /dev/null
 
-# Format web app code
-echo "Formatting web app code..."
-cd src/web-app && npm run lint -- --fix && cd "$PROJECT_ROOT"
+# Format web app code (unless skipped)
+if [ "$SKIP_LINT" = false ]; then
+    echo "Formatting web app code..."
+    (cd src/web-app && npm run lint -- --fix) || true
+    cd "$PROJECT_ROOT"  # Ensure we're back in project root
+fi
 
 # Read the server port from config file
 CONFIG_FILE="$PROJECT_ROOT/etc/loc-api-srv.env"

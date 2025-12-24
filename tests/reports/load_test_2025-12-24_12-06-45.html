@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Load Test Results - 2025-12-24 12:06:45</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .summary {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #007bff;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        .success { color: #28a745; font-weight: bold; }
+        .warning { color: #ffc107; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .metric { font-family: 'Courier New', monospace; }
+        .errors { background: #fff5f5; padding: 15px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>API Load Test Results</h1>
+            <p><strong>Timestamp:</strong> 2025-12-24 12:06:45</p>
+            <p><strong>Duration:</strong> 62.0s</p>
+            <p><strong>Concurrency:</strong> 100 users</p>
+            <p><strong>Test Mode:</strong> Duration (1m0s)</p>
+        </div>
+
+        <div class="summary">
+            <h2>Overall Summary</h2>
+            <p><strong>Total Requests:</strong> 20336</p>
+            <p><strong>Requests/sec:</strong> 328.2</p>
+            <p><strong>Success Rate:</strong>
+                <span class="success">
+                    100.0%
+                </span>
+            </p>
+            
+        </div>
+
+        <h2>Detailed Metrics</h2>
+        <table>
+            <tr>
+                <th>Operation</th>
+                <th>Requests</th>
+                <th>Success Rate</th>
+                <th>Avg (ms)</th>
+                <th>Min (ms)</th>
+                <th>Max (ms)</th>
+                <th>P95 (ms)</th>
+                <th>P99 (ms)</th>
+            </tr>
+            
+            <tr>
+                <td>login</td>
+                <td>5084</td>
+                <td class="success">
+                    100.0%
+                </td>
+                <td class="metric">1046.5</td>
+                <td class="metric">2.0</td>
+                <td class="metric">3695.0</td>
+                <td class="metric">2387.0</td>
+                <td class="metric">2634.0</td>
+            </tr>
+            
+            <tr>
+                <td>create</td>
+                <td>5084</td>
+                <td class="success">
+                    100.0%
+                </td>
+                <td class="metric">65.6</td>
+                <td class="metric">1.0</td>
+                <td class="metric">1248.0</td>
+                <td class="metric">164.0</td>
+                <td class="metric">657.0</td>
+            </tr>
+            
+            <tr>
+                <td>update</td>
+                <td>2542</td>
+                <td class="success">
+                    100.0%
+                </td>
+                <td class="metric">61.3</td>
+                <td class="metric">1.0</td>
+                <td class="metric">1379.0</td>
+                <td class="metric">162.0</td>
+                <td class="metric">385.0</td>
+            </tr>
+            
+            <tr>
+                <td>get</td>
+                <td>2542</td>
+                <td class="success">
+                    100.0%
+                </td>
+                <td class="metric">91.8</td>
+                <td class="metric">1.0</td>
+                <td class="metric">2081.0</td>
+                <td class="metric">223.0</td>
+                <td class="metric">409.0</td>
+            </tr>
+            
+            <tr>
+                <td>delete</td>
+                <td>2542</td>
+                <td class="success">
+                    100.0%
+                </td>
+                <td class="metric">66.0</td>
+                <td class="metric">2.0</td>
+                <td class="metric">767.0</td>
+                <td class="metric">176.0</td>
+                <td class="metric">265.0</td>
+            </tr>
+            
+            <tr>
+                <td>logout</td>
+                <td>2542</td>
+                <td class="success">
+                    100.0%
+                </td>
+                <td class="metric">31.3</td>
+                <td class="metric">0.0</td>
+                <td class="metric">461.0</td>
+                <td class="metric">88.0</td>
+                <td class="metric">186.0</td>
+            </tr>
+            
+        </table>
+
+        
+    </div>
+</body>
+</html>

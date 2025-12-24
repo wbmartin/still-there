@@ -181,18 +181,31 @@ func (ah *AppHelper) WarnWithCallerSkip(code, message string, skip int) {
 	)
 }
 
-// writeJSON writes a JSON response
-func writeJSON(
+// WriteJSON writes a JSON response
+func (ah *AppHelper) WriteJSON(
 	w http.ResponseWriter,
 	status int,
 	data interface{},
-	logger ThisAppLoggerInterface,
 ) {
+	// Only enforce security checks for success responses (status < 400)
+	// Error responses (4xx/5xx) are allowed even if checks failed
+	if status < 400 && !ah.CheckAllChecksComplete() {
+		ah.appServices.Logger.Error(
+			"SEC0",
+			"Attempted to write JSON before security checks complete",
+		)
+		http.Error(w, "Security check failed", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		logger.Error("JEN0", "Failed to encode JSON response: "+err.Error())
+		ah.appServices.Logger.Error(
+			"JEN0",
+			"Failed to encode JSON response: "+err.Error(),
+		)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -217,7 +230,7 @@ func (ah *AppHelper) WriteError(
 		ah.username,
 	)
 	response := map[string]string{"error": clientMsg}
-	writeJSON(w, status, response, ah.appServices.Logger)
+	ah.WriteJSON(w, status, response)
 }
 
 // GetContext returns the current context
@@ -228,6 +241,11 @@ func (sh *AppHelper) GetContext() context.Context {
 // CanProceed returns true if processing can continue
 func (sh *AppHelper) CanProceed() bool {
 	return !sh.blocked
+}
+
+// Logger returns the logger
+func (ah *AppHelper) Logger() ThisAppLoggerInterface {
+	return ah.appServices.Logger
 }
 
 // CheckJWT validates the JWT token

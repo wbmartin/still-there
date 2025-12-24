@@ -80,16 +80,16 @@ func UserSelfCreateHandler(
 	userRepo *repository.UserRepository,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Create app helper
+		app := app_lib.NewAppHelper(w, r, appServices)
+
 		// No auth required for self-create
-		appServices.Logger.Info(
+		app.Logger().Info(
 			"USC0",
 			"User self-create request started",
 			"username",
 			"anonymous",
 		)
-
-		// Create app helper without JWT check
-		app := app_lib.NewAppHelper(w, r, appServices)
 		app.SkipJWT() // Public endpoint
 		app.CheckRateLimit()
 		app.SkipUserBlock()
@@ -214,7 +214,7 @@ func UserSelfCreateHandler(
 			return
 		}
 
-		appServices.Logger.Info(
+		app.Logger().Info(
 			"USCC",
 			"User self-created successfully",
 			"username",
@@ -226,7 +226,7 @@ func UserSelfCreateHandler(
 		wrapper := model.DataWrapper{
 			Data: map[string]string{"message": "User created successfully"},
 		}
-		writeJSON(w, http.StatusCreated, wrapper, appServices.Logger)
+		app.WriteJSON(w, http.StatusCreated, wrapper)
 	}
 }
 
@@ -375,7 +375,7 @@ func MFASetupHandler(
 		}
 
 		wrapper := model.DataWrapper{Data: response}
-		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+		app.WriteJSON(w, http.StatusOK, wrapper)
 		app.Info("MFA_STP_DATA", "MFA setup data provided")
 	}
 }
@@ -517,12 +517,13 @@ func MFAVerifyHandler(
 				userName,
 			)
 			if err != nil {
-				appServices.Logger.Error(
+				app.Logger().Error(
 					"FAILED_ATTEMPT_INCR_FAIL",
 					"Failed to increment failed attempts for user: "+userName+", error: "+err.Error(),
 					"username",
 					userName,
 				)
+
 				// Don't fail the request, just log
 			}
 			app.WriteError(
@@ -616,7 +617,7 @@ func MFAVerifyHandler(
 				User:      response,
 				CsrfToken: csrfToken,
 			}
-			writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+			app.WriteJSON(w, http.StatusOK, wrapper)
 			app.Info(
 				"MFA_ONB_CMP",
 				"MFA onboarding completed for user: "+userName,
@@ -624,7 +625,7 @@ func MFAVerifyHandler(
 		} else {
 			// For logged in users, just confirm
 			wrapper := model.DataWrapper{Data: map[string]string{"message": "MFA verified successfully"}}
-			writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+			app.WriteJSON(w, http.StatusOK, wrapper)
 			app.Info("MFA_VFY_OK", "MFA verification successful for user: "+userName)
 		}
 	}
@@ -719,7 +720,7 @@ func AdminResetUserMFAHandler(
 				"updateTs": newUpdateTS,
 			},
 		}
-		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+		app.WriteJSON(w, http.StatusOK, wrapper)
 		app.Info(
 			"ADM_RST_MFA_D",
 			"Admin reset MFA completed for user: "+targetUser.UserName,

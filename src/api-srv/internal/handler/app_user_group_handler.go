@@ -62,7 +62,7 @@ func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 	}
 
 	wrapper := model.DataWrapper{Data: groups}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info("UGRP_LST_DONE", "User group list retrieval completed")
 }
 
@@ -234,7 +234,7 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 
 	app.Debug("UGRP_UPDATED", "User group updated")
 	wrapper := model.DataWrapper{Data: group}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info(
 		"UP_UGRP_DONE",
 		fmt.Sprintf(
@@ -328,7 +328,7 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 	data := map[string]interface{}{
 		"message": "User group deleted successfully", "userGroupId": deletedID}
 	wrapper := model.DataWrapper{Data: data}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info(
 		"DEL_UGRP_DONE",
 		fmt.Sprintf("User group deletion completed for groupId=%d", deletedID),

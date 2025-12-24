@@ -72,7 +72,9 @@ func (c *VaultClient) Connect() (bool, error) {
 	}
 	block, _ := pem.Decode(serverCertPEM)
 	if block == nil {
-		return false, fmt.Errorf("failed to decode PEM block from server certificate")
+		return false, fmt.Errorf(
+			"failed to decode PEM block from server certificate",
+		)
 	}
 	serverCert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {

@@ -286,7 +286,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 
 	// Return as JSON
 	wrapper := model.DataWrapper{Data: users}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 
 	app.Info("USR_LIST_DONE", "User list read completed")
 }
@@ -324,7 +324,7 @@ func (h *UserHandler) RetrieveGrantList(
 
 	app.Debug("GRT_LST_READ", "Grant list read")
 	wrapper := model.DataWrapper{Data: grantList}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info("GRT_LIST_DONE", "Grant list read completed")
 }
 
@@ -603,7 +603,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	app.Debug("UUD0", "User updated")
 	wrapper := model.DataWrapper{Data: user}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info(
 		"USR_UPDATE_DONE",
 		fmt.Sprintf(
@@ -697,7 +697,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		"appUserId": deletedID,
 	}
 	wrapper := model.DataWrapper{Data: data}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info(
 		"USR_DELETE_DONE",
 		fmt.Sprintf("User deletion completed for userId=%d", deletedID),
@@ -822,7 +822,7 @@ func (h *UserHandler) AddUserListToGroupHandler(
 
 	app.Info("ADD_USR_GRP_D", "Users added to group successfully")
 	wrapper := model.DataWrapper{Data: updatedUsers}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 }
 
 // RemoveUserListFromGroupHandler handles POST /removeUserListFromGroup
@@ -931,7 +931,7 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 
 	app.Info("REM_USR_GRP_D", "Users removed from group successfully")
 	wrapper := model.DataWrapper{Data: updatedUsers}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 }
 
 // ChangeOtherUserPassword handles POST /changeOtherUserPassword
@@ -1055,6 +1055,6 @@ func (h *UserHandler) ChangeOtherUserPassword(
 	wrapper := model.DataWrapper{
 		Data: map[string]string{"message": "Password changed successfully"},
 	}
-	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info("PW_CHANGED", "User password change completed")
 }
