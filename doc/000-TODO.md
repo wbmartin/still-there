@@ -1,16 +1,5 @@
 # React App
 
-Currently failing integration test
-
-_______________________________________________________________________________________ TestExampleCRUD.test_error_scenarios ________________________________________________________________________________________
-tests/test_a_example_crud.py:190: in test_error_scenarios
-    assert response.status_code == 404
-E   assert 200 == 404
-E    +  where 200 = <Response [200]>.status_code
-
-=========================================================================================
-
-
 - MFA
   - investigate passcode as second factor - doc in 120
 
@@ -20,11 +9,11 @@ E    +  where 200 = <Response [200]>.status_code
   
 
 # API Server
-- It is currently possible for someone with user update rights to add a group ID outside their context and gain access to another context.  The groups need to be checked to make sure they are within the users security context.
+
 
 - **Complete Repository Coverage:** Address the "test environment issues" to un-skip the tests for `AddUserListToGroup` and `RemoveUserListFromGroup`.
 
-- Check on all repo functions, they should be receving the security context from users jwt claims.
+
 
 - move the database connection string, JWT, and the TOTP code to a shrmple vault.
 
@@ -32,7 +21,7 @@ E    +  where 200 = <Response [200]>.status_code
  
  - The hand-rolled `.env` parser is fragile and doesn't handle common cases like quoted values. Using a standard library like `joho/godotenv` would be more robust.
  
- - The `.golangci.yml` file exists but is empty, defeating its purpose. A good starter project should include a recommended set of linters.
+
  
  - page number on the user list page should be part of state so a refresh or link takes to same place.
 
@@ -53,8 +42,14 @@ make sure you look at my styles and quirks in the instructions. we are building 
 
 # Code Review Prompt
 **This works well for one AI to review what  you've been doing with antother AI**
-Please perform a detailed code review of the WEB APP in the src/api-srv folder.  
-- Background: This is a golang server project that will serv as a starter/base scaffold project for future projects.  
+Please perform a detailed code review of the API Server in the src/api-srv folder.  
+- Background: This is a golang server project that will serv as a starter/base scaffold project for future projects.  It is intended to be paired iwth the web-app react app in src/web-app.  The goal is to have a well structured, secure, and maintainable codebase that follows best practices for golang web servers.
+- Focus on inconsistencies, best practices, security, dead code, and note any tradeoffs made.  
+- Don't look at the documentation in the doc folder because it may  bias the review.
+- Output all of your results to /Users/brandon/Code/ProtoStack-ReactGo/doc/110-api-server-code-review.md.
+
+Please perform a detailed code review of the WEB APP in the src/web-app folder.  
+- Background: This is a react project that will serv as a starter/base scaffold project for future projects. It is intended to be paired with the api-srv in the sibling folder 
 - Focus on inconsistencies, best practices, security, dead code, and note any tradeoffs made.  
 - Don't look at the documentation in the doc folder because it may  bias the review.
 - Output all of your results to /Users/brandon/Code/ProtoStack-ReactGo/doc/110-api-server-code-review.md.
@@ -86,3 +81,9 @@ Thought to be complete
  - shrmple log client reconnection logic is not thread-safe)
 
  - shrmpl-kv client is not handling list correctly right now.
+ 
+ - It is currently possible for someone with user update rights to add a group ID outside their context and gain access to another context.  The groups need to be checked to make sure they are within the users security context.
+
+ - Check on all repo functions, they should be receving the security context from users jwt claims.
+ 
+  - The `.golangci.yml` file exists but is empty, defeating its purpose. A good starter project should include a recommended set of linters.

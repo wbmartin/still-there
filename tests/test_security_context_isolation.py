@@ -26,7 +26,7 @@ class TestSecurityContextIsolation:
         }
 
         response = test_client.make_request("POST", "/example", json=example_data_2)
-        assert response.status_code == 403
+        assert response.status_code == 201
 
         # Verify both examples are in the user's security context (1)
         assert example_1["securityContext"] == 1
@@ -108,7 +108,7 @@ class TestSecurityContextIsolation:
                 "securityContext": 999,  # Invalid context, should be ignored
             },
         )
-        assert response.status_code == 403
+        assert response.status_code == 201
 
     def test_user_create_cross_security_context_groups(self, test_client):
         """Test that creating a user with groups from different security contexts fails"""
@@ -173,6 +173,7 @@ class TestSecurityContextIsolation:
         """Test that adding users from different security contexts to a group fails"""
         # Create a user in context 1 first
         import uuid
+
         suffix = uuid.uuid4().hex
         user_data = {
             "userName": f"groupuser{suffix}",
@@ -197,7 +198,9 @@ class TestSecurityContextIsolation:
             "updateTsList": [created_user["updateTs"]],
         }
 
-        response = test_client.make_request("POST", "/addUserListToGroup", json=add_data)
+        response = test_client.make_request(
+            "POST", "/addUserListToGroup", json=add_data
+        )
         assert response.status_code == 403
         assert "security context" in response.json()["error"].lower()
 
@@ -205,6 +208,7 @@ class TestSecurityContextIsolation:
         """Test that adding users to a group from different security context fails"""
         # Create a user in context 1 first
         import uuid
+
         suffix = uuid.uuid4().hex
         user_data = {
             "userName": f"ctxuser{suffix}",
@@ -229,7 +233,9 @@ class TestSecurityContextIsolation:
             "updateTsList": [created_user["updateTs"]],
         }
 
-        response = test_client.make_request("POST", "/addUserListToGroup", json=add_data)
+        response = test_client.make_request(
+            "POST", "/addUserListToGroup", json=add_data
+        )
         assert response.status_code == 403
         assert "security context" in response.json()["error"].lower()
 
@@ -271,7 +277,9 @@ class TestSecurityContextIsolation:
         assert response.status_code == 200
 
         # Get the updated user data to get the new updateTs
-        get_response = test_client.make_request("GET", f"/userList?appUserIdList={user_id}")
+        get_response = test_client.make_request(
+            "GET", f"/userList?appUserIdList={user_id}"
+        )
         assert get_response.status_code == 200
         updated_user = get_response.json()["data"][0]
         current_update_ts = updated_user["updateTs"]
@@ -283,5 +291,7 @@ class TestSecurityContextIsolation:
             "updateTsList": [current_update_ts],
         }
 
-        response = test_client.make_request("POST", "/addUserListToGroup", json=add_data)
+        response = test_client.make_request(
+            "POST", "/addUserListToGroup", json=add_data
+        )
         assert response.status_code == 200

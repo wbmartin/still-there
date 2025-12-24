@@ -155,23 +155,6 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate security context
-	if example.SecurityContext != 0 &&
-		example.SecurityContext != jwtClaims.SecurityContext {
-		app.WriteError(
-			w,
-			http.StatusForbidden,
-			fmt.Sprintf(
-				"Invalid security context for create example: provided=%d, expected=%d",
-				example.SecurityContext,
-				jwtClaims.SecurityContext,
-			),
-			"SEC_CTX_INVALID",
-			nil,
-		)
-		return
-	}
-
 	// Set security context and creation metadata
 	now := CurrentTimestamp()
 	example.SecurityContext = jwtClaims.SecurityContext
@@ -604,24 +587,8 @@ func (h *ExampleHandler) CreateExampleList(
 		return
 	}
 
-	// Validate all examples have the same security context and it's allowed
-	userSecurityContext := jwtClaims.SecurityContext
+	// Validate required fields
 	for i, example := range exampleList {
-		if example.SecurityContext != userSecurityContext {
-			app.WriteError(
-				w,
-				http.StatusBadRequest,
-				fmt.Sprintf(
-					"Example %d has invalid security context in bulk create: provided=%d, expected=%d",
-					i,
-					example.SecurityContext,
-					userSecurityContext,
-				),
-				"BAD_REQUEST",
-				nil,
-			)
-			return
-		}
 		if example.ExampleText == "" {
 			app.WriteError(
 				w,
@@ -650,6 +617,7 @@ func (h *ExampleHandler) CreateExampleList(
 
 	// Set metadata for all
 	for i := range exampleList {
+		exampleList[i].SecurityContext = jwtClaims.SecurityContext
 		exampleList[i].CreateTS = createTS
 		exampleList[i].CreateUserID = jwtClaims.UserID
 		exampleList[i].UpdateTS = updateTS
@@ -755,22 +723,6 @@ func (h *ExampleHandler) UpdateExampleList(
 	for i := range exampleList {
 		examplePtrList[i] = &exampleList[i]
 		originalUpdateTSList[i] = exampleList[i].UpdateTS
-		if examplePtrList[i].SecurityContext != jwtClaims.SecurityContext {
-			app.WriteError(
-				w,
-				http.StatusBadRequest,
-				fmt.Sprintf(
-					"Example %d has invalid security context in bulk update: example_id=%d, provided=%d, expected=%d",
-					i,
-					examplePtrList[i].ExampleID,
-					examplePtrList[i].SecurityContext,
-					jwtClaims.SecurityContext,
-				),
-				"BAD_REQUEST",
-				nil,
-			)
-			return
-		}
 		if examplePtrList[i].ExampleID == 0 {
 			app.WriteError(
 				w,

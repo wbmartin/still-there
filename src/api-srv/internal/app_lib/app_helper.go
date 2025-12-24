@@ -389,7 +389,13 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 		return sh
 	}
 
-	limit := 100 // Example limit
+	// Use configurable rate limit
+	var limit int
+	if sh.claims != nil {
+		limit = sh.appServices.Config.MaxUserReqPerMin
+	} else {
+		limit = sh.appServices.Config.MaxUnauthReqPerMin
+	}
 	if rateCount > limit {
 		sh.appServices.Logger.Warn("RLE0",
 			fmt.Sprintf("Rate limit exceeded - key: %s, count: %d, limit: %d",

@@ -873,6 +873,32 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 		return
 	}
 
+	// Validate group is in the same security context
+	if valid, err := h.validateGroupsSecurityContext([]int{req.GroupId}, jwtClaims.SecurityContext, r.Context()); !valid ||
+		err != nil {
+		app.WriteError(
+			w,
+			http.StatusForbidden,
+			"Access denied: group must be in the same security context",
+			"SEC_CTX_VIOLATION",
+			nil,
+		)
+		return
+	}
+
+	// Validate all users are in the same security context
+	if valid, err := h.validateUsersSecurityContext(req.UserIds, jwtClaims.SecurityContext, r.Context()); !valid ||
+		err != nil {
+		app.WriteError(
+			w,
+			http.StatusForbidden,
+			"Access denied: all users must be in the same security context",
+			"SEC_CTX_VIOLATION",
+			nil,
+		)
+		return
+	}
+
 	// Remove users from group
 	updatedUsers, err := h.userRepo.RemoveUserListFromGroup(
 		r.Context(),
