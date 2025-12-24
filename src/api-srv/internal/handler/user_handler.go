@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -22,6 +23,26 @@ import (
 	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/repository"
 )
+
+// UserRepositoryInterface defines the methods needed by UserHandler
+type UserRepositoryInterface interface {
+	CreateUser(ctx context.Context, user *model.AppUserModel) (*model.AppUserModel, error)
+	RetrieveUserByUserName(ctx context.Context, username string) (*model.AppUserModel, error)
+	RetrieveUserList(ctx context.Context, securityContext int, idList []int, updateTs float64) ([]*model.AppUserModel, error)
+	UpdateUser(ctx context.Context, user *model.AppUserModel, clientUpdateTS float64) error
+	DeleteUser(ctx context.Context, userID int, securityContext int, updateTS float64, now float64, updateUserID int) (int, error)
+	UpdateUserPassword(ctx context.Context, userID int, hashedPassword string, now float64, updateUserID int) error
+	UpdateUserTOTPSeed(ctx context.Context, userID int, totpSeed string, updateTS float64, updateUserID int) (float64, error)
+	UpdateUserMFAExempt(ctx context.Context, userID int, mfaExempt bool, updateTS float64, updateUserID int) (float64, error)
+	AddUserListToGroup(ctx context.Context, userIDs []int, groupID int, updateTsList []float64, updateUserID int, securityContext int) ([]*model.AppUserModel, error)
+	RemoveUserListFromGroup(ctx context.Context, userIDs []int, groupID int, updateTsList []float64, updateUserID int, securityContext int) ([]*model.AppUserModel, error)
+	GetGrantsForGroups(ctx context.Context, groupIDs []int) (map[int][]int, error)
+}
+
+// AppUserGroupRepositoryInterface defines the methods needed by UserHandler
+type AppUserGroupRepositoryInterface interface {
+	RetrieveAppUserGroupListByIDList(ctx context.Context, groupIDs []int) ([]*model.AppUserGroupModel, error)
+}
 
 // encryptTOTPSeed encrypts a TOTP seed using AES-GCM
 func encryptTOTPSeed(plainSeed, keyHex string) (string, error) {
@@ -77,16 +98,66 @@ func decryptTOTPSeed(encryptedSeed, keyHex string) (string, error) {
 
 // UserHandler handles user management operations
 type UserHandler struct {
-	appsrv   *app_lib.AppServices
-	userRepo *repository.UserRepository
+	appsrv           *app_lib.AppServices
+	userRepo         UserRepositoryInterface
+	appUserGroupRepo AppUserGroupRepositoryInterface
 }
 
 // NewUserHandler creates a new user handler
-func NewUserHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository) *UserHandler {
+func NewUserHandler(appServices *app_lib.AppServices, userRepo UserRepositoryInterface, appUserGroupRepo AppUserGroupRepositoryInterface) *UserHandler {
 	return &UserHandler{
-		appsrv:   appServices,
-		userRepo: userRepo,
+		appsrv:           appServices,
+		userRepo:         userRepo,
+		appUserGroupRepo: appUserGroupRepo,
 	}
+}
+
+// validateGroupsSecurityContext ensures all groups belong to the expected security context
+func (h *UserHandler) validateGroupsSecurityContext(groupIDs []int, expectedSecurityContext int, ctx context.Context) (bool, error) {
+	if len(groupIDs) == 0 {
+		return true, nil
+	}
+
+	groups, err := h.appUserGroupRepo.RetrieveAppUserGroupListByIDList(ctx, groupIDs)
+	if err != nil {
+		return false, fmt.Errorf("failed to retrieve groups for validation: %w", err)
+	}
+
+	if len(groups) != len(groupIDs) {
+		return false, fmt.Errorf("some groups not found: requested %d, found %d", len(groupIDs), len(groups))
+	}
+
+	for _, group := range groups {
+		if group.SecurityContext != expectedSecurityContext {
+			return false, fmt.Errorf("group %d has invalid security context: expected %d, got %d",
+				group.AppUserGroupID, expectedSecurityContext, group.SecurityContext)
+		}
+	}
+	return true, nil
+}
+
+// validateUsersSecurityContext ensures all users belong to the expected security context
+func (h *UserHandler) validateUsersSecurityContext(userIDs []int, expectedSecurityContext int, ctx context.Context) (bool, error) {
+	if len(userIDs) == 0 {
+		return true, nil
+	}
+
+	users, err := h.userRepo.RetrieveUserList(ctx, expectedSecurityContext, userIDs, 0)
+	if err != nil {
+		return false, fmt.Errorf("failed to retrieve users for validation: %w", err)
+	}
+
+	if len(users) != len(userIDs) {
+		return false, fmt.Errorf("some users not found or inaccessible: requested %d, found %d", len(userIDs), len(users))
+	}
+
+	for _, user := range users {
+		if user.SecurityContext != expectedSecurityContext {
+			return false, fmt.Errorf("user %d has invalid security context: expected %d, got %d",
+				user.AppUserID, expectedSecurityContext, user.SecurityContext)
+		}
+	}
+	return true, nil
 }
 
 // RetrieveUserList handles GET /userList
@@ -203,6 +274,12 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate group memberships are in the same security context
+	if valid, err := h.validateGroupsSecurityContext(req.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context()); !valid || err != nil {
+		app.WriteError(w, http.StatusForbidden, "Access denied: all groups must be in the same security context as the user", "SEC_CTX_VIOLATION", nil)
+		return
+	}
+
 	// Validate password length
 	if len(req.PwRaw) < 8 {
 		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Password must be at least 8 characters long: len=%d", len(req.PwRaw)), "BRQ0", nil)
@@ -280,6 +357,12 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Validate required fields
 	if user.AppUserID == 0 || user.UserName == "" {
 		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("appUserId and userName are required for update: appUserId=%d, userName='%s'", user.AppUserID, user.UserName), "BRQ0", nil)
+		return
+	}
+
+	// Validate group memberships are in the same security context
+	if valid, err := h.validateGroupsSecurityContext(user.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context()); !valid || err != nil {
+		app.WriteError(w, http.StatusForbidden, "Access denied: all groups must be in the same security context as the user", "SEC_CTX_VIOLATION", nil)
 		return
 	}
 
@@ -395,6 +478,18 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 
 	if len(req.UserIds) == 0 || len(req.UpdateTsList) != len(req.UserIds) {
 		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("userIds and updateTsList must be provided and have matching lengths: userIds=%d, updateTsList=%d", len(req.UserIds), len(req.UpdateTsList)), "BRQ0", nil)
+		return
+	}
+
+	// Validate group is in the same security context
+	if valid, err := h.validateGroupsSecurityContext([]int{req.GroupId}, jwtClaims.SecurityContext, r.Context()); !valid || err != nil {
+		app.WriteError(w, http.StatusForbidden, "Access denied: group must be in the same security context", "SEC_CTX_VIOLATION", nil)
+		return
+	}
+
+	// Validate all users are in the same security context
+	if valid, err := h.validateUsersSecurityContext(req.UserIds, jwtClaims.SecurityContext, r.Context()); !valid || err != nil {
+		app.WriteError(w, http.StatusForbidden, "Access denied: all users must be in the same security context", "SEC_CTX_VIOLATION", nil)
 		return
 	}
 

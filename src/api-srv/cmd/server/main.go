@@ -81,7 +81,7 @@ func main() {
 	changeOwnPasswordHandler := handler.ChangeOwnPasswordHandler(appServices, userRepo)
 	logoffHandler := handler.LogoffHandler(appServices)
 	exampleHandler := handler.NewExampleHandler(appServices, exampleRepo)
-	userHandler := handler.NewUserHandler(appServices, userRepo)
+	userHandler := handler.NewUserHandler(appServices, userRepo, appUserGroupRepo)
 	appUserGroupHandler := handler.NewAppUserGroupHandler(appServices, appUserGroupRepo)
 	errorReportHandler := handler.NewErrorReportHandler(appServices)
 	userSelfCreateHandler := handler.UserSelfCreateHandler(appServices, userRepo)

@@ -109,3 +109,179 @@ class TestSecurityContextIsolation:
             },
         )
         assert response.status_code == 403
+
+    def test_user_create_cross_security_context_groups(self, test_client):
+        """Test that creating a user with groups from different security contexts fails"""
+        import uuid
+
+        suffix = uuid.uuid4().hex
+        user_data = {
+            "userName": f"testuser{suffix}",
+            "firstName": "Cross",
+            "lastName": "Context",
+            "email": f"cross{suffix}@example.com",
+            "pwHash": "testpass123!",
+            "mfaExempt": False,
+            "appUserGroupMembershipList": [4, 5],  # Groups from security context 2
+        }
+
+        # Admin is in security context 1, should not be able to assign groups from context 2
+        response = test_client.make_request("POST", "/user", json=user_data)
+        assert response.status_code == 403
+        assert "security context" in response.json()["error"].lower()
+
+    def test_user_update_cross_security_context_groups(self, test_client):
+        """Test that updating a user with groups from different security contexts fails"""
+        import uuid
+
+        # First create a valid user in context 1
+        suffix = uuid.uuid4().hex
+        create_data = {
+            "userName": f"updateuser{suffix}",
+            "firstName": "Update",
+            "lastName": "Test",
+            "email": f"update{suffix}@example.com",
+            "pwHash": "testpass123!",
+            "mfaExempt": False,
+            "appUserGroupMembershipList": [1],  # Valid group from context 1
+        }
+
+        create_response = test_client.make_request("POST", "/user", json=create_data)
+        assert create_response.status_code == 201
+        user_data = create_response.json()["data"]
+        app_user_id = user_data["appUserId"]
+        update_ts = user_data["updateTs"]
+        test_client.track_user(app_user_id, update_ts)
+
+        # Now try to update with groups from context 2 (should fail)
+        update_data = {
+            "appUserId": app_user_id,
+            "userName": f"updateuser{suffix}",
+            "firstName": "Updated",
+            "lastName": "Test",
+            "email": f"updated{suffix}@example.com",
+            "mfaExempt": False,
+            "appUserGroupMembershipList": [4, 5],  # Groups from security context 2
+            "updateTs": update_ts,
+        }
+
+        response = test_client.make_request("PUT", "/user", json=update_data)
+        assert response.status_code == 403
+        assert "security context" in response.json()["error"].lower()
+
+    def test_add_users_cross_security_context_group(self, test_client):
+        """Test that adding users from different security contexts to a group fails"""
+        # Create a user in context 1 first
+        import uuid
+        suffix = uuid.uuid4().hex
+        user_data = {
+            "userName": f"groupuser{suffix}",
+            "firstName": "Group",
+            "lastName": "Test",
+            "email": f"group{suffix}@example.com",
+            "pwHash": "testpass123!",
+            "mfaExempt": False,
+            "appUserGroupMembershipList": [],
+        }
+
+        create_response = test_client.make_request("POST", "/user", json=user_data)
+        assert create_response.status_code == 201
+        created_user = create_response.json()["data"]
+        user_id = created_user["appUserId"]
+        test_client.track_user(user_id, created_user["updateTs"])
+
+        # Try to add this user to a group from context 2 (should fail)
+        add_data = {
+            "userIds": [user_id],
+            "groupId": 4,  # Group from security context 2
+            "updateTsList": [created_user["updateTs"]],
+        }
+
+        response = test_client.make_request("POST", "/addUserListToGroup", json=add_data)
+        assert response.status_code == 403
+        assert "security context" in response.json()["error"].lower()
+
+    def test_add_users_to_cross_security_context_group(self, test_client):
+        """Test that adding users to a group from different security context fails"""
+        # Create a user in context 1 first
+        import uuid
+        suffix = uuid.uuid4().hex
+        user_data = {
+            "userName": f"ctxuser{suffix}",
+            "firstName": "Context",
+            "lastName": "Test",
+            "email": f"ctx{suffix}@example.com",
+            "pwHash": "testpass123!",
+            "mfaExempt": False,
+            "appUserGroupMembershipList": [],
+        }
+
+        create_response = test_client.make_request("POST", "/user", json=user_data)
+        assert create_response.status_code == 201
+        created_user = create_response.json()["data"]
+        user_id = created_user["appUserId"]
+        test_client.track_user(user_id, created_user["updateTs"])
+
+        # Try to add user from context 1 to group from context 2 (should fail)
+        add_data = {
+            "userIds": [user_id],
+            "groupId": 5,  # Group from security context 2
+            "updateTsList": [created_user["updateTs"]],
+        }
+
+        response = test_client.make_request("POST", "/addUserListToGroup", json=add_data)
+        assert response.status_code == 403
+        assert "security context" in response.json()["error"].lower()
+
+    def test_valid_user_operations_within_security_context(self, test_client):
+        """Test that valid user operations within the same security context succeed"""
+        import uuid
+
+        # Create a user with no groups initially
+        suffix = uuid.uuid4().hex
+        user_data = {
+            "userName": f"validuser{suffix}",
+            "firstName": "Valid",
+            "lastName": "Test",
+            "email": f"valid{suffix}@example.com",
+            "pwHash": "testpass123!",
+            "mfaExempt": False,
+            "appUserGroupMembershipList": [],  # No groups initially
+        }
+
+        response = test_client.make_request("POST", "/user", json=user_data)
+        assert response.status_code == 201
+        created_user = response.json()["data"]
+        user_id = created_user["appUserId"]
+        test_client.track_user(user_id, created_user["updateTs"])
+
+        # Update the user with valid groups
+        update_data = {
+            "appUserId": user_id,
+            "userName": f"validuser{suffix}",
+            "firstName": "Updated",
+            "lastName": "Valid",
+            "email": f"updated{suffix}@example.com",
+            "mfaExempt": True,
+            "appUserGroupMembershipList": [1],  # Valid group from context 1
+            "updateTs": created_user["updateTs"],
+        }
+
+        response = test_client.make_request("PUT", "/user", json=update_data)
+        assert response.status_code == 200
+
+        # Get the updated user data to get the new updateTs
+        get_response = test_client.make_request("GET", f"/userList?appUserIdList={user_id}")
+        assert get_response.status_code == 200
+        updated_user = get_response.json()["data"][0]
+        current_update_ts = updated_user["updateTs"]
+
+        # Add user to another valid group within context
+        add_data = {
+            "userIds": [user_id],
+            "groupId": 3,  # Group from security context 1
+            "updateTsList": [current_update_ts],
+        }
+
+        response = test_client.make_request("POST", "/addUserListToGroup", json=add_data)
+        assert response.status_code == 200
