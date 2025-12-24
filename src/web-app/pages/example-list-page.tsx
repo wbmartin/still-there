@@ -1,6 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Table, Button, Title, Group, Pagination, Container } from "@mantine/core";
+import {
+  Table,
+  Button,
+  Title,
+  Group,
+  Pagination,
+  Container,
+} from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
@@ -9,7 +16,7 @@ import { grants } from "../constants/grants";
 
 function ExampleListPage() {
   const authState = useAuthGuard([grants.READ_EXAMPLE]);
-  const { exampleList, loading, retrieveExampleList, deleteExample } =
+  const { exampleList, loading, error, retrieveExampleList, deleteExample } =
     useExamplesStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -30,6 +37,43 @@ function ExampleListPage() {
     }
   }, [authState, retrieveExampleList]);
 
+  // Sort examples
+  const sortedExampleList = useMemo(() => {
+    // Skip sorting for very large lists to prevent stack overflow
+    if (exampleList.length > 1000) {
+      return exampleList;
+    }
+    return [...exampleList].sort((a, b) => {
+      let aValue: string | number;
+      let bValue: string | number;
+
+      switch (sortColumn) {
+        case "exampleId":
+          aValue = a.exampleId;
+          bValue = b.exampleId;
+          break;
+        case "exampleText":
+          aValue = a.exampleText.toLowerCase();
+          bValue = b.exampleText.toLowerCase();
+          break;
+        case "exampleInt":
+          aValue = a.exampleInt || 0;
+          bValue = b.exampleInt || 0;
+          break;
+        case "exampleFloat":
+          aValue = a.exampleFloat || 0;
+          bValue = b.exampleFloat || 0;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [exampleList, sortColumn, sortDirection]);
+
   //============================^ HOOK LINE ^====================
 
   if (authState === "CHECKING") {
@@ -39,44 +83,19 @@ function ExampleListPage() {
     return <div>Loading...</div>;
   }
 
-  if (loading) return <div>Loading...</div>;
-
-  // Sort examples
-  const sortedExampleList = [...exampleList].sort((a, b) => {
-    let aValue: string | number;
-    let bValue: string | number;
-
-    switch (sortColumn) {
-      case "exampleId":
-        aValue = a.exampleId;
-        bValue = b.exampleId;
-        break;
-      case "exampleText":
-        aValue = a.exampleText.toLowerCase();
-        bValue = b.exampleText.toLowerCase();
-        break;
-      case "exampleInt":
-        aValue = a.exampleInt || 0;
-        bValue = b.exampleInt || 0;
-        break;
-      case "exampleFloat":
-        aValue = a.exampleFloat || 0;
-        bValue = b.exampleFloat || 0;
-        break;
-      default:
-        return 0;
-    }
-
-    if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
-    if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
-    return 0;
-  });
-
   const totalPageCount = Math.ceil(sortedExampleList.length / itemsPerPage);
   const paginatedExampleList = sortedExampleList.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
   );
+
+  if (loading) return <div>Loading...</div>;
+
+  if (error) return <div>Error loading examples: {error}</div>;
+
+  if (loading) return <div>Loading...</div>;
+
+  if (error) return <div>Error loading examples: {error}</div>;
 
   const handleDeleteClick = (id: number) => {
     setDeleteId(id);

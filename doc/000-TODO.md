@@ -11,17 +11,10 @@
 # API Server
 
 
-- **Complete Repository Coverage:** Address the "test environment issues" to un-skip the tests for `AddUserListToGroup` and `RemoveUserListFromGroup`.
-
-
-
-- move the database connection string, JWT, and the TOTP code to a shrmple vault.
-
  - The project uses a hand-rolled TCP client to send logs to a custom service (`shrmpl-log`) in a custom, fixed-width text format. This reinvents the wheel of structured logging, is likely not as performant or robust  as standard libraries, and creates a dependency on a non-standard service.
  
  - The hand-rolled `.env` parser is fragile and doesn't handle common cases like quoted values. Using a standard library like `joho/godotenv` would be more robust.
  
-
  
  - page number on the user list page should be part of state so a refresh or link takes to same place.
 
@@ -87,3 +80,8 @@ Thought to be complete
  - Check on all repo functions, they should be receving the security context from users jwt claims.
  
   - The `.golangci.yml` file exists but is empty, defeating its purpose. A good starter project should include a recommended set of linters.
+  
+- move the database connection string, JWT, and the TOTP code to a shrmple vault.
+
+
+- **Complete Repository Coverage:** Address the "test environment issues" to un-skip the tests for `AddUserListToGroup` and `RemoveUserListFromGroup  `.

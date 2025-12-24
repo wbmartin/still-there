@@ -2,10 +2,15 @@ package app_lib
 
 import (
 	"bufio"
+	"crypto/tls"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds the application configuration
@@ -28,6 +33,84 @@ type Config struct {
 	FailedLoginAttemptWindowDuration string   `json:"failed_login_attempt_window_duration"`
 	FailedLoginLockoutDuration       string   `json:"failed_login_lockout_duration"`
 	CorsAllowedOrigins               []string `json:"cors_allowed_origins"`
+}
+
+// VaultClient represents a client for the shrmpl-vault service
+type VaultClient struct {
+	serverURL string
+	certPath  string
+	keyPath   string
+	secret    string
+	client    *http.Client
+}
+
+// NewVaultClient creates a new vault client
+func NewVaultClient(serverURL, certPath, keyPath, secret string) *VaultClient {
+	return &VaultClient{
+		serverURL: strings.TrimRight(serverURL, "/"),
+		certPath:  certPath,
+		keyPath:   keyPath,
+		secret:    secret,
+	}
+}
+
+// Connect establishes TLS connection to shrmpl-vault
+func (c *VaultClient) Connect() (bool, error) {
+	// Load client certificates
+	cert, err := tls.LoadX509KeyPair(c.certPath, c.keyPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to load certificates: %v", err)
+	}
+
+	// Create TLS config
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+
+	// Create HTTP client
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
+	c.client = &http.Client{
+		Transport: transport,
+		Timeout:   10 * time.Second,
+	}
+
+	// Connection setup successful - actual testing happens during GetConfig calls
+	return true, nil
+}
+
+// GetConfig retrieves a configuration file from shrmpl-vault
+func (c *VaultClient) GetConfig(filename string) (string, error) {
+	if c.client == nil {
+		return "", fmt.Errorf("not connected")
+	}
+
+	url := fmt.Sprintf("%s/%s?secret=%s", c.serverURL, filename, c.secret)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case 200:
+		content, err := io.ReadAll(resp.Body)
+		return string(content), err
+	case 404:
+		return "", fmt.Errorf("file not found")
+	case 401:
+		return "", fmt.Errorf("unauthorized - invalid certificate or secret")
+	case 429:
+		return "", fmt.Errorf("rate limit exceeded")
+	default:
+		return "", fmt.Errorf("HTTP error: %d", resp.StatusCode)
+	}
 }
 
 // LoadConfig loads configuration from a .env file
@@ -56,6 +139,45 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading configuration file: %w", err)
+	}
+
+	// Fetch secrets from vault if configured
+	vaultServer := env["VAULT_SERVER"]
+	vaultCert := env["VAULT_CLIENT_CERT_PATH"]
+	vaultKey := env["VAULT_CLIENT_KEY_PATH"]
+	vaultSecret := env["VAULT_SECRET_KEY"]
+	vaultFile := env["VAULT_SECRETS_FILENAME"]
+	if vaultServer != "" && vaultCert != "" && vaultKey != "" &&
+		vaultSecret != "" &&
+		vaultFile != "" {
+		vaultClient := NewVaultClient(
+			vaultServer,
+			vaultCert,
+			vaultKey,
+			vaultSecret,
+		)
+		_, err := vaultClient.Connect()
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to vault: %w", err)
+		}
+		secretsJSON, err := vaultClient.GetConfig(vaultFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get secrets from vault: %w", err)
+		}
+		var secrets map[string]string
+		if err := json.Unmarshal([]byte(secretsJSON), &secrets); err != nil {
+			return nil, fmt.Errorf("failed to parse secrets JSON: %w", err)
+		}
+		// Override env with secrets
+		if dbURL, ok := secrets["DATABASE_URL"]; ok {
+			env["DATABASE_URL"] = dbURL
+		}
+		if jwtSecret, ok := secrets["JWT_SECRET"]; ok {
+			env["JWT_SECRET"] = jwtSecret
+		}
+		if totpKey, ok := secrets["TOTP_ENCRYPTION_KEY"]; ok {
+			env["TOTP_ENCRYPTION_KEY"] = totpKey
+		}
 	}
 
 	var config Config

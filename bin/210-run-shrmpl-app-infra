@@ -1,54 +1,20 @@
 #!/bin/bash
 
-# Script to stop any running shrmpl infrastructure services and start them with local configs
-# Services: skv-srv, slog-srv, shrmpl-vault-srv
+# Script to stop any running shrmpl app services and start infrastructure with local configs
+# Services: shrmpl-log-srv, shrmpl-kv-srv, shrmpl-vault-srv
 
 set -e
 
-echo "Stopping any running shrmpl infrastructure services..."
-
-# Kill existing processes and track if any were killed
-KILLED_PROCESSES=false
-
-if pkill -f "shrmpl-kv-srv" 2>/dev/null; then
-    echo "Killed shrmpl-kv-srv processes"
-    KILLED_PROCESSES=true
-else
-    echo "No shrmpl-kv-srv processes found"
-fi
-
-if pkill -f "shrmpl-log-srv" 2>/dev/null; then
-    echo "Killed shrmpl-log-srv processes"
-    KILLED_PROCESSES=true
-else
-    echo "No shrmpl-log-srv processes found"
-fi
-
-if pkill -f "shrmpl-vault-srv" 2>/dev/null; then
-    echo "Killed shrmpl-vault-srv processes"
-    KILLED_PROCESSES=true
-else
-    echo "No shrmpl-vault-srv processes found"
-fi
-
-if pkill -f "shrmpl-kv-cli" 2>/dev/null; then
-    echo "Killed shrmpl-kv-cli processes"
-    KILLED_PROCESSES=true
-else
-    echo "No shrmpl-kv-cli processes found"
-fi
-
-# Wait for processes to terminate only if we killed any
-if [ "$KILLED_PROCESSES" = true ]; then
-    echo "Waiting for processes to terminate..."
-    sleep 3
-fi
-
-echo "Starting shrmpl infrastructure services..."
+echo "Stopping any running shrmpl app services..."
 
 # Get the directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Call the stop script to stop all services
+"$SCRIPT_DIR/211-stop-shrmpl-app-infra"
+
+echo "Starting shrmpl infrastructure services..."
 
 # Change to the project root directory
 pushd "$PROJECT_ROOT" > /dev/null
@@ -72,8 +38,8 @@ echo "Starting Vault server..."
 echo "✓ Vault server started"
 
 echo ""
-echo "All services started in the background."
-echo "To stop them, run: pkill -f 'shrmpl-kv-srv|shrmpl-log-srv|shrmpl-vault-srv|shrmpl-kv-cli'"
+echo "Infrastructure services started in the background."
+echo "To stop them, run: ./bin/211-stop-shrmpl-app-infra"
 
 # Return to original directory
 popd > /dev/null

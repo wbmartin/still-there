@@ -69,3 +69,10 @@ To load test the api server:
 ```
 ./bin/330-test-load
 ```
+
+To regenerate vault TLS certificates:
+```
+./bin/410-regenerate-vault-certs
+```
+- Regenerates server and client certificates for shrmpl-vault
+- Requires restarting vault and services using the certificates

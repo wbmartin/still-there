@@ -47,7 +47,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
         }));
         const newMaxExampleUpdateTs =
           examples.length > 0
-            ? Math.max(...examples.map((e) => e.updateTs))
+            ? examples.reduce((max, e) => Math.max(max, e.updateTs), 0)
             : 0;
         set({
           exampleList: examples,
@@ -101,6 +101,7 @@ export const useExamplesStore = create<ExamplesState>((set, get) => ({
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.error("Failed to retrieve examples:", err);
       set({ loading: false, error: errorMessage });
     } finally {
       // console.log("getExampleList finally setting loading to false");

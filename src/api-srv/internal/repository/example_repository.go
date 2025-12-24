@@ -271,7 +271,7 @@ func (r *ExampleRepository) RetrieveExampleList(
 			strings.Join(placeholderList, ","))
 	}
 
-	query := selectClause + " " + whereClause + orderBy
+	query := selectClause + " " + whereClause + orderBy //+ " Limit 1000"
 
 	var rowList pgx.Rows
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {

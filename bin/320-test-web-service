@@ -13,6 +13,10 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # Change to project root directory
 pushd "$PROJECT_ROOT" > /dev/null
 
+# Format web app code
+echo "Formatting web app code..."
+cd src/web-app && npm run lint -- --fix && cd "$PROJECT_ROOT"
+
 # Read the server port from config file
 CONFIG_FILE="$PROJECT_ROOT/etc/loc-api-srv.env"
 if [ ! -f "$CONFIG_FILE" ]; then

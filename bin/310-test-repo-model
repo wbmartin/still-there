@@ -14,6 +14,10 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # Change to the API server source directory
 pushd "$PROJECT_ROOT/src/api-srv" > /dev/null
 
+# Format Go code with golines
+echo "Formatting Go code..."
+golines -m 80 -w .
+
 # Clean any existing test data first
 # echo "Cleaning existing test data..."
 # psql -d loc_starter_db -c "

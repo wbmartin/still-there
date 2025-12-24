@@ -15,10 +15,6 @@ echo "Building API server..."
 # Change to the API server source directory
 pushd "$PROJECT_ROOT/src/api-srv" > /dev/null
 
-# Format Go code with golines
-echo "Formatting Go code..."
-golines -m 80 -w .
-
 # Build the binary
 go build -o "$BINARY_PATH" ./cmd/server
 
