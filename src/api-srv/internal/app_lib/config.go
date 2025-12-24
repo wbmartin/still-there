@@ -81,7 +81,7 @@ func (c *VaultClient) Connect() (bool, error) {
 		return false, fmt.Errorf("failed to parse server certificate: %v", err)
 	}
 
-	// Create cert pool with server cert as CA (assuming self-signed)
+	// Create cert pool with server cert as CA (assuming self-signed, will break otherwise)
 	caCertPool := x509.NewCertPool()
 	caCertPool.AddCert(serverCert)
 
