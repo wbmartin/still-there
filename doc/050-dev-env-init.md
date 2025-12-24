@@ -41,6 +41,6 @@ VAULT_SERVER=https://loc-proto.cnfg.li:7474
   ```
 127.0.0.1       loc-proto.cnfg.li
   ```
-
-7. Restart the shrmpl-vault server
-8. restart the api-srv
+7. If using the shrmpl-vault, you need to run bin/410-regenerate-vault-mtls-cters
+8. Restart the shrmpl-vault server
+9. restart the api-srv

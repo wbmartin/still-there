@@ -1,6 +1,8 @@
-cd Code/ProtoStack-ReactGo
 
+```bash
+cd Code/ProtoStack-ReactGo
 ./bin/010-download-shrmpl.sh
+```
 
 # Database
 Start Docker

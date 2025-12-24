@@ -192,33 +192,6 @@ initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.s
 ### Environment Variables (.env format)
 Environment files follow the naming convention `loc-{service}.env` for local development configurations.
 
-```env
-# Database
-ENV_CFG_SQL_DB_NAME=proto_db
-ENV_CFG_SQL_DB_HOST=localhost
-ENV_CFG_SQL_DB_USER=app_user
-ENV_CFG_SQL_DB_PASSWORD=secure_password
-ENV_CFG_SQL_DB_PORT=5432
-
-# Security
-ENV_SEC_APP_JWT_SECRET_KEY=high_entropy_secret
-ENV_CFG_JWT_SESSION_EXPIRE_HOURS=72
-
-# Rate Limiting
-ENV_CFG_MAX_USER_REQ_PER_MIN=200
-ENV_CFG_MAX_UNAUTH_REQ_PER_MIN=20
-
-# External Services
-ENV_CFG_SHRMPL_KV_HOST=localhost:7379
-ENV_CFG_SHRMPL_LOG_DEST=localhost:7380
-
-# Application
-ENV_CFG_SERVER_NAME=proto-go-app
-
-# Testing (only in loc-api-srv.env)
-TEST_BASE_URL=https://localhost:8443
-```
-
 ### Loading
 - Command-line argument specifies config file path
 - Simple environment variable parsing (no external libraries)
@@ -234,7 +207,7 @@ TEST_BASE_URL=https://localhost:8443
 - **Transport**: TCP connection to shrmpl-log service
 
 ### Log Codes
-- 4-character codes for consistent categorization
+- 12-character codes for consistent categorization, uniqueness
 - Examples: STRT (start), AUTH (authentication), DBFL (database failure)
 
 ### Username Tracking
@@ -270,7 +243,7 @@ TEST_BASE_URL=https://localhost:8443
 
 ### Naming
 - **Variables**: camelCase, descriptive names (e.g., `userName`, `securityContext`)
-- **Lists**: Suffix with "List" (e.g., `userList`, `grantIdList`)
+- **Lists**: Suffix with "List" (e.g., `userList`, `grantIdList`), don't use plural forms
 - **Functions**: PascalCase, action-oriented (e.g., `GetUserByUserName`)
 - **Files**: snake_case, descriptive (e.g., `auth_handler.go`)
 
@@ -319,7 +292,7 @@ TEST_BASE_URL=https://localhost:8443
 - **PostgreSQL**: Database server
 - **shrmpl-kv**: Key-value store service
 - **shrmpl-log**: Logging service
-- **Network**: TCP connectivity between services
+- **Network**: TCP connectivity between services (localhost tcp is fine, but also distributable)
 
 ### Operational Considerations
 - **Health Checks**: `/health` endpoint for load balancers
@@ -372,5 +345,4 @@ TEST_BASE_URL=https://localhost:8443
 - **Database Optimization**: Strategic indexing for update_ts fields and optimistic locking
 - **Code Quality**: golangci-lint configuration and comprehensive test coverage
 
-This specification captures the current implementation and serves as a foundation for future development and maintenance of the ProtoStack-ReactGo API server.</content>
-<parameter name="filePath">doc/105-api-srv-tech-spec.md
+This specification captures the current implementation and serves as a foundation for future development and maintenance of the ProtoStack-ReactGo API server.
