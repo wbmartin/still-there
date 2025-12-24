@@ -27,7 +27,7 @@ func (h *ErrorReportHandler) HandleErrorReport(
 	r *http.Request,
 ) {
 	// Security checks - rate limiting only, skip others for error reports
-	app := app_lib.NewAppHelper(w, r, h.appServices)
+	app := app_lib.NewAppHelper(w, r, h.appServices, "HandleErrorReport")
 	app.SkipJWT()           // No auth required for error reports
 	app.SkipCSRF()          // Error reports aren't form submissions
 	app.SkipAuthorization() // No grants needed
@@ -58,7 +58,7 @@ func (h *ErrorReportHandler) HandleErrorReport(
 	}
 
 	// Log the error report
-	h.appServices.Logger.Error("CLER", "Client Error Report: "+report)
+	app.Logger().Error("CLER", "Client Error Report: "+report)
 
 	// Return success
 	w.Header().Set("Content-Type", "application/json")

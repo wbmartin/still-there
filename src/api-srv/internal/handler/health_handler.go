@@ -10,7 +10,7 @@ import (
 // HealthHandler handles health check requests
 func HealthHandler(deps *app_lib.AppServices) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		app := app_lib.NewAppHelper(w, r, deps)
+		app := app_lib.NewAppHelper(w, r, deps, "HealthHandler")
 		app.SkipJWT()
 		app.SkipRateLimit()
 		app.SkipUserBlock()

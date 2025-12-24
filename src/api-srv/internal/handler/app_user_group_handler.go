@@ -31,7 +31,7 @@ func NewAppUserGroupHandler(appServices *app_lib.AppServices,
 func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "RetrieveAppUserGroupList")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -70,7 +70,7 @@ func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "CreateAppUserGroup")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -148,7 +148,7 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "UpdateAppUserGroup")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -249,7 +249,7 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "DeleteAppUserGroup")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()

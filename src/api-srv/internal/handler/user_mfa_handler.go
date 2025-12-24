@@ -81,7 +81,7 @@ func UserSelfCreateHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create app helper
-		app := app_lib.NewAppHelper(w, r, appServices)
+		app := app_lib.NewAppHelper(w, r, appServices, "UserSelfCreateHandler")
 
 		// No auth required for self-create
 		app.Logger().Info(
@@ -237,7 +237,7 @@ func MFASetupHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := app_lib.NewAppHelper(w, r, appServices)
+		app := app_lib.NewAppHelper(w, r, appServices, "MFASetupHandler")
 		app.CheckRateLimitAndUserBlock()
 		app.SkipCSRF()
 		app.SkipAuthorization() // MFA setup is user-specific
@@ -387,7 +387,7 @@ func MFAVerifyHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := app_lib.NewAppHelper(w, r, appServices)
+		app := app_lib.NewAppHelper(w, r, appServices, "MFAVerifyHandler")
 		app.CheckRateLimitAndUserBlock()
 		app.SkipCSRF()
 		app.SkipAuthorization()
@@ -638,7 +638,7 @@ func AdminResetUserMFAHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := app_lib.NewAppHelper(w, r, appServices)
+		app := app_lib.NewAppHelper(w, r, appServices, "AdminResetUserMFAHandler")
 		app.CheckJWT()
 		app.CheckRateLimitAndUserBlock()
 		app.CheckCSRF()

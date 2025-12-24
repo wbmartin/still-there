@@ -20,18 +20,19 @@ const claimsKey contextKey = "claims"
 
 // AppHelper encapsulates request-specific security checks and state
 type AppHelper struct {
-	r           *http.Request
-	w           http.ResponseWriter
-	appServices *AppServices
-	claims      *Claims
-	ctx         context.Context
-	username    string
-	blocked     bool
-	jwtChecked  bool
-	rateChecked bool
-	userChecked bool
-	csrfChecked bool
-	authChecked bool
+	r              *http.Request
+	w              http.ResponseWriter
+	appServices    *AppServices
+	claims         *Claims
+	ctx            context.Context
+	username       string
+	helperLocation string
+	blocked        bool
+	jwtChecked     bool
+	rateChecked    bool
+	userChecked    bool
+	csrfChecked    bool
+	authChecked    bool
 }
 
 // NewAppHelper creates a new app helper
@@ -39,13 +40,17 @@ func NewAppHelper(
 	w http.ResponseWriter,
 	r *http.Request,
 	appServices *AppServices,
+	helperLocation string,
 ) *AppHelper {
-	return &AppHelper{
-		r:           r,
-		w:           w,
-		appServices: appServices,
-		username:    "preauth",
+	ah := &AppHelper{
+		r:              r,
+		w:              w,
+		appServices:    appServices,
+		helperLocation: helperLocation,
+		username:       "preauth",
 	}
+	ah.appServices.Logger.Info("APP_HELPER_INIT", "AppHelper instantiated", "handler", helperLocation)
+	return ah
 }
 
 // SkipJWT skips JWT validation

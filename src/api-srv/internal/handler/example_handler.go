@@ -34,7 +34,7 @@ func (h *ExampleHandler) RetrieveExample(
 	r *http.Request,
 ) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "RetrieveExample")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -116,7 +116,7 @@ func (h *ExampleHandler) RetrieveExample(
 // CreateExample handles POST /example
 func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "CreateExample")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -201,7 +201,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 // UpdateExample handles PUT /example
 func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "UpdateExample")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -346,7 +346,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 // DeleteExample handles DELETE /example
 func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "DeleteExample")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -467,7 +467,7 @@ func (h *ExampleHandler) RetrieveExampleList(
 	r *http.Request,
 ) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "RetrieveExampleList")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -546,7 +546,7 @@ func (h *ExampleHandler) CreateExampleList(
 	r *http.Request,
 ) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "CreateExampleList")
 	app.Info("EX_BLK_CR_ST", "CreateExampleList invoked")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
@@ -672,7 +672,7 @@ func (h *ExampleHandler) UpdateExampleList(
 	r *http.Request,
 ) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "UpdateExampleList")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -787,7 +787,7 @@ func (h *ExampleHandler) DeleteExampleList(
 	r *http.Request,
 ) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv)
+	app := app_lib.NewAppHelper(w, r, h.appsrv, "DeleteExampleList")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()

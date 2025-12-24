@@ -152,7 +152,7 @@ func AuthHandler(
 		)
 
 		// Create app helper for error handling
-		app := app_lib.NewAppHelper(w, r, appServices)
+		app := app_lib.NewAppHelper(w, r, appServices, "AuthHandler")
 
 		// Parse request
 		var req model.AuthRequestModel
@@ -399,7 +399,7 @@ func RefreshHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := app_lib.NewAppHelper(w, r, appServices)
+		app := app_lib.NewAppHelper(w, r, appServices, "RefreshHandler")
 		app.CheckJWT()
 		app.CheckRateLimitAndUserBlock()
 		app.SkipCSRF()          // CSRF not required for read-only refresh
@@ -529,7 +529,7 @@ func ChangeSecurityContextHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create app helper for error handling
-		app := app_lib.NewAppHelper(w, r, appServices)
+		app := app_lib.NewAppHelper(w, r, appServices, "ChangeSecurityContextHandler")
 
 		// Parse request first to get security context
 		var req model.ChangeSecurityContextRequest
@@ -705,7 +705,7 @@ func ChangeSecurityContextHandler(
 func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Use AppHelper to extract username from JWT (skip other validations)
-		app := app_lib.NewAppHelper(w, r, appServices)
+		app := app_lib.NewAppHelper(w, r, appServices, "LogoffHandler")
 		app.CheckJWT()                   // Extract username from JWT
 		app.CheckRateLimitAndUserBlock() // No rate limiting for logoff
 		app.SkipCSRF()                   // No CSRF needed for logoff
@@ -750,7 +750,7 @@ func ChangeOwnPasswordHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := app_lib.NewAppHelper(w, r, appServices)
+		app := app_lib.NewAppHelper(w, r, appServices, "ChangeOwnPasswordHandler")
 		app.CheckJWT()
 		app.CheckRateLimitAndUserBlock()
 		app.CheckCSRF()
