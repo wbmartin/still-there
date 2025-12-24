@@ -15,57 +15,130 @@ type MockUserRepository struct {
 	mock.Mock
 }
 
-func (m *MockUserRepository) CreateUser(ctx context.Context, user *model.AppUserModel, securityContext int) (*model.AppUserModel, error) {
+func (m *MockUserRepository) CreateUser(
+	ctx context.Context,
+	user *model.AppUserModel,
+	securityContext int,
+) (*model.AppUserModel, error) {
 	args := m.Called(ctx, user, securityContext)
 	return args.Get(0).(*model.AppUserModel), args.Error(1)
 }
 
-func (m *MockUserRepository) RetrieveUserByUserName(ctx context.Context, username string) (*model.AppUserModel, error) {
+func (m *MockUserRepository) RetrieveUserByUserName(
+	ctx context.Context,
+	username string,
+) (*model.AppUserModel, error) {
 	args := m.Called(ctx, username)
 	return args.Get(0).(*model.AppUserModel), args.Error(1)
 }
 
-func (m *MockUserRepository) RetrieveUserList(ctx context.Context, securityContext int, idList []int, updateTs float64) ([]*model.AppUserModel, error) {
+func (m *MockUserRepository) RetrieveUserList(
+	ctx context.Context,
+	securityContext int,
+	idList []int,
+	updateTs float64,
+) ([]*model.AppUserModel, error) {
 	args := m.Called(ctx, securityContext, idList, updateTs)
 	return args.Get(0).([]*model.AppUserModel), args.Error(1)
 }
 
-func (m *MockUserRepository) UpdateUser(ctx context.Context, user *model.AppUserModel, clientUpdateTS float64, securityContext int) error {
+func (m *MockUserRepository) UpdateUser(
+	ctx context.Context,
+	user *model.AppUserModel,
+	clientUpdateTS float64,
+	securityContext int,
+) error {
 	args := m.Called(ctx, user, clientUpdateTS, securityContext)
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) DeleteUser(ctx context.Context, userID int, securityContext int, updateTS float64, now float64, updateUserID int) (int, error) {
+func (m *MockUserRepository) DeleteUser(
+	ctx context.Context,
+	userID int,
+	securityContext int,
+	updateTS float64,
+	now float64,
+	updateUserID int,
+) (int, error) {
 	args := m.Called(ctx, userID, securityContext, updateTS, now, updateUserID)
 	return args.Int(0), args.Error(1)
 }
 
-func (m *MockUserRepository) UpdateUserPassword(ctx context.Context, userID int, hashedPassword string, now float64, updateUserID int) error {
+func (m *MockUserRepository) UpdateUserPassword(
+	ctx context.Context,
+	userID int,
+	hashedPassword string,
+	now float64,
+	updateUserID int,
+) error {
 	args := m.Called(ctx, userID, hashedPassword, now, updateUserID)
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) UpdateUserTOTPSeed(ctx context.Context, userID int, totpSeed string, updateTS float64, updateUserID int) (float64, error) {
+func (m *MockUserRepository) UpdateUserTOTPSeed(
+	ctx context.Context,
+	userID int,
+	totpSeed string,
+	updateTS float64,
+	updateUserID int,
+) (float64, error) {
 	args := m.Called(ctx, userID, totpSeed, updateTS, updateUserID)
 	return args.Get(0).(float64), args.Error(1)
 }
 
-func (m *MockUserRepository) UpdateUserMFAExempt(ctx context.Context, userID int, mfaExempt bool, updateTS float64, updateUserID int) (float64, error) {
+func (m *MockUserRepository) UpdateUserMFAExempt(
+	ctx context.Context,
+	userID int,
+	mfaExempt bool,
+	updateTS float64,
+	updateUserID int,
+) (float64, error) {
 	args := m.Called(ctx, userID, mfaExempt, updateTS, updateUserID)
 	return args.Get(0).(float64), args.Error(1)
 }
 
-func (m *MockUserRepository) AddUserListToGroup(ctx context.Context, userIDs []int, groupID int, updateTsList []float64, updateUserID int, securityContext int) ([]*model.AppUserModel, error) {
-	args := m.Called(ctx, userIDs, groupID, updateTsList, updateUserID, securityContext)
+func (m *MockUserRepository) AddUserListToGroup(
+	ctx context.Context,
+	userIDs []int,
+	groupID int,
+	updateTsList []float64,
+	updateUserID int,
+	securityContext int,
+) ([]*model.AppUserModel, error) {
+	args := m.Called(
+		ctx,
+		userIDs,
+		groupID,
+		updateTsList,
+		updateUserID,
+		securityContext,
+	)
 	return args.Get(0).([]*model.AppUserModel), args.Error(1)
 }
 
-func (m *MockUserRepository) RemoveUserListFromGroup(ctx context.Context, userIDs []int, groupID int, updateTsList []float64, updateUserID int, securityContext int) ([]*model.AppUserModel, error) {
-	args := m.Called(ctx, userIDs, groupID, updateTsList, updateUserID, securityContext)
+func (m *MockUserRepository) RemoveUserListFromGroup(
+	ctx context.Context,
+	userIDs []int,
+	groupID int,
+	updateTsList []float64,
+	updateUserID int,
+	securityContext int,
+) ([]*model.AppUserModel, error) {
+	args := m.Called(
+		ctx,
+		userIDs,
+		groupID,
+		updateTsList,
+		updateUserID,
+		securityContext,
+	)
 	return args.Get(0).([]*model.AppUserModel), args.Error(1)
 }
 
-func (m *MockUserRepository) GetGrantsForGroups(ctx context.Context, groupIDs []int) (map[int][]int, error) {
+func (m *MockUserRepository) GetGrantsForGroups(
+	ctx context.Context,
+	groupIDs []int,
+) (map[int][]int, error) {
 	args := m.Called(ctx, groupIDs)
 	return args.Get(0).(map[int][]int), args.Error(1)
 }
@@ -74,17 +147,30 @@ type MockAppUserGroupRepository struct {
 	mock.Mock
 }
 
-func (m *MockAppUserGroupRepository) RetrieveAppUserGroupListByIDList(ctx context.Context, groupIDs []int, securityContext int) ([]*model.AppUserGroupModel, error) {
+func (m *MockAppUserGroupRepository) RetrieveAppUserGroupListByIDList(
+	ctx context.Context,
+	groupIDs []int,
+	securityContext int,
+) ([]*model.AppUserGroupModel, error) {
 	args := m.Called(ctx, groupIDs, securityContext)
 	return args.Get(0).([]*model.AppUserGroupModel), args.Error(1)
 }
 
-func (m *MockAppUserGroupRepository) UpdateAppUserGroup(ctx context.Context, group *model.AppUserGroupModel, clientUpdateTS float64, securityContext int) error {
+func (m *MockAppUserGroupRepository) UpdateAppUserGroup(
+	ctx context.Context,
+	group *model.AppUserGroupModel,
+	clientUpdateTS float64,
+	securityContext int,
+) error {
 	args := m.Called(ctx, group, clientUpdateTS, securityContext)
 	return args.Error(0)
 }
 
-func (m *MockAppUserGroupRepository) CreateAppUserGroup(ctx context.Context, group *model.AppUserGroupModel, securityContext int) (*model.AppUserGroupModel, error) {
+func (m *MockAppUserGroupRepository) CreateAppUserGroup(
+	ctx context.Context,
+	group *model.AppUserGroupModel,
+	securityContext int,
+) (*model.AppUserGroupModel, error) {
 	args := m.Called(ctx, group, securityContext)
 	return args.Get(0).(*model.AppUserGroupModel), args.Error(1)
 }
@@ -159,14 +245,19 @@ func TestValidateGroupsSecurityContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRepo := new(MockAppUserGroupRepository)
 			if len(tt.groupIDs) > 0 {
-				mockRepo.On("RetrieveAppUserGroupListByIDList", mock.Anything, tt.groupIDs, mock.AnythingOfType("int")).Return(tt.mockGroups, tt.mockError)
+				mockRepo.On("RetrieveAppUserGroupListByIDList", mock.Anything, tt.groupIDs, mock.AnythingOfType("int")).
+					Return(tt.mockGroups, tt.mockError)
 			}
 
 			handler := &UserHandler{
 				appUserGroupRepo: mockRepo,
 			}
 
-			valid, err := handler.validateGroupsSecurityContext(tt.groupIDs, tt.expectedSecurityContext, context.Background())
+			valid, err := handler.validateGroupsSecurityContext(
+				tt.groupIDs,
+				tt.expectedSecurityContext,
+				context.Background(),
+			)
 
 			assert.Equal(t, tt.expectedValid, valid)
 			if tt.expectedError {
@@ -249,14 +340,19 @@ func TestValidateUsersSecurityContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRepo := new(MockUserRepository)
 			if len(tt.userIDs) > 0 {
-				mockRepo.On("RetrieveUserList", mock.Anything, tt.expectedSecurityContext, tt.userIDs, float64(0)).Return(tt.mockUsers, tt.mockError)
+				mockRepo.On("RetrieveUserList", mock.Anything, tt.expectedSecurityContext, tt.userIDs, float64(0)).
+					Return(tt.mockUsers, tt.mockError)
 			}
 
 			handler := &UserHandler{
 				userRepo: mockRepo,
 			}
 
-			valid, err := handler.validateUsersSecurityContext(tt.userIDs, tt.expectedSecurityContext, context.Background())
+			valid, err := handler.validateUsersSecurityContext(
+				tt.userIDs,
+				tt.expectedSecurityContext,
+				context.Background(),
+			)
 
 			assert.Equal(t, tt.expectedValid, valid)
 			if tt.expectedError {
@@ -370,7 +466,8 @@ func TestCreateUser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockUserRepo := new(MockUserRepository)
 			if tt.expectCall {
-				mockUserRepo.On("CreateUser", mock.Anything, &tt.inputUser, mock.AnythingOfType("int")).Return(tt.mockResult, tt.mockError)
+				mockUserRepo.On("CreateUser", mock.Anything, &tt.inputUser, mock.AnythingOfType("int")).
+					Return(tt.mockResult, tt.mockError)
 			}
 
 			handler := &UserHandler{
@@ -379,7 +476,11 @@ func TestCreateUser(t *testing.T) {
 
 			// Simulate HTTP request for context
 			req := httptest.NewRequest("POST", "/user", nil)
-			result, err := handler.userRepo.CreateUser(req.Context(), &tt.inputUser, 1)
+			result, err := handler.userRepo.CreateUser(
+				req.Context(),
+				&tt.inputUser,
+				1,
+			)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -465,7 +566,8 @@ func TestUpdateUser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockUserRepo := new(MockUserRepository)
 			if tt.expectCall {
-				mockUserRepo.On("UpdateUser", mock.Anything, &tt.inputUser, tt.clientUpdateTS, mock.AnythingOfType("int")).Return(tt.mockError)
+				mockUserRepo.On("UpdateUser", mock.Anything, &tt.inputUser, tt.clientUpdateTS, mock.AnythingOfType("int")).
+					Return(tt.mockError)
 			}
 
 			handler := &UserHandler{
@@ -474,7 +576,12 @@ func TestUpdateUser(t *testing.T) {
 
 			// Simulate HTTP request for context
 			req := httptest.NewRequest("PUT", "/user", nil)
-			err := handler.userRepo.UpdateUser(req.Context(), &tt.inputUser, tt.clientUpdateTS, 1)
+			err := handler.userRepo.UpdateUser(
+				req.Context(),
+				&tt.inputUser,
+				tt.clientUpdateTS,
+				1,
+			)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -560,7 +667,8 @@ func TestDeleteUser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockUserRepo := new(MockUserRepository)
 			if tt.expectCall {
-				mockUserRepo.On("DeleteUser", mock.Anything, tt.userID, tt.securityContext, tt.updateTS, tt.now, tt.updateUserID).Return(tt.mockResult, tt.mockError)
+				mockUserRepo.On("DeleteUser", mock.Anything, tt.userID, tt.securityContext, tt.updateTS, tt.now, tt.updateUserID).
+					Return(tt.mockResult, tt.mockError)
 			}
 
 			handler := &UserHandler{
@@ -569,7 +677,14 @@ func TestDeleteUser(t *testing.T) {
 
 			// Simulate HTTP request for context
 			req := httptest.NewRequest("DELETE", "/user", nil)
-			result, err := handler.userRepo.DeleteUser(req.Context(), tt.userID, tt.securityContext, tt.updateTS, tt.now, tt.updateUserID)
+			result, err := handler.userRepo.DeleteUser(
+				req.Context(),
+				tt.userID,
+				tt.securityContext,
+				tt.updateTS,
+				tt.now,
+				tt.updateUserID,
+			)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -653,7 +768,12 @@ func TestRetrieveUserList(t *testing.T) {
 			idList:          []int{1, 2},
 			updateTS:        1234567890.123,
 			mockResult: []*model.AppUserModel{
-				{AppUserID: 1, UserName: "user1", SecurityContext: 1, UpdateTS: 1234567891.456},
+				{
+					AppUserID:       1,
+					UserName:        "user1",
+					SecurityContext: 1,
+					UpdateTS:        1234567891.456,
+				},
 			},
 			mockError:     nil,
 			expectedError: false,
@@ -666,7 +786,8 @@ func TestRetrieveUserList(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockUserRepo := new(MockUserRepository)
 			if tt.expectCall {
-				mockUserRepo.On("RetrieveUserList", mock.Anything, tt.securityContext, tt.idList, tt.updateTS).Return(tt.mockResult, tt.mockError)
+				mockUserRepo.On("RetrieveUserList", mock.Anything, tt.securityContext, tt.idList, tt.updateTS).
+					Return(tt.mockResult, tt.mockError)
 			}
 
 			handler := &UserHandler{
@@ -675,7 +796,12 @@ func TestRetrieveUserList(t *testing.T) {
 
 			// Simulate HTTP request for context
 			req := httptest.NewRequest("GET", "/userList", nil)
-			result, err := handler.userRepo.RetrieveUserList(req.Context(), tt.securityContext, tt.idList, tt.updateTS)
+			result, err := handler.userRepo.RetrieveUserList(
+				req.Context(),
+				tt.securityContext,
+				tt.idList,
+				tt.updateTS,
+			)
 
 			if tt.expectedError {
 				assert.Error(t, err)

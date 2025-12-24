@@ -26,24 +26,96 @@ import (
 
 // UserRepositoryInterface defines the methods needed by UserHandler
 type UserRepositoryInterface interface {
-	CreateUser(ctx context.Context, user *model.AppUserModel, securityContext int) (*model.AppUserModel, error)
-	RetrieveUserByUserName(ctx context.Context, username string) (*model.AppUserModel, error)
-	RetrieveUserList(ctx context.Context, securityContext int, idList []int, updateTs float64) ([]*model.AppUserModel, error)
-	UpdateUser(ctx context.Context, user *model.AppUserModel, clientUpdateTS float64, securityContext int) error
-	DeleteUser(ctx context.Context, userID int, securityContext int, updateTS float64, now float64, updateUserID int) (int, error)
-	UpdateUserPassword(ctx context.Context, userID int, hashedPassword string, now float64, updateUserID int) error
-	UpdateUserTOTPSeed(ctx context.Context, userID int, totpSeed string, updateTS float64, updateUserID int) (float64, error)
-	UpdateUserMFAExempt(ctx context.Context, userID int, mfaExempt bool, updateTS float64, updateUserID int) (float64, error)
-	AddUserListToGroup(ctx context.Context, userIDs []int, groupID int, updateTsList []float64, updateUserID int, securityContext int) ([]*model.AppUserModel, error)
-	RemoveUserListFromGroup(ctx context.Context, userIDs []int, groupID int, updateTsList []float64, updateUserID int, securityContext int) ([]*model.AppUserModel, error)
-	GetGrantsForGroups(ctx context.Context, groupIDs []int) (map[int][]int, error)
+	CreateUser(
+		ctx context.Context,
+		user *model.AppUserModel,
+		securityContext int,
+	) (*model.AppUserModel, error)
+	RetrieveUserByUserName(
+		ctx context.Context,
+		username string,
+	) (*model.AppUserModel, error)
+	RetrieveUserList(
+		ctx context.Context,
+		securityContext int,
+		idList []int,
+		updateTs float64,
+	) ([]*model.AppUserModel, error)
+	UpdateUser(
+		ctx context.Context,
+		user *model.AppUserModel,
+		clientUpdateTS float64,
+		securityContext int,
+	) error
+	DeleteUser(
+		ctx context.Context,
+		userID int,
+		securityContext int,
+		updateTS float64,
+		now float64,
+		updateUserID int,
+	) (int, error)
+	UpdateUserPassword(
+		ctx context.Context,
+		userID int,
+		hashedPassword string,
+		now float64,
+		updateUserID int,
+	) error
+	UpdateUserTOTPSeed(
+		ctx context.Context,
+		userID int,
+		totpSeed string,
+		updateTS float64,
+		updateUserID int,
+	) (float64, error)
+	UpdateUserMFAExempt(
+		ctx context.Context,
+		userID int,
+		mfaExempt bool,
+		updateTS float64,
+		updateUserID int,
+	) (float64, error)
+	AddUserListToGroup(
+		ctx context.Context,
+		userIDs []int,
+		groupID int,
+		updateTsList []float64,
+		updateUserID int,
+		securityContext int,
+	) ([]*model.AppUserModel, error)
+	RemoveUserListFromGroup(
+		ctx context.Context,
+		userIDs []int,
+		groupID int,
+		updateTsList []float64,
+		updateUserID int,
+		securityContext int,
+	) ([]*model.AppUserModel, error)
+	GetGrantsForGroups(
+		ctx context.Context,
+		groupIDs []int,
+	) (map[int][]int, error)
 }
 
 // AppUserGroupRepositoryInterface defines the methods needed by UserHandler
 type AppUserGroupRepositoryInterface interface {
-	RetrieveAppUserGroupListByIDList(ctx context.Context, groupIDs []int, securityContext int) ([]*model.AppUserGroupModel, error)
-	UpdateAppUserGroup(ctx context.Context, group *model.AppUserGroupModel, clientUpdateTS float64, securityContext int) error
-	CreateAppUserGroup(ctx context.Context, group *model.AppUserGroupModel, securityContext int) (*model.AppUserGroupModel, error)
+	RetrieveAppUserGroupListByIDList(
+		ctx context.Context,
+		groupIDs []int,
+		securityContext int,
+	) ([]*model.AppUserGroupModel, error)
+	UpdateAppUserGroup(
+		ctx context.Context,
+		group *model.AppUserGroupModel,
+		clientUpdateTS float64,
+		securityContext int,
+	) error
+	CreateAppUserGroup(
+		ctx context.Context,
+		group *model.AppUserGroupModel,
+		securityContext int,
+	) (*model.AppUserGroupModel, error)
 }
 
 // encryptTOTPSeed encrypts a TOTP seed using AES-GCM
@@ -106,7 +178,11 @@ type UserHandler struct {
 }
 
 // NewUserHandler creates a new user handler
-func NewUserHandler(appServices *app_lib.AppServices, userRepo UserRepositoryInterface, appUserGroupRepo AppUserGroupRepositoryInterface) *UserHandler {
+func NewUserHandler(
+	appServices *app_lib.AppServices,
+	userRepo UserRepositoryInterface,
+	appUserGroupRepo AppUserGroupRepositoryInterface,
+) *UserHandler {
 	return &UserHandler{
 		appsrv:           appServices,
 		userRepo:         userRepo,
@@ -115,48 +191,87 @@ func NewUserHandler(appServices *app_lib.AppServices, userRepo UserRepositoryInt
 }
 
 // validateGroupsSecurityContext ensures all groups belong to the expected security context
-func (h *UserHandler) validateGroupsSecurityContext(groupIDs []int, expectedSecurityContext int, ctx context.Context) (bool, error) {
+func (h *UserHandler) validateGroupsSecurityContext(
+	groupIDs []int,
+	expectedSecurityContext int,
+	ctx context.Context,
+) (bool, error) {
 	if len(groupIDs) == 0 {
 		return true, nil
 	}
 
-	groups, err := h.appUserGroupRepo.RetrieveAppUserGroupListByIDList(ctx, groupIDs, expectedSecurityContext)
+	groups, err := h.appUserGroupRepo.RetrieveAppUserGroupListByIDList(
+		ctx,
+		groupIDs,
+		expectedSecurityContext,
+	)
 	if err != nil {
-		return false, fmt.Errorf("failed to retrieve groups for validation: %w", err)
+		return false, fmt.Errorf(
+			"failed to retrieve groups for validation: %w",
+			err,
+		)
 	}
 
 	if len(groups) != len(groupIDs) {
-		return false, fmt.Errorf("some groups not found: requested %d, found %d", len(groupIDs), len(groups))
+		return false, fmt.Errorf(
+			"some groups not found: requested %d, found %d",
+			len(groupIDs),
+			len(groups),
+		)
 	}
 
 	for _, group := range groups {
 		if group.SecurityContext != expectedSecurityContext {
-			return false, fmt.Errorf("group %d has invalid security context: expected %d, got %d",
-				group.AppUserGroupID, expectedSecurityContext, group.SecurityContext)
+			return false, fmt.Errorf(
+				"group %d has invalid security context: expected %d, got %d",
+				group.AppUserGroupID,
+				expectedSecurityContext,
+				group.SecurityContext,
+			)
 		}
 	}
 	return true, nil
 }
 
 // validateUsersSecurityContext ensures all users belong to the expected security context
-func (h *UserHandler) validateUsersSecurityContext(userIDs []int, expectedSecurityContext int, ctx context.Context) (bool, error) {
+func (h *UserHandler) validateUsersSecurityContext(
+	userIDs []int,
+	expectedSecurityContext int,
+	ctx context.Context,
+) (bool, error) {
 	if len(userIDs) == 0 {
 		return true, nil
 	}
 
-	users, err := h.userRepo.RetrieveUserList(ctx, expectedSecurityContext, userIDs, 0)
+	users, err := h.userRepo.RetrieveUserList(
+		ctx,
+		expectedSecurityContext,
+		userIDs,
+		0,
+	)
 	if err != nil {
-		return false, fmt.Errorf("failed to retrieve users for validation: %w", err)
+		return false, fmt.Errorf(
+			"failed to retrieve users for validation: %w",
+			err,
+		)
 	}
 
 	if len(users) != len(userIDs) {
-		return false, fmt.Errorf("some users not found or inaccessible: requested %d, found %d", len(userIDs), len(users))
+		return false, fmt.Errorf(
+			"some users not found or inaccessible: requested %d, found %d",
+			len(userIDs),
+			len(users),
+		)
 	}
 
 	for _, user := range users {
 		if user.SecurityContext != expectedSecurityContext {
-			return false, fmt.Errorf("user %d has invalid security context: expected %d, got %d",
-				user.AppUserID, expectedSecurityContext, user.SecurityContext)
+			return false, fmt.Errorf(
+				"user %d has invalid security context: expected %d, got %d",
+				user.AppUserID,
+				expectedSecurityContext,
+				user.SecurityContext,
+			)
 		}
 	}
 	return true, nil
@@ -185,7 +300,14 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
 		return
 	}
-	app.Info("USR_LIST_PARAMS", fmt.Sprintf("ReadUserList with appUserIdList='%s', idCount=%d", r.URL.Query().Get("appUserIdList"), len(idList)))
+	app.Info(
+		"USR_LIST_PARAMS",
+		fmt.Sprintf(
+			"ReadUserList with appUserIdList='%s', idCount=%d",
+			r.URL.Query().Get("appUserIdList"),
+			len(idList),
+		),
+	)
 
 	// Parse optional afterUpdateTs query parameter
 	afterUpdateTs, err := GetFloatFromQuery(r, "afterUpdateTs")
@@ -194,13 +316,31 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read users (filtered by security context, optional idList, and afterUpdateTs)
-	users, err := h.userRepo.RetrieveUserList(r.Context(), jwtClaims.SecurityContext, idList, afterUpdateTs)
+	users, err := h.userRepo.RetrieveUserList(
+		r.Context(),
+		jwtClaims.SecurityContext,
+		idList,
+		afterUpdateTs,
+	)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to retrieve users: idList=%v, afterUpdateTs=%v", idList, afterUpdateTs), "ULF0", err)
+		app.WriteError(
+			w,
+			http.StatusInternalServerError,
+			fmt.Sprintf(
+				"Failed to retrieve users: idList=%v, afterUpdateTs=%v",
+				idList,
+				afterUpdateTs,
+			),
+			"ULF0",
+			err,
+		)
 		return
 	}
 
-	app.Debug("USR_LIST_READ", fmt.Sprintf("Users read: idList=%v, count=%d", idList, len(users)))
+	app.Debug(
+		"USR_LIST_READ",
+		fmt.Sprintf("Users read: idList=%v, count=%d", idList, len(users)),
+	)
 
 	// Ensure users is never nil
 	if users == nil {
@@ -215,7 +355,10 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 }
 
 // RetrieveGrantList handles GET /grantList
-func (h *UserHandler) RetrieveGrantList(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) RetrieveGrantList(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
@@ -230,7 +373,11 @@ func (h *UserHandler) RetrieveGrantList(w http.ResponseWriter, r *http.Request) 
 	app.Info("GRT_LIST_START", "ReadGrantList invoked")
 
 	// Convert GrantIDToShortCodeMap to array of objects
-	grantList := make([]map[string]interface{}, 0, len(model.GrantIDToShortCodeMap))
+	grantList := make(
+		[]map[string]interface{},
+		0,
+		len(model.GrantIDToShortCodeMap),
+	)
 	for id, text := range model.GrantIDToShortCodeMap {
 		grantList = append(grantList, map[string]interface{}{
 			"id":   id,
@@ -264,27 +411,62 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Parse request body into CreateUserRequest
 	var req model.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body for create user: %v", err), "BRQ0", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			fmt.Sprintf("Invalid request body for create user: %v", err),
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
 	app.Debug("UCP0", "User creation request parsed")
 
 	// Validate required fields
-	if req.UserName == "" || req.FirstName == "" || req.LastName == "" || req.Email == "" {
-		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Required fields missing for create user: userName='%s', firstName='%s', lastName='%s', email='%s'", req.UserName, req.FirstName, req.LastName, req.Email), "BRQ0", nil)
+	if req.UserName == "" || req.FirstName == "" || req.LastName == "" ||
+		req.Email == "" {
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			fmt.Sprintf(
+				"Required fields missing for create user: userName='%s', firstName='%s', lastName='%s', email='%s'",
+				req.UserName,
+				req.FirstName,
+				req.LastName,
+				req.Email,
+			),
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
 	// Validate group memberships are in the same security context
-	if valid, err := h.validateGroupsSecurityContext(req.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context()); !valid || err != nil {
-		app.WriteError(w, http.StatusForbidden, "Access denied: all groups must be in the same security context as the user", "SEC_CTX_VIOLATION", nil)
+	if valid, err := h.validateGroupsSecurityContext(req.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context()); !valid ||
+		err != nil {
+		app.WriteError(
+			w,
+			http.StatusForbidden,
+			"Access denied: all groups must be in the same security context as the user",
+			"SEC_CTX_VIOLATION",
+			nil,
+		)
 		return
 	}
 
 	// Validate password length
 	if len(req.PwRaw) < 8 {
-		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Password must be at least 8 characters long: len=%d", len(req.PwRaw)), "BRQ0", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			fmt.Sprintf(
+				"Password must be at least 8 characters long: len=%d",
+				len(req.PwRaw),
+			),
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
@@ -307,27 +489,59 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Hash password
 	hashed, err := app_lib.HashPassword(req.PwRaw)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to process password for user: username=%s", req.UserName), "UCH0", err)
+		app.WriteError(
+			w,
+			http.StatusInternalServerError,
+			fmt.Sprintf(
+				"Failed to process password for user: username=%s",
+				req.UserName,
+			),
+			"UCH0",
+			err,
+		)
 		return
 	}
 	user.PwHash = hashed
 
 	// Create user
-	createdUser, err := h.userRepo.CreateUser(r.Context(), &user, jwtClaims.SecurityContext)
+	createdUser, err := h.userRepo.CreateUser(
+		r.Context(),
+		&user,
+		jwtClaims.SecurityContext,
+	)
 	if err != nil {
 		// Check if it's a validation error
 		if strings.Contains(err.Error(), "username must contain only") {
-			app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid username: %s", err.Error()), "BRQ0", nil)
+			app.WriteError(
+				w,
+				http.StatusBadRequest,
+				fmt.Sprintf("Invalid username: %s", err.Error()),
+				"BRQ0",
+				nil,
+			)
 			return
 		}
-		app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create user: username=%s", req.UserName), "UCF0", err)
+		app.WriteError(
+			w,
+			http.StatusInternalServerError,
+			fmt.Sprintf("Failed to create user: username=%s", req.UserName),
+			"UCF0",
+			err,
+		)
 		return
 	}
 
 	app.Debug("UCD0", "User created")
 	wrapper := model.DataWrapper{Data: createdUser}
 	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
-	app.Info("USR_CREATE_DONE", fmt.Sprintf("User creation completed for userId=%d, username='%s'", createdUser.AppUserID, createdUser.UserName))
+	app.Info(
+		"USR_CREATE_DONE",
+		fmt.Sprintf(
+			"User creation completed for userId=%d, username='%s'",
+			createdUser.AppUserID,
+			createdUser.UserName,
+		),
+	)
 }
 
 // UpdateUser handles PUT /user
@@ -350,7 +564,13 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	var user model.AppUserModel
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body for update user: %v", err), "BRQ0", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			fmt.Sprintf("Invalid request body for update user: %v", err),
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
@@ -358,17 +578,41 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if user.AppUserID == 0 || user.UserName == "" {
-		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("appUserId and userName are required for update: appUserId=%d, userName='%s'", user.AppUserID, user.UserName), "BRQ0", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			fmt.Sprintf(
+				"appUserId and userName are required for update: appUserId=%d, userName='%s'",
+				user.AppUserID,
+				user.UserName,
+			),
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
 	// Validate group memberships are in the same security context
-	if valid, err := h.validateGroupsSecurityContext(user.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context()); !valid || err != nil {
-		app.WriteError(w, http.StatusForbidden, "Access denied: all groups must be in the same security context as the user", "SEC_CTX_VIOLATION", nil)
+	if valid, err := h.validateGroupsSecurityContext(user.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context()); !valid ||
+		err != nil {
+		app.WriteError(
+			w,
+			http.StatusForbidden,
+			"Access denied: all groups must be in the same security context as the user",
+			"SEC_CTX_VIOLATION",
+			nil,
+		)
 		return
 	}
 
-	app.Info("USR_UPDATE_PARAMS", fmt.Sprintf("UpdateUser for userId=%d, username='%s'", user.AppUserID, user.UserName))
+	app.Info(
+		"USR_UPDATE_PARAMS",
+		fmt.Sprintf(
+			"UpdateUser for userId=%d, username='%s'",
+			user.AppUserID,
+			user.UserName,
+		),
+	)
 
 	// Set update metadata
 	clientUpdateTS := user.UpdateTS
@@ -378,15 +622,44 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	user.UpdateUserID = jwtClaims.UserID
 
 	// Update user with optimistic locking
-	err := h.userRepo.UpdateUser(r.Context(), &user, clientUpdateTS, jwtClaims.SecurityContext)
+	err := h.userRepo.UpdateUser(
+		r.Context(),
+		&user,
+		clientUpdateTS,
+		jwtClaims.SecurityContext,
+	)
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict, fmt.Sprintf("User was modified by another user: app_user_id=%d", user.AppUserID), "CONFLICT_ERROR", err)
+			app.WriteError(
+				w,
+				http.StatusConflict,
+				fmt.Sprintf(
+					"User was modified by another user: app_user_id=%d",
+					user.AppUserID,
+				),
+				"CONFLICT_ERROR",
+				err,
+			)
 		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, fmt.Sprintf("User not found: app_user_id=%d", user.AppUserID), "NOT_FOUND_ERROR", err)
+			app.WriteError(
+				w,
+				http.StatusNotFound,
+				fmt.Sprintf("User not found: app_user_id=%d", user.AppUserID),
+				"NOT_FOUND_ERROR",
+				err,
+			)
 		default:
-			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to update user: app_user_id=%d", user.AppUserID), "USR_UPD_FAIL", err)
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				fmt.Sprintf(
+					"Failed to update user: app_user_id=%d",
+					user.AppUserID,
+				),
+				"USR_UPD_FAIL",
+				err,
+			)
 		}
 		return
 	}
@@ -394,7 +667,14 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	app.Debug("UUD0", "User updated")
 	wrapper := model.DataWrapper{Data: user}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("USR_UPDATE_DONE", fmt.Sprintf("User update completed for userId=%d, username='%s'", user.AppUserID, user.UserName))
+	app.Info(
+		"USR_UPDATE_DONE",
+		fmt.Sprintf(
+			"User update completed for userId=%d, username='%s'",
+			user.AppUserID,
+			user.UserName,
+		),
+	)
 }
 
 // DeleteUser handles DELETE /user
@@ -421,7 +701,10 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info("USR_DELETE_PARAMS", fmt.Sprintf("DeleteUser for userId=%d", userID))
+	app.Info(
+		"USR_DELETE_PARAMS",
+		fmt.Sprintf("DeleteUser for userId=%d", userID),
+	)
 
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
@@ -431,27 +714,64 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	// Delete user with optimistic locking
 	now := CurrentTimestamp()
-	deletedID, err := h.userRepo.DeleteUser(r.Context(), userID, jwtClaims.SecurityContext, updateTS, now, jwtClaims.UserID)
+	deletedID, err := h.userRepo.DeleteUser(
+		r.Context(),
+		userID,
+		jwtClaims.SecurityContext,
+		updateTS,
+		now,
+		jwtClaims.UserID,
+	)
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict, fmt.Sprintf("User was modified by another user: app_user_id=%d", userID), "CNF0", nil)
+			app.WriteError(
+				w,
+				http.StatusConflict,
+				fmt.Sprintf(
+					"User was modified by another user: app_user_id=%d",
+					userID,
+				),
+				"CNF0",
+				nil,
+			)
 		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, fmt.Sprintf("User not found: app_user_id=%d", userID), "NFN0", nil)
+			app.WriteError(
+				w,
+				http.StatusNotFound,
+				fmt.Sprintf("User not found: app_user_id=%d", userID),
+				"NFN0",
+				nil,
+			)
 		default:
-			app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to delete user: app_user_id=%d", userID), "UDF0", err)
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				fmt.Sprintf("Failed to delete user: app_user_id=%d", userID),
+				"UDF0",
+				err,
+			)
 		}
 		return
 	}
 
-	data := map[string]interface{}{"message": "User deleted successfully", "appUserId": deletedID}
+	data := map[string]interface{}{
+		"message":   "User deleted successfully",
+		"appUserId": deletedID,
+	}
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("USR_DELETE_DONE", fmt.Sprintf("User deletion completed for userId=%d", deletedID))
+	app.Info(
+		"USR_DELETE_DONE",
+		fmt.Sprintf("User deletion completed for userId=%d", deletedID),
+	)
 }
 
 // AddUserListToGroupHandler handles POST /addUserListToGroup
-func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) AddUserListToGroupHandler(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
@@ -474,35 +794,92 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 		UpdateTsList []float64 `json:"updateTsList"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body for add users to group: %v", err), "BRQ0", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			fmt.Sprintf("Invalid request body for add users to group: %v", err),
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
 	if len(req.UserIds) == 0 || len(req.UpdateTsList) != len(req.UserIds) {
-		app.WriteError(w, http.StatusBadRequest, fmt.Sprintf("userIds and updateTsList must be provided and have matching lengths: userIds=%d, updateTsList=%d", len(req.UserIds), len(req.UpdateTsList)), "BRQ0", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			fmt.Sprintf(
+				"userIds and updateTsList must be provided and have matching lengths: userIds=%d, updateTsList=%d",
+				len(req.UserIds),
+				len(req.UpdateTsList),
+			),
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
 	// Validate group is in the same security context
-	if valid, err := h.validateGroupsSecurityContext([]int{req.GroupId}, jwtClaims.SecurityContext, r.Context()); !valid || err != nil {
-		app.WriteError(w, http.StatusForbidden, "Access denied: group must be in the same security context", "SEC_CTX_VIOLATION", nil)
+	if valid, err := h.validateGroupsSecurityContext([]int{req.GroupId}, jwtClaims.SecurityContext, r.Context()); !valid ||
+		err != nil {
+		app.WriteError(
+			w,
+			http.StatusForbidden,
+			"Access denied: group must be in the same security context",
+			"SEC_CTX_VIOLATION",
+			nil,
+		)
 		return
 	}
 
 	// Validate all users are in the same security context
-	if valid, err := h.validateUsersSecurityContext(req.UserIds, jwtClaims.SecurityContext, r.Context()); !valid || err != nil {
-		app.WriteError(w, http.StatusForbidden, "Access denied: all users must be in the same security context", "SEC_CTX_VIOLATION", nil)
+	if valid, err := h.validateUsersSecurityContext(req.UserIds, jwtClaims.SecurityContext, r.Context()); !valid ||
+		err != nil {
+		app.WriteError(
+			w,
+			http.StatusForbidden,
+			"Access denied: all users must be in the same security context",
+			"SEC_CTX_VIOLATION",
+			nil,
+		)
 		return
 	}
 
 	// Add users to group
-	updatedUsers, err := h.userRepo.AddUserListToGroup(r.Context(), req.UserIds, req.GroupId, req.UpdateTsList, jwtClaims.UserID, jwtClaims.SecurityContext)
+	updatedUsers, err := h.userRepo.AddUserListToGroup(
+		r.Context(),
+		req.UserIds,
+		req.GroupId,
+		req.UpdateTsList,
+		jwtClaims.UserID,
+		jwtClaims.SecurityContext,
+	)
 	if err != nil {
 		if errors.Is(err, repository.ErrConflict) {
-			app.WriteError(w, http.StatusConflict, fmt.Sprintf("Concurrent update detected for add to group: group_id=%d, app_user_ids=%v", req.GroupId, req.UserIds), "CONFLICT_ERROR", err)
+			app.WriteError(
+				w,
+				http.StatusConflict,
+				fmt.Sprintf(
+					"Concurrent update detected for add to group: group_id=%d, app_user_ids=%v",
+					req.GroupId,
+					req.UserIds,
+				),
+				"CONFLICT_ERROR",
+				err,
+			)
 			return
 		}
-		app.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to add users to group: group_id=%d, user_count=%d", req.GroupId, len(req.UserIds)), "ADD_GRP_FAIL", err)
+		app.WriteError(
+			w,
+			http.StatusInternalServerError,
+			fmt.Sprintf(
+				"Failed to add users to group: group_id=%d, user_count=%d",
+				req.GroupId,
+				len(req.UserIds),
+			),
+			"ADD_GRP_FAIL",
+			err,
+		)
 		return
 	}
 
@@ -512,7 +889,10 @@ func (h *UserHandler) AddUserListToGroupHandler(w http.ResponseWriter, r *http.R
 }
 
 // RemoveUserListFromGroupHandler handles POST /removeUserListFromGroup
-func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) RemoveUserListFromGroupHandler(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
@@ -535,23 +915,54 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *h
 		UpdateTsList []float64 `json:"updateTsList"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BRQ0", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			"Invalid request body",
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
 	if len(req.UserIds) == 0 || len(req.UpdateTsList) != len(req.UserIds) {
-		app.WriteError(w, http.StatusBadRequest, "userIds and updateTsList must be provided and have matching lengths", "BRQ0", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			"userIds and updateTsList must be provided and have matching lengths",
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
 	// Remove users from group
-	updatedUsers, err := h.userRepo.RemoveUserListFromGroup(r.Context(), req.UserIds, req.GroupId, req.UpdateTsList, jwtClaims.UserID, jwtClaims.SecurityContext)
+	updatedUsers, err := h.userRepo.RemoveUserListFromGroup(
+		r.Context(),
+		req.UserIds,
+		req.GroupId,
+		req.UpdateTsList,
+		jwtClaims.UserID,
+		jwtClaims.SecurityContext,
+	)
 	if err != nil {
 		if errors.Is(err, repository.ErrConflict) {
-			app.WriteError(w, http.StatusConflict, "Concurrent update detected", "CONFLICT_ERROR", err)
+			app.WriteError(
+				w,
+				http.StatusConflict,
+				"Concurrent update detected",
+				"CONFLICT_ERROR",
+				err,
+			)
 			return
 		}
-		app.WriteError(w, http.StatusInternalServerError, "Failed to remove users from group", "REM_GRP_FAIL", err)
+		app.WriteError(
+			w,
+			http.StatusInternalServerError,
+			"Failed to remove users from group",
+			"REM_GRP_FAIL",
+			err,
+		)
 		return
 	}
 
@@ -561,7 +972,10 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(w http.ResponseWriter, r *h
 }
 
 // ChangeOtherUserPassword handles POST /changeOtherUserPassword
-func (h *UserHandler) ChangeOtherUserPassword(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) ChangeOtherUserPassword(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	// Security checks
 	app := app_lib.NewAppHelper(w, r, h.appsrv)
 	app.CheckJWT()
@@ -583,26 +997,55 @@ func (h *UserHandler) ChangeOtherUserPassword(w http.ResponseWriter, r *http.Req
 		NewPassword string `json:"newPassword"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "BRQ0", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			"Invalid request body",
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
 	// Validate required fields
 	if req.UserID == 0 || req.NewPassword == "" {
-		app.WriteError(w, http.StatusBadRequest, "appUserId and newPassword are required", "BRQ0", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			"appUserId and newPassword are required",
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
 	// Basic password validation (minimum length)
 	if len(req.NewPassword) < 8 {
-		app.WriteError(w, http.StatusBadRequest, "New password must be at least 8 characters long", "BRQ0", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			"New password must be at least 8 characters long",
+			"BRQ0",
+			nil,
+		)
 		return
 	}
 
 	// Verify the user exists and get their details for logging
-	users, err := h.userRepo.RetrieveUserList(r.Context(), jwtClaims.SecurityContext, []int{req.UserID}, 0)
+	users, err := h.userRepo.RetrieveUserList(
+		r.Context(),
+		jwtClaims.SecurityContext,
+		[]int{req.UserID},
+		0,
+	)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve user", "USF0", err)
+		app.WriteError(
+			w,
+			http.StatusInternalServerError,
+			"Failed to retrieve user",
+			"USF0",
+			err,
+		)
 		return
 	}
 	if len(users) == 0 {
@@ -614,30 +1057,58 @@ func (h *UserHandler) ChangeOtherUserPassword(w http.ResponseWriter, r *http.Req
 	// Hash new password
 	hashedPassword, err := app_lib.HashPassword(req.NewPassword)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, "Failed to process password", "UCH0", err)
+		app.WriteError(
+			w,
+			http.StatusInternalServerError,
+			"Failed to process password",
+			"UCH0",
+			err,
+		)
 		return
 	}
 
 	// Update password
 	now := CurrentTimestamp()
-	err = h.userRepo.UpdateUserPassword(r.Context(), req.UserID, hashedPassword, now, jwtClaims.UserID)
+	err = h.userRepo.UpdateUserPassword(
+		r.Context(),
+		req.UserID,
+		hashedPassword,
+		now,
+		jwtClaims.UserID,
+	)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError, "Failed to update password", "UUF0", err)
+		app.WriteError(
+			w,
+			http.StatusInternalServerError,
+			"Failed to update password",
+			"UUF0",
+			err,
+		)
 		return
 	}
 
 	app.Debug("PW_CHANGED", "Password updated for user: "+user.UserName)
 
-	wrapper := model.DataWrapper{Data: map[string]string{"message": "Password changed successfully"}}
+	wrapper := model.DataWrapper{
+		Data: map[string]string{"message": "Password changed successfully"},
+	}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
 	app.Info("PW_CHANGED", "User password change completed")
 }
 
 // UserSelfCreateHandler handles user self-registration (public endpoint)
-func UserSelfCreateHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository) http.HandlerFunc {
+func UserSelfCreateHandler(
+	appServices *app_lib.AppServices,
+	userRepo *repository.UserRepository,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// No auth required for self-create
-		appServices.Logger.Info("USC0", "User self-create request started", "username", "anonymous")
+		appServices.Logger.Info(
+			"USC0",
+			"User self-create request started",
+			"username",
+			"anonymous",
+		)
 
 		// Create app helper without JWT check
 		app := app_lib.NewAppHelper(w, r, appServices)
@@ -657,23 +1128,44 @@ func UserSelfCreateHandler(appServices *app_lib.AppServices, userRepo *repositor
 			Password string `json:"password"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
+			app.WriteError(
+				w,
+				http.StatusBadRequest,
+				"Invalid request body",
+				"IRB0",
+				err,
+			)
 			return
 		}
 
 		// Validate input
 		if req.Username == "" || req.Password == "" {
-			app.WriteError(w, http.StatusBadRequest, "Username and password are required", "BRQ0", nil)
+			app.WriteError(
+				w,
+				http.StatusBadRequest,
+				"Username and password are required",
+				"BRQ0",
+				nil,
+			)
 			return
 		}
 
 		if len(req.Password) < 8 {
-			app.WriteError(w, http.StatusBadRequest, "Password must be at least 8 characters long", "BRQ0", nil)
+			app.WriteError(
+				w,
+				http.StatusBadRequest,
+				"Password must be at least 8 characters long",
+				"BRQ0",
+				nil,
+			)
 			return
 		}
 
 		// Check if username is available
-		existingUser, err := userRepo.RetrieveUserByUserName(r.Context(), req.Username)
+		existingUser, err := userRepo.RetrieveUserByUserName(
+			r.Context(),
+			req.Username,
+		)
 		if err != nil {
 			if strings.Contains(err.Error(), "user not found") {
 				// Username is available
@@ -683,14 +1175,26 @@ func UserSelfCreateHandler(appServices *app_lib.AppServices, userRepo *repositor
 			}
 		}
 		if existingUser != nil {
-			app.WriteError(w, http.StatusConflict, "Username already taken", "UNTK", nil)
+			app.WriteError(
+				w,
+				http.StatusConflict,
+				"Username already taken",
+				"UNTK",
+				nil,
+			)
 			return
 		}
 
 		// Hash password
 		hashedPassword, err := app_lib.HashPassword(req.Password)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to process password", "UCH0", err)
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to process password",
+				"UCH0",
+				err,
+			)
 			return
 		}
 
@@ -699,36 +1203,60 @@ func UserSelfCreateHandler(appServices *app_lib.AppServices, userRepo *repositor
 		defaultSecurityContext := 1 // Default security context for self-created users
 		defaultSecurityGroupId := 3 // "New User" group ID
 		newUser := &model.AppUserModel{
-			UserName:                   req.Username,
-			PwHash:                     hashedPassword,
-			FirstName:                  "",
-			LastName:                   "",
-			Email:                      "",
-			SecurityContext:            defaultSecurityContext,
-			AppUserGroupMembershipList: []int{defaultSecurityGroupId}, // "New User" group
-			MFAExempt:                  false,
-			TOTPSeed:                   nil, // Will be set during MFA setup
-			CreateTS:                   now,
-			CreateUserID:               0, // System
-			UpdateTS:                   now,
-			UpdateUserID:               0, // System
+			UserName:        req.Username,
+			PwHash:          hashedPassword,
+			FirstName:       "",
+			LastName:        "",
+			Email:           "",
+			SecurityContext: defaultSecurityContext,
+			AppUserGroupMembershipList: []int{
+				defaultSecurityGroupId,
+			}, // "New User" group
+			MFAExempt:    false,
+			TOTPSeed:     nil, // Will be set during MFA setup
+			CreateTS:     now,
+			CreateUserID: 0, // System
+			UpdateTS:     now,
+			UpdateUserID: 0, // System
 		}
 
-		userID, err := userRepo.CreateUser(r.Context(), newUser, 1) // Self-created users go in security context 1
+		userID, err := userRepo.CreateUser(
+			r.Context(),
+			newUser,
+			1,
+		) // Self-created users go in security context 1
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to create user", "UCF0", err)
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to create user",
+				"UCF0",
+				err,
+			)
 			return
 		}
 
-		appServices.Logger.Info("USCC", "User self-created successfully", "username", req.Username, "userId", userID)
+		appServices.Logger.Info(
+			"USCC",
+			"User self-created successfully",
+			"username",
+			req.Username,
+			"userId",
+			userID,
+		)
 
-		wrapper := model.DataWrapper{Data: map[string]string{"message": "User created successfully"}}
+		wrapper := model.DataWrapper{
+			Data: map[string]string{"message": "User created successfully"},
+		}
 		writeJSON(w, http.StatusCreated, wrapper, appServices.Logger)
 	}
 }
 
 // MFASetupHandler handles MFA setup for authenticated users
-func MFASetupHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository) http.HandlerFunc {
+func MFASetupHandler(
+	appServices *app_lib.AppServices,
+	userRepo *repository.UserRepository,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
 		app := app_lib.NewAppHelper(w, r, appServices)
@@ -742,14 +1270,23 @@ func MFASetupHandler(appServices *app_lib.AppServices, userRepo *repository.User
 			TempToken string `json:"tempToken"`
 		}
 		bodyBytes, _ := io.ReadAll(r.Body)
-		r.Body = io.NopCloser(bytes.NewReader(bodyBytes)) // Reset body for later
-		if err := json.Unmarshal(bodyBytes, &tempReq); err == nil && tempReq.TempToken != "" {
+		r.Body = io.NopCloser(
+			bytes.NewReader(bodyBytes),
+		) // Reset body for later
+		if err := json.Unmarshal(bodyBytes, &tempReq); err == nil &&
+			tempReq.TempToken != "" {
 			// Temp token path
 			tempToken := tempReq.TempToken
 			// Get username from temp token
 			userNameBytes, err := appServices.KV.Get("TEMP_AUTH_" + tempToken)
 			if err != nil || userNameBytes == "" {
-				app.WriteError(w, http.StatusUnauthorized, "Invalid temp token", "ITTK", nil)
+				app.WriteError(
+					w,
+					http.StatusUnauthorized,
+					"Invalid temp token",
+					"ITTK",
+					nil,
+				)
 				return
 			}
 			userName = userNameBytes
@@ -763,17 +1300,32 @@ func MFASetupHandler(appServices *app_lib.AppServices, userRepo *repository.User
 			userName = jwtClaims.Subject
 		}
 
-		app.Info("MFA_STP_STRT", "MFA setup request started for user: "+userName)
+		app.Info(
+			"MFA_STP_STRT",
+			"MFA setup request started for user: "+userName,
+		)
 
 		// Get current user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve user", "USF0", err)
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to retrieve user",
+				"USF0",
+				err,
+			)
 			return
 		}
 
 		if user.MFAExempt {
-			app.WriteError(w, http.StatusBadRequest, "MFA not required for this user", "MFAN", nil)
+			app.WriteError(
+				w,
+				http.StatusBadRequest,
+				"MFA not required for this user",
+				"MFAN",
+				nil,
+			)
 			return
 		}
 
@@ -781,9 +1333,18 @@ func MFASetupHandler(appServices *app_lib.AppServices, userRepo *repository.User
 		var secret string
 		if user.TOTPSeed != nil && *user.TOTPSeed != "" {
 			// Decrypt existing seed
-			decrypted, err := decryptTOTPSeed(*user.TOTPSeed, appServices.Config.TOTPEncryptionKey)
+			decrypted, err := decryptTOTPSeed(
+				*user.TOTPSeed,
+				appServices.Config.TOTPEncryptionKey,
+			)
 			if err != nil {
-				app.WriteError(w, http.StatusInternalServerError, "Failed to decrypt TOTP secret", "TSD0", err)
+				app.WriteError(
+					w,
+					http.StatusInternalServerError,
+					"Failed to decrypt TOTP secret",
+					"TSD0",
+					err,
+				)
 				return
 			}
 			secret = decrypted
@@ -810,16 +1371,25 @@ func MFASetupHandler(appServices *app_lib.AppServices, userRepo *repository.User
 		}
 
 		// Generate QR code URL
-		processedAppName := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(appServices.Config.AppName, "")
+		processedAppName := regexp.MustCompile(`[^a-zA-Z0-9]`).
+			ReplaceAllString(appServices.Config.AppName, "")
 		qrCodeUrl := "otpauth://totp/" + processedAppName + ":" + userName + "?secret=" + secret + "&issuer=" + appServices.Config.AppName
 
 		// Generate QR code image
 		png, err := qrcode.Encode(qrCodeUrl, qrcode.Medium, 256)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to generate QR code", "QRCG", err)
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to generate QR code",
+				"QRCG",
+				err,
+			)
 			return
 		}
-		qrCodeImage := "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+		qrCodeImage := "data:image/png;base64," + base64.StdEncoding.EncodeToString(
+			png,
+		)
 
 		response := map[string]interface{}{
 			"secret":      secret,
@@ -833,7 +1403,10 @@ func MFASetupHandler(appServices *app_lib.AppServices, userRepo *repository.User
 }
 
 // MFAVerifyHandler handles MFA verification
-func MFAVerifyHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository) http.HandlerFunc {
+func MFAVerifyHandler(
+	appServices *app_lib.AppServices,
+	userRepo *repository.UserRepository,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
 		app := app_lib.NewAppHelper(w, r, appServices)
@@ -849,16 +1422,30 @@ func MFAVerifyHandler(appServices *app_lib.AppServices, userRepo *repository.Use
 		bodyBytes, _ := io.ReadAll(r.Body)
 		r.Body = io.NopCloser(bytes.NewReader(bodyBytes)) // Reset body
 		if err := json.Unmarshal(bodyBytes, &req); err != nil {
-			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
+			app.WriteError(
+				w,
+				http.StatusBadRequest,
+				"Invalid request body",
+				"IRB0",
+				err,
+			)
 			return
 		}
 
 		var userName string
 		if req.TempToken != "" {
 			// Temp token path
-			userNameBytes, err := appServices.KV.Get("TEMP_AUTH_" + req.TempToken)
+			userNameBytes, err := appServices.KV.Get(
+				"TEMP_AUTH_" + req.TempToken,
+			)
 			if err != nil || userNameBytes == "" {
-				app.WriteError(w, http.StatusUnauthorized, "Invalid temp token", "ITTK", nil)
+				app.WriteError(
+					w,
+					http.StatusUnauthorized,
+					"Invalid temp token",
+					"ITTK",
+					nil,
+				)
 				return
 			}
 			userName = userNameBytes
@@ -872,24 +1459,48 @@ func MFAVerifyHandler(appServices *app_lib.AppServices, userRepo *repository.Use
 			userName = jwtClaims.Subject
 		}
 
-		app.Info("MFA_VFY_STRT", "MFA verify request started for user: "+userName)
+		app.Info(
+			"MFA_VFY_STRT",
+			"MFA verify request started for user: "+userName,
+		)
 
 		// Get user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve user", "USF0", err)
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to retrieve user",
+				"USF0",
+				err,
+			)
 			return
 		}
 
 		if user.TOTPSeed == nil || *user.TOTPSeed == "" {
-			app.WriteError(w, http.StatusBadRequest, "MFA not set up", "MFNS", nil)
+			app.WriteError(
+				w,
+				http.StatusBadRequest,
+				"MFA not set up",
+				"MFNS",
+				nil,
+			)
 			return
 		}
 
 		// Decrypt TOTP secret
-		decryptedSecret, err := decryptTOTPSeed(*user.TOTPSeed, appServices.Config.TOTPEncryptionKey)
+		decryptedSecret, err := decryptTOTPSeed(
+			*user.TOTPSeed,
+			appServices.Config.TOTPEncryptionKey,
+		)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to decrypt TOTP secret", "TSD0", err)
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to decrypt TOTP secret",
+				"TSD0",
+				err,
+			)
 			return
 		}
 
@@ -897,11 +1508,23 @@ func MFAVerifyHandler(appServices *app_lib.AppServices, userRepo *repository.Use
 		clientIP := getClientIP(r)
 		locked, err := isAccountLocked(appServices.KV, clientIP, userName)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to check account lockout", "LOCKOUT_CHECK_FAIL", err)
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to check account lockout",
+				"LOCKOUT_CHECK_FAIL",
+				err,
+			)
 			return
 		}
 		if locked {
-			app.WriteError(w, http.StatusTooManyRequests, "Account is temporarily locked due to too many failed login attempts", "ACCOUNT_LOCKED", nil)
+			app.WriteError(
+				w,
+				http.StatusTooManyRequests,
+				"Account is temporarily locked due to too many failed login attempts",
+				"ACCOUNT_LOCKED",
+				nil,
+			)
 			return
 		}
 
@@ -909,29 +1532,63 @@ func MFAVerifyHandler(appServices *app_lib.AppServices, userRepo *repository.Use
 		valid := totp.Validate(req.TOTPCode, decryptedSecret)
 		if !valid {
 			// Increment failed attempt counters
-			err := incrementFailedAttempt(appServices.KV, appServices.Config, clientIP, userName)
+			err := incrementFailedAttempt(
+				appServices.KV,
+				appServices.Config,
+				clientIP,
+				userName,
+			)
 			if err != nil {
-				appServices.Logger.Error("FAILED_ATTEMPT_INCR_FAIL",
-					"Failed to increment failed attempts for user: "+userName+", error: "+err.Error(), "username", userName)
+				appServices.Logger.Error(
+					"FAILED_ATTEMPT_INCR_FAIL",
+					"Failed to increment failed attempts for user: "+userName+", error: "+err.Error(),
+					"username",
+					userName,
+				)
 				// Don't fail the request, just log
 			}
-			app.WriteError(w, http.StatusUnauthorized, "Invalid TOTP code", "ITCC", nil)
+			app.WriteError(
+				w,
+				http.StatusUnauthorized,
+				"Invalid TOTP code",
+				"ITCC",
+				nil,
+			)
 			return
 		}
 
 		if req.TempToken != "" {
 			// Complete authentication for onboarding
 			// Get grants
-			grantsMap, err := userRepo.GetGrantsForGroups(r.Context(), user.AppUserGroupMembershipList)
+			grantsMap, err := userRepo.GetGrantsForGroups(
+				r.Context(),
+				user.AppUserGroupMembershipList,
+			)
 			if err != nil {
-				app.WriteError(w, http.StatusInternalServerError, "Failed to get grants", "GRFL", err)
+				app.WriteError(
+					w,
+					http.StatusInternalServerError,
+					"Failed to get grants",
+					"GRFL",
+					err,
+				)
 				return
 			}
 
 			// Issue JWT
-			jwt, sessionID, err := createJWTForUser(user, grantsMap[user.SecurityContext], appServices)
+			jwt, sessionID, err := createJWTForUser(
+				user,
+				grantsMap[user.SecurityContext],
+				appServices,
+			)
 			if err != nil {
-				app.WriteError(w, http.StatusInternalServerError, "Failed to create JWT", "JWFL", err)
+				app.WriteError(
+					w,
+					http.StatusInternalServerError,
+					"Failed to create JWT",
+					"JWFL",
+					err,
+				)
 				return
 			}
 
@@ -949,26 +1606,43 @@ func MFAVerifyHandler(appServices *app_lib.AppServices, userRepo *repository.Use
 			csrfToken := sessionID[len(sessionID)-3:]
 
 			// Remove temp token
-			appServices.KV.Set("TEMP_AUTH_"+req.TempToken, "", "0") // Expire immediately
+			appServices.KV.Set(
+				"TEMP_AUTH_"+req.TempToken,
+				"",
+				"0",
+			) // Expire immediately
 
 			// Return full user data
 			response := model.Auth2ResponseModel{
-				AppUserID:                    user.AppUserID,
-				UserName:                     user.UserName,
-				FirstName:                    user.FirstName,
-				LastName:                     user.LastName,
-				SecurityContext:              user.SecurityContext,
-				GrantList:                    grantsMap[user.SecurityContext],
-				AvailableSecurityContextList: make([]int, 0, len(grantsMap)), // TODO: populate
-				MFARequired:                  false,                          // Now verified
+				AppUserID:       user.AppUserID,
+				UserName:        user.UserName,
+				FirstName:       user.FirstName,
+				LastName:        user.LastName,
+				SecurityContext: user.SecurityContext,
+				GrantList:       grantsMap[user.SecurityContext],
+				AvailableSecurityContextList: make(
+					[]int,
+					0,
+					len(grantsMap),
+				), // TODO: populate
+				MFARequired: false, // Now verified
 			}
 			for ctx := range grantsMap {
-				response.AvailableSecurityContextList = append(response.AvailableSecurityContextList, ctx)
+				response.AvailableSecurityContextList = append(
+					response.AvailableSecurityContextList,
+					ctx,
+				)
 			}
 
-			wrapper := model.Auth2ResponseWrapper{User: response, CsrfToken: csrfToken}
+			wrapper := model.Auth2ResponseWrapper{
+				User:      response,
+				CsrfToken: csrfToken,
+			}
 			writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-			app.Info("MFA_ONB_CMP", "MFA onboarding completed for user: "+userName)
+			app.Info(
+				"MFA_ONB_CMP",
+				"MFA onboarding completed for user: "+userName,
+			)
 		} else {
 			// For logged in users, just confirm
 			wrapper := model.DataWrapper{Data: map[string]string{"message": "MFA verified successfully"}}
@@ -979,7 +1653,10 @@ func MFAVerifyHandler(appServices *app_lib.AppServices, userRepo *repository.Use
 }
 
 // AdminResetUserMFAHandler handles admin reset of user MFA
-func AdminResetUserMFAHandler(appServices *app_lib.AppServices, userRepo *repository.UserRepository) http.HandlerFunc {
+func AdminResetUserMFAHandler(
+	appServices *app_lib.AppServices,
+	userRepo *repository.UserRepository,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
 		app := app_lib.NewAppHelper(w, r, appServices)
@@ -999,32 +1676,75 @@ func AdminResetUserMFAHandler(appServices *app_lib.AppServices, userRepo *reposi
 			UserID int `json:"userId"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(w, http.StatusBadRequest, "Invalid request body", "IRB0", err)
+			app.WriteError(
+				w,
+				http.StatusBadRequest,
+				"Invalid request body",
+				"IRB0",
+				err,
+			)
 			return
 		}
 
 		// Get target user
-		users, err := userRepo.RetrieveUserList(r.Context(), app.GetClaims().SecurityContext, []int{req.UserID}, 0)
+		users, err := userRepo.RetrieveUserList(
+			r.Context(),
+			app.GetClaims().SecurityContext,
+			[]int{req.UserID},
+			0,
+		)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to retrieve user", "USF0", err)
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to retrieve user",
+				"USF0",
+				err,
+			)
 			return
 		}
 		if len(users) == 0 {
-			app.WriteError(w, http.StatusNotFound, "User not found", "NFN0", nil)
+			app.WriteError(
+				w,
+				http.StatusNotFound,
+				"User not found",
+				"NFN0",
+				nil,
+			)
 			return
 		}
 
 		targetUser := users[0]
 
 		// Reset MFA seed only
-		newUpdateTS, err := userRepo.UpdateUserTOTPSeed(r.Context(), targetUser.AppUserID, "", targetUser.UpdateTS, app.GetClaims().UserID)
+		newUpdateTS, err := userRepo.UpdateUserTOTPSeed(
+			r.Context(),
+			targetUser.AppUserID,
+			"",
+			targetUser.UpdateTS,
+			app.GetClaims().UserID,
+		)
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError, "Failed to reset MFA", "MFRE", err)
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to reset MFA",
+				"MFRE",
+				err,
+			)
 			return
 		}
 
-		wrapper := model.DataWrapper{Data: map[string]interface{}{"message": "MFA reset successfully", "updateTs": newUpdateTS}}
+		wrapper := model.DataWrapper{
+			Data: map[string]interface{}{
+				"message":  "MFA reset successfully",
+				"updateTs": newUpdateTS,
+			},
+		}
 		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
-		app.Info("ADM_RST_MFA_D", "Admin reset MFA completed for user: "+targetUser.UserName)
+		app.Info(
+			"ADM_RST_MFA_D",
+			"Admin reset MFA completed for user: "+targetUser.UserName,
+		)
 	}
 }

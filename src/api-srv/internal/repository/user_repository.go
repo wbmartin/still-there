@@ -124,11 +124,15 @@ func (r *UserRepository) CreateUser(
 ) (*model.AppUserModel, error) {
 	// Validate that the user can only be created in the user's security context
 	if user.SecurityContext != securityContext {
-		return nil, fmt.Errorf("cannot create user in different security context")
+		return nil, fmt.Errorf(
+			"cannot create user in different security context",
+		)
 	}
 
 	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(user.UserName) {
-		return nil, fmt.Errorf("username must contain only alphanumeric characters, hyphens, and underscores")
+		return nil, fmt.Errorf(
+			"username must contain only alphanumeric characters, hyphens, and underscores",
+		)
 	}
 
 	query := `
@@ -139,10 +143,21 @@ func (r *UserRepository) CreateUser(
 		RETURNING app_user_id`
 
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, query,
-			user.UserName, user.PwHash, user.FirstName, user.LastName, user.Email,
-			user.SecurityContext, user.AppUserGroupMembershipList, user.MFAExempt,
-			user.CreateTS, user.CreateUserID, user.UpdateTS, user.UpdateUserID,
+		return r.db.QueryRow(
+			ctx,
+			query,
+			user.UserName,
+			user.PwHash,
+			user.FirstName,
+			user.LastName,
+			user.Email,
+			user.SecurityContext,
+			user.AppUserGroupMembershipList,
+			user.MFAExempt,
+			user.CreateTS,
+			user.CreateUserID,
+			user.UpdateTS,
+			user.UpdateUserID,
 		).Scan(&user.AppUserID)
 	})
 
@@ -279,10 +294,20 @@ func (r *UserRepository) RetrieveUserList(
 		for rows.Next() {
 			var user model.AppUserModel
 			err := rows.Scan(
-				&user.AppUserID, &user.UserName, &user.FirstName, &user.LastName, &user.Email,
-				&user.SecurityContext, &user.AppUserGroupMembershipList, &user.MFAExempt,
-				&user.CreateTS, &user.CreateUserID, &user.UpdateTS, &user.UpdateUserID,
-				&user.DeleteTS, &user.DeleteUserID,
+				&user.AppUserID,
+				&user.UserName,
+				&user.FirstName,
+				&user.LastName,
+				&user.Email,
+				&user.SecurityContext,
+				&user.AppUserGroupMembershipList,
+				&user.MFAExempt,
+				&user.CreateTS,
+				&user.CreateUserID,
+				&user.UpdateTS,
+				&user.UpdateUserID,
+				&user.DeleteTS,
+				&user.DeleteUserID,
 			)
 			if err != nil {
 				return fmt.Errorf("failed to scan user: %w", err)
@@ -301,7 +326,10 @@ func (r *UserRepository) RetrieveUserList(
 
 // UpdateUser updates a user with optimistic locking within a security context
 func (r *UserRepository) UpdateUser(
-	ctx context.Context, user *model.AppUserModel, clientUpdateTS float64, securityContext int,
+	ctx context.Context,
+	user *model.AppUserModel,
+	clientUpdateTS float64,
+	securityContext int,
 ) error {
 	query := `
 		UPDATE app_user
@@ -361,7 +389,15 @@ func (r *UserRepository) DeleteUser(
 	var result pgconn.CommandTag
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		var execErr error
-		result, execErr = r.db.Exec(ctx, query, deleteTS, deleteUserID, userID, securityContext, clientUpdateTS)
+		result, execErr = r.db.Exec(
+			ctx,
+			query,
+			deleteTS,
+			deleteUserID,
+			userID,
+			securityContext,
+			clientUpdateTS,
+		)
 		return execErr
 	})
 	if err != nil {
@@ -397,7 +433,9 @@ func (r *UserRepository) AddUserListToGroup(
 	securityContext int,
 ) ([]*model.AppUserModel, error) {
 	if len(userIds) != len(updateTsList) {
-		return nil, fmt.Errorf("userIds and updateTsList must have the same length")
+		return nil, fmt.Errorf(
+			"userIds and updateTsList must have the same length",
+		)
 	}
 
 	// Begin transaction
@@ -409,19 +447,29 @@ func (r *UserRepository) AddUserListToGroup(
 
 	// Update each user (only if group not already in membership list)
 	for i, userId := range userIds {
-		result, err := tx.Exec(ctx, `
+		result, err := tx.Exec(
+			ctx,
+			`
 			UPDATE app_user
 			SET app_user_group_membership_list = array_append(app_user_group_membership_list, $2),
 				update_ts = $3,
 				update_user_id = $4
 			WHERE app_user_id = $1 AND update_ts = $5 AND delete_user_id IS NULL AND $2 != ALL(app_user_group_membership_list)`,
-			userId, groupId, float64(time.Now().UnixNano())/1e9, updateUserId, updateTsList[i])
+			userId,
+			groupId,
+			float64(time.Now().UnixNano())/1e9,
+			updateUserId,
+			updateTsList[i],
+		)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to update user %d: %w", userId, err)
 		}
 		if result.RowsAffected() == 0 {
-			return nil, fmt.Errorf("user %d not found, already has group, or concurrent update", userId)
+			return nil, fmt.Errorf(
+				"user %d not found, already has group, or concurrent update",
+				userId,
+			)
 		}
 	}
 
@@ -444,7 +492,9 @@ func (r *UserRepository) RemoveUserListFromGroup(
 	securityContext int,
 ) ([]*model.AppUserModel, error) {
 	if len(userIds) != len(updateTsList) {
-		return nil, fmt.Errorf("userIds and updateTsList must have the same length")
+		return nil, fmt.Errorf(
+			"userIds and updateTsList must have the same length",
+		)
 	}
 
 	// Begin transaction
@@ -456,19 +506,29 @@ func (r *UserRepository) RemoveUserListFromGroup(
 
 	// Update each user
 	for i, userId := range userIds {
-		result, err := tx.Exec(ctx, `
+		result, err := tx.Exec(
+			ctx,
+			`
 			UPDATE app_user
 			SET app_user_group_membership_list = array_remove(app_user_group_membership_list, $2),
 				update_ts = $3,
 				update_user_id = $4
 			WHERE app_user_id = $1 AND update_ts = $5 AND delete_user_id IS NULL`,
-			userId, groupId, float64(time.Now().UnixNano())/1e9, updateUserId, updateTsList[i])
+			userId,
+			groupId,
+			float64(time.Now().UnixNano())/1e9,
+			updateUserId,
+			updateTsList[i],
+		)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to update user %d: %w", userId, err)
 		}
 		if result.RowsAffected() == 0 {
-			return nil, fmt.Errorf("user %d not found or concurrent update", userId)
+			return nil, fmt.Errorf(
+				"user %d not found or concurrent update",
+				userId,
+			)
 		}
 	}
 

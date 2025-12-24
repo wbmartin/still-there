@@ -43,13 +43,21 @@ func NewKV(kvHostPort string) ThisAppKVInterface {
 	// Parse the combined host:port string
 	host, portStr, err := parseHostPort(kvHostPort)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse kv_host_port: %s\n", err.Error())
+		fmt.Fprintf(
+			os.Stderr,
+			"Failed to parse kv_host_port: %s\n",
+			err.Error(),
+		)
 		return &KV{shrmplKVClient: nil, hostPort: kvHostPort}
 	}
 
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid port in kv_host_port: %s\n", err.Error())
+		fmt.Fprintf(
+			os.Stderr,
+			"Invalid port in kv_host_port: %s\n",
+			err.Error(),
+		)
 		return &KV{shrmplKVClient: nil, hostPort: kvHostPort}
 	}
 
@@ -57,7 +65,11 @@ func NewKV(kvHostPort string) ThisAppKVInterface {
 	if err := shrmplKV.Connect(); err != nil {
 		// If we can't connect, we'll return a client that logs errors
 		// The operations will fail gracefully
-		fmt.Fprintf(os.Stderr, "Failed to connect to shrmpl-kv: %s\n", err.Error())
+		fmt.Fprintf(
+			os.Stderr,
+			"Failed to connect to shrmpl-kv: %s\n",
+			err.Error(),
+		)
 		return &KV{shrmplKVClient: nil, hostPort: kvHostPort}
 	}
 

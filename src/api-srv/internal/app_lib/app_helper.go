@@ -102,17 +102,35 @@ func (ah *AppHelper) Debug(code, message string) {
 
 // Info logs at info level with automatic username attachment
 func (ah *AppHelper) Info(code, message string) {
-	ah.appServices.Logger.InfoWithCallerSkip(code, message, 3, "username", ah.username)
+	ah.appServices.Logger.InfoWithCallerSkip(
+		code,
+		message,
+		3,
+		"username",
+		ah.username,
+	)
 }
 
 // Warn logs at warn level with automatic username attachment
 func (ah *AppHelper) Warn(code, message string) {
-	ah.appServices.Logger.WarnWithCallerSkip(code, message, 3, "username", ah.username)
+	ah.appServices.Logger.WarnWithCallerSkip(
+		code,
+		message,
+		3,
+		"username",
+		ah.username,
+	)
 }
 
 // Error logs at error level with automatic username attachment
 func (ah *AppHelper) Error(code, message string) {
-	ah.appServices.Logger.ErrorWithCallerSkip(code, message, 3, "username", ah.username)
+	ah.appServices.Logger.ErrorWithCallerSkip(
+		code,
+		message,
+		3,
+		"username",
+		ah.username,
+	)
 }
 
 // ErrorWithCallerSkip logs at error level with custom caller skip
@@ -191,7 +209,13 @@ func (ah *AppHelper) WriteError(
 	if err != nil {
 		internalMsg = clientMsg + ": " + err.Error()
 	}
-	ah.appServices.Logger.ErrorWithCallerSkip(code, internalMsg, 3, "username", ah.username)
+	ah.appServices.Logger.ErrorWithCallerSkip(
+		code,
+		internalMsg,
+		3,
+		"username",
+		ah.username,
+	)
 	response := map[string]string{"error": clientMsg}
 	writeJSON(w, status, response, ah.appServices.Logger)
 }
@@ -222,8 +246,14 @@ func (sh *AppHelper) CheckJWT() *AppHelper {
 	tokenString := cookie.Value
 	claims, err := ValidateJWT(tokenString, sh.appServices.Config.JWTSecret)
 	if err != nil {
-		sh.appServices.Logger.Warn("JWF0", "JWT validation failed: "+err.Error())
-		sh.failAndRespond(http.StatusUnauthorized, "Invalid authentication token")
+		sh.appServices.Logger.Warn(
+			"JWF0",
+			"JWT validation failed: "+err.Error(),
+		)
+		sh.failAndRespond(
+			http.StatusUnauthorized,
+			"Invalid authentication token",
+		)
 		return sh
 	}
 
@@ -246,7 +276,10 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 		cookie, err := sh.r.Cookie("auth")
 		if err == nil {
 			tokenString := cookie.Value
-			claims, err := ValidateJWT(tokenString, sh.appServices.Config.JWTSecret)
+			claims, err := ValidateJWT(
+				tokenString,
+				sh.appServices.Config.JWTSecret,
+			)
 			if err == nil {
 				sh.claims = claims
 				sh.username = claims.Subject
@@ -372,7 +405,10 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 	if len(results) > 1 {
 		blockedValue := results[1]
 		if blockedValue != "" && blockedValue != "*KEY NOT FOUND*" {
-			sh.appServices.Logger.Warn("UBK0", "User is blocked: "+sh.claims.Subject)
+			sh.appServices.Logger.Warn(
+				"UBK0",
+				"User is blocked: "+sh.claims.Subject,
+			)
 			sh.failAndRespond(http.StatusForbidden, "User account is blocked")
 			return sh
 		}
@@ -399,7 +435,10 @@ func (sh *AppHelper) CheckUserBlocked() *AppHelper {
 
 	if blockedValue != "" && blockedValue != "*KEY NOT FOUND*" {
 		// Key exists, user is blocked
-		sh.appServices.Logger.Warn("UBK0", "User is blocked: "+sh.claims.Subject)
+		sh.appServices.Logger.Warn(
+			"UBK0",
+			"User is blocked: "+sh.claims.Subject,
+		)
 		sh.failAndRespond(http.StatusForbidden, "User account is blocked")
 		return sh
 	}
@@ -439,8 +478,10 @@ func (sh *AppHelper) CheckCSRF() *AppHelper {
 
 	expectedToken := sh.claims.SessionID[len(sh.claims.SessionID)-3:]
 	if csrfToken != expectedToken {
-		sh.appServices.Logger.Warn("CSM0",
-			"CSRF token mismatch - received: "+csrfToken+", expected: "+expectedToken)
+		sh.appServices.Logger.Warn(
+			"CSM0",
+			"CSRF token mismatch - received: "+csrfToken+", expected: "+expectedToken,
+		)
 		sh.failAndRespond(http.StatusForbidden, "CSRF validation failed")
 		return sh
 	}
@@ -463,7 +504,11 @@ func (sh *AppHelper) CheckAuthorization(requiredGrantID int) *AppHelper {
 
 	if requiredGrantID > 0 {
 		rbac := NewRBACManager(sh.appServices.Logger, sh.username)
-		if !rbac.HasGrant(sh.claims, requiredGrantID, sh.claims.SecurityContext) {
+		if !rbac.HasGrant(
+			sh.claims,
+			requiredGrantID,
+			sh.claims.SecurityContext,
+		) {
 			sh.appServices.Logger.Warn("ATF0",
 				fmt.Sprintf("Authorization failed - required grant: %d, "+
 					"security context: %d",
@@ -472,8 +517,13 @@ func (sh *AppHelper) CheckAuthorization(requiredGrantID int) *AppHelper {
 			if shortCode == "" {
 				shortCode = fmt.Sprintf("%d", requiredGrantID)
 			}
-			sh.failAndRespond(http.StatusForbidden,
-				fmt.Sprintf("Permission denied (grant \"%s\" required)", shortCode))
+			sh.failAndRespond(
+				http.StatusForbidden,
+				fmt.Sprintf(
+					"Permission denied (grant \"%s\" required)",
+					shortCode,
+				),
+			)
 			return sh
 		}
 	}
@@ -499,9 +549,15 @@ func (sh *AppHelper) CheckTargetContextAuthorization(
 
 	rbac := NewRBACManager(sh.appServices.Logger, sh.username)
 	if !rbac.HasGrant(sh.claims, requiredGrantID, targetSecurityContext) {
-		sh.appServices.Logger.Warn("TAF0",
-			fmt.Sprintf("Target context authorization failed - required grant: %d, "+
-				"target context: %d", requiredGrantID, targetSecurityContext))
+		sh.appServices.Logger.Warn(
+			"TAF0",
+			fmt.Sprintf(
+				"Target context authorization failed - required grant: %d, "+
+					"target context: %d",
+				requiredGrantID,
+				targetSecurityContext,
+			),
+		)
 		sh.failAndRespond(http.StatusForbidden,
 			fmt.Sprintf("Permission denied (grant %d required in context %d)",
 				requiredGrantID, targetSecurityContext))
@@ -518,7 +574,10 @@ func (sh *AppHelper) CheckAllChecksComplete() bool {
 	}
 
 	if !sh.jwtChecked {
-		sh.failAndRespond(http.StatusInternalServerError, "JWT check not completed")
+		sh.failAndRespond(
+			http.StatusInternalServerError,
+			"JWT check not completed",
+		)
 		return false
 	}
 

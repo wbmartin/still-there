@@ -81,8 +81,14 @@ func (sm *SystemMonitor) Start(metrics *SystemMetrics) {
 			case <-ticker.C:
 				// Placeholder: collect CPU and memory usage
 				// This would use gopsutil or similar on real systems
-				metrics.CPUUsage = append(metrics.CPUUsage, 50.0)      // Placeholder
-				metrics.MemoryUsage = append(metrics.MemoryUsage, 256) // Placeholder MB
+				metrics.CPUUsage = append(
+					metrics.CPUUsage,
+					50.0,
+				) // Placeholder
+				metrics.MemoryUsage = append(
+					metrics.MemoryUsage,
+					256,
+				) // Placeholder MB
 			}
 		}
 	}()
@@ -116,10 +122,16 @@ func main() {
 	// Generate output filename if not specified
 	if config.OutputFile == "" {
 		timestamp := time.Now().Format("2006-01-02_15-04-05")
-		config.OutputFile = fmt.Sprintf("tests/reports/load_test_%s.html", timestamp)
+		config.OutputFile = fmt.Sprintf(
+			"tests/reports/load_test_%s.html",
+			timestamp,
+		)
 	}
 
-	log.Printf("Starting load test with %d concurrent users", config.Concurrency)
+	log.Printf(
+		"Starting load test with %d concurrent users",
+		config.Concurrency,
+	)
 	log.Printf(
 		"Target: %v duration or %d iterations",
 		config.Duration,
@@ -148,7 +160,12 @@ func parseFlags() Config {
 	var monitorServer bool
 	var outputFile string
 
-	flag.StringVar(&durationStr, "duration", "2m", "Test duration (e.g., 2m, 30s)")
+	flag.StringVar(
+		&durationStr,
+		"duration",
+		"2m",
+		"Test duration (e.g., 2m, 30s)",
+	)
 	flag.IntVar(
 		&iterations,
 		"iterations",
@@ -253,7 +270,11 @@ func runLoadTest(config Config) *TestResults {
 
 	// Wait for test completion
 	if config.Iterations > 0 {
-		log.Printf("Waiting for %d iterations to complete across %d workers...", config.Iterations*config.Concurrency, config.Concurrency)
+		log.Printf(
+			"Waiting for %d iterations to complete across %d workers...",
+			config.Iterations*config.Concurrency,
+			config.Concurrency,
+		)
 		// Wait for all iterations to complete
 		wg.Wait()
 		log.Printf("All iterations completed. Stopping workers...")
@@ -618,11 +639,21 @@ func generateHTMLReport(results *TestResults) error {
 
 	// Calculate overall metrics
 	if templateData.Duration.Seconds() > 0 {
-		templateData.RequestsPerSecond = float64(results.TotalRequests) / templateData.Duration.Seconds()
+		templateData.RequestsPerSecond = float64(
+			results.TotalRequests,
+		) / templateData.Duration.Seconds()
 	}
 	if results.TotalRequests > 0 {
-		templateData.SuccessRate = float64(results.TotalRequests-results.TotalErrors) / float64(results.TotalRequests) * 100
-		templateData.ErrorRate = float64(results.TotalErrors) / float64(results.TotalRequests) * 100
+		templateData.SuccessRate = float64(
+			results.TotalRequests-results.TotalErrors,
+		) / float64(
+			results.TotalRequests,
+		) * 100
+		templateData.ErrorRate = float64(
+			results.TotalErrors,
+		) / float64(
+			results.TotalRequests,
+		) * 100
 	}
 
 	// Calculate per-operation statistics
@@ -634,7 +665,11 @@ func generateHTMLReport(results *TestResults) error {
 		}
 
 		if stats.Count > 0 {
-			display.SuccessRate = float64(stats.Success) / float64(stats.Count) * 100
+			display.SuccessRate = float64(
+				stats.Success,
+			) / float64(
+				stats.Count,
+			) * 100
 		}
 
 		if len(stats.Durations) > 0 {
@@ -643,24 +678,37 @@ func generateHTMLReport(results *TestResults) error {
 			for _, d := range stats.Durations {
 				total += d
 			}
-			display.AvgMs = float64(total.Milliseconds()) / float64(len(stats.Durations))
+			display.AvgMs = float64(
+				total.Milliseconds(),
+			) / float64(
+				len(stats.Durations),
+			)
 
 			// Min/Max
 			display.MinMs = float64(stats.Durations[0].Milliseconds())
-			display.MaxMs = float64(stats.Durations[len(stats.Durations)-1].Milliseconds())
+			display.MaxMs = float64(
+				stats.Durations[len(stats.Durations)-1].Milliseconds(),
+			)
 
 			// Percentiles
 			p95Index := int(float64(len(stats.Durations)) * 0.95)
 			p99Index := int(float64(len(stats.Durations)) * 0.99)
 			if p95Index < len(stats.Durations) {
-				display.P95Ms = float64(stats.Durations[p95Index].Milliseconds())
+				display.P95Ms = float64(
+					stats.Durations[p95Index].Milliseconds(),
+				)
 			}
 			if p99Index < len(stats.Durations) {
-				display.P99Ms = float64(stats.Durations[p99Index].Milliseconds())
+				display.P99Ms = float64(
+					stats.Durations[p99Index].Milliseconds(),
+				)
 			}
 		}
 
-		templateData.OperationStatsList = append(templateData.OperationStatsList, display)
+		templateData.OperationStatsList = append(
+			templateData.OperationStatsList,
+			display,
+		)
 	}
 
 	// Calculate system metrics
@@ -676,12 +724,15 @@ func generateHTMLReport(results *TestResults) error {
 			}
 			totalCPU += cpu
 		}
-		templateData.SystemMetrics.CPUAvg = totalCPU / float64(len(results.SystemMetrics.CPUUsage))
+		templateData.SystemMetrics.CPUAvg = totalCPU / float64(
+			len(results.SystemMetrics.CPUUsage),
+		)
 		templateData.SystemMetrics.CPUMin = minCPU
 		templateData.SystemMetrics.CPUMax = maxCPU
 	}
 
-	if results.Config.MonitorServer && len(results.SystemMetrics.MemoryUsage) > 0 {
+	if results.Config.MonitorServer &&
+		len(results.SystemMetrics.MemoryUsage) > 0 {
 		minMem, maxMem := results.SystemMetrics.MemoryUsage[0], results.SystemMetrics.MemoryUsage[0]
 		var totalMem int64
 		for _, mem := range results.SystemMetrics.MemoryUsage {
@@ -693,7 +744,9 @@ func generateHTMLReport(results *TestResults) error {
 			}
 			totalMem += mem
 		}
-		templateData.SystemMetrics.MemoryAvg = totalMem / int64(len(results.SystemMetrics.MemoryUsage))
+		templateData.SystemMetrics.MemoryAvg = totalMem / int64(
+			len(results.SystemMetrics.MemoryUsage),
+		)
 		templateData.SystemMetrics.MemoryMin = minMem
 		templateData.SystemMetrics.MemoryMax = maxMem
 	}
@@ -704,8 +757,12 @@ func generateHTMLReport(results *TestResults) error {
 	os.MkdirAll(reportsDir, 0755)
 
 	// If output file doesn't contain a path separator, put it in tests/reports
-	if !strings.Contains(results.Config.OutputFile, "/") && !strings.Contains(results.Config.OutputFile, "\\") {
-		results.Config.OutputFile = filepath.Join(reportsDir, results.Config.OutputFile)
+	if !strings.Contains(results.Config.OutputFile, "/") &&
+		!strings.Contains(results.Config.OutputFile, "\\") {
+		results.Config.OutputFile = filepath.Join(
+			reportsDir,
+			results.Config.OutputFile,
+		)
 	}
 
 	// Generate HTML
@@ -730,7 +787,11 @@ func generateHTMLReport(results *TestResults) error {
 func printSummary(results *TestResults) {
 	duration := results.EndTime.Sub(results.StartTime)
 	requestsPerSecond := float64(results.TotalRequests) / duration.Seconds()
-	successRate := float64(results.TotalRequests-results.TotalErrors) / float64(results.TotalRequests) * 100
+	successRate := float64(
+		results.TotalRequests-results.TotalErrors,
+	) / float64(
+		results.TotalRequests,
+	) * 100
 
 	fmt.Printf("\nLoad Test Summary:\n")
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -754,7 +815,12 @@ func printSummary(results *TestResults) {
 				totalCPU += cpu
 			}
 			avgCPU := totalCPU / float64(len(results.SystemMetrics.CPUUsage))
-			fmt.Printf("Server CPU:         %.1f%% avg (%.1f%% - %.1f%%)\n", avgCPU, minCPU, maxCPU)
+			fmt.Printf(
+				"Server CPU:         %.1f%% avg (%.1f%% - %.1f%%)\n",
+				avgCPU,
+				minCPU,
+				maxCPU,
+			)
 		}
 
 		if len(results.SystemMetrics.MemoryUsage) > 0 {
@@ -770,11 +836,20 @@ func printSummary(results *TestResults) {
 				totalMem += mem
 			}
 			avgMem := totalMem / int64(len(results.SystemMetrics.MemoryUsage))
-			fmt.Printf("Server Memory:      %dMB avg (%dMB - %dMB)\n", avgMem, minMem, maxMem)
+			fmt.Printf(
+				"Server Memory:      %dMB avg (%dMB - %dMB)\n",
+				avgMem,
+				minMem,
+				maxMem,
+			)
 		}
 	}
 
 	if results.TotalErrors > 0 {
-		fmt.Printf("Errors:             %d (%.1f%%)\n", results.TotalErrors, float64(results.TotalErrors)/float64(results.TotalRequests)*100)
+		fmt.Printf(
+			"Errors:             %d (%.1f%%)\n",
+			results.TotalErrors,
+			float64(results.TotalErrors)/float64(results.TotalRequests)*100,
+		)
 	}
 }

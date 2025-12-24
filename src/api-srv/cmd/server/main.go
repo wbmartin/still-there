@@ -28,7 +28,11 @@ func main() {
 	config, err := app_lib.LoadConfig(configFile)
 	if err != nil {
 		// Use console logging for early errors
-		fmt.Fprintf(os.Stderr, "Failed to load configuration: %s\n", err.Error())
+		fmt.Fprintf(
+			os.Stderr,
+			"Failed to load configuration: %s\n",
+			err.Error(),
+		)
 		os.Exit(1)
 	}
 
@@ -76,15 +80,36 @@ func main() {
 	// Initialize handlers
 	healthHandler := handler.HealthHandler(appServices)
 	authHandler := handler.AuthHandler(appServices, userRepo, appUserGroupRepo)
-	refreshHandler := handler.RefreshHandler(appServices, userRepo, appUserGroupRepo)
-	changeSecurityContextHandler := handler.ChangeSecurityContextHandler(appServices, userRepo, appUserGroupRepo)
-	changeOwnPasswordHandler := handler.ChangeOwnPasswordHandler(appServices, userRepo)
+	refreshHandler := handler.RefreshHandler(
+		appServices,
+		userRepo,
+		appUserGroupRepo,
+	)
+	changeSecurityContextHandler := handler.ChangeSecurityContextHandler(
+		appServices,
+		userRepo,
+		appUserGroupRepo,
+	)
+	changeOwnPasswordHandler := handler.ChangeOwnPasswordHandler(
+		appServices,
+		userRepo,
+	)
 	logoffHandler := handler.LogoffHandler(appServices)
 	exampleHandler := handler.NewExampleHandler(appServices, exampleRepo)
-	userHandler := handler.NewUserHandler(appServices, userRepo, appUserGroupRepo)
-	appUserGroupHandler := handler.NewAppUserGroupHandler(appServices, appUserGroupRepo)
+	userHandler := handler.NewUserHandler(
+		appServices,
+		userRepo,
+		appUserGroupRepo,
+	)
+	appUserGroupHandler := handler.NewAppUserGroupHandler(
+		appServices,
+		appUserGroupRepo,
+	)
 	errorReportHandler := handler.NewErrorReportHandler(appServices)
-	userSelfCreateHandler := handler.UserSelfCreateHandler(appServices, userRepo)
+	userSelfCreateHandler := handler.UserSelfCreateHandler(
+		appServices,
+		userRepo,
+	)
 	mfaSetupHandler := handler.MFASetupHandler(appServices, userRepo)
 	mfaVerifyHandler := handler.MFAVerifyHandler(appServices, userRepo)
 
@@ -96,7 +121,11 @@ func main() {
 
 	// Apply CORS middleware if origins are configured
 	if len(config.CorsAllowedOrigins) > 0 {
-		securedMux = app_lib.CORSMiddleware(config.CorsAllowedOrigins)(securedMux)
+		securedMux = app_lib.CORSMiddleware(
+			config.CorsAllowedOrigins,
+		)(
+			securedMux,
+		)
 	}
 
 	// Health check
@@ -133,14 +162,20 @@ func main() {
 	mux.HandleFunc("POST /user", userHandler.CreateUser)
 	mux.HandleFunc("PUT /user", userHandler.UpdateUser)
 	mux.HandleFunc("DELETE /user", userHandler.DeleteUser)
-	mux.HandleFunc("POST /changeOtherUserPassword", userHandler.ChangeOtherUserPassword)
+	mux.HandleFunc(
+		"POST /changeOtherUserPassword",
+		userHandler.ChangeOtherUserPassword,
+	)
 	mux.HandleFunc("POST /addUserListToGroup",
 		userHandler.AddUserListToGroupHandler)
 	mux.HandleFunc("POST /removeUserListFromGroup",
 		userHandler.RemoveUserListFromGroupHandler)
 
 	// Admin reset MFA
-	adminResetMFAHandler := handler.AdminResetUserMFAHandler(appServices, userRepo)
+	adminResetMFAHandler := handler.AdminResetUserMFAHandler(
+		appServices,
+		userRepo,
+	)
 	mux.HandleFunc("POST /admin/resetUserMFA", adminResetMFAHandler)
 
 	// Receive Grant list is available, but shouldn't be used in most cases.  Clients will have their own copy of it.
@@ -148,10 +183,16 @@ func main() {
 	mux.HandleFunc("GET /grantList", userHandler.RetrieveGrantList)
 
 	// User groups
-	mux.HandleFunc("GET /appUserGroupList", appUserGroupHandler.RetrieveAppUserGroupList)
+	mux.HandleFunc(
+		"GET /appUserGroupList",
+		appUserGroupHandler.RetrieveAppUserGroupList,
+	)
 	mux.HandleFunc("POST /appUserGroup", appUserGroupHandler.CreateAppUserGroup)
 	mux.HandleFunc("PUT /appUserGroup", appUserGroupHandler.UpdateAppUserGroup)
-	mux.HandleFunc("DELETE /appUserGroup", appUserGroupHandler.DeleteAppUserGroup)
+	mux.HandleFunc(
+		"DELETE /appUserGroup",
+		appUserGroupHandler.DeleteAppUserGroup,
+	)
 
 	// Error reporting (no auth required)
 	mux.HandleFunc("POST /error-report", errorReportHandler.HandleErrorReport)
@@ -165,10 +206,19 @@ func main() {
 	// Start server in goroutine
 	go func() {
 		if config.EnableTLS {
-			logger.Info("SERVER_START",
-				fmt.Sprintf("Server starting on HTTPS port: %d", config.ServerPort),
-				"username", "app-root")
-			err := server.ListenAndServeTLS(config.TLSCertPath, config.TLSKeyPath)
+			logger.Info(
+				"SERVER_START",
+				fmt.Sprintf(
+					"Server starting on HTTPS port: %d",
+					config.ServerPort,
+				),
+				"username",
+				"app-root",
+			)
+			err := server.ListenAndServeTLS(
+				config.TLSCertPath,
+				config.TLSKeyPath,
+			)
 			if err != nil && err != http.ErrServerClosed {
 				logger.Error("STF0",
 					"Server failed to start: "+err.Error(),
@@ -194,7 +244,12 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	logger.Info("SERVER_SHUTDOWN", "Shutting down server", "username", "app-root")
+	logger.Info(
+		"SERVER_SHUTDOWN",
+		"Shutting down server",
+		"username",
+		"app-root",
+	)
 
 	// Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

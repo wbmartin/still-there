@@ -52,7 +52,11 @@ func NewLogger(serverName, logReceiverHostPort string) *Logger {
 
 	fmt.Fprintf(os.Stderr, "DEBUG: Connecting to shrmpl-log\n")
 	if err := shrmplLogClient.Connect(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to connect to shrmpl-log: %s\n", err.Error())
+		fmt.Fprintf(
+			os.Stderr,
+			"Failed to connect to shrmpl-log: %s\n",
+			err.Error(),
+		)
 		return &Logger{
 			shrmplLogClient: nil,
 			service:         serverName,
@@ -116,8 +120,11 @@ func (l *Logger) log(level string, code string, message string, skip int,
 		//	level, fullMessage)
 		if err := shrmplLogClient.Log(level, l.service, "0000",
 			fullMessage); err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: Failed to send log to shrmpl-log: %s\n",
-				err.Error())
+			fmt.Fprintf(
+				os.Stderr,
+				"ERROR: Failed to send log to shrmpl-log: %s\n",
+				err.Error(),
+			)
 			shrmplLogClient.Close()
 			// Thread-safe: set to nil while holding lock
 			l.mu.Lock()

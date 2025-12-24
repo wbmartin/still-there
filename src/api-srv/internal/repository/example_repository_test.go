@@ -34,8 +34,10 @@ func (s *ExampleRepositoryTestSuite) SetupSuite() {
 
 	s.cleanup = func() {
 		// Clean only test data
-		_, _ = db.Exec(context.Background(),
-			"DELETE FROM example WHERE example_text LIKE 'Test%' OR example_text LIKE 'RepoTest%'")
+		_, _ = db.Exec(
+			context.Background(),
+			"DELETE FROM example WHERE example_text LIKE 'Test%' OR example_text LIKE 'RepoTest%'",
+		)
 	}
 }
 
@@ -75,7 +77,11 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExample() {
 	created, _ := s.repo.CreateExample(context.Background(), example, 1)
 
 	// Test retrieval
-	retrieved, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
+	retrieved, err := s.repo.RetrieveExample(
+		context.Background(),
+		created.ExampleID,
+		1,
+	)
 	s.NoError(err)
 	s.Equal(created.ExampleID, retrieved.ExampleID)
 	s.Equal("RepoTest Read Example", retrieved.ExampleText)
@@ -103,7 +109,11 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExample() {
 	s.NoError(err)
 
 	// Verify update
-	updated, _ := s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
+	updated, _ := s.repo.RetrieveExample(
+		context.Background(),
+		created.ExampleID,
+		1,
+	)
 	s.Equal("RepoTest Updated Example", updated.ExampleText)
 }
 
@@ -121,7 +131,14 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExample() {
 	created, _ := s.repo.CreateExample(context.Background(), example, 1)
 
 	// Delete it
-	deletedID, err := s.repo.DeleteExample(context.Background(), created.ExampleID, 1, 1234567890.123, 1234567892.789, 2)
+	deletedID, err := s.repo.DeleteExample(
+		context.Background(),
+		created.ExampleID,
+		1,
+		1234567890.123,
+		1234567892.789,
+		2,
+	)
 	s.NoError(err)
 	s.Equal(created.ExampleID, deletedID)
 
@@ -182,7 +199,12 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExampleList() {
 
 	// Test list retrieval
 	ids := []int{created1.ExampleID, created2.ExampleID}
-	retrieved, err := s.repo.RetrieveExampleList(context.Background(), ids, 1, 0)
+	retrieved, err := s.repo.RetrieveExampleList(
+		context.Background(),
+		ids,
+		1,
+		0,
+	)
 	s.NoError(err)
 	s.Len(retrieved, 2)
 }
@@ -219,7 +241,12 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExampleList() {
 	created[1].UpdateUserID = 2
 
 	originalUpdateTSList := []float64{1234567890.123, 1234567890.123}
-	err := s.repo.UpdateExampleList(context.Background(), created, originalUpdateTSList, 1)
+	err := s.repo.UpdateExampleList(
+		context.Background(),
+		created,
+		originalUpdateTSList,
+		1,
+	)
 	s.NoError(err)
 }
 
@@ -249,7 +276,14 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExampleList() {
 	updateTs := []float64{1234567890.123, 1234567890.123}
 
 	// Delete them
-	deletedIDs, err := s.repo.DeleteExampleList(context.Background(), ids, updateTs, 1, 1234567892.789, 2)
+	deletedIDs, err := s.repo.DeleteExampleList(
+		context.Background(),
+		ids,
+		updateTs,
+		1,
+		1234567892.789,
+		2,
+	)
 	s.NoError(err)
 	s.Len(deletedIDs, 2)
 	s.Equal(ids, deletedIDs)

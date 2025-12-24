@@ -91,9 +91,16 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupList(
 		for rows.Next() {
 			var group model.AppUserGroupModel
 			err := rows.Scan(
-				&group.AppUserGroupID, &group.GroupName, &group.UserGrantList, &group.SecurityContext,
-				&group.CreateTS, &group.CreateUserID, &group.UpdateTS, &group.UpdateUserID,
-				&group.DeleteTS, &group.DeleteUserID,
+				&group.AppUserGroupID,
+				&group.GroupName,
+				&group.UserGrantList,
+				&group.SecurityContext,
+				&group.CreateTS,
+				&group.CreateUserID,
+				&group.UpdateTS,
+				&group.UpdateUserID,
+				&group.DeleteTS,
+				&group.DeleteUserID,
 			)
 			if err != nil {
 				return err
@@ -116,7 +123,9 @@ func (r *AppUserGroupRepository) CreateAppUserGroup(
 ) (*model.AppUserGroupModel, error) {
 	// Validate that the group can only be created in the user's security context
 	if group.SecurityContext != securityContext {
-		return nil, fmt.Errorf("cannot create user group in different security context")
+		return nil, fmt.Errorf(
+			"cannot create user group in different security context",
+		)
 	}
 
 	query := `
@@ -142,7 +151,10 @@ func (r *AppUserGroupRepository) CreateAppUserGroup(
 
 // UpdateAppUserGroup updates a user group with optimistic locking within a security context
 func (r *AppUserGroupRepository) UpdateAppUserGroup(
-	ctx context.Context, group *model.AppUserGroupModel, clientUpdateTS float64, securityContext int,
+	ctx context.Context,
+	group *model.AppUserGroupModel,
+	clientUpdateTS float64,
+	securityContext int,
 ) error {
 	query := `
 		UPDATE app_user_group
@@ -169,7 +181,8 @@ func (r *AppUserGroupRepository) UpdateAppUserGroup(
 		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user_group
 			WHERE app_user_group_id = $1 AND delete_user_id IS NULL)`
 		err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx, checkQuery, group.AppUserGroupID).Scan(&exists)
+			return r.db.QueryRow(ctx, checkQuery, group.AppUserGroupID).
+				Scan(&exists)
 		})
 		if err != nil {
 			return fmt.Errorf("failed to check user group existence: %w", err)
@@ -205,7 +218,10 @@ func (r *AppUserGroupRepository) DeleteAppUserGroup(
 		return 0, fmt.Errorf("failed to check user assignments: %w", err)
 	}
 	if count > 0 {
-		return 0, fmt.Errorf("cannot delete group: %d users are assigned to it", count)
+		return 0, fmt.Errorf(
+			"cannot delete group: %d users are assigned to it",
+			count,
+		)
 	}
 
 	// Delete the group
@@ -217,7 +233,15 @@ func (r *AppUserGroupRepository) DeleteAppUserGroup(
 	var result pgconn.CommandTag
 	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		var execErr error
-		result, execErr = r.db.Exec(ctx, query, deleteTS, deleteUserID, groupID, securityContext, clientUpdateTS)
+		result, execErr = r.db.Exec(
+			ctx,
+			query,
+			deleteTS,
+			deleteUserID,
+			groupID,
+			securityContext,
+			clientUpdateTS,
+		)
 		return execErr
 	})
 	if err != nil {
@@ -232,7 +256,10 @@ func (r *AppUserGroupRepository) DeleteAppUserGroup(
 			return r.db.QueryRow(ctx, checkQuery, groupID).Scan(&exists)
 		})
 		if err != nil {
-			return 0, fmt.Errorf("failed to check user group existence: %w", err)
+			return 0, fmt.Errorf(
+				"failed to check user group existence: %w",
+				err,
+			)
 		}
 		if !exists {
 			return 0, ErrNotFound

@@ -123,7 +123,9 @@ func LoadConfig(configFilePath string) (*Config, error) {
 
 	config.FailedLoginAttemptWindowDuration = env["FAILED_LOGIN_ATTEMPT_WINDOW_DURATION"]
 	if config.FailedLoginAttemptWindowDuration == "" {
-		return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_WINDOW_DURATION is required")
+		return nil, fmt.Errorf(
+			"FAILED_LOGIN_ATTEMPT_WINDOW_DURATION is required",
+		)
 	}
 
 	config.FailedLoginLockoutDuration = env["FAILED_LOGIN_LOCKOUT_DURATION"]
@@ -162,10 +164,14 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	}
 	if config.EnableTLS {
 		if config.TLSCertPath == "" {
-			return nil, fmt.Errorf("TLS_CERT_PATH is required when ENABLE_TLS is true")
+			return nil, fmt.Errorf(
+				"TLS_CERT_PATH is required when ENABLE_TLS is true",
+			)
 		}
 		if config.TLSKeyPath == "" {
-			return nil, fmt.Errorf("TLS_KEY_PATH is required when ENABLE_TLS is true")
+			return nil, fmt.Errorf(
+				"TLS_KEY_PATH is required when ENABLE_TLS is true",
+			)
 		}
 	}
 	if config.TOTPEncryptionKey == "" {
@@ -173,7 +179,9 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	}
 
 	if config.FailedLoginAttemptThreshold <= 0 {
-		return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_THRESHOLD must be greater than 0")
+		return nil, fmt.Errorf(
+			"FAILED_LOGIN_ATTEMPT_THRESHOLD must be greater than 0",
+		)
 	}
 
 	if config.ServerPort <= 0 {
@@ -181,7 +189,9 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	}
 
 	if config.FailedLoginAttemptWindowDuration == "" {
-		return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_WINDOW_DURATION is required")
+		return nil, fmt.Errorf(
+			"FAILED_LOGIN_ATTEMPT_WINDOW_DURATION is required",
+		)
 	}
 
 	if config.FailedLoginLockoutDuration == "" {

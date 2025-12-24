@@ -13,14 +13,19 @@ type ErrorReportHandler struct {
 }
 
 // NewErrorReportHandler creates a new error report handler
-func NewErrorReportHandler(appServices *app_lib.AppServices) *ErrorReportHandler {
+func NewErrorReportHandler(
+	appServices *app_lib.AppServices,
+) *ErrorReportHandler {
 	return &ErrorReportHandler{
 		appServices: appServices,
 	}
 }
 
 // HandleErrorReport handles POST /error-report for client-side error reporting
-func (h *ErrorReportHandler) HandleErrorReport(w http.ResponseWriter, r *http.Request) {
+func (h *ErrorReportHandler) HandleErrorReport(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	// Security checks - rate limiting only, skip others for error reports
 	app := app_lib.NewAppHelper(w, r, h.appServices)
 	app.SkipJWT()           // No auth required for error reports
@@ -36,7 +41,13 @@ func (h *ErrorReportHandler) HandleErrorReport(w http.ResponseWriter, r *http.Re
 	// Read the request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Failed to read request body", "CLER", err)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			"Failed to read request body",
+			"CLER",
+			err,
+		)
 		return
 	}
 

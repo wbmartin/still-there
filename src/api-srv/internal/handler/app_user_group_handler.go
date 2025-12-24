@@ -87,7 +87,13 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 	// Parse request body
 	var group model.AppUserGroupModel
 	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "GENERAL_ERROR", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			"Invalid request body",
+			"GENERAL_ERROR",
+			nil,
+		)
 		return
 	}
 
@@ -95,7 +101,13 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 
 	// Validate required fields
 	if group.GroupName == "" {
-		app.WriteError(w, http.StatusBadRequest, "groupName is required", "GENERAL_ERROR", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			"groupName is required",
+			"GENERAL_ERROR",
+			nil,
+		)
 		return
 	}
 
@@ -108,7 +120,11 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 	group.UpdateUserID = jwtClaims.UserID
 
 	// Create user group
-	createdGroup, err := h.appUserGroupRepo.CreateAppUserGroup(r.Context(), &group, jwtClaims.SecurityContext)
+	createdGroup, err := h.appUserGroupRepo.CreateAppUserGroup(
+		r.Context(),
+		&group,
+		jwtClaims.SecurityContext,
+	)
 	if err != nil {
 		app.WriteError(w, http.StatusInternalServerError,
 			"Failed to create user group", "CREATE_USER_GROUP_FAIL", err)
@@ -118,7 +134,14 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 	app.Debug("UGRP_CREATED", "User group created")
 	wrapper := model.DataWrapper{Data: createdGroup}
 	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
-	app.Info("CR_UGRP_DONE", fmt.Sprintf("User group creation completed for groupId=%d, groupName='%s'", createdGroup.AppUserGroupID, createdGroup.GroupName))
+	app.Info(
+		"CR_UGRP_DONE",
+		fmt.Sprintf(
+			"User group creation completed for groupId=%d, groupName='%s'",
+			createdGroup.AppUserGroupID,
+			createdGroup.GroupName,
+		),
+	)
 }
 
 // UpdateAppUserGroup handles PUT /userGroup
@@ -142,7 +165,13 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 	// Parse request body
 	var group model.AppUserGroupModel
 	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body", "GENERAL_ERROR", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			"Invalid request body",
+			"GENERAL_ERROR",
+			nil,
+		)
 		return
 	}
 
@@ -155,7 +184,14 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 		return
 	}
 
-	app.Info("UP_UGRP_PARAMS", fmt.Sprintf("UpdateUserGroup for groupId=%d, groupName='%s'", group.AppUserGroupID, group.GroupName))
+	app.Info(
+		"UP_UGRP_PARAMS",
+		fmt.Sprintf(
+			"UpdateUserGroup for groupId=%d, groupName='%s'",
+			group.AppUserGroupID,
+			group.GroupName,
+		),
+	)
 
 	// Set update metadata
 	clientUpdateTS := group.UpdateTS
@@ -165,14 +201,30 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 	group.UpdateUserID = jwtClaims.UserID
 
 	// Update user group with optimistic locking
-	err := h.appUserGroupRepo.UpdateAppUserGroup(r.Context(), &group, clientUpdateTS, jwtClaims.SecurityContext)
+	err := h.appUserGroupRepo.UpdateAppUserGroup(
+		r.Context(),
+		&group,
+		clientUpdateTS,
+		jwtClaims.SecurityContext,
+	)
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict,
-				"User group was modified by another user", "CONFLICT_ERROR", nil)
+			app.WriteError(
+				w,
+				http.StatusConflict,
+				"User group was modified by another user",
+				"CONFLICT_ERROR",
+				nil,
+			)
 		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, "User group not found", "NOT_FOUND_ERROR", nil)
+			app.WriteError(
+				w,
+				http.StatusNotFound,
+				"User group not found",
+				"NOT_FOUND_ERROR",
+				nil,
+			)
 		default:
 			app.WriteError(w, http.StatusInternalServerError,
 				"Failed to update user group", "USER_GROUP_UPDATE_FAIL", err)
@@ -183,7 +235,14 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 	app.Debug("UGRP_UPDATED", "User group updated")
 	wrapper := model.DataWrapper{Data: group}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("UP_UGRP_DONE", fmt.Sprintf("User group update completed for groupId=%d, groupName='%s'", group.AppUserGroupID, group.GroupName))
+	app.Info(
+		"UP_UGRP_DONE",
+		fmt.Sprintf(
+			"User group update completed for groupId=%d, groupName='%s'",
+			group.AppUserGroupID,
+			group.GroupName,
+		),
+	)
 }
 
 // DeleteAppUserGroup handles DELETE /userGroup
@@ -207,24 +266,52 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 	// Parse query parameters
 	groupID, err := GetIntFromQuery(r, "appUserGroupId")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "GENERAL_ERROR", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			err.Error(),
+			"GENERAL_ERROR",
+			nil,
+		)
 		return
 	}
 
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "GENERAL_ERROR", nil)
+		app.WriteError(
+			w,
+			http.StatusBadRequest,
+			err.Error(),
+			"GENERAL_ERROR",
+			nil,
+		)
 		return
 	}
 
-	app.Info("DEL_UGRP_PARAMS", fmt.Sprintf("DeleteUserGroup for groupId=%d", groupID))
+	app.Info(
+		"DEL_UGRP_PARAMS",
+		fmt.Sprintf("DeleteUserGroup for groupId=%d", groupID),
+	)
 
 	// Delete user group with optimistic locking and assignment check
 	now := CurrentTimestamp()
-	deletedID, err := h.appUserGroupRepo.DeleteAppUserGroup(r.Context(), groupID, jwtClaims.SecurityContext, updateTS, now, jwtClaims.UserID)
+	deletedID, err := h.appUserGroupRepo.DeleteAppUserGroup(
+		r.Context(),
+		groupID,
+		jwtClaims.SecurityContext,
+		updateTS,
+		now,
+		jwtClaims.UserID,
+	)
 	if err != nil {
 		if strings.Contains(err.Error(), "cannot delete group") {
-			app.WriteError(w, http.StatusConflict, err.Error(), "GENERAL_ERROR", err)
+			app.WriteError(
+				w,
+				http.StatusConflict,
+				err.Error(),
+				"GENERAL_ERROR",
+				err,
+			)
 		} else {
 			switch {
 			case errors.Is(err, repository.ErrConflict):
@@ -242,5 +329,8 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 		"message": "User group deleted successfully", "userGroupId": deletedID}
 	wrapper := model.DataWrapper{Data: data}
 	writeJSON(w, http.StatusOK, wrapper, h.appsrv.Logger)
-	app.Info("DEL_UGRP_DONE", fmt.Sprintf("User group deletion completed for groupId=%d", deletedID))
+	app.Info(
+		"DEL_UGRP_DONE",
+		fmt.Sprintf("User group deletion completed for groupId=%d", deletedID),
+	)
 }

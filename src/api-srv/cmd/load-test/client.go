@@ -82,7 +82,11 @@ func (c *APIClient) Login() error {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("auth failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf(
+			"auth failed with status %d: %s",
+			resp.StatusCode,
+			string(body),
+		)
 	}
 
 	// Parse response

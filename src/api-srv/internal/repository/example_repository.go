@@ -85,7 +85,9 @@ func (r *ExampleRepository) CreateExample(
 ) (*model.ExampleModel, error) {
 	// Validate that the example can only be created in the user's security context
 	if example.SecurityContext != securityContext {
-		return nil, fmt.Errorf("cannot create example in different security context")
+		return nil, fmt.Errorf(
+			"cannot create example in different security context",
+		)
 	}
 
 	query := `
@@ -186,8 +188,15 @@ func (r *ExampleRepository) DeleteExample(
 	var result pgconn.CommandTag
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			deleteTS, deleteUserID, exampleID, securityContext, originalUpdateTS)
+		result, execErr = r.db.Exec(
+			ctx,
+			query,
+			deleteTS,
+			deleteUserID,
+			exampleID,
+			securityContext,
+			originalUpdateTS,
+		)
 		return execErr
 	})
 
@@ -279,10 +288,19 @@ func (r *ExampleRepository) RetrieveExampleList(
 	for rowList.Next() {
 		var example model.ExampleModel
 		err := rowList.Scan(
-			&example.ExampleID, &example.ExampleText, &example.ExampleInt, &example.ExampleFloat,
-			&example.ExampleIntArray, &example.ExampleFloatArray, &example.SecurityContext,
-			&example.CreateTS, &example.CreateUserID, &example.UpdateTS, &example.UpdateUserID,
-			&example.DeleteTS, &example.DeleteUserID,
+			&example.ExampleID,
+			&example.ExampleText,
+			&example.ExampleInt,
+			&example.ExampleFloat,
+			&example.ExampleIntArray,
+			&example.ExampleFloatArray,
+			&example.SecurityContext,
+			&example.CreateTS,
+			&example.CreateUserID,
+			&example.UpdateTS,
+			&example.UpdateUserID,
+			&example.DeleteTS,
+			&example.DeleteUserID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan example: %w", err)
@@ -309,7 +327,9 @@ func (r *ExampleRepository) CreateExampleList(
 	// Validate that all examples can only be created in the user's security context
 	for _, example := range exampleList {
 		if example.SecurityContext != securityContext {
-			return nil, fmt.Errorf("cannot create example in different security context")
+			return nil, fmt.Errorf(
+				"cannot create example in different security context",
+			)
 		}
 	}
 
@@ -375,12 +395,26 @@ func (r *ExampleRepository) UpdateExampleList(
 		WHERE example_id = $8 AND security_context = $9 AND update_ts = $10 AND delete_user_id IS NULL`
 
 	for i, example := range exampleList {
-		result, err := tx.Exec(ctx, query,
-			example.ExampleText, example.ExampleInt, example.ExampleFloat, example.ExampleIntArray, example.ExampleFloatArray,
-			example.UpdateTS, example.UpdateUserID, example.ExampleID, securityContext, originalUpdateTSList[i],
+		result, err := tx.Exec(
+			ctx,
+			query,
+			example.ExampleText,
+			example.ExampleInt,
+			example.ExampleFloat,
+			example.ExampleIntArray,
+			example.ExampleFloatArray,
+			example.UpdateTS,
+			example.UpdateUserID,
+			example.ExampleID,
+			securityContext,
+			originalUpdateTSList[i],
 		)
 		if err != nil {
-			return fmt.Errorf("failed to update example %d: %w", example.ExampleID, err)
+			return fmt.Errorf(
+				"failed to update example %d: %w",
+				example.ExampleID,
+				err,
+			)
 		}
 		if result.RowsAffected() != 1 {
 			return ErrExpectationFailed
@@ -421,7 +455,15 @@ func (r *ExampleRepository) DeleteExampleList(
 		WHERE example_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
 	for i, id := range idList {
-		_, err := tx.Exec(ctx, query, deleteTS, deleteUserID, id, securityContext, updateTimestampList[i])
+		_, err := tx.Exec(
+			ctx,
+			query,
+			deleteTS,
+			deleteUserID,
+			id,
+			securityContext,
+			updateTimestampList[i],
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to delete example %d: %w", id, err)
 		}

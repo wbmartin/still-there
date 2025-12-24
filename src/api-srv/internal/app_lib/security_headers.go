@@ -58,7 +58,8 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 
 		// Cache control for API responses (no caching by default)
 		if r.Method == "GET" && r.URL.Path != "/health" {
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().
+				Set("Cache-Control", "no-cache, no-store, must-revalidate")
 			w.Header().Set("Pragma", "no-cache")
 			w.Header().Set("Expires", "0")
 		}
@@ -95,7 +96,9 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 					"Content-Type, X-CSRF-Token, Authorization",
 				)
 				w.Header().Set("Access-Control-Max-Age", "86400") // 24 hours
-				w.Header().Set("Vary", "Origin")                  // For proper caching
+				w.Header().
+					Set("Vary", "Origin")
+				// For proper caching
 			}
 
 			// Handle preflight requests
