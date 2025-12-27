@@ -1,3 +1,6 @@
+# General List 
+there is a new shrmpl-vault binary in the dist folder that needs to be committed and plugged into protostack.
+
 # React App
 
 - MFA
