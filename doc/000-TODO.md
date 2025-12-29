@@ -42,7 +42,7 @@ Please perform a detailed code review of the API Server in the src/api-srv folde
 - Background: This is a golang server project that will serv as a starter/base scaffold project for future projects.  It is intended to be paired iwth the web-app react app in src/web-app.  The goal is to have a well structured, secure, and maintainable codebase that follows best practices for golang web servers.
 - Focus on inconsistencies, best practices, security, dead code, and note any tradeoffs made.  
 - Don't look at the documentation in the doc folder because it may  bias the review.
-- Output all of your results to /Users/brandon/Code/ProtoStack-ReactGo/doc/110-api-server-code-review.md.
+- Output all of your results to /Users/brandon/Code/ProtoStack-ReactGo/doc/111-api-server-code-review-codex.md.
 
 Please perform a detailed code review of the WEB APP in the src/web-app folder.  
 - Background: This is a react project that will serv as a starter/base scaffold project for future projects. It is intended to be paired with the api-srv in the sibling folder 
