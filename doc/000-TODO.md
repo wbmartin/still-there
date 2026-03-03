@@ -1,6 +1,6 @@
 # General List 
 there is a new shrmpl-vault binary in the dist folder that needs to be committed and plugged into protostack.
-
+you need to add JSONB, UUID to the example handler.
 # React App
 
 - MFA

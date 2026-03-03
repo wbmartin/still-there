@@ -51,10 +51,9 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
 
 		// Remove server header for security
+		//TODO determine why this would even be here
 		w.Header().Del("Server")
 
-		// Add custom server header if desired
-		w.Header().Set("Server", "ProtoStack-ReactGo-API")
 
 		// Cache control for API responses (no caching by default)
 		if r.Method == "GET" && r.URL.Path != "/health" {

@@ -5,10 +5,25 @@ CREATE DATABASE loc_starter_db;
 \c loc_starter_db
 
 -- app svc account must be unique to each app, change for non-local developer installs
+
+
+-- Create database roles for read/write access
+CREATE ROLE db_reader;
+CREATE ROLE db_writer;
+
+-- app svc account must be unique to each app, change for non-local developer installs
 CREATE USER proto_app_svc_account WITH PASSWORD 'reallygoodPSQLpassword';
-GRANT USAGE ON SCHEMA public TO proto_app_svc_account;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO proto_app_svc_account;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public  TO proto_app_svc_account;
+GRANT db_reader TO atticus_meeting_manager_app_svc_account;
+GRANT db_writer TO atticus_meeting_manager_app_svc_account;
+
+-- Grant permissions to roles
+GRANT USAGE ON SCHEMA public TO db_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO db_reader;
+
+GRANT USAGE ON SCHEMA public TO db_writer;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO db_writer;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO db_writer;
+
 
 
 -- User groups table (per security context)
