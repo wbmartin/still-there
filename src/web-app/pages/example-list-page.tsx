@@ -7,6 +7,8 @@ import {
   Group,
   Pagination,
   Container,
+  Loader,
+  Alert,
 } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
@@ -77,10 +79,10 @@ function ExampleListPage() {
   //============================^ HOOK LINE ^====================
 
   if (authState === "CHECKING") {
-    return <div>Checking permissions...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
   }
   if (authState !== "YES") {
-    return <div>Loading...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto"><Alert color="red">Authentication required.</Alert></Container>;
   }
 
   const totalPageCount = Math.ceil(sortedExampleList.length / itemsPerPage);
@@ -89,13 +91,9 @@ function ExampleListPage() {
     page * itemsPerPage,
   );
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
 
-  if (error) return <div>Error loading examples: {error}</div>;
-
-  if (loading) return <div>Loading...</div>;
-
-  if (error) return <div>Error loading examples: {error}</div>;
+  if (error) return <Container size={1280} px={32} py={32} mx="auto"><Alert color="red">Error loading examples: {error}</Alert></Container>;
 
   const handleDeleteClick = (id: number) => {
     setDeleteId(id);
@@ -130,7 +128,7 @@ function ExampleListPage() {
   };
 
   return (
-    <Container p="2rem">
+    <Container size={1280} px={32} py={32} mx="auto">
       <Group justify="space-between" mb="lg">
         <Title order={1}>Examples</Title>
         <Button

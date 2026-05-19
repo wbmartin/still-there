@@ -13,6 +13,8 @@ import {
   Text,
   Container,
   Stack,
+  Loader,
+  Alert,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
@@ -84,10 +86,10 @@ function AppUserGroupEditPage() {
   //============================^ HOOK LINE ^====================
 
   if (authState === "CHECKING") {
-    return <div>Checking permissions...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
   }
   if (authState !== "YES") {
-    return <div>Checking Auth...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto"><Alert color="red">Authentication required.</Alert></Container>;
   }
 
   const handleSubmit = async (values: typeof defaultAppUserGroupFormData) => {
@@ -197,7 +199,7 @@ function AppUserGroupEditPage() {
   };
 
   return (
-    <Container p="2rem">
+    <Container size={1280} px={32} py={32} mx="auto">
       <Title order={1} mb="lg">
         Edit User Group
       </Title>

@@ -1,7 +1,5 @@
 # OpenCode CLI Prompt: File Download Handler with Dev/Prod Toggle (Go + Nginx)
 
-# This has not been reviewe d by a human yet.
-
 You are generating production-quality Go code for a **file download handler** in a service built with the standard `net/http` package (no frameworks).
 
 The system follows this architecture:
@@ -25,6 +23,7 @@ The code must be **readable, explicit, and boring**. Prefer clarity over clevern
 ## Requirements
 
 ### 1. Environment Toggle
+
 Implement a configuration option:
 
 - Environment variable: `FILE_SERVE_MODE`
@@ -33,7 +32,7 @@ Implement a configuration option:
 
 Default to `"accel"` if the variable is unset.
 
-Only the *final file-serving step* should differ between modes.
+Only the _final file-serving step_ should differ between modes.
 All auth, lookup, and header logic must be shared.
 
 ---
@@ -44,6 +43,7 @@ Implement:
 GET /api/files/{object_id}
 
 Where:
+
 - `{object_id}` is a GUID (opaque identifier)
 - The handler must:
   1. Authenticate the request (stub is fine)
@@ -62,6 +62,7 @@ Where:
   `Content-Disposition`
 
 Example:
+
 - Disk: `/data/private/ab/cd/<guid>`
 - Header: `Content-Disposition: inline; filename="Quarterly Report.pdf"`
 
@@ -104,6 +105,7 @@ Generate:
 - A minimal `main()` wiring with `http.ServeMux`
 
 No frameworks. Use only:
+
 - `net/http`
 - `database/sql`
 - standard library packages
@@ -118,7 +120,9 @@ the minimal Postgres tables required.
 At minimum, include:
 
 ### `objects` table
+
 Fields should include:
+
 - `id` (UUID / text GUID, primary key)
 - `storage_relpath` (relative disk path, e.g. `ab/cd/<guid>`)
 - `content_type`
@@ -127,6 +131,7 @@ Fields should include:
 - `created_at`
 
 ### Optional Notes
+
 - Explain why GUID filenames are used on disk
 - Explain why the human filename lives in the DB
 - Mention that ACLs can be added later via a join table

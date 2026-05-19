@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Title, Text, Card, Container } from "@mantine/core";
+import { Title, Text, Card, Container, Loader, Alert } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 
@@ -17,17 +17,17 @@ function Dashboard() {
 
   //============================^ HOOK LINE ^====================
   if (authState === "CHECKING") {
-    return <div>Checking permissions...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
   }
   if (authState !== "YES") {
-    return <div>Checking Auth...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto"><Alert color="red">Authentication required.</Alert></Container>;
   }
   if (loading) {
-    return <div>Loading...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
   }
 
   return (
-    <Container p="2rem">
+    <Container size={1280} px={32} py={32} mx="auto">
       <Title order={1} mb="lg">
         Dashboard
       </Title>

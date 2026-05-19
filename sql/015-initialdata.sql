@@ -21,7 +21,7 @@ VALUES
 
 
 -- Insert admin user (password hash for 'admin123!')
-      INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context, app_user_group_membership_list, mfa_exempt, create_ts, create_user_id, update_ts, update_user_id)
+      INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup, create_ts, create_user_id, update_ts, update_user_id)
 VALUES
     ('admin',
      '$argon2id$v=19$m=65536,t=3,p=4$dvj9Tc0FPrJvKevg+DCOhg$TlKP/tTUBnTZ0VIR8IU4JAYQl8i1jnCcIRUrPgWCUIg', -- Argon2id hash for 'admin123!' change for non-dev/server builds
@@ -31,12 +31,14 @@ VALUES
      1,
      ARRAY[2], -- Admin group
      TRUE,     -- MFA exempt for initial setup
+     '',       -- totp_seed empty by default
+     FALSE,    -- mfa_setup not completed
      EXTRACT(EPOCH FROM NOW()),
      0,
      EXTRACT(EPOCH FROM NOW()),
      0);
 
-INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context, app_user_group_membership_list, mfa_exempt, create_ts, create_user_id, update_ts, update_user_id)
+INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup, create_ts, create_user_id, update_ts, update_user_id)
      VALUES
          ('basic',
           '$argon2id$v=19$m=65536,t=3,p=4$kxssq7+N6Of3OSiUThJgrw$S+uHFwjOhp8daiHCYhyto7whkrDjDr2TD0+Y6Cq1kd4', -- Argon2id hash for 'basic123!'
@@ -46,6 +48,8 @@ INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security
           1,
           ARRAY[1], -- Basic User group
           TRUE,    -- Not MFA exempt
+          '',       -- totp_seed empty by default
+          FALSE,    -- mfa_setup not completed
           EXTRACT(EPOCH FROM NOW()),
           0,
           EXTRACT(EPOCH FROM NOW()),

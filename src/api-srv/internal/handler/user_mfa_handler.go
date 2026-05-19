@@ -10,8 +10,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -21,6 +23,56 @@ import (
 	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/repository"
 )
+
+// generateTOTPSecret generates a valid Base32 TOTP secret (no padding, uppercase)
+func generateTOTPSecret() (string, error) {
+	secretBytes := make([]byte, 32)
+	if _, err := rand.Read(secretBytes); err != nil {
+		return "", err
+	}
+
+	// Encode to Base32, strip padding, ensure uppercase
+	secret := base32.StdEncoding.EncodeToString(secretBytes)
+	secret = strings.TrimRight(secret, "=")
+	secret = strings.ToUpper(secret)
+
+	return secret, nil
+}
+
+// validateTOTPSecret validates Base32 secret format (no padding allowed)
+func validateTOTPSecret(secret string) bool {
+	if len(secret) == 0 {
+		return false
+	}
+
+	// Check for valid Base32 characters only (A-Z, 2-7, no padding)
+	for _, r := range secret {
+		if !((r >= 'A' && r <= 'Z') || (r >= '2' && r <= '7')) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// formatTOTPLabel creates a properly formatted TOTP label
+func formatTOTPLabel(issuer, account string) string {
+	// Clean issuer for label (allow alphanumeric, underscore, dash)
+	cleanIssuer := regexp.MustCompile(`[^a-zA-Z0-9_-]`).
+		ReplaceAllString(issuer, "")
+	return cleanIssuer + ":" + account
+}
+
+// generateTOTPUri generates a fully compliant otpauth:// URI
+func generateTOTPUri(issuer, account, secret string) (string, error) {
+	label := formatTOTPLabel(issuer, account)
+
+	// Build URI with minimal required parameters (SHA1, 6 digits, 30s period are defaults)
+	uri := fmt.Sprintf("otpauth://totp/%s?secret=%s&issuer=%s",
+		url.PathEscape(label), secret, url.QueryEscape(issuer))
+
+	return uri, nil
+}
 
 // encryptTOTPSeed encrypts a TOTP seed using AES-GCM
 func encryptTOTPSeed(plainSeed, keyHex string) (string, error) {
@@ -247,16 +299,29 @@ func MFASetupHandler(
 		var tempReq struct {
 			TempToken string `json:"tempToken"`
 		}
-		bodyBytes, _ := io.ReadAll(r.Body)
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			app.WriteError(
+				w,
+				http.StatusBadRequest,
+				"Failed to read request body",
+				"MFA_READ_BODY",
+				err,
+			)
+			return
+		}
 		r.Body = io.NopCloser(
 			bytes.NewReader(bodyBytes),
 		) // Reset body for later
 		if err := json.Unmarshal(bodyBytes, &tempReq); err == nil &&
 			tempReq.TempToken != "" {
-			// Temp token path
+			// Temp token path - skip JWT for temp token authentication
+			app.SkipJWT()
 			tempToken := tempReq.TempToken
 			// Get username from temp token
-			userNameBytes, err := appServices.KV.Get("TEMP_AUTH_" + tempToken)
+			userNameBytes, err := appServices.KV.Get(
+				"TEMP_AUTH_SUCCESS_" + tempToken,
+			)
 			if err != nil || userNameBytes == "" {
 				app.WriteError(
 					w,
@@ -320,20 +385,28 @@ func MFASetupHandler(
 					w,
 					http.StatusInternalServerError,
 					"Failed to decrypt TOTP secret",
-					"TSD0",
+					"TDT0",
 					err,
 				)
 				return
 			}
-			secret = decrypted
+			// Strip padding from existing secrets and ensure uppercase
+			secret = strings.TrimRight(decrypted, "=")
+			secret = strings.ToUpper(secret)
 		} else {
 			// Generate new TOTP secret
-			secretBytes := make([]byte, 32)
-			if _, err := rand.Read(secretBytes); err != nil {
+			var err error
+			secret, err = generateTOTPSecret()
+			if err != nil {
 				app.WriteError(w, http.StatusInternalServerError, "Failed to generate secret", "SGF0", err)
 				return
 			}
-			secret = base32.StdEncoding.EncodeToString(secretBytes)
+
+			// Validate generated secret
+			if !validateTOTPSecret(secret) {
+				app.WriteError(w, http.StatusInternalServerError, "Generated invalid TOTP secret", "TOTP_INVALID_SECRET", nil)
+				return
+			}
 
 			// Encrypt and save
 			encrypted, err := encryptTOTPSeed(secret, appServices.Config.TOTPEncryptionKey)
@@ -349,9 +422,21 @@ func MFASetupHandler(
 		}
 
 		// Generate QR code URL
-		processedAppName := regexp.MustCompile(`[^a-zA-Z0-9]`).
-			ReplaceAllString(appServices.Config.AppName, "")
-		qrCodeUrl := "otpauth://totp/" + processedAppName + ":" + userName + "?secret=" + secret + "&issuer=" + appServices.Config.AppName
+		qrCodeUrl, err := generateTOTPUri(
+			appServices.Config.AppName,
+			userName,
+			secret,
+		)
+		if err != nil {
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to generate TOTP URI",
+				"TOTP_URI_ERROR",
+				err,
+			)
+			return
+		}
 
 		// Generate QR code image
 		png, err := qrcode.Encode(qrCodeUrl, qrcode.Medium, 256)
@@ -369,9 +454,12 @@ func MFASetupHandler(
 			png,
 		)
 
+		mfaAlreadySetup := user.MFASetup
+
 		response := map[string]interface{}{
-			"secret":      secret,
-			"qrCodeImage": qrCodeImage,
+			"secret":          secret,
+			"qrCodeImage":     qrCodeImage,
+			"mfaAlreadySetup": mfaAlreadySetup,
 		}
 
 		wrapper := model.DataWrapper{Data: response}
@@ -397,7 +485,17 @@ func MFAVerifyHandler(
 			TempToken string `json:"tempToken"`
 			TOTPCode  string `json:"totpCode"`
 		}
-		bodyBytes, _ := io.ReadAll(r.Body)
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			app.WriteError(
+				w,
+				http.StatusBadRequest,
+				"Failed to read request body",
+				"MFA_READ_BODY",
+				err,
+			)
+			return
+		}
 		r.Body = io.NopCloser(bytes.NewReader(bodyBytes)) // Reset body
 		if err := json.Unmarshal(bodyBytes, &req); err != nil {
 			app.WriteError(
@@ -412,9 +510,10 @@ func MFAVerifyHandler(
 
 		var userName string
 		if req.TempToken != "" {
-			// Temp token path
+			// Temp token path - skip JWT for temp token authentication
+			app.SkipJWT()
 			userNameBytes, err := appServices.KV.Get(
-				"TEMP_AUTH_" + req.TempToken,
+				"TEMP_AUTH_SUCCESS_" + req.TempToken,
 			)
 			if err != nil || userNameBytes == "" {
 				app.WriteError(
@@ -455,11 +554,12 @@ func MFAVerifyHandler(
 			return
 		}
 
-		if user.TOTPSeed == nil || *user.TOTPSeed == "" {
+		// Only check MFA setup for logged-in users (JWT path), not during initial setup (temp token path)
+		if !user.MFASetup && req.TempToken == "" {
 			app.WriteError(
 				w,
 				http.StatusBadRequest,
-				"MFA not set up",
+				"MFA not set up. Please complete MFA setup first.",
 				"MFNS",
 				nil,
 			)
@@ -467,6 +567,16 @@ func MFAVerifyHandler(
 		}
 
 		// Decrypt TOTP secret
+		if user.TOTPSeed == nil {
+			app.WriteError(
+				w,
+				http.StatusBadRequest,
+				"TOTP secret not found. Please restart MFA setup.",
+				"TOTP_SECRET_MISSING",
+				nil,
+			)
+			return
+		}
 		decryptedSecret, err := decryptTOTPSeed(
 			*user.TOTPSeed,
 			appServices.Config.TOTPEncryptionKey,
@@ -536,6 +646,27 @@ func MFAVerifyHandler(
 			return
 		}
 
+		// Update MFA setup status to true after successful validation
+		if !user.MFASetup {
+			_, err = userRepo.UpdateUserMFASetup(
+				r.Context(),
+				user.AppUserID,
+				true,
+				user.UpdateTS,
+				user.AppUserID,
+			)
+			if err != nil {
+				app.Logger().Error(
+					"MFA_SETUP_UPDATE_FAIL",
+					"Failed to update MFA setup status for user: "+userName+", error: "+err.Error(),
+					"username",
+					userName,
+				)
+
+				// Don't fail request, MFA validation was successful
+			}
+		}
+
 		if req.TempToken != "" {
 			// Complete authentication for onboarding
 			// Get grants
@@ -586,7 +717,7 @@ func MFAVerifyHandler(
 
 			// Remove temp token
 			appServices.KV.Set(
-				"TEMP_AUTH_"+req.TempToken,
+				"TEMP_AUTH_SUCCESS_"+req.TempToken,
 				"",
 				"0",
 			) // Expire immediately

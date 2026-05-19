@@ -35,7 +35,7 @@ func (r *UserRepository) RetrieveUserByUserName(
 ) (*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
-		       security_context, app_user_group_membership_list, mfa_exempt, totp_seed,
+		       security_context, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
@@ -48,6 +48,7 @@ func (r *UserRepository) RetrieveUserByUserName(
 			&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName,
 			&user.LastName, &user.Email, &user.SecurityContext,
 			&user.AppUserGroupMembershipList, &user.MFAExempt, &user.TOTPSeed,
+			&user.MFASetup,
 			&user.CreateTS, &user.CreateUserID, &user.UpdateTS,
 			&user.UpdateUserID, &user.DeleteTS, &user.DeleteUserID,
 		)
@@ -204,7 +205,7 @@ func (r *UserRepository) UpdateUserTOTPSeed(
 	newUpdateTS = CurrentTimestamp()
 	query := `
 		UPDATE app_user
-		SET totp_seed = $1, update_ts = $2, update_user_id = $3
+		SET totp_seed = $1, mfa_setup = false, update_ts = $2, update_user_id = $3
 		WHERE app_user_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
@@ -216,6 +217,35 @@ func (r *UserRepository) UpdateUserTOTPSeed(
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to update user TOTP seed: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return 0, fmt.Errorf("user not found or concurrent modification")
+	}
+
+	return newUpdateTS, nil
+}
+
+// UpdateUserMFASetup updates a user's MFA setup status with optimistic locking
+func (r *UserRepository) UpdateUserMFASetup(
+	ctx context.Context, userID int, mfaSetup bool,
+	expectedUpdateTS float64, updateUserID int,
+) (newUpdateTS float64, err error) {
+	newUpdateTS = CurrentTimestamp()
+	query := `
+		UPDATE app_user
+		SET mfa_setup = $1, update_ts = $2, update_user_id = $3
+		WHERE app_user_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+
+	var result pgconn.CommandTag
+	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+		var execErr error
+		result, execErr = r.db.Exec(ctx, query,
+			mfaSetup, newUpdateTS, updateUserID, userID, expectedUpdateTS)
+		return execErr
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to update user MFA setup: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {
@@ -261,7 +291,7 @@ func (r *UserRepository) RetrieveUserList(
 ) ([]*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, first_name, last_name, email,
-		       security_context, app_user_group_membership_list, mfa_exempt,
+		       security_context, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
@@ -302,6 +332,8 @@ func (r *UserRepository) RetrieveUserList(
 				&user.SecurityContext,
 				&user.AppUserGroupMembershipList,
 				&user.MFAExempt,
+				&user.TOTPSeed,
+				&user.MFASetup,
 				&user.CreateTS,
 				&user.CreateUserID,
 				&user.UpdateTS,

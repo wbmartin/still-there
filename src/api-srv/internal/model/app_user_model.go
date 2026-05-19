@@ -11,6 +11,7 @@ type AppUserModel struct {
 	SecurityContext            int      `json:"securityContext"            db:"security_context"`
 	AppUserGroupMembershipList []int    `json:"appUserGroupMembershipList" db:"app_user_group_membership_list"`
 	MFAExempt                  bool     `json:"mfaExempt"                  db:"mfa_exempt"`
+	MFASetup                   bool     `json:"mfaSetup"                   db:"mfa_setup"`
 	TOTPSeed                   *string  `json:"totpSeed,omitempty"         db:"totp_seed"`
 	CreateTS                   float64  `json:"createTs"                   db:"create_ts"`
 	CreateUserID               int      `json:"createUserId"               db:"create_user_id"`

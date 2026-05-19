@@ -13,8 +13,8 @@ CREATE ROLE db_writer;
 
 -- app svc account must be unique to each app, change for non-local developer installs
 CREATE USER proto_app_svc_account WITH PASSWORD 'reallygoodPSQLpassword';
-GRANT db_reader TO atticus_meeting_manager_app_svc_account;
-GRANT db_writer TO atticus_meeting_manager_app_svc_account;
+GRANT db_reader TO proto_app_svc_account;
+GRANT db_writer TO proto_app_svc_account;
 
 -- Grant permissions to roles
 GRANT USAGE ON SCHEMA public TO db_reader;
@@ -52,7 +52,8 @@ CREATE TABLE app_user (
     security_context INTEGER NOT NULL,
     app_user_group_membership_list INTEGER[],
     mfa_exempt BOOLEAN NOT NULL,
-    totp_seed varchar(255) NULL,
+    totp_seed varchar(255) NOT NULL,
+    mfa_setup BOOLEAN NOT NULL,
     create_ts NUMERIC(17,7) NOT NULL,
     create_user_id INTEGER NOT NULL,
     update_ts NUMERIC(17,7) NOT NULL,

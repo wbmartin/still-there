@@ -3,6 +3,7 @@ package app_lib
 import (
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // SecurityHeadersMiddleware adds essential security headers to all responses
@@ -28,8 +29,10 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 				"includeSubDomains; "+
 				"preload")
 
-		// X-Frame-Options - prevent clickjacking
-		w.Header().Set("X-Frame-Options", "DENY")
+		// X-Frame-Options - prevent clickjacking (skip for assets)
+		if !strings.HasPrefix(r.URL.Path, "/assets/") {
+			w.Header().Set("X-Frame-Options", "DENY")
+		}
 
 		// X-Content-Type-Options - prevent MIME type sniffing
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -51,9 +54,7 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
 
 		// Remove server header for security
-		//TODO determine why this would even be here
 		w.Header().Del("Server")
-
 
 		// Cache control for API responses (no caching by default)
 		if r.Method == "GET" && r.URL.Path != "/health" {

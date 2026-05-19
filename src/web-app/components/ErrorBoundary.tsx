@@ -61,7 +61,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       const { error, reportingStatus } = this.state;
 
       return (
-        <Container p="2rem" maw="600px" m="0 auto">
+        <Container size={1280} px={32} py={32} mx="auto" maw="600px" m="0 auto">
           <Stack gap="lg">
             <Title order={1} ta="center">Something went wrong</Title>
 

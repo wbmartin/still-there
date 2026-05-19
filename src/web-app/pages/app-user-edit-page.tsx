@@ -11,6 +11,8 @@ import {
   MultiSelect,
   Text,
   Container,
+  Loader,
+  Alert,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { modals } from "@mantine/modals";
@@ -103,14 +105,14 @@ function UserEditPage() {
   //============================^ HOOK LINE ^====================
 
   if (authState === "CHECKING") {
-    return <div>Checking permissions...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
   }
   if (authState !== "YES") {
-    return <div>Checking Auth...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto"><Alert color="red">Authentication required.</Alert></Container>;
   }
 
   if (userLoading) {
-    return <div>Loading user...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
   }
 
   const handleSubmit = async (values: typeof defaultUserFormData) => {
@@ -250,7 +252,7 @@ function UserEditPage() {
   }));
 
   return (
-    <Container p="2rem">
+    <Container size={1280} px={32} py={32} mx="auto">
       <Title order={1} mb="lg">
         {isNew ? "Add User" : "Edit User"}
       </Title>

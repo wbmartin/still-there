@@ -11,8 +11,6 @@ import {
   CopyButton,
   ActionIcon,
   Tooltip,
-  Image,
-  Box,
 } from "@mantine/core";
 import { IconCopy, IconCheck } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
@@ -28,6 +26,7 @@ function MFAOnboardingPage() {
   const [totpCode, setTotpCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [mfaAlreadySetup, setMfaAlreadySetup] = useState(false);
   const navigate = useNavigate();
   const { tempToken } = useAuthStore();
   const [hasFetched, setHasFetched] = useState(false);
@@ -49,10 +48,11 @@ function MFAOnboardingPage() {
           throw new Error("Failed to get MFA setup data");
         }
         const data = (await response.json()) as {
-          data: { secret: string; qrCodeImage: string };
+          data: { secret: string; qrCodeImage: string; mfaAlreadySetup: boolean };
         };
         setSecret(data.data.secret);
         setQrCodeImage(data.data.qrCodeImage);
+        setMfaAlreadySetup(data.data.mfaAlreadySetup || false);
       } catch (err) {
         notifications.show({
           title: "Error",
@@ -94,11 +94,13 @@ function MFAOnboardingPage() {
           mfaRequired: data.user.mfaRequired || false,
         });
       }
-      notifications.show({
-        title: "Success",
-        message: "MFA setup completed successfully",
-        color: "green",
-      });
+      if (!mfaAlreadySetup) {
+        notifications.show({
+          title: "Success",
+          message: "MFA setup completed successfully",
+          color: "green",
+        });
+      }
       void navigate(`/${ROUTES.DASHBOARD}`);
     } catch (err) {
       notifications.show({
@@ -128,27 +130,29 @@ function MFAOnboardingPage() {
     <Container size="sm">
       <Paper shadow="md" p="xl">
         <Title order={2} mb="md" ta="center">
-          Set up Multi-Factor Authentication
+          {mfaAlreadySetup ? "Verify Multi-Factor Authentication" : "Set up Multi-Factor Authentication"}
         </Title>
         <Text mb="md">
-          Scan the QR code with your authenticator app, or manually enter the
-          secret key.
+          {mfaAlreadySetup
+            ? "Enter the verification code from your authenticator app."
+            : "Scan the QR code with your authenticator app, or manually enter the secret key."
+          }
         </Text>
 
-        {qrCodeImage && (
+        {!mfaAlreadySetup && qrCodeImage && (
           <Group justify="center" mb="md">
-            <Box h="250" w="250">
-              <Image
+            <div style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '10px', display: 'inline-block' }}>
+              <img
                 src={qrCodeImage}
-                alt="QR Code"
-                width={100}
-                fit="contain"
+                alt="QR Code for MFA Setup - Scan with your authenticator app"
+                style={{ width: '200px', height: '200px', objectFit: 'contain' }}
+                onError={() => console.error('QR Code image failed to load')}
               />
-            </Box>
+            </div>
           </Group>
         )}
 
-        {secret && (
+        {!mfaAlreadySetup && secret && (
           <Group mb="md">
             <Text size="sm">Secret Key: {secret}</Text>
             <CopyButton value={secret}>
@@ -179,7 +183,7 @@ function MFAOnboardingPage() {
             }}
             loading={verifying}
           >
-            Verify and Complete Setup
+            Verify Code
           </Button>
         </Group>
       </Paper>

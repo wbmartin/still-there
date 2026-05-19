@@ -45,9 +45,29 @@ func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 
 	jwtClaims := app.GetClaims()
 
+	// Parse query parameters
+	appUserGroupIdList, err := GetCommaSeparatedIntListFromQuery(
+		r,
+		"appUserGroupIdList",
+	)
+	if err != nil {
+		app.Error("RD_UGRP_LST_PARSE_ER", "Failed to parse appUserGroupIdList")
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	app.Info(
+		"RD_UGRP_LST_PARAMS",
+		fmt.Sprintf(
+			"Retrieving user groups: idList=%v, securityContext=%d",
+			appUserGroupIdList,
+			jwtClaims.SecurityContext,
+		),
+	)
+
 	// Read user groups
 	groups, err := h.appUserGroupRepo.RetrieveAppUserGroupList(r.Context(),
-		jwtClaims.SecurityContext)
+		appUserGroupIdList, jwtClaims.SecurityContext)
 	if err != nil {
 		app.WriteError(w, http.StatusInternalServerError,
 			"Failed to retrieve user groups", "USER_GROUP_LIST_FAIL", err)

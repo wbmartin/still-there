@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -69,19 +70,42 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupListByIDList(
 
 // RetrieveAppUserGroupList retrieves all user groups for a security context
 func (r *AppUserGroupRepository) RetrieveAppUserGroupList(
-	ctx context.Context, securityContext int,
+	ctx context.Context,
+	idList []int,
+	securityContext int,
 ) ([]*model.AppUserGroupModel, error) {
-	query := `
+	selectClause := `
 		SELECT app_user_group_id, group_name, user_grant_list, security_context,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
-		FROM app_user_group
-		WHERE security_context = $1 AND delete_user_id IS NULL
-		ORDER BY group_name`
+		FROM app_user_group`
+	orderBy := ` ORDER BY group_name`
+
+	var whereClause string
+	var argList []interface{}
+
+	if len(idList) == 0 {
+		whereClause = `WHERE security_context = $1 AND delete_user_id IS NULL`
+		argList = []interface{}{securityContext}
+	} else {
+		placeholderList := make([]string, len(idList))
+		argList = make([]interface{}, len(idList)+1)
+		argList[0] = securityContext
+		for i, id := range idList {
+			placeholderList[i] = fmt.Sprintf("$%d", i+2)
+			argList[i+1] = id
+		}
+
+		whereClause = fmt.Sprintf(
+			` WHERE app_user_group_id IN (%s) AND security_context = $1 AND delete_user_id IS NULL`,
+			strings.Join(placeholderList, ","))
+	}
+
+	query := selectClause + " " + whereClause + orderBy
 
 	var groups []*model.AppUserGroupModel
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		rows, err := r.db.Query(ctx, query, securityContext)
+		rows, err := r.db.Query(ctx, query, argList...)
 		if err != nil {
 			return err
 		}

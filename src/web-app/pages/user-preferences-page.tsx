@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Title, Group, Text, Select, Alert, Container, Stack } from "@mantine/core";
+import { Button, Title, Group, Text, Select, Alert, Container, Stack, Loader } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/auth-store";
@@ -46,10 +46,10 @@ function UserPreferencesPage() {
 
   //============================^ HOOK LINE ^====================
   if (authState === "CHECKING") {
-    return <div>Checking permissions...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto" maw="600px" ta="center"><Loader /></Container>;
   }
   if (authState === "NO" || authState === "TBD") {
-    return <div>Checking Auth...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto" maw="600px"><Alert color="red">Authentication required.</Alert></Container>;
   }
 
   const handleContextChange = async () => {
@@ -94,7 +94,7 @@ function UserPreferencesPage() {
   }));
 
   return (
-    <Container p="2rem" maw="600px">
+    <Container size={1280} px={32} py={32} mx="auto" maw="600px">
       <Title order={1} mb="lg">
         User Preferences
       </Title>
@@ -155,6 +155,52 @@ function UserPreferencesPage() {
         <Text size="sm" c="dimmed">
           Change your account password. You will need to enter your current
           password.
+        </Text>
+      </Stack>
+
+      <Stack mt="2rem">
+        <Title order={3} mb="sm">
+          Administration
+        </Title>
+        <Group mb="md">
+          <Button
+            onClick={() => void navigate(`/${ROUTES.APP_USER_LIST}`)}
+            variant="outline"
+            disabled={!useAuthStore.getState().grantList.includes(grants.CREATE_USER)}
+          >
+            User Admin
+          </Button>
+          <Button
+            onClick={() => void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`)}
+            variant="outline"
+            disabled={!useAuthStore.getState().grantList.includes(grants.CREATE_USER_GROUP)}
+          >
+            User Groups
+          </Button>
+        </Group>
+        <Text size="sm" c="dimmed">
+          Manage users and user groups (requires appropriate permissions).
+        </Text>
+      </Stack>
+
+      <Stack mt="2rem">
+        <Title order={3} mb="sm">
+          Account Management
+        </Title>
+        <Group mb="md">
+          <Button
+            onClick={async () => {
+              await useAuthStore.getState().logout();
+              void navigate(`/${ROUTES.LOGIN}`);
+            }}
+            variant="outline"
+            color="red"
+          >
+            Logout
+          </Button>
+        </Group>
+        <Text size="sm" c="dimmed">
+          Log out of your account. You will need to log in again to access the application.
         </Text>
       </Stack>
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Table, Button, Title, Group, Pagination, Container } from "@mantine/core";
+import { Table, Button, Title, Group, Pagination, Container, Loader, Alert } from "@mantine/core";
 import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
@@ -35,13 +35,13 @@ function UserAdminPage() {
   //============================^ HOOK LINE ^====================
 
   if (authState === "CHECKING") {
-    return <div>Checking permissions...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
   }
   if (authState !== "YES") {
-    return <div>Checking Auth...</div>;
+    return <Container size={1280} px={32} py={32} mx="auto"><Alert color="red">Authentication required.</Alert></Container>;
   }
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
 
   // Sort users
   const sortedUserList = [...userList].sort((a, b) => {
@@ -110,7 +110,7 @@ function UserAdminPage() {
   };
 
   return (
-    <Container p="2rem">
+    <Container size={1280} px={32} py={32} mx="auto">
       <Group justify="space-between" mb="lg">
         <Title order={1}>User Admin</Title>
         <Button
