@@ -139,8 +139,9 @@ func (r *UserRepository) CreateUser(
 	query := `
 		INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email,
 		       security_context, app_user_group_membership_list, mfa_exempt,
+		       totp_seed, mfa_setup,
 		                     create_ts, create_user_id, update_ts, update_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING app_user_id`
 
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
@@ -155,6 +156,11 @@ func (r *UserRepository) CreateUser(
 			user.SecurityContext,
 			user.AppUserGroupMembershipList,
 			user.MFAExempt,
+			// totp_seed/mfa_setup are NOT NULL with no default; a new user has no TOTP yet, so
+			// seed empty + mfa_setup false (populated when the user completes MFA setup). Without
+			// this, CreateUser fails: null value in column "totp_seed" violates not-null constraint.
+			"",
+			false,
 			user.CreateTS,
 			user.CreateUserID,
 			user.UpdateTS,
