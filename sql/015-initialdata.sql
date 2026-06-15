@@ -3,14 +3,14 @@
 
 -- Insert user groups for security context 1
 -- delete  from app_user_group;
-INSERT INTO app_user_group (app_user_group_id,group_name, user_grant_list, security_context, create_ts, create_user_id, update_ts, update_user_id)
+INSERT INTO app_user_group (app_user_group_id,group_name, user_grant_list, security_context_id, create_ts, create_user_id, update_ts, update_user_id)
 VALUES
     (1,'Basic User', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9010], 1, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0),
     (2,'Admin', ARRAY[1,1001,1002,1003,1004,8001,9001,9002,9009,9010,9011,9012,9013,9014,9015,9003,9004,9008,9020], 1, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0),
     (3,'New User', ARRAY[1, 1001], 1, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0);
 
 -- Insert user groups for security context 2 (mirroring context 1)
-INSERT INTO app_user_group (app_user_group_id,group_name, user_grant_list, security_context, create_ts, create_user_id, update_ts, update_user_id)
+INSERT INTO app_user_group (app_user_group_id,group_name, user_grant_list, security_context_id, create_ts, create_user_id, update_ts, update_user_id)
 VALUES
     (4,'Basic2 User', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9010], 2, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0),
     (5,'Admin2', ARRAY[1,1001,1002,1003,1004,8001,9001,9002,9009,9010,9011,9012,9013,9014,9015,9003,9004,9008], 2, EXTRACT(EPOCH FROM NOW()), 0, EXTRACT(EPOCH FROM NOW()), 0);
@@ -21,7 +21,7 @@ VALUES
 
 
 -- Insert admin user (password hash for 'admin123!')
-      INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup, create_ts, create_user_id, update_ts, update_user_id)
+      INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup, create_ts, create_user_id, update_ts, update_user_id)
 VALUES
     ('admin',
      '$argon2id$v=19$m=65536,t=3,p=4$dvj9Tc0FPrJvKevg+DCOhg$TlKP/tTUBnTZ0VIR8IU4JAYQl8i1jnCcIRUrPgWCUIg', -- Argon2id hash for 'admin123!' change for non-dev/server builds
@@ -38,7 +38,7 @@ VALUES
      EXTRACT(EPOCH FROM NOW()),
      0);
 
-INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup, create_ts, create_user_id, update_ts, update_user_id)
+INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup, create_ts, create_user_id, update_ts, update_user_id)
      VALUES
          ('basic',
           '$argon2id$v=19$m=65536,t=3,p=4$kxssq7+N6Of3OSiUThJgrw$S+uHFwjOhp8daiHCYhyto7whkrDjDr2TD0+Y6Cq1kd4', -- Argon2id hash for 'basic123!'
@@ -60,7 +60,7 @@ INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email, security
 WITH common_vars AS (
     SELECT EXTRACT(EPOCH FROM NOW()) as ts, 0 as system_user_id
 )
-INSERT INTO example (example_text, example_int, example_float, example_int_array, example_float_array, security_context, create_ts, create_user_id, update_ts, update_user_id)
+INSERT INTO example (example_text, example_int, example_float, example_int_array, example_float_array, security_context_id, create_ts, create_user_id, update_ts, update_user_id)
 SELECT
     data.example_text,
     data.example_int,
@@ -87,7 +87,7 @@ SELECT setval('example_example_id_seq', (SELECT COALESCE(MAX(example_id), 0) + 1
 -- Insert "New User" group with minimal privileges (only LOGON grant) Example
 -- INSERT INTO app_user_group (
 --     app_user_group_id,
---     security_context,
+--     security_context_id,
 --     group_name,
 --     user_grant_list,
 --     create_ts,

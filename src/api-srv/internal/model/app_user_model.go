@@ -8,7 +8,7 @@ type AppUserModel struct {
 	FirstName                  string   `json:"firstName"                  db:"first_name"`
 	LastName                   string   `json:"lastName"                   db:"last_name"`
 	Email                      string   `json:"email"                      db:"email"`
-	SecurityContext            int      `json:"securityContext"            db:"security_context"`
+	SecurityContext            int      `json:"securityContext"            db:"security_context_id"`
 	AppUserGroupMembershipList []int    `json:"appUserGroupMembershipList" db:"app_user_group_membership_list"`
 	MFAExempt                  bool     `json:"mfaExempt"                  db:"mfa_exempt"`
 	MFASetup                   bool     `json:"mfaSetup"                   db:"mfa_setup"`

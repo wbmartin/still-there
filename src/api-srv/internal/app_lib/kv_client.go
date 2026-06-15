@@ -38,6 +38,20 @@ func parseHostPort(hostPort string) (string, string, error) {
 	return host, port, nil
 }
 
+// NewKVFromBackend returns the configured KV implementation: "memory" (default, in-process —
+// no external service needed) or "shrmpl" (the external shrmpl-kv TCP client). LoadConfig
+// validates the value, so an unknown backend here is a programmer error.
+func NewKVFromBackend(backend, kvHostPort string) ThisAppKVInterface {
+	switch backend {
+	case "", "memory":
+		return NewMemoryKV()
+	case "shrmpl":
+		return NewKV(kvHostPort)
+	default:
+		panic(fmt.Sprintf("unknown KV backend: %q", backend))
+	}
+}
+
 // NewKV creates a key-value store client
 func NewKV(kvHostPort string) ThisAppKVInterface {
 	// Parse the combined host:port string

@@ -8,7 +8,7 @@ type ExampleModel struct {
 	ExampleFloat      *float64  `json:"exampleFloat,omitempty"      db:"example_float"`
 	ExampleIntArray   []int     `json:"exampleIntArray,omitempty"   db:"example_int_array"`
 	ExampleFloatArray []float64 `json:"exampleFloatArray,omitempty" db:"example_float_array"`
-	SecurityContext   int       `json:"securityContext"             db:"security_context"`
+	SecurityContext   int       `json:"securityContext"             db:"security_context_id"`
 	CreateTS          float64   `json:"createTs"                    db:"create_ts"`
 	CreateUserID      int       `json:"createUserId"                db:"create_user_id"`
 	UpdateTS          float64   `json:"updateTs"                    db:"update_ts"`

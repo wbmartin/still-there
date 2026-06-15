@@ -53,7 +53,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestReadAppUserGroupList() {
 	// First, check what groups actually exist in the database for security context 1
 	allGroups, err := s.db.Query(
 		context.Background(),
-		"SELECT app_user_group_id FROM app_user_group WHERE security_context = 1 AND delete_user_id IS NULL ORDER BY app_user_group_id",
+		"SELECT app_user_group_id FROM app_user_group WHERE security_context_id = 1 AND delete_user_id IS NULL ORDER BY app_user_group_id",
 	)
 	s.NoError(err)
 	defer allGroups.Close()
