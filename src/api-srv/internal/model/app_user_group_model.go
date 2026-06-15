@@ -5,7 +5,7 @@ type AppUserGroupModel struct {
 	AppUserGroupID  int      `json:"appUserGroupId"         db:"app_user_group_id"`
 	GroupName       string   `json:"groupName"              db:"group_name"`
 	UserGrantList   []int    `json:"userGrantList"          db:"user_grant_list"`
-	SecurityContext int      `json:"securityContext"        db:"security_context"`
+	SecurityContext int      `json:"securityContext"        db:"security_context_id"`
 	CreateTS        float64  `json:"createTs"               db:"create_ts"`
 	CreateUserID    int      `json:"createUserId"           db:"create_user_id"`
 	UpdateTS        float64  `json:"updateTs"               db:"update_ts"`

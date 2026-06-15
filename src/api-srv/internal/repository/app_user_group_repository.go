@@ -30,11 +30,11 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupListByIDList(
 	}
 
 	query := `
-		SELECT app_user_group_id, group_name, user_grant_list, security_context,
+		SELECT app_user_group_id, group_name, user_grant_list, security_context_id,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user_group
-		WHERE app_user_group_id = ANY($1) AND security_context = $2 AND delete_user_id IS NULL`
+		WHERE app_user_group_id = ANY($1) AND security_context_id = $2 AND delete_user_id IS NULL`
 
 	var groupList []*model.AppUserGroupModel
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
@@ -75,7 +75,7 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupList(
 	securityContext int,
 ) ([]*model.AppUserGroupModel, error) {
 	selectClause := `
-		SELECT app_user_group_id, group_name, user_grant_list, security_context,
+		SELECT app_user_group_id, group_name, user_grant_list, security_context_id,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user_group`
@@ -85,7 +85,7 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupList(
 	var argList []interface{}
 
 	if len(idList) == 0 {
-		whereClause = `WHERE security_context = $1 AND delete_user_id IS NULL`
+		whereClause = `WHERE security_context_id = $1 AND delete_user_id IS NULL`
 		argList = []interface{}{securityContext}
 	} else {
 		placeholderList := make([]string, len(idList))
@@ -97,7 +97,7 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupList(
 		}
 
 		whereClause = fmt.Sprintf(
-			` WHERE app_user_group_id IN (%s) AND security_context = $1 AND delete_user_id IS NULL`,
+			` WHERE app_user_group_id IN (%s) AND security_context_id = $1 AND delete_user_id IS NULL`,
 			strings.Join(placeholderList, ","))
 	}
 
@@ -153,7 +153,7 @@ func (r *AppUserGroupRepository) CreateAppUserGroup(
 	}
 
 	query := `
-		INSERT INTO app_user_group (group_name, user_grant_list, security_context,
+		INSERT INTO app_user_group (group_name, user_grant_list, security_context_id,
 		                        create_ts, create_user_id, update_ts, update_user_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING app_user_group_id`
@@ -184,7 +184,7 @@ func (r *AppUserGroupRepository) UpdateAppUserGroup(
 		UPDATE app_user_group
 		SET group_name = $1, user_grant_list = $2,
 		    update_ts = $3, update_user_id = $4
-		WHERE app_user_group_id = $5 AND security_context = $6 AND update_ts = $7 AND delete_user_id IS NULL`
+		WHERE app_user_group_id = $5 AND security_context_id = $6 AND update_ts = $7 AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
@@ -252,7 +252,7 @@ func (r *AppUserGroupRepository) DeleteAppUserGroup(
 	query := `
 		UPDATE app_user_group
 		SET delete_ts = $1, delete_user_id = $2
-		WHERE app_user_group_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+		WHERE app_user_group_id = $3 AND security_context_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {

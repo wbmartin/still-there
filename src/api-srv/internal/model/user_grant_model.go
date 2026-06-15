@@ -5,7 +5,7 @@ type UserGrantModel struct {
 	UserGrantID      int      `json:"user_grant_id"            db:"user_grant_id"`
 	GrantShortCode   string   `json:"grant_short_code"         db:"grant_short_code"`
 	GrantDescription string   `json:"grant_description"        db:"grant_description"`
-	SecurityContext  int      `json:"security_context"         db:"security_context"`
+	SecurityContext  int      `json:"security_context_id"         db:"security_context_id"`
 	CreateTS         float64  `json:"create_ts"                db:"create_ts"`
 	CreateUserID     int      `json:"create_user_id"           db:"create_user_id"`
 	UpdateTS         float64  `json:"update_ts"                db:"update_ts"`

@@ -32,7 +32,7 @@ func (r *ExampleRepository) RetrieveExample(
 	checkQuery := `
 		SELECT delete_user_id
 		FROM example
-		WHERE example_id = $1 AND security_context = $2`
+		WHERE example_id = $1 AND security_context_id = $2`
 
 	var deleteUserID *int
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
@@ -55,11 +55,11 @@ func (r *ExampleRepository) RetrieveExample(
 	// Record exists and is not deleted, retrieve full data
 	query := `
 		SELECT example_id, example_text, example_int, example_float,
-		       example_int_array, example_float_array, security_context,
+		       example_int_array, example_float_array, security_context_id,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM example
-		WHERE example_id = $1 AND security_context = $2 AND delete_user_id IS NULL`
+		WHERE example_id = $1 AND security_context_id = $2 AND delete_user_id IS NULL`
 
 	var example model.ExampleModel
 	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
@@ -93,7 +93,7 @@ func (r *ExampleRepository) CreateExample(
 	query := `
 		INSERT INTO example (
 			example_text, example_int, example_float, example_int_array,
-			example_float_array, security_context, create_ts, create_user_id,
+			example_float_array, security_context_id, create_ts, create_user_id,
 			update_ts, update_user_id
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -126,7 +126,7 @@ func (r *ExampleRepository) UpdateExample(
 		SET example_text = $1, example_int = $2, example_float = $3,
 		    example_int_array = $4, example_float_array = $5,
 		    update_ts = $6, update_user_id = $7
-		WHERE example_id = $8 AND security_context = $9 AND update_ts = $10
+		WHERE example_id = $8 AND security_context_id = $9 AND update_ts = $10
 		      AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
@@ -149,7 +149,7 @@ func (r *ExampleRepository) UpdateExample(
 		// Assess the state of the example
 		var deleteUserID *int
 		checkQuery := `SELECT delete_user_id FROM example
-			WHERE example_id = $1 AND security_context = $2`
+			WHERE example_id = $1 AND security_context_id = $2`
 		err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 			return r.db.QueryRow(ctx, checkQuery,
 				example.ExampleID, example.SecurityContext).Scan(&deleteUserID)
@@ -182,7 +182,7 @@ func (r *ExampleRepository) DeleteExample(
 	query := `
 		UPDATE example
 		SET delete_ts = $1, delete_user_id = $2
-		WHERE example_id = $3 AND security_context = $4 AND update_ts = $5
+		WHERE example_id = $3 AND security_context_id = $4 AND update_ts = $5
 		      AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
@@ -207,7 +207,7 @@ func (r *ExampleRepository) DeleteExample(
 	if result.RowsAffected() == 0 {
 		var deleteUserIDCheck *int
 		checkQuery := `SELECT delete_user_id FROM example
-			WHERE example_id = $1 AND security_context = $2`
+			WHERE example_id = $1 AND security_context_id = $2`
 		err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 			return r.db.QueryRow(ctx, checkQuery,
 				exampleID, securityContext).Scan(&deleteUserIDCheck)
@@ -239,7 +239,7 @@ func (r *ExampleRepository) RetrieveExampleList(
 ) ([]*model.ExampleModel, error) {
 	selectClause := `
 		SELECT example_id, example_text, example_int, example_float,
-		       example_int_array, example_float_array, security_context,
+		       example_int_array, example_float_array, security_context_id,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM example`
@@ -250,7 +250,7 @@ func (r *ExampleRepository) RetrieveExampleList(
 
 	if len(idList) == 0 {
 		// Get all or after update_ts
-		whereClause = `WHERE security_context = $1 AND delete_user_id IS NULL`
+		whereClause = `WHERE security_context_id = $1 AND delete_user_id IS NULL`
 		argList = []interface{}{securityContext}
 		if afterUpdateTs > 0 {
 			whereClause += ` AND update_ts > $2`
@@ -267,7 +267,7 @@ func (r *ExampleRepository) RetrieveExampleList(
 		}
 
 		whereClause = fmt.Sprintf(
-			` WHERE example_id IN (%s) AND security_context = $1 AND delete_user_id IS NULL`,
+			` WHERE example_id IN (%s) AND security_context_id = $1 AND delete_user_id IS NULL`,
 			strings.Join(placeholderList, ","))
 	}
 
@@ -343,7 +343,7 @@ func (r *ExampleRepository) CreateExampleList(
 	query := `
 		INSERT INTO example (
 			example_text, example_int, example_float, example_int_array,
-			example_float_array, security_context, create_ts, create_user_id,
+			example_float_array, security_context_id, create_ts, create_user_id,
 			update_ts, update_user_id
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -392,7 +392,7 @@ func (r *ExampleRepository) UpdateExampleList(
 		UPDATE example
 		SET example_text = $1, example_int = $2, example_float = $3, example_int_array = $4, example_float_array = $5,
 		    update_ts = $6, update_user_id = $7
-		WHERE example_id = $8 AND security_context = $9 AND update_ts = $10 AND delete_user_id IS NULL`
+		WHERE example_id = $8 AND security_context_id = $9 AND update_ts = $10 AND delete_user_id IS NULL`
 
 	for i, example := range exampleList {
 		result, err := tx.Exec(
@@ -452,7 +452,7 @@ func (r *ExampleRepository) DeleteExampleList(
 	query := `
 		UPDATE example
 		SET delete_ts = $1, delete_user_id = $2
-		WHERE example_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+		WHERE example_id = $3 AND security_context_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
 	for i, id := range idList {
 		_, err := tx.Exec(

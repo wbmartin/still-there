@@ -35,7 +35,7 @@ func (r *UserRepository) RetrieveUserByUserName(
 ) (*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
-		       security_context, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
+		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
@@ -75,7 +75,7 @@ func (r *UserRepository) GetGrantsForGroups(
 	}
 
 	query := `
-		SELECT ug.security_context, ug.user_grant_list
+		SELECT ug.security_context_id, ug.user_grant_list
 		FROM app_user_group ug
 		WHERE ug.app_user_group_id = ANY($1) AND ug.delete_user_id IS NULL`
 
@@ -138,7 +138,7 @@ func (r *UserRepository) CreateUser(
 
 	query := `
 		INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email,
-		       security_context, app_user_group_membership_list, mfa_exempt,
+		       security_context_id, app_user_group_membership_list, mfa_exempt,
 		       totp_seed, mfa_setup,
 		                     create_ts, create_user_id, update_ts, update_user_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
@@ -297,11 +297,11 @@ func (r *UserRepository) RetrieveUserList(
 ) ([]*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, first_name, last_name, email,
-		       security_context, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
+		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
-		WHERE security_context = $1 AND delete_user_id IS NULL`
+		WHERE security_context_id = $1 AND delete_user_id IS NULL`
 
 	args := []interface{}{securityContext}
 
@@ -374,7 +374,7 @@ func (r *UserRepository) UpdateUser(
 		SET user_name = $1, first_name = $2, last_name = $3, email = $4,
 		    app_user_group_membership_list = $5, mfa_exempt = $6,
 		    update_ts = $7, update_user_id = $8
-		WHERE app_user_id = $9 AND security_context = $10 AND update_ts = $11 AND delete_user_id IS NULL`
+		WHERE app_user_id = $9 AND security_context_id = $10 AND update_ts = $11 AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
@@ -422,7 +422,7 @@ func (r *UserRepository) DeleteUser(
 	query := `
 		UPDATE app_user
 		SET delete_ts = $1, delete_user_id = $2
-		WHERE app_user_id = $3 AND security_context = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+		WHERE app_user_id = $3 AND security_context_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
