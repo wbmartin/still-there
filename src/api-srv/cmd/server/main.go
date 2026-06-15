@@ -36,8 +36,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize key-value store
-	kv := app_lib.NewKV(config.KVHostPort)
+	// Initialize key-value store (in-process "memory" by default; "shrmpl" for the external service)
+	kv := app_lib.NewKVFromBackend(config.KVBackend, config.KVHostPort)
 	defer kv.Close()
 
 	// Create the logger (it will handle shrmpl-log internally)

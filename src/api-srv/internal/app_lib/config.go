@@ -24,6 +24,7 @@ type Config struct {
 	MaxUnauthReqPerMin               int      `json:"max_unauth_req_per_min"`
 	LogReceiverHostPort              string   `json:"log_receiver_host_port"`
 	KVHostPort                       string   `json:"kv_host_port"`
+	KVBackend                        string   `json:"kv_backend"`
 	ServerName                       string   `json:"server_name"`
 	AppName                          string   `json:"app_name"`
 	ServerPort                       int      `json:"server_port"`
@@ -230,6 +231,10 @@ func LoadConfig(configFilePath string) (*Config, error) {
 
 	config.LogReceiverHostPort = env["LOG_RECEIVER_HOST_PORT"]
 	config.KVHostPort = env["KV_HOST_PORT"]
+	config.KVBackend = env["KV_BACKEND"]
+	if config.KVBackend == "" {
+		config.KVBackend = "memory" // default: in-process KV (no external shrmpl-kv needed)
+	}
 	config.ServerName = env["SERVER_NAME"]
 	config.AppName = env["APP_NAME"]
 
@@ -299,8 +304,15 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	if config.LogReceiverHostPort == "" {
 		return nil, fmt.Errorf("LOG_RECEIVER_HOST_PORT is required")
 	}
-	if config.KVHostPort == "" {
-		return nil, fmt.Errorf("KV_HOST_PORT is required")
+	switch config.KVBackend {
+	case "memory":
+		// in-process KV; KV_HOST_PORT not needed
+	case "shrmpl":
+		if config.KVHostPort == "" {
+			return nil, fmt.Errorf("KV_HOST_PORT is required when KV_BACKEND=shrmpl")
+		}
+	default:
+		return nil, fmt.Errorf("KV_BACKEND must be \"memory\" or \"shrmpl\", got %q", config.KVBackend)
 	}
 	if config.ServerName == "" {
 		return nil, fmt.Errorf("SERVER_NAME is required")
