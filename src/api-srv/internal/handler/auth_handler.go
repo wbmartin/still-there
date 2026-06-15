@@ -178,14 +178,18 @@ func AuthHandler(
 		clientIP := getClientIP(r)
 		locked, err := isAccountLocked(appServices.KV, clientIP, req.UserName)
 		if err != nil {
-			app.WriteError(
-				w,
-				http.StatusInternalServerError,
-				"Failed to check account lockout",
+			// Fail open: if the KV store is unavailable, don't block login. Account lockout is a
+			// best-effort brute-force throttle (not authorization), and the write side already
+			// fails open (incrementFailedAttempt only logs on error) — so the read side should
+			// too, otherwise a KV outage hard-locks every login. Trade-off: while KV is down,
+			// failed-attempt lockout is not enforced.
+			appServices.Logger.Warn(
 				"LOCKOUT_CHECK_FAIL",
-				err,
+				"Account lockout check failed; failing open: "+err.Error(),
+				"username",
+				req.UserName,
 			)
-			return
+			locked = false
 		}
 		if locked {
 			app.WriteError(
