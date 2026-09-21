@@ -1,10 +1,10 @@
 ---
 id: PS0010
 title: Make the example entity a lean, copyable template — error mapping, scoped queries, retry removal, doc/810 rewrite
-status: needs-triage
+status: blocked
 blocked_by: 
-waiting_on:
-priority: high
+waiting_on: Brandon
+priority: low
 domain: api
 raised: 2026-09-21
 raised_by: template review 2026-09-21
@@ -124,3 +124,9 @@ that will not be simple CRUD. The discussion should sort each item into
 `security_context_id`, `strings.Contains` error detection, the inert
 retry helper, `DeleteExampleList` ignoring RowsAffected, the stale
 `doc/810`.
+
+## Deferred (Brandon, 2026-09-21)
+
+**Deferred.** Brandon wants to wait on this. Do not claim, do not walk the
+items, until he re-opens it. `status: blocked`, `waiting_on: Brandon` — blocked on his decision, not
+on another ticket.

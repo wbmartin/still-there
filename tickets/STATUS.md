@@ -6,11 +6,11 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 14:21 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 14:25 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (12)
+## Engineering — ready to start (10)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
@@ -19,13 +19,11 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0004** | Document the presales → post-sales deploy migration; fix bin/600 fail-fast | high | docs |
 | **PS0005** | One agent rulebook — fold doc/9xx guidance into CLAUDE.md, fix or retire opencode.json | high | docs |
 | **PS0006** | Move ProtoStack history out of doc/ into the engineering log; fix every broken path | high | docs |
-| **PS0010** | Make the example entity a lean, copyable template — error mapping, scoped queries, retry removal, doc/810 rewrite | high | api |
 | **PS0009** | Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable | medium | api |
 | **PS0012** | Web — fix the entity-page bugs; document that pages are deliberate scaffolding | medium | web |
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | medium | web |
 | **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | medium | tooling |
 | **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | medium | api |
-| **PS0011** | API dead code, duplicated helpers, table-driven config loader, lint baseline | low | api |
 
 ## Engineering — validated, awaiting archive (1)
 
@@ -33,12 +31,14 @@ picks up the next piece of work. Do not edit below the marker.
 |---|---|---|
 | **PS0001** | Backport infra, ticketing and tooling from derivative apps | 2026-09-21 |
 
-## Engineering — blocked (2)
+## Engineering — blocked (4)
 
 | Ticket | Title | Priority | Waiting on |
 |---|---|---|---|
 | **PS0007** | Single rename point and a "deriving a new app" checklist | high | PS0003, PS0004 |
 | **PS0008** | Split internal/app_lib into packages named by role (no KV/log interfaces) | medium | PS0003 |
+| **PS0010** | Make the example entity a lean, copyable template — error mapping, scoped queries, retry removal, doc/810 rewrite | low | Brandon |
+| **PS0011** | API dead code, duplicated helpers, table-driven config loader, lint baseline | low | Brandon |
 
 ## Open tickets by domain
 

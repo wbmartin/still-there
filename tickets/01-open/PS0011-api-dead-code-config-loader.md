@@ -1,9 +1,9 @@
 ---
 id: PS0011
 title: API dead code, duplicated helpers, table-driven config loader, lint baseline
-status: needs-triage
+status: blocked
 blocked_by:
-waiting_on:
+waiting_on: Brandon
 priority: low
 domain: api
 raised: 2026-09-21
@@ -95,3 +95,9 @@ scenarios." Do not claim until PS0010 is settled (PS0009 is decided); then walk 
 dead-code table with Brandon item by item before deleting. The
 `security_model.go` DTOs and `user_grant_model.go` in particular may be
 placeholders for planned endpoints/tables.
+
+## Deferred (Brandon, 2026-09-21)
+
+**Deferred.** Brandon wants to wait on this. Do not claim, do not walk the
+items, until he re-opens it. `status: blocked`, `waiting_on: Brandon` — blocked on his decision, not
+on another ticket.
