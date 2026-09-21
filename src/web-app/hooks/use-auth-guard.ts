@@ -12,7 +12,7 @@ const useAuthGuard = (requiredGrants: number[]) => {
   const handleAuthStateNoSingleFireComplete = useRef(false);
 
   useEffect(() => {
-    if (authState === "TBD" && location.pathname !== ROUTES.LOGIN) {
+    if (authState === "TBD" && location.pathname !== `/${ROUTES.LOGIN}`) {
       setTimeout(() => setIsValidating(true), 0);
       // Trigger refresh - only once per component mount
       void useAuthStore
