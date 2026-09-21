@@ -16,9 +16,10 @@ import { notifications } from "@mantine/notifications";
 import { ROUTES } from "../constants/routes";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { confirmDelete } from "../utils/confirm-delete";
 import { grants } from "../constants/grants";
 import { defaultExampleFormData } from "../types/example-type";
+import { reportError } from "../utils/report-error";
 
 function ExampleEditPage() {
   const [searchParams] = useSearchParams();
@@ -42,7 +43,6 @@ function ExampleEditPage() {
     !isNew && numericId !== null,
   );
   const hasFetched = useRef(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   useEffect(() => {
     if (numericId && !isNew && !hasFetched.current) {
@@ -63,7 +63,7 @@ function ExampleEditPage() {
           }
         })
         .catch((error: unknown) => {
-          console.error("Error loading example:", error);
+          reportError(error, "loading example");
         })
         .finally(() => {
           setExampleLoading(false);
@@ -121,7 +121,7 @@ function ExampleEditPage() {
       }
       void navigate(`/${ROUTES.EXAMPLE_LIST}`);
     } catch (error) {
-      console.error("Error saving example:", error);
+      reportError(error, "saving example");
       notifications.show({
         title: "Error",
         message: "Failed to save example",
@@ -133,7 +133,7 @@ function ExampleEditPage() {
   };
 
   const handleDeleteClick = () => {
-    setDeleteModalOpen(true);
+    confirmDelete("example", () => void handleDeleteConfirm());
   };
 
   const handleDeleteConfirm = async () => {
@@ -149,7 +149,7 @@ function ExampleEditPage() {
         });
       void navigate(`/${ROUTES.EXAMPLE_LIST}`);
       } catch (error) {
-        console.error("Error deleting example:", error);
+        reportError(error, "deleting example");
         notifications.show({
           title: "Error",
           message: "Failed to delete example",
@@ -159,11 +159,6 @@ function ExampleEditPage() {
         });
       }
     }
-    setDeleteModalOpen(false);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
   };
 
   return (
@@ -212,12 +207,6 @@ function ExampleEditPage() {
           </Button>
         </Group>
       </form>
-      <DeleteConfirmModal
-        isOpen={deleteModalOpen}
-        onConfirm={() => void handleDeleteConfirm()}
-        onCancel={handleDeleteCancel}
-        entityType="example"
-      />
     </Container>
   );
 }

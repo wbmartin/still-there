@@ -16,10 +16,11 @@ import { notifications } from "@mantine/notifications";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAuthStore } from "../stores/auth-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { confirmDelete } from "../utils/confirm-delete";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { AppUserGroup } from "../types/app-user-group-type";
+import { reportError } from "../utils/report-error";
 
 function AppUserGroupListPage() {
   const authState = useAuthGuard([grants.READ_USER_GROUP]);
@@ -34,13 +35,11 @@ function AppUserGroupListPage() {
   const [page, setPage] = useState(1);
   const itemsPerPage = 15;
   const hasFetched = useRef(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void readAppUserGroupList().catch(console.error);
+      void readAppUserGroupList().catch((err) => reportError(err, "user group list"));
     }
   }, [authState, readAppUserGroupList]);
 
@@ -62,12 +61,11 @@ function AppUserGroupListPage() {
   );
 
   const handleDeleteClick = (id: number) => {
-    setDeleteId(id);
-    setDeleteModalOpen(true);
+    confirmDelete("user group", () => void handleDeleteConfirm(id));
   };
 
-  const handleDeleteConfirm = async () => {
-    const group = appUserGroupList.find((g) => g.appUserGroupId === deleteId);
+  const handleDeleteConfirm = async (id: number) => {
+    const group = appUserGroupList.find((g) => g.appUserGroupId === id);
     if (group) {
       try {
         await deleteAppUserGroup(group.appUserGroupId, group.updateTs);
@@ -77,7 +75,7 @@ function AppUserGroupListPage() {
           color: "green",
         });
       } catch (error) {
-        console.error("Error deleting user group:", error);
+        reportError(error, "deleting user group");
         notifications.show({
           title: "Error",
           message: "Failed to delete user group",
@@ -85,13 +83,6 @@ function AppUserGroupListPage() {
         });
       }
     }
-    setDeleteModalOpen(false);
-    setDeleteId(null);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
-    setDeleteId(null);
   };
 
   // Authorization checks
@@ -170,12 +161,6 @@ function AppUserGroupListPage() {
           <Pagination total={totalPageCount} value={page} onChange={setPage} />
         </Group>
       )}
-      <DeleteConfirmModal
-        isOpen={deleteModalOpen}
-        onConfirm={() => void handleDeleteConfirm()}
-        onCancel={handleDeleteCancel}
-        entityType="user group"
-      />
     </Container>
   );
 }

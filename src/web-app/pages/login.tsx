@@ -17,7 +17,7 @@ import {
 } from "@mantine/core";
 import { useAuthStore } from "../stores/auth-store";
 import { notifications } from "@mantine/notifications";
-import { UserRegistrationModal } from "../components/UserRegistrationModal";
+import { UserRegistrationModal } from "../components/user-registration-modal";
 import { ROUTES } from "../constants/routes";
 
 function Login() {

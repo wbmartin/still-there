@@ -24,7 +24,7 @@ import AppUserEditPage from './pages/app-user-edit-page'
 import AppUserGroupListPage from './pages/app-user-group-list-page'
 import AppUserGroupEditPage from './pages/app-user-group-edit-page'
 import UserPreferencesPage from './pages/user-preferences-page'
-import MFAOnboardingPage from './pages/MFAOnboardingPage'
+import MFAOnboardingPage from './pages/mfa-onboarding-page'
 
 import { useAuthStore } from './stores/auth-store'
 import { ROUTES } from './constants/routes'

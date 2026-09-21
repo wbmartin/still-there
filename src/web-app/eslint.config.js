@@ -19,12 +19,19 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
       parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        project: ['./tsconfig.node.json', './tsconfig.app.json', './tsconfig.test.json'],
         tsconfigRootDir: import.meta.dirname,
       },
     },
     rules: {
-      'max-len': ['error', { code: 80, ignoreUrls: true, ignoreStrings: true, ignoreTemplateLiterals: true }],
+      // Errors go through utils/report-error.ts, never straight to the console.
+      'no-console': 'error',
     },
+  },
+  {
+    // The one place app code may write to the console; the test harnesses
+    // print their own progress.
+    files: ['utils/report-error.ts', 'tests/**'],
+    rules: { 'no-console': 'off' },
   },
 ])

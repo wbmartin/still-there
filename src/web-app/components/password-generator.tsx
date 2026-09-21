@@ -20,7 +20,6 @@ export function PasswordGenerator({
 
   return (
     <Stack>
-      <Text>Password Generator Component</Text>
       <Group>
       <Button variant="filled" onClick={handleGenerate}>
         Generate Strong Password

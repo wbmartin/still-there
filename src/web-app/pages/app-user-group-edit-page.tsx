@@ -21,9 +21,10 @@ import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAppUserStore } from "../stores/app-user-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import type { AppUserGroup } from "../types/app-user-group-type";
-import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
-import AddRemoveUsersFromGroupModal from "../components/AddRemoveUsersFromGroupModal";
+import { confirmDelete } from "../utils/confirm-delete";
+import { AddRemoveUsersFromGroupModal } from "../components/add-remove-users-from-group-modal";
 import { defaultAppUserGroupFormData } from "../types/app-user-group-type";
+import { reportError } from "../utils/report-error";
 
 function AppUserGroupEditPage() {
   const [searchParams] = useSearchParams();
@@ -60,7 +61,6 @@ function AppUserGroupEditPage() {
   const grants = grantConstants.getGrantList();
 
   const hasFetched = useRef(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [userModalMode, setUserModalMode] = useState<"add" | "remove">("add");
 
@@ -82,7 +82,7 @@ function AppUserGroupEditPage() {
         }, 0);
       }
       // Load users for the group management
-      void readUserList().catch(console.error);
+      void readUserList().catch((err) => reportError(err, "user group edit"));
     }
   }, [numericId, readUserList]);
 
@@ -130,7 +130,7 @@ function AppUserGroupEditPage() {
       }
       void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`);
     } catch (error) {
-      console.error("Error saving user group:", error);
+      reportError(error, "saving user group");
       notifications.show({
         title: "Error",
         message: "Failed to save user group",
@@ -142,7 +142,7 @@ function AppUserGroupEditPage() {
   };
 
   const handleDeleteClick = () => {
-    setDeleteModalOpen(true);
+    confirmDelete("user group", () => void handleDeleteConfirm());
   };
 
   const handleDeleteConfirm = async () => {
@@ -158,7 +158,7 @@ function AppUserGroupEditPage() {
         });
         void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`);
       } catch (error) {
-        console.error("Error deleting user group:", error);
+        reportError(error, "deleting user group");
         notifications.show({
           title: "Error",
           message: "Failed to delete user group",
@@ -168,11 +168,6 @@ function AppUserGroupEditPage() {
         });
       }
     }
-    setDeleteModalOpen(false);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
   };
 
   const handleUserModalConfirm = async (userIds: number[]) => {
@@ -194,7 +189,7 @@ function AppUserGroupEditPage() {
         withCloseButton: false,
       });
     } catch (error) {
-      console.error(`Error ${userModalMode}ing users:`, error);
+      reportError(error, `${userModalMode}ing users`);
       notifications.show({
         title: "Error",
         message: `Failed to ${userModalMode} users`,
@@ -280,18 +275,12 @@ function AppUserGroupEditPage() {
         </Group>
       </Stack>
 
-      <DeleteConfirmModal
-        isOpen={deleteModalOpen}
-        onConfirm={() => void handleDeleteConfirm()}
-        onCancel={handleDeleteCancel}
-        entityType="user group"
-      />
       <AddRemoveUsersFromGroupModal
-        isOpen={userModalOpen}
+        opened={userModalOpen}
         onClose={() => setUserModalOpen(false)}
         groupId={numericId}
         mode={userModalMode}
-        onConfirm={handleUserModalConfirm}
+        onSubmit={handleUserModalConfirm}
       />
     </Container>
   );

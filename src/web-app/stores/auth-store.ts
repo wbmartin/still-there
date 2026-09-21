@@ -7,14 +7,18 @@ import type {
   RefreshResponse,
 } from "../types/auth-type";
 import {
+  apiJson,
   apiRequest,
+  jsonBody,
   setCsrfToken,
   clearCsrfToken,
   isApiUnreachable,
   setSessionExpiredListener,
 } from "../utils/api";
 import { clearAllCaches } from "../utils/cache-utils";
+import { API_ENDPOINTS } from "../constants/api";
 import { notifications } from "@mantine/notifications";
+import { reportError } from "../utils/report-error";
 
 interface AuthStore extends Omit<AuthState, "csrfToken"> {
   mfaRequired: boolean;
@@ -51,13 +55,12 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ loading: true, error: null });
     try {
       const loginRequest: LoginRequest = { userName, password };
-      const response = await apiRequest("/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(loginRequest),
-      });
-      if (!response.ok) throw new Error("Login failed");
-      const data = (await response.json()) as LoginResponse;
+      // anonymous: a 401 here is "wrong password", not an ended session
+      const data = await apiJson<LoginResponse>(
+        API_ENDPOINTS.AUTH,
+        { method: "POST", ...jsonBody(loginRequest) },
+        { anonymous: true },
+      );
       if (data.user) {
         if (data.user.tempToken) {
           // MFA required
@@ -98,10 +101,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
   //============================^FUNCTION LINE ^============================
   authenticateWithAuthToken: async () => {
-    // console.log("refresh async starting ");
     set({ authState: "CHECKING", loading: true, error: null });
     try {
-      const response = await apiRequest("/refresh", {});
+      const response = await apiRequest(API_ENDPOINTS.REFRESH, {});
 
       // Only an explicit refusal means signed out. A 502 from a proxy while
       // the API restarts is an ordinary HTTP response, not a verdict on the
@@ -149,9 +151,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
   //============================^FUNCTION LINE ^============================
   logout: async () => {
     try {
-      await apiRequest("/logoff", { method: "POST" });
+      await apiRequest(API_ENDPOINTS.LOGOFF, { method: "POST" });
     } catch (err) {
-      console.error(err);
+      reportError(err, "logout");
     }
     clearCsrfToken();
 
@@ -172,13 +174,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
   changeSecurityContext: async (newContext: number) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiRequest("/changeSecurityContext", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ securityContext: newContext }),
-      });
-      if (!response.ok) throw new Error("Context change failed");
-      const data = (await response.json()) as LoginResponse;
+      const data = await apiJson<LoginResponse>(
+        API_ENDPOINTS.CHANGE_SECURITY_CONTEXT,
+        { method: "POST", ...jsonBody({ securityContext: newContext }) },
+      );
       if (data.user) {
         set({
           authState: "YES",
@@ -201,15 +200,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
   changeOwnPassword: async (oldPassword: string, newPassword: string) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiRequest("/changeOwnPassword", {
+      await apiJson<unknown>(API_ENDPOINTS.CHANGE_OWN_PASSWORD, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ oldPassword, newPassword }),
+        ...jsonBody({ oldPassword, newPassword }),
       });
-      if (!response.ok) {
-        const errorData = (await response.json()) as { message: string };
-        throw new Error(errorData.message || "Password change failed");
-      }
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : "Password change failed",

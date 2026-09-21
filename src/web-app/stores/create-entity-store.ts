@@ -1,13 +1,9 @@
+import type { EntityBase } from "../types/api";
 import { create, type StateCreator } from "zustand";
-import { apiRequest, throwForFailedResponse } from "../utils/api";
+import { apiRequest, throwForFailedResponse,
+  readErrorMessage,
+} from "../utils/api";
 import { registerCacheClearer } from "../utils/cache-utils";
-
-// Anything the API returns carries these. deleteTs only ever arrives on an
-// incremental read, where the server sends soft-deleted rows as tombstones.
-export interface EntityBase {
-  updateTs: number;
-  deleteTs?: number;
-}
 
 export interface EntityStoreState<TEntity> {
   itemList: TEntity[];
@@ -49,19 +45,6 @@ export type EntityStoreExtension<TEntity, TExtra> = StateCreator<
   [],
   TExtra
 >;
-
-export const readErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const body = (await response.json()) as {
-      error?: string;
-      message?: string;
-    };
-    return body.error || body.message || `Request failed (${response.status})`;
-  } catch {
-    return `Request failed (${response.status})`;
-  }
-};
-
 /**
  * Builds a Zustand store implementing the entity cache-management pattern.
  *
@@ -79,6 +62,8 @@ export const readErrorMessage = async (response: Response): Promise<string> => {
  *   - Every store registers its own cache clearer, so sign-out and context
  *     switches cannot leave another tenant's rows in memory.
  */
+export type { EntityBase };
+
 export const createEntityStore = <
   TEntity extends EntityBase,
   TExtra extends object = Record<never, never>,

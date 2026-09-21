@@ -102,4 +102,48 @@ export const throwForFailedResponse = async (
   throw new Error(message);
 };
 
+/**
+ * The message a failed response carries, or a generic one. Both the entity
+ * stores and the one-off calls pass this to throwForFailedResponse.
+ */
+export const readErrorMessage = async (response: Response): Promise<string> => {
+  try {
+    const body = (await response.json()) as {
+      error?: string;
+      message?: string;
+    };
+    return body.error || body.message || `Request failed (${response.status})`;
+  } catch {
+    return `Request failed (${response.status})`;
+  }
+};
+
+/**
+ * apiRequest + the failure handling every caller used to repeat: a non-2xx
+ * response throws and a 2xx one is parsed as JSON, so callers never look at
+ * response.ok. By default a 401/403 is a SessionExpiredError and the app is
+ * told; `anonymous: true` is for the endpoints reached before there is a
+ * session (login, MFA setup/verify, self-registration), where a 401 means
+ * "wrong password/code", not "signed out", and must not touch the session.
+ */
+export const apiJson = async <T>(
+  url: string,
+  options: RequestInit = {},
+  { anonymous = false }: { anonymous?: boolean } = {},
+): Promise<T> => {
+  const response = await apiRequest(url, options);
+  if (!response.ok) {
+    if (anonymous) throw new Error(await readErrorMessage(response));
+    await throwForFailedResponse(response, readErrorMessage);
+  }
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+};
+
+/** JSON body + header for the POST/PUT calls. */
+export const jsonBody = (body: unknown): RequestInit => ({
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
 export { apiRequest };

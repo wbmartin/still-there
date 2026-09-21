@@ -32,14 +32,6 @@ export const grants = {
     return name || `???`;
   },
 
-  nameToId(name: string): number | undefined {
-    return grantConstants[name as keyof typeof grantConstants];
-  },
-
-  // Get all grant IDs
-  getAllIds(): number[] {
-    return Object.values(grantConstants);
-  },
 
   // Get grant list in UI format
   getGrantList(): { id: number; text: string }[] {

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../stores/auth-store";
 import { ROUTES } from "../constants/routes";
 import { notifications } from "@mantine/notifications";
+import { reportError } from "../utils/report-error";
 
 const useAuthGuard = (requiredGrants: number[]) => {
   const { authState, grantList } = useAuthStore();
@@ -18,7 +19,7 @@ const useAuthGuard = (requiredGrants: number[]) => {
       void useAuthStore
         .getState()
         .authenticateWithAuthToken()
-        .catch(console.error);
+        .catch((err) => reportError(err, "auth guard"));
     } else if (authState === "NO") {
       if (!handleAuthStateNoSingleFireComplete.current) {
         handleAuthStateNoSingleFireComplete.current = true;

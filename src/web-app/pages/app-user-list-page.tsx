@@ -4,10 +4,11 @@ import { Table, Button, Title, Group, Pagination, Container, Loader, Alert } fro
 import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { confirmDelete } from "../utils/confirm-delete";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { User } from "../types/user-type";
+import { reportError } from "../utils/report-error";
 
 function UserAdminPage() {
   const authState = useAuthGuard([grants.READ_USER]);
@@ -24,8 +25,6 @@ function UserAdminPage() {
   const [page, setPage] = useState(1);
   const itemsPerPage = 15;
   const hasFetched = useRef(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   // Sort state from URL params
   const sortColumn = searchParams.get("sort") || "appUserId";
@@ -34,8 +33,8 @@ function UserAdminPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void readUserList().catch(console.error);
-      void readAppUserGroupList().catch(console.error);
+      void readUserList().catch((err) => reportError(err, "user list"));
+      void readAppUserGroupList().catch((err) => reportError(err, "user list"));
     }
   }, [authState, readUserList, readAppUserGroupList]);
   //============================^ HOOK LINE ^====================
@@ -87,26 +86,18 @@ function UserAdminPage() {
   );
 
   const handleDeleteClick = (id: number) => {
-    setDeleteId(id);
-    setDeleteModalOpen(true);
+    confirmDelete("user", () => void handleDeleteConfirm(id));
   };
 
-  const handleDeleteConfirm = async () => {
-    const user = userList.find((u) => u.appUserId === deleteId);
+  const handleDeleteConfirm = async (id: number) => {
+    const user = userList.find((u) => u.appUserId === id);
     if (user) {
       try {
         await deleteUser(user.appUserId, user.updateTs);
       } catch (error) {
-        console.error("Error deleting user:", error);
+        reportError(error, "deleting user");
       }
     }
-    setDeleteModalOpen(false);
-    setDeleteId(null);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
-    setDeleteId(null);
   };
 
   const handleSort = (column: string) => {
@@ -210,12 +201,6 @@ function UserAdminPage() {
           <Pagination total={totalPageCount} value={page} onChange={setPage} />
         </Group>
       )}
-      <DeleteConfirmModal
-        isOpen={deleteModalOpen}
-        onConfirm={() => void handleDeleteConfirm()}
-        onCancel={handleDeleteCancel}
-        entityType="user"
-      />
     </Container>
   );
 }

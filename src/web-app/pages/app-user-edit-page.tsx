@@ -20,12 +20,13 @@ import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { useAuthStore } from "../stores/auth-store";
-import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
-import { ChangePasswordModal } from "../components/ChangePasswordModal";
+import { confirmDelete } from "../utils/confirm-delete";
+import { ChangePasswordModal } from "../components/change-password-modal";
 import { ROUTES } from "../constants/routes";
 import { defaultUserFormData } from "../types/user-type";
 import { grants } from "../constants/grants";
-import { PasswordGenerator } from "../components/PasswordGenerator";
+import { PasswordGenerator } from "../components/password-generator";
+import { reportError } from "../utils/report-error";
 
 
 function UserEditPage() {
@@ -63,7 +64,6 @@ function UserEditPage() {
    const grantList = useAuthStore.getState().grantList;
   const [userLoading, setUserLoading] = useState(!isNew && numericId !== null);
   const hasFetched = useRef(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
    const [passwordChangeError, setPasswordChangeError] = useState<
@@ -74,7 +74,7 @@ function UserEditPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void readAppUserGroupList().catch(console.error);
+      void readAppUserGroupList().catch((err) => reportError(err, "user edit"));
       if (numericId && !isNew) {
         // Fetch the user directly
         void readUserById(numericId).then((user) => {
@@ -94,7 +94,7 @@ function UserEditPage() {
             setUserLoading(false);
           }, 0);
         }).catch((error: unknown) => {
-          console.error("Error loading user:", error);
+          reportError(error, "loading user");
           setUserLoading(false);
         });
       } else {
@@ -152,7 +152,7 @@ function UserEditPage() {
       }
       void navigate(`/${ROUTES.APP_USER_LIST}`);
     } catch (error) {
-      console.error("Error saving user:", error);
+      reportError(error, "saving user");
       notifications.show({
         title: "Error",
         message: "Failed to save user",
@@ -164,7 +164,7 @@ function UserEditPage() {
   };
 
   const handleDeleteClick = () => {
-    setDeleteModalOpen(true);
+    confirmDelete("user", () => void handleDeleteConfirm());
   };
 
   const handleDeleteConfirm = async () => {
@@ -180,7 +180,7 @@ function UserEditPage() {
         });
         void navigate(`/${ROUTES.APP_USER_LIST}`);
       } catch (error) {
-        console.error("Error deleting user:", error);
+        reportError(error, "deleting user");
         notifications.show({
           title: "Error",
           message: "Failed to delete user",
@@ -190,11 +190,6 @@ function UserEditPage() {
         });
       }
     }
-    setDeleteModalOpen(false);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
   };
 
   const handlePasswordChange = async (
@@ -326,7 +321,6 @@ function UserEditPage() {
                    title: "Reset MFA",
                    children: (
                      <Text size="sm">
-                       {/* eslint-disable-next-line max-len */}
                        This will clear the user's MFA setup, requiring them to re-configure it on their next login. This action cannot be undone. Are you sure?
                      </Text>
                    ),
@@ -352,18 +346,12 @@ function UserEditPage() {
           </Button>
         </Group>
       </form>
-      <DeleteConfirmModal
-        isOpen={deleteModalOpen}
-        onConfirm={() => void handleDeleteConfirm()}
-        onCancel={handleDeleteCancel}
-        entityType="user"
-      />
       <ChangePasswordModal
-        isOpen={passwordModalOpen}
-        onConfirm={(oldPassword, newPassword) => {
+        opened={passwordModalOpen}
+        onSubmit={(oldPassword, newPassword) => {
           void handlePasswordChange(oldPassword, newPassword);
         }}
-        onCancel={() => {
+        onClose={() => {
           setPasswordModalOpen(false);
           setPasswordChangeError(undefined);
         }}

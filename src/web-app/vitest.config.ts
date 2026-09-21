@@ -9,5 +9,11 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
+    coverage: {
+      provider: "v8",
+      include: ["stores/**", "utils/**", "hooks/**", "constants/**"],
+      // A floor, not a target: the logic that is testable without a page.
+      thresholds: { lines: 40, functions: 40 },
+    },
   },
 });
