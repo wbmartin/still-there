@@ -9,7 +9,7 @@ domain: api
 raised: 2026-09-21
 raised_by: PS0006 triage of doc/000-TODO.md
 asked:
-claimed:
+claimed: 2026-09-21 by TKT-PS0016-example-entity-jsonb-uuid
 merged:
 deployed:
 validated:

@@ -6,17 +6,22 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 17:33 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 17:35 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (3)
+## Engineering — ready to start (2)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
-| **PS0016** | Add JSONB and UUID columns to the example entity | low | api |
 | **PS0017** | Passkey (WebAuthn) as a second factor | low | security |
 | **PS0018** | User profile page: preferences and avatar | low | web |
+
+## Engineering — in progress (1)
+
+| Ticket | Title | Claimed |
+|---|---|---|
+| **PS0016** | Add JSONB and UUID columns to the example entity | 2026-09-21 by TKT-PS0016-example-entity-jsonb-uuid |
 
 ## Engineering — merged, awaiting validation (10)
 
