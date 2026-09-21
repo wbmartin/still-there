@@ -6,7 +6,7 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 17:35 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 17:52 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
@@ -17,13 +17,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0017** | Passkey (WebAuthn) as a second factor | low | security |
 | **PS0018** | User profile page: preferences and avatar | low | web |
 
-## Engineering — in progress (1)
-
-| Ticket | Title | Claimed |
-|---|---|---|
-| **PS0016** | Add JSONB and UUID columns to the example entity | 2026-09-21 by TKT-PS0016-example-entity-jsonb-uuid |
-
-## Engineering — merged, awaiting validation (10)
+## Engineering — merged, awaiting validation (11)
 
 | Ticket | Title | Merged | Deployed |
 |---|---|---|---|
@@ -37,6 +31,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | 6f0aff1 | — |
 | **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | 1fa0001 | — |
 | **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | 67bb62c | — |
+| **PS0016** | Add JSONB and UUID columns to the example entity | bdb4c16 | — |
 
 ## Engineering — validated, awaiting archive (4)
 

@@ -10,7 +10,7 @@ raised: 2026-09-21
 raised_by: PS0006 triage of doc/000-TODO.md
 asked:
 claimed: 2026-09-21 by TKT-PS0016-example-entity-jsonb-uuid
-merged:
+merged: bdb4c16
 deployed:
 validated:
 ---
