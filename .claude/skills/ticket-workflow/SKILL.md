@@ -99,7 +99,7 @@ approves:
 ```bash
 cd src/api-srv && go build ./...
 cd src/web-app && npx tsc --noEmit -p tsconfig.app.json
-bin/300-* # this repo's test runners — see bin/ for the current numbered scripts
+bin/200-run-tests all             # rebuilds the scratch DBs, then go + playwright + pytest
 ```
 
 Write **Deploy needs** in the ticket body, push the branch, ask. When he says yes:

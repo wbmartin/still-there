@@ -1,7 +1,7 @@
 ---
 id: PS0005
 title: One agent rulebook — fold doc/9xx guidance into CLAUDE.md, fix or retire opencode.json
-status: ready
+status: in-review
 blocked_by:
 waiting_on:
 priority: high
@@ -62,17 +62,41 @@ it is unclear whether opencode is still a used host.
 5. Make sure the `ticket-workflow` skill's check step no longer says
    `bin/300-*` (matches nothing; real runners are `200`, `310/320/330`).
 
-## Acceptance
+## What changed and why
 
-- Every file `opencode.json` references exists, or `opencode.json` is gone.
-- `CLAUDE.md` is the single entry point: every rule an agent must follow
-  is in it or linked from it by path.
-- `grep -rln '903-roles\|904-python' .` returns nothing unless kept on
-  purpose.
+Per the direction below, verbatim.
+
+| Item | Done |
+|---|---|
+| `opencode.json` | deleted |
+| `CLAUDE.md` | new **Conventions** section between Layout and Tickets: a three-line pointer to `doc/900` / `905` / `904`, then six one-rule bullets — schema (no FKs/triggers/DEFAULTs, `security_context_id`, `<table>_id`, snake_case), explicit security checks (the PS0009 decision, marked non-negotiable), `List` naming + verbose names, 80-col Go/TS, flat env-file config, git-diff-not-memory for PR summaries. +150 words; CLAUDE.md 377 → 527 words. |
+| `doc/901`, `906`, `907`, `908` | deleted — each is now one of those bullets |
+| `doc/903` | deleted — `~/.claude/CLAUDE.md` Core Principles covers it |
+| `doc/904` | kept (PS0014 keeps pytest); `tests/README.md` now points at it, and its stale prerequisites (TLS, "KV store, logging" services — PS0003 fallout) are replaced with how `bin/200-run-tests py` actually runs it |
+| `doc/900`, `905`, `902` | stay as files. `900` had two stale lines fixed: the column is `security_context_id` (was `security_context`), and the "exclusive source for column names" pointed at another app's `/atticus-web-snipper/doc/003-…sql` — now `src/api-srv/sql/migrations/`. Item 4's `bin/410` name in `902` is moot: PS0003 removed that block. |
+| `README.md` | doc-index rows for the five deleted files removed |
+| `ticket-workflow` skill | check step says `bin/200-run-tests all` instead of `bin/300-*` |
+
+## Files modified
+
+- `CLAUDE.md`, `README.md`, `tests/README.md`, `.claude/skills/ticket-workflow/SKILL.md`
+- `doc/900-database-guidelines.md`
+- deleted: `opencode.json`, `doc/901-naming-preferences.md`, `doc/903-roles-and-goals.md`, `doc/906-git.md`, `doc/907-golang-guidance.md`, `doc/908-typescript-guidance.md`
+
+## Endpoints introduced or modified
+
+None.
+
+## Acceptance (met 2026-09-21)
+
+- [x] `opencode.json` is gone.
+- [x] `CLAUDE.md` is the single entry point: the six rules are in it; `900`/`905`/`904` are linked by path.
+- [x] `grep -rln '903-roles\|904-python' .` → only `tickets/` (this ticket's own text) and the deliberate `904` pointers in `CLAUDE.md`, `README.md`, `tests/README.md`.
+- [x] `grep -rn 'bin/300' .claude` → nothing.
 
 ## Deploy needs
 
-None (docs only). `deployed: none`.
+None. `deployed: none`.
 
 ## Related
 

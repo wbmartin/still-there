@@ -23,6 +23,27 @@ here.
 - `tickets/` — every piece of engineering work and every open question for
   the customer, one file per item. See below.
 
+## Conventions
+
+The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
+(schema), `doc/905-config-guidance.md` (env files), `doc/904-python-guidance.md`
+(pytest and scripts).
+
+- Schema: no foreign keys, no triggers, no `DEFAULT`s for application data
+  (`create_ts`/`update_ts`/`delete_ts` are set in Go); every table carries
+  `security_context_id`; primary key is `<table>_id`; snake_case.
+- Security checks are called explicitly in each handler (JWT → rate limit →
+  CSRF → authorization → `CheckAllChecksComplete`); exceptions are written in
+  the handler, not hidden in middleware. Non-negotiable.
+- A list is `fooList` / `foo_list`, never a plural — variables, functions
+  (`getUserList`), endpoints (`/exampleList`). Verbose names over terse
+  (`tagCache`, not `tc`); a variable holding an `ExampleRepository` is
+  `exampleRepository` (Go receivers may be one letter).
+- Go and TypeScript: break lines around 80 columns.
+- Config is a flat `KEY=VALUE` file passed to the binary; no environment-
+  variable lookups.
+- Git: summarize a PR from `git diff`, not memory, in markdown with headings.
+
 ## Tickets
 
 Every piece of work is a ticket in `tickets/`. Ids are `PS` plus four
