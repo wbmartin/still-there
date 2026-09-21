@@ -10,7 +10,7 @@ picks up the next piece of work. Do not edit below the marker.
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (9)
+## Engineering — ready to start (8)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
@@ -19,10 +19,15 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | medium | web |
 | **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | medium | tooling |
 | **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | medium | api |
-| **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | medium | api |
 | **PS0016** | Add JSONB and UUID columns to the example entity | low | api |
 | **PS0017** | Passkey (WebAuthn) as a second factor | low | security |
 | **PS0018** | User profile page: preferences and avatar | low | web |
+
+## Engineering — in progress (1)
+
+| Ticket | Title | Claimed |
+|---|---|---|
+| **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | 2026-09-21 by TKT-PS0019-env-file-quoted-values |
 
 ## Engineering — merged, awaiting validation (5)
 
