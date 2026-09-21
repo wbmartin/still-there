@@ -1,7 +1,7 @@
 ---
 id: PS0002
 title: Security and correctness hygiene found in the 2026-09-21 template review
-status: ready
+status: in-review
 blocked_by:
 waiting_on:
 priority: high
@@ -91,19 +91,66 @@ been committed. Small, independent commits are fine.
 10. `.gitignore` also misses `tests/.pytest_cache/` and root
     `.pytest_cache/` (both present on disk).
 
-## Acceptance
+## Root cause or requirements
+
+Ten independent defects from the 2026-09-21 review; no design decision
+in any of them. Items 1-4 are API bugs, 5-6 web bugs, 7-10 tracked
+artifacts that should never have been committed.
+
+## What changed and why
+
+Branch `TKT-PS0002-security-correctness-hygiene`, three commits, all ten items.
+
+| # | Change | Why |
+|---|---|---|
+| 1 | `AppUserModel.TOTPSeed` tagged `json:"-"` (as `PwHash`). New `TestRetrieveUserList_OmitsSecrets` marshals the exact `DataWrapper` `/userList` writes and asserts `totpSeed`/`pwHash` absent. | READ_USER holders were getting every user's encrypted seed. Nothing decodes `totpSeed` from JSON; the seed only moves via `UpdateUserTOTPSeed`. |
+| 2 | `DeleteAppUserGroup` returns `groupID` instead of `RowsAffected()`. | Every delete answered `userGroupId: 1`. |
+| 3 | New `app_lib.ClientIP(r)` (first valid `X-Forwarded-For` entry, else `RemoteAddr` host). `CheckRateLimit` and `CheckRateLimitAndUserBlock` both key anonymous callers by it; `handler.getClientIP` deleted, its two callers (login lockout, MFA verify) use the shared one. `"admin"` exemption untouched. | 27 handlers shared one `RPM*anon*<minute>` bucket, so the MFA step 429'd for everyone at 20 req/min. |
+| 4 | Removed `fmt.Printf("DEBUG: ...")` from `RetrieveExample`. | stdout noise on a request path. |
+| 5 | `generateStrongPassword` uses `crypto.getRandomValues` with rejection sampling (`limit = 256 - 256 % 70`). | `Math.random` is not a CSPRNG; plain modulo would bias the first 46 characters. |
+| 6 | `use-auth-guard` compares `location.pathname` to `` `/${ROUTES.LOGIN}` ``. | `ROUTES.LOGIN` is `"login"` so the TBD-on-login check never matched. Systemic fix is PS0013. |
+| 7 | `git rm --cached` the vault secrets file; `.example` committed with placeholders; `etc/vault-configs/*` ignored except `*.example`. | Live DATABASE_URL password, JWT_SECRET, TOTP key in git. **Still in history — see Security_Considerations.** |
+| 8 | `git rm -r --cached tests/reports`; `tests/reports/` ignored. `bin/310`/`320` still write there (unchanged; PS0014). | 680 KB of generated HTML; every run dirtied the tree. |
+| 9 | Root `package.json` + `package-lock.json` deleted; `/node_modules/` ignored. | Stray `npm i` at root; `zustand` already in `src/web-app`. |
+| 10 | `.pytest_cache/` ignored (matches root and `tests/`). | Present on disk, untracked noise. |
+
+## Files modified
+
+- `.gitignore`
+- `etc/vault-configs/dev_proto-api-server-secrets-json_550e8400-….example` (new); the non-`.example` file untracked
+- `package.json`, `package-lock.json` (deleted); `tests/reports/*` (17 files untracked)
+- `src/api-srv/internal/app_lib/app_helper.go`
+- `src/api-srv/internal/handler/auth_handler.go`, `user_mfa_handler.go`, `example_handler.go`, `user_handler_test.go`
+- `src/api-srv/internal/model/app_user_model.go`
+- `src/api-srv/internal/repository/app_user_group_repository.go`
+- `src/web-app/hooks/use-auth-guard.ts`, `src/web-app/utils/password-utils.ts`
+
+## Endpoints introduced or modified
+
+No new endpoints, no path or method changes. Response-shape changes:
+
+| Endpoint | Auth | Change | Data |
+|---|---|---|---|
+| `GET /userList` | JWT + CSRF + READ_USER | `totpSeed` field removed from each user object | credentials (encrypted TOTP seed) — no longer returned |
+| `DELETE /userGroup` | JWT + CSRF + grant | `userGroupId` now the deleted id, not `1` | none |
+| every handler using `CheckRateLimitAndUserBlock` with no valid JWT (MFA setup/verify temp-token step, failed refresh/change-password/logoff) | anonymous | 429 threshold now per client IP instead of one global bucket | none |
+
+Environment: local now → UAT on Brandon's deploy.
+
+## Acceptance (met 2026-09-21)
 
 - `go build ./... && go vet ./... && go test ./...` clean in `src/api-srv`.
-- `npx tsc --noEmit -p tsconfig.app.json` clean in `src/web-app`.
-- `bin/200-run-tests all` green.
-- `git ls-files | grep -E 'tests/reports|vault-configs|^package'` returns
-  only the `.example`.
-- A handler test proves `totpSeed` is not in the `/userList` body.
+- `npx tsc --noEmit -p tsconfig.app.json` and eslint clean in `src/web-app`.
+- `bin/200-run-tests all`: go=106 e2e=3 py=63, all passed; tree clean after the run.
+- `git ls-files | grep -E 'tests/reports|vault-configs|^package'` → only the `.example`.
+- `TestRetrieveUserList_OmitsSecrets` proves `totpSeed` absent from the `/userList` body.
 
 ## Deploy needs
 
-Go binary rebuild (items 1-4). No migration. No web build unless 5-6 ship
-with it.
+- Go binary rebuild (items 1-4).
+- Web build (items 5-6).
+- No migration.
+- Server-side: nothing — the vault file is read from the server's own `etc/vault-configs/`, untouched by this change. **Rotate** the three secrets that were in git history (see Security_Considerations).
 
 ## Direction (Brandon, 2026-09-21)
 
