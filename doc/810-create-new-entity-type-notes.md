@@ -26,6 +26,21 @@ This document outlines the steps and key points for creating a new entity type i
    - Standard fields: `entity_id` (primary key), `security_context`, `create_ts`, `create_user_id`, `update_ts`, `update_user_id`, `delete_ts`, `delete_user_id`.
    - Entity-specific fields in snake_case.
    - Example: See `src/api-srv/sql/migrations/0001_initial_schema.sql` for the `example` table; a new entity is a new `src/api-srv/sql/migrations/NNNN_<name>.sql`.
+   - **Column types with a worked example** on `example` (PS0016,
+     `migrations/0002_example_jsonb_uuid.sql`):
+     - `uuid` — `example_uuid UUID NOT NULL` + unique index. The server
+       assigns it (`model.NewUUID()`, crypto/rand v4, no library) in the
+       create handler; it is never in an UPDATE's SET list and
+       `UpdateExample` `RETURNING`s it so the response carries it. Go type
+       `string`; pgx maps uuid <-> string. Web: read-only field, list
+       column.
+     - `jsonb` — `example_jsonb JSONB` nullable, any JSON value. Go type
+       `json.RawMessage` (`omitempty`); pass through
+       `repository.jsonbParam` so an absent value is SQL NULL, not the
+       JSON literal `null`. Web: a JSON textarea, validated with
+       `JSON.parse` in the form, `JSON.stringify(v, null, 2)` on load.
+     - arrays — `INTEGER[]` / `FLOAT[]` <-> `[]int` / `[]float64`
+       directly; web edits them as comma-separated text.
 
 2. **Grants**: Add schema grants in migration SQL.
    - Everything lives in `public`; grants to `db_reader`/`db_writer` are in `src/api-srv/sql/roles.sql` and the migrations.
