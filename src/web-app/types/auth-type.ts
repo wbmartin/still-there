@@ -1,4 +1,16 @@
-export type AuthStateType = "YES" | "NO" | "CHECKING" | "TBD" | "MFA";
+/**
+ * "NO" means the server said this person is not signed in.
+ * "UNREACHABLE" means the server did not answer at all, which is a different
+ * fact and deserves a different screen -- see ApiUnreachableError in utils/api.
+ * Collapsing the two is what makes a down API look like an expired session.
+ */
+export type AuthStateType =
+  | "YES"
+  | "NO"
+  | "CHECKING"
+  | "TBD"
+  | "MFA"
+  | "UNREACHABLE";
 
 export interface User {
   userName: string;

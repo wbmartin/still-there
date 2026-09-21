@@ -11,8 +11,14 @@ import type { User } from "../types/user-type";
 
 function UserAdminPage() {
   const authState = useAuthGuard([grants.READ_USER]);
-  const { userList, loading, retrieveUserList, deleteUser } = useAppUserStore();
-  const { getGroupName, retrieveAppUserGroupList } = useAppUserGroupStore();
+  const {
+    itemList: userList,
+    loading,
+    readList: readUserList,
+    deleteItem: deleteUser,
+  } = useAppUserStore();
+  const { getGroupName, readList: readAppUserGroupList } =
+    useAppUserGroupStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
@@ -28,10 +34,10 @@ function UserAdminPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void retrieveUserList();
-      void retrieveAppUserGroupList();
+      void readUserList().catch(console.error);
+      void readAppUserGroupList().catch(console.error);
     }
-  }, [authState, retrieveUserList, retrieveAppUserGroupList]);
+  }, [authState, readUserList, readAppUserGroupList]);
   //============================^ HOOK LINE ^====================
 
   if (authState === "CHECKING") {
@@ -86,9 +92,10 @@ function UserAdminPage() {
   };
 
   const handleDeleteConfirm = async () => {
-    if (deleteId !== null) {
+    const user = userList.find((u) => u.appUserId === deleteId);
+    if (user) {
       try {
-        await deleteUser(deleteId);
+        await deleteUser(user.appUserId, user.updateTs);
       } catch (error) {
         console.error("Error deleting user:", error);
       }

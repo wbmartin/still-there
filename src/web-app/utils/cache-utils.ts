@@ -1,13 +1,17 @@
-// Centralized cache clearing utility
-// This ensures all application caches are cleared consistently
+// Cache invalidation on sign-out and security-context switches.
+//
+// Stores register themselves here (createEntityStore does it automatically),
+// so adding an entity does not mean editing this file -- and forgetting to
+// register cannot leave another tenant's rows in memory after a context
+// switch.
+type CacheClearer = () => void;
 
-import { useExamplesStore } from "../stores/examples-store";
-import { useAppUserStore } from "../stores/app-user-store";
-import { useAppUserGroupStore } from "../stores/app-user-group-store";
+const cacheClearerList: CacheClearer[] = [];
 
-export const clearAllCaches = () => {
-  useExamplesStore.getState().clearCache();
-  useAppUserStore.getState().clearCache();
-  useAppUserGroupStore.getState().clearCache();
-  // Add new stores here as they are added to the application
+export const registerCacheClearer = (clearer: CacheClearer): void => {
+  cacheClearerList.push(clearer);
+};
+
+export const clearAllCaches = (): void => {
+  cacheClearerList.forEach((clear) => clear());
 };

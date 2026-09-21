@@ -1,5 +1,20 @@
-import { createBrowserRouter, RouterProvider, Outlet, Link, useNavigate } from 'react-router-dom'
-import { NavLink, Button, Stack, Center, Container, Flex } from '@mantine/core'
+import {
+  createBrowserRouter,
+  RouterProvider,
+  Outlet,
+  Link,
+  useNavigate,
+} from 'react-router-dom'
+import {
+  NavLink,
+  Button,
+  Stack,
+  Center,
+  Container,
+  Flex,
+  Alert,
+  Text,
+} from '@mantine/core'
 import Login from './pages/login'
 import Dashboard from './pages/dashboard'
 import ExampleListPage from './pages/example-list-page'
@@ -20,8 +35,41 @@ function ErrorPage() {
   return (
     <div style={{ padding: '2rem', textAlign: 'center' }}>
       <h1>Something went wrong</h1>
-      <p>Please try refreshing the page or contact support if the problem persists.</p>
+      <p>
+        Please try refreshing the page or contact support if the problem
+        persists.
+      </p>
     </div>
+  );
+}
+
+// Shown in place of the routed page when the session check could not reach
+// the API. Distinct from the login redirect on purpose: an outage is not an
+// expired session, and typing credentials at a server that cannot answer
+// would not help.
+function ApiUnreachableNotice() {
+  const { error, loading, authenticateWithAuthToken } = useAuthStore();
+  return (
+    <Alert color="orange" title="Cannot reach the server" role="alert">
+      <Stack gap="sm" align="flex-start">
+        <Text size="sm">
+          This is a connection problem, not a sign-in problem. Nothing you
+          have saved is affected. Try again in a moment.
+        </Text>
+        {error && (
+          <Text size="xs" c="dimmed">
+            {error}
+          </Text>
+        )}
+        <Button
+          size="xs"
+          loading={loading}
+          onClick={() => void authenticateWithAuthToken()}
+        >
+          Try again
+        </Button>
+      </Stack>
+    </Alert>
   );
 }
 
@@ -122,7 +170,7 @@ function AppLayout() {
             </nav>
           )}
           <main style={{ flex: 1, padding: '1rem' }}>
-            <Outlet />
+            {authState === 'UNREACHABLE' ? <ApiUnreachableNotice /> : <Outlet />}
           </main>
         </Flex>
       </Container>

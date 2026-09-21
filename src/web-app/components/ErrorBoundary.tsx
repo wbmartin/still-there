@@ -1,121 +1,92 @@
-import React, { Component } from 'react';
-import type { ReactNode } from 'react';
-import { Alert, Button, Collapse, Group, Stack, Text, Title, Container } from '@mantine/core';
+import { Component } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
+import {
+  Alert,
+  Button,
+  Group,
+  Stack,
+  Text,
+  Title,
+  Container,
+} from '@mantine/core';
 
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-  reportingStatus: 'idle' | 'reporting' | 'reported' | 'failed';
-}
+// A thrown render error should cost one view, not the whole application.
+//
+// React's default for an uncaught render error is to unmount the whole tree.
+// This boundary turns that into a message with a way back. A class component
+// because `getDerivedStateFromError` and `componentDidCatch` have no hook
+// equivalent.
 
 interface ErrorBoundaryProps {
   children: ReactNode;
+  /** Names the view in the fallback and the console log. */
+  viewName?: string;
+}
+
+interface ErrorBoundaryState {
+  error: Error | null;
 }
 
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      reportingStatus: 'idle'
-    };
+  state: ErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { error };
   }
 
-  async reportError(error: Error) {
-    this.setState({ reportingStatus: 'reporting' });
-    try {
-      const response = await fetch('/error-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: error.message,
-          stack: error.stack,
-          userAgent: navigator.userAgent,
-          url: window.location.href,
-          timestamp: new Date().toISOString()
-        })
-      });
-      if (response.ok) {
-        this.setState({ reportingStatus: 'reported' });
-      } else {
-        throw new Error('Report failed');
-      }
-    } catch (reportError) {
-      console.error('Failed to report error:', reportError);
-      this.setState({ reportingStatus: 'failed' });
-    }
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // The component stack is what makes a render error diagnosable, and React
+    // only hands it to this method. Logged rather than POSTed to the server:
+    // an unauthenticated error endpoint is a spam target.
+    console.error(
+      `[ErrorBoundary] ${this.props.viewName ?? 'view'} failed to render`,
+      error,
+      errorInfo.componentStack,
+    );
   }
 
-  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Application Error:', error, errorInfo);
-    void this.reportError(error);
-  }
+  private reset = () => {
+    this.setState({ error: null });
+  };
 
   render() {
-    if (this.state.hasError) {
-      const { error, reportingStatus } = this.state;
+    const { error } = this.state;
+    if (!error) return this.props.children;
 
-      return (
-        <Container size={1280} px={32} py={32} mx="auto" maw="600px" m="0 auto">
-          <Stack gap="lg">
-            <Title order={1} ta="center">Something went wrong</Title>
+    return (
+      <Container size={1280} px={32} py={32} mx="auto" maw="600px">
+        <Stack gap="lg">
+          <Title order={1} ta="center">
+            This page ran into a problem
+          </Title>
 
-            {reportingStatus === 'reported' && (
-              <Alert color="green" variant="light">
-                <Text>
-                  We've automatically reported this issue to help us fix it.
-                </Text>
-              </Alert>
-            )}
+          <Alert color="red" variant="light" role="alert">
+            <Text>
+              Something on this screen failed to load. Nothing you have
+              already saved is affected.
+            </Text>
+          </Alert>
 
-            {reportingStatus === 'failed' && error && (
-               <Alert color="red" variant="light">
-                 <Text>
-                   We tried to report this issue but couldn't.
-                   {/* eslint-disable-next-line max-len */}
-                   Please take a screenshot of this page and send it to your administrator to help us troubleshoot.
-                 </Text>
-               </Alert>
-            )}
+          <Group justify="center" gap="md">
+            <Button onClick={this.reset}>Try again</Button>
+            <Button variant="outline" component="a" href="/dashboard">
+              Back to dashboard
+            </Button>
+          </Group>
 
-            {reportingStatus === 'failed' && error && (
-              <Collapse in={reportingStatus === 'failed'}>
-                <Alert
-                  color="orange"
-                  variant="outline"
-                  title="Error Details (for administrator)"
-                >
-                  <Text size="sm" style={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
-                    {error.message}
-                    {'\n\n'}
-                    {error.stack}
-                  </Text>
-                </Alert>
-              </Collapse>
-            )}
-
-            <Group justify="center" gap="md">
-              <Button onClick={() => window.location.reload()}>
-                Refresh Page
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => window.location.href = '/dashboard'}
-              >
-                Go to Dashboard
-              </Button>
-            </Group>
-          </Stack>
-        </Container>
-      );
-    }
-
-    return this.props.children;
+          {/* The message only. A stack trace on screen helps nobody here and
+              is in the console for anyone it does help. */}
+          <Text
+            size="xs"
+            c="dimmed"
+            ta="center"
+            style={{ wordBreak: 'break-word' }}
+          >
+            {error.message}
+          </Text>
+        </Stack>
+      </Container>
+    );
   }
 }
 

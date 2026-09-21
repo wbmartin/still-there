@@ -25,10 +25,10 @@ function AppUserGroupListPage() {
   const authState = useAuthGuard([grants.READ_USER_GROUP]);
   const { grantList } = useAuthStore();
   const {
-    appUserGroupList,
+    itemList: appUserGroupList,
     loading,
-    retrieveAppUserGroupList,
-    deleteAppUserGroup,
+    readList: readAppUserGroupList,
+    deleteItem: deleteAppUserGroup,
   } = useAppUserGroupStore();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -40,9 +40,9 @@ function AppUserGroupListPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void retrieveAppUserGroupList();
+      void readAppUserGroupList().catch(console.error);
     }
-  }, [authState, retrieveAppUserGroupList]);
+  }, [authState, readAppUserGroupList]);
 
   //============================^ HOOK LINE ^====================
 
@@ -67,9 +67,10 @@ function AppUserGroupListPage() {
   };
 
   const handleDeleteConfirm = async () => {
-    if (deleteId !== null) {
+    const group = appUserGroupList.find((g) => g.appUserGroupId === deleteId);
+    if (group) {
       try {
-        await deleteAppUserGroup(deleteId);
+        await deleteAppUserGroup(group.appUserGroupId, group.updateTs);
         notifications.show({
           title: "Success",
           message: "User group deleted successfully",

@@ -48,7 +48,11 @@ function MFAOnboardingPage() {
           throw new Error("Failed to get MFA setup data");
         }
         const data = (await response.json()) as {
-          data: { secret: string; qrCodeImage: string; mfaAlreadySetup: boolean };
+          data: {
+            secret: string;
+            qrCodeImage: string;
+            mfaAlreadySetup: boolean;
+          };
         };
         setSecret(data.data.secret);
         setQrCodeImage(data.data.qrCodeImage);

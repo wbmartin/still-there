@@ -3,9 +3,7 @@ import { Button, Title, Group, Text, Select, Alert, Container, Stack, Loader } f
 import { notifications } from "@mantine/notifications";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/auth-store";
-import { useExamplesStore } from "../stores/examples-store";
-import { useAppUserStore } from "../stores/app-user-store";
-import { useAppUserGroupStore } from "../stores/app-user-group-store";
+import { clearAllCaches } from "../utils/cache-utils";
 import { ROUTES } from "../constants/routes";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { grants } from "../constants/grants";
@@ -33,9 +31,7 @@ function UserPreferencesPage() {
   >();
 
   const handleClearCache = () => {
-    useExamplesStore.getState().clearCache();
-    useAppUserStore.getState().clearCache();
-    useAppUserGroupStore.getState().clearCache();
+    clearAllCaches();
     notifications.show({
       title: "Cache Cleared",
       message:
@@ -57,9 +53,7 @@ function UserPreferencesPage() {
     if (newContext !== securityContext) {
       await changeSecurityContext(newContext);
       // Clear all caches after successful context change
-      useExamplesStore.getState().clearCache();
-      useAppUserStore.getState().clearCache();
-      useAppUserGroupStore.getState().clearCache();
+      clearAllCaches();
       // Navigate to dashboard
       void navigate(`/${ROUTES.DASHBOARD}`);
     }
@@ -166,14 +160,20 @@ function UserPreferencesPage() {
           <Button
             onClick={() => void navigate(`/${ROUTES.APP_USER_LIST}`)}
             variant="outline"
-            disabled={!useAuthStore.getState().grantList.includes(grants.CREATE_USER)}
+            disabled={
+              !useAuthStore.getState().grantList.includes(grants.CREATE_USER)
+            }
           >
             User Admin
           </Button>
           <Button
             onClick={() => void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`)}
             variant="outline"
-            disabled={!useAuthStore.getState().grantList.includes(grants.CREATE_USER_GROUP)}
+            disabled={
+              !useAuthStore
+                .getState()
+                .grantList.includes(grants.CREATE_USER_GROUP)
+            }
           >
             User Groups
           </Button>
@@ -189,9 +189,11 @@ function UserPreferencesPage() {
         </Title>
         <Group mb="md">
           <Button
-            onClick={async () => {
-              await useAuthStore.getState().logout();
-              void navigate(`/${ROUTES.LOGIN}`);
+            onClick={() => {
+              void useAuthStore
+                .getState()
+                .logout()
+                .then(() => navigate(`/${ROUTES.LOGIN}`));
             }}
             variant="outline"
             color="red"
@@ -200,7 +202,8 @@ function UserPreferencesPage() {
           </Button>
         </Group>
         <Text size="sm" c="dimmed">
-          Log out of your account. You will need to log in again to access the application.
+          Log out of your account. You will need to log in again to access
+          the application.
         </Text>
       </Stack>
 
