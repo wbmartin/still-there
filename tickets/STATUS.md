@@ -6,15 +6,14 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 15:04 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 15:23 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (7)
+## Engineering — ready to start (6)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
-| **PS0005** | One agent rulebook — fold doc/9xx guidance into CLAUDE.md, fix or retire opencode.json | high | docs |
 | **PS0006** | Move ProtoStack history out of doc/ into the engineering log; fix every broken path | high | docs |
 | **PS0009** | Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable | medium | api |
 | **PS0012** | Web — fix the entity-page bugs; document that pages are deliberate scaffolding | medium | web |
@@ -26,13 +25,14 @@ picks up the next piece of work. Do not edit below the marker.
 
 | Ticket | Title | Claimed |
 |---|---|---|
-| **PS0003** | Sunset the shrmpl kv, log and vault clients and all their local tooling | 2026-09-21 by TKT-PS0003-shrmpl-optional-quarantine |
+| **PS0005** | One agent rulebook — fold doc/9xx guidance into CLAUDE.md, fix or retire opencode.json | 2026-09-21 by TKT-PS0005-agent-guidance-consolidation |
 
-## Engineering — merged, awaiting validation (2)
+## Engineering — merged, awaiting validation (3)
 
 | Ticket | Title | Merged | Deployed |
 |---|---|---|---|
 | **PS0002** | Security and correctness hygiene found in the 2026-09-21 template review | ea5f4f0 | — |
+| **PS0003** | Sunset the shrmpl kv, log and vault clients and all their local tooling | b514d5c | — |
 | **PS0004** | Document the presales → post-sales deploy migration; fix bin/600 fail-fast | ef91f35 | — |
 
 ## Engineering — validated, awaiting archive (1)

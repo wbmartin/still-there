@@ -10,7 +10,7 @@ raised: 2026-09-21
 raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0003-shrmpl-optional-quarantine
-merged:
+merged: b514d5c
 deployed:
 validated:
 ---
