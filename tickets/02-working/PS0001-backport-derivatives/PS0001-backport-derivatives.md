@@ -23,7 +23,7 @@ validated:
 
 ProtoStack is the template that eastern-rebate, atticus-meeting and others
 derive from. Those apps built infrastructure and process that belongs in the
-template. This ticket brings it back, genericized, in six commits.
+template. This ticket brings it back, genericized, in eight commits.
 
 ## Requirements
 
@@ -42,13 +42,14 @@ template. This ticket brings it back, genericized, in six commits.
 | `5fac67d` | Presales deploy | `bin/600-bundle-uat` (static linux/amd64 api-srv + proto-migrate, vite bundle, pg_dump via `docker exec`, roles.sql, MANIFEST → scp to `$UAT_HOST:/tmp`), `bin/610-deploy-uat` (ships as `deploy.sh`; installs systemd unit on first run, stop → drop/restore DB → swap binary/web keeping `.prev` → start → `/health` poll; `--no-db` runs `proto-migrate verify`), `presales-deploy` skill, `etc/uat-api-srv.env.example` (`SERVERONLY` redaction), `doc/320-presales-uat-deploy.md`. |
 | `8559400` | Web app | `utils/api.ts`: `ApiUnreachableError` vs `SessionExpiredError` + `setSessionExpiredListener`. `auth-store`: refresh signs out only on 401/403; network/5xx → `authState: "UNREACHABLE"` (Mantine alert + retry) — fixes users bounced to login during an nginx 502. `stores/create-entity-store.ts` factory replaces three hand-written stores (public API now `itemList`/`readList`/`createItem`/`updateItem`/`deleteItem`; 9 call sites adapted; `updateItem` now throws on failure instead of silently succeeding). `cache-utils` self-registering clearers. `ErrorBoundary`: try-again without reload, no unauthenticated `POST /error-report`, message only. `vitest.config.ts` + 28 tests. 10 pre-existing lint errors fixed. |
 | `eb6452c` | API server | `SERVER_BIND_ADDRESS` (bind 127.0.0.1 behind nginx); `LOG_RECEIVER_HOST_PORT` optional → stdout logger; `KV.Del`; CSRF-mismatch log no longer prints the expected token; `http.MaxBytesReader` on bodies read before auth/rate-limit (login 4K, context switch 4K, MFA 4K, error-report 8K); unique violations (23505) → `ErrDuplicate` → 409 on user/group create+update; `repository/scoped_query.go` centralises the security-context WHERE clause (`example`, `app_user_group` lists; SQL unchanged). |
+| `72c1db6` | Infra mirrors | `infra/uat/` and `infra/prd/` placeholders for the post-sales pipeline (atticus TKT-MA0005 model): host `bin/` scripts deploy verbatim, every per-host value in `infra/<host>/etc/*.env` (repo copies `SERVERONLY`-redacted), systemd unit + root-owned restart `.path` unit, nginx, shrmpl-hook env, `infra/README.md`. Presales `600/610` now read `etc/uat-deploy.env` (local, no secrets) and a bundled `deploy.env`; no inline defaults, missing keys die by name. |
 | `ac9c8eb` | Test infra | `bin/200-run-tests [all|go|e2e|py]` — a skipped integration suite is a failure; `connectTestDB(t)` helper (fixes a pre-existing `go vet` failure in the group repo test); Playwright smoke on ports 8082/5182 (`playwright.config.ts`, `tests/e2e/`, `bin/230-run-web-app-e2e`, `bin/513`/`514` scratch resets, `etc/e2e-api-srv.env`, `etc/loc-test.env`); `bin/320` no longer relies on a stale venv `activate`; `bin/220` repo-relative; `.gitignore` generic entries; `doc/902` refreshed. |
 
 Deliberately not ported: atticus's Tailwind swap, Node-cutover shims (`legacy_pw_hash`, bcrypt), realtime/websocket, team tenancy, webhook/oras registry pipeline, `azure-pipelines.yml`; eastern-rebate's named contacts and post-pytest SQL cleanup ritual.
 
 ## Files modified
 
-`git diff --stat 0c2130a..HEAD` — 100+ files. Highlights: `CLAUDE.md`, `tickets/**`, `scripts/lint-tickets.py`, `.claude/skills/**`, `src/api-srv/{cmd/migrate,internal/migrate,sql/**}`, `src/api-srv/internal/{app_lib,handler,repository}/*.go`, `src/web-app/{stores,utils,components,pages,tests}/**`, `bin/{100,200,220,230,320,510,513,514,600,610}-*`, `etc/{loc-test,e2e-api-srv}.env`, `etc/uat-api-srv.env.example`, `doc/{050,320,900,902}-*.md`, `.gitignore`.
+`git diff --stat 0c2130a..HEAD` — 100+ files. Highlights: `CLAUDE.md`, `tickets/**`, `scripts/lint-tickets.py`, `.claude/skills/**`, `src/api-srv/{cmd/migrate,internal/migrate,sql/**}`, `src/api-srv/internal/{app_lib,handler,repository}/*.go`, `src/web-app/{stores,utils,components,pages,tests}/**`, `bin/{100,200,220,230,320,510,513,514,600,610}-*`, `etc/{loc-test,e2e-api-srv}.env`, `etc/uat-api-srv.env.example`, `doc/{050,320,900,902}-*.md`, `.gitignore`, `infra/**`, `etc/uat-deploy.env`.
 
 ## Endpoints
 
