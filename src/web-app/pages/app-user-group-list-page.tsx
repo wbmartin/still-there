@@ -16,7 +16,7 @@ import { notifications } from "@mantine/notifications";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAuthStore } from "../stores/auth-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import { DeleteConfirmModal } from "../components/delete-confirm-modal";
+import { confirmDelete } from "../utils/confirm-delete";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { AppUserGroup } from "../types/app-user-group-type";
@@ -35,8 +35,6 @@ function AppUserGroupListPage() {
   const [page, setPage] = useState(1);
   const itemsPerPage = 15;
   const hasFetched = useRef(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
@@ -63,12 +61,11 @@ function AppUserGroupListPage() {
   );
 
   const handleDeleteClick = (id: number) => {
-    setDeleteId(id);
-    setDeleteModalOpen(true);
+    confirmDelete("user group", () => void handleDeleteConfirm(id));
   };
 
-  const handleDeleteConfirm = async () => {
-    const group = appUserGroupList.find((g) => g.appUserGroupId === deleteId);
+  const handleDeleteConfirm = async (id: number) => {
+    const group = appUserGroupList.find((g) => g.appUserGroupId === id);
     if (group) {
       try {
         await deleteAppUserGroup(group.appUserGroupId, group.updateTs);
@@ -86,13 +83,6 @@ function AppUserGroupListPage() {
         });
       }
     }
-    setDeleteModalOpen(false);
-    setDeleteId(null);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
-    setDeleteId(null);
   };
 
   // Authorization checks
@@ -171,12 +161,6 @@ function AppUserGroupListPage() {
           <Pagination total={totalPageCount} value={page} onChange={setPage} />
         </Group>
       )}
-      <DeleteConfirmModal
-        isOpen={deleteModalOpen}
-        onConfirm={() => void handleDeleteConfirm()}
-        onCancel={handleDeleteCancel}
-        entityType="user group"
-      />
     </Container>
   );
 }

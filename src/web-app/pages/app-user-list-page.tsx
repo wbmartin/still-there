@@ -4,7 +4,7 @@ import { Table, Button, Title, Group, Pagination, Container, Loader, Alert } fro
 import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import { DeleteConfirmModal } from "../components/delete-confirm-modal";
+import { confirmDelete } from "../utils/confirm-delete";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { User } from "../types/user-type";
@@ -25,8 +25,6 @@ function UserAdminPage() {
   const [page, setPage] = useState(1);
   const itemsPerPage = 15;
   const hasFetched = useRef(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   // Sort state from URL params
   const sortColumn = searchParams.get("sort") || "appUserId";
@@ -88,12 +86,11 @@ function UserAdminPage() {
   );
 
   const handleDeleteClick = (id: number) => {
-    setDeleteId(id);
-    setDeleteModalOpen(true);
+    confirmDelete("user", () => void handleDeleteConfirm(id));
   };
 
-  const handleDeleteConfirm = async () => {
-    const user = userList.find((u) => u.appUserId === deleteId);
+  const handleDeleteConfirm = async (id: number) => {
+    const user = userList.find((u) => u.appUserId === id);
     if (user) {
       try {
         await deleteUser(user.appUserId, user.updateTs);
@@ -101,13 +98,6 @@ function UserAdminPage() {
         reportError(error, "deleting user");
       }
     }
-    setDeleteModalOpen(false);
-    setDeleteId(null);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
-    setDeleteId(null);
   };
 
   const handleSort = (column: string) => {
@@ -211,12 +201,6 @@ function UserAdminPage() {
           <Pagination total={totalPageCount} value={page} onChange={setPage} />
         </Group>
       )}
-      <DeleteConfirmModal
-        isOpen={deleteModalOpen}
-        onConfirm={() => void handleDeleteConfirm()}
-        onCancel={handleDeleteCancel}
-        entityType="user"
-      />
     </Container>
   );
 }

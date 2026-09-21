@@ -12,7 +12,7 @@ import {
 } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import { DeleteConfirmModal } from "../components/delete-confirm-modal";
+import { confirmDelete } from "../utils/confirm-delete";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import { reportError } from "../utils/report-error";
@@ -31,8 +31,6 @@ function ExampleListPage() {
   const [page, setPage] = useState(1);
   const itemsPerPage = 15;
   const hasFetched = useRef(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   // Sort state from URL params
   const sortColumn = searchParams.get("sort") || "exampleId";
@@ -102,12 +100,11 @@ function ExampleListPage() {
   if (error) return <Container size={1280} px={32} py={32} mx="auto"><Alert color="red">Error loading examples: {error}</Alert></Container>;
 
   const handleDeleteClick = (id: number) => {
-    setDeleteId(id);
-    setDeleteModalOpen(true);
+    confirmDelete("example", () => void handleDeleteConfirm(id));
   };
 
-  const handleDeleteConfirm = async () => {
-    const example = exampleList.find((ex) => ex.exampleId === deleteId);
+  const handleDeleteConfirm = async (id: number) => {
+    const example = exampleList.find((ex) => ex.exampleId === id);
     if (example) {
       try {
         await deleteItem(example.exampleId, example.updateTs);
@@ -118,13 +115,6 @@ function ExampleListPage() {
         // Error is handled in store
       }
     }
-    setDeleteModalOpen(false);
-    setDeleteId(null);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
-    setDeleteId(null);
   };
 
   const handleSort = (column: string) => {
@@ -218,12 +208,6 @@ function ExampleListPage() {
           <Pagination total={totalPageCount} value={page} onChange={setPage} />
         </Group>
       )}
-      <DeleteConfirmModal
-        isOpen={deleteModalOpen}
-        onConfirm={() => void handleDeleteConfirm()}
-        onCancel={handleDeleteCancel}
-        entityType="example"
-      />
     </Container>
   );
 }

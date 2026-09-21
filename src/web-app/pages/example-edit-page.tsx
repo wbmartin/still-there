@@ -16,7 +16,7 @@ import { notifications } from "@mantine/notifications";
 import { ROUTES } from "../constants/routes";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import { DeleteConfirmModal } from "../components/delete-confirm-modal";
+import { confirmDelete } from "../utils/confirm-delete";
 import { grants } from "../constants/grants";
 import { defaultExampleFormData } from "../types/example-type";
 import { reportError } from "../utils/report-error";
@@ -43,7 +43,6 @@ function ExampleEditPage() {
     !isNew && numericId !== null,
   );
   const hasFetched = useRef(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   useEffect(() => {
     if (numericId && !isNew && !hasFetched.current) {
@@ -134,7 +133,7 @@ function ExampleEditPage() {
   };
 
   const handleDeleteClick = () => {
-    setDeleteModalOpen(true);
+    confirmDelete("example", () => void handleDeleteConfirm());
   };
 
   const handleDeleteConfirm = async () => {
@@ -160,11 +159,6 @@ function ExampleEditPage() {
         });
       }
     }
-    setDeleteModalOpen(false);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
   };
 
   return (
@@ -213,12 +207,6 @@ function ExampleEditPage() {
           </Button>
         </Group>
       </form>
-      <DeleteConfirmModal
-        isOpen={deleteModalOpen}
-        onConfirm={() => void handleDeleteConfirm()}
-        onCancel={handleDeleteCancel}
-        entityType="example"
-      />
     </Container>
   );
 }

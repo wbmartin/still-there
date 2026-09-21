@@ -3,18 +3,18 @@ import { useState } from "react";
 import { PasswordGenerator } from "./password-generator";
 
 interface ChangePasswordModalProps {
-  isOpen: boolean;
-  onConfirm: (oldPassword: string, newPassword: string) => void;
-  onCancel: () => void;
+  opened: boolean;
+  onSubmit: (oldPassword: string, newPassword: string) => void;
+  onClose: () => void;
   mode: "own" | "other"; // "own" for changing own password, "other" for changing another user's password
   loading?: boolean;
   error?: string;
 }
 
 export function ChangePasswordModal({
-  isOpen,
-  onConfirm,
-  onCancel,
+  opened,
+  onSubmit,
+  onClose,
   mode,
   loading = false,
   error,
@@ -48,7 +48,7 @@ export function ChangePasswordModal({
       setValidationError("New passwords do not match");
       return;
     }
-    onConfirm(oldPassword, newPassword);
+    onSubmit(oldPassword, newPassword);
 
     // Reset form
     setOldPassword("");
@@ -63,12 +63,12 @@ export function ChangePasswordModal({
     setNewPassword("");
     setConfirmPassword("");
     setValidationError("");
-    onCancel();
+    onClose();
   };
 
   return (
     <Modal
-      opened={isOpen}
+      opened={opened}
       onClose={handleCancel}
       title="Change Password"
       centered

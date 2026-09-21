@@ -20,7 +20,7 @@ import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { useAuthStore } from "../stores/auth-store";
-import { DeleteConfirmModal } from "../components/delete-confirm-modal";
+import { confirmDelete } from "../utils/confirm-delete";
 import { ChangePasswordModal } from "../components/change-password-modal";
 import { ROUTES } from "../constants/routes";
 import { defaultUserFormData } from "../types/user-type";
@@ -64,7 +64,6 @@ function UserEditPage() {
    const grantList = useAuthStore.getState().grantList;
   const [userLoading, setUserLoading] = useState(!isNew && numericId !== null);
   const hasFetched = useRef(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
    const [passwordChangeError, setPasswordChangeError] = useState<
@@ -165,7 +164,7 @@ function UserEditPage() {
   };
 
   const handleDeleteClick = () => {
-    setDeleteModalOpen(true);
+    confirmDelete("user", () => void handleDeleteConfirm());
   };
 
   const handleDeleteConfirm = async () => {
@@ -191,11 +190,6 @@ function UserEditPage() {
         });
       }
     }
-    setDeleteModalOpen(false);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
   };
 
   const handlePasswordChange = async (
@@ -352,18 +346,12 @@ function UserEditPage() {
           </Button>
         </Group>
       </form>
-      <DeleteConfirmModal
-        isOpen={deleteModalOpen}
-        onConfirm={() => void handleDeleteConfirm()}
-        onCancel={handleDeleteCancel}
-        entityType="user"
-      />
       <ChangePasswordModal
-        isOpen={passwordModalOpen}
-        onConfirm={(oldPassword, newPassword) => {
+        opened={passwordModalOpen}
+        onSubmit={(oldPassword, newPassword) => {
           void handlePasswordChange(oldPassword, newPassword);
         }}
-        onCancel={() => {
+        onClose={() => {
           setPasswordModalOpen(false);
           setPasswordChangeError(undefined);
         }}

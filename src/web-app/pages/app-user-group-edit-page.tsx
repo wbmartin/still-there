@@ -21,8 +21,8 @@ import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAppUserStore } from "../stores/app-user-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import type { AppUserGroup } from "../types/app-user-group-type";
-import { DeleteConfirmModal } from "../components/delete-confirm-modal";
-import AddRemoveUsersFromGroupModal from "../components/add-remove-users-from-group-modal";
+import { confirmDelete } from "../utils/confirm-delete";
+import { AddRemoveUsersFromGroupModal } from "../components/add-remove-users-from-group-modal";
 import { defaultAppUserGroupFormData } from "../types/app-user-group-type";
 import { reportError } from "../utils/report-error";
 
@@ -61,7 +61,6 @@ function AppUserGroupEditPage() {
   const grants = grantConstants.getGrantList();
 
   const hasFetched = useRef(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [userModalMode, setUserModalMode] = useState<"add" | "remove">("add");
 
@@ -143,7 +142,7 @@ function AppUserGroupEditPage() {
   };
 
   const handleDeleteClick = () => {
-    setDeleteModalOpen(true);
+    confirmDelete("user group", () => void handleDeleteConfirm());
   };
 
   const handleDeleteConfirm = async () => {
@@ -169,11 +168,6 @@ function AppUserGroupEditPage() {
         });
       }
     }
-    setDeleteModalOpen(false);
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
   };
 
   const handleUserModalConfirm = async (userIds: number[]) => {
@@ -281,18 +275,12 @@ function AppUserGroupEditPage() {
         </Group>
       </Stack>
 
-      <DeleteConfirmModal
-        isOpen={deleteModalOpen}
-        onConfirm={() => void handleDeleteConfirm()}
-        onCancel={handleDeleteCancel}
-        entityType="user group"
-      />
       <AddRemoveUsersFromGroupModal
-        isOpen={userModalOpen}
+        opened={userModalOpen}
         onClose={() => setUserModalOpen(false)}
         groupId={numericId}
         mode={userModalMode}
-        onConfirm={handleUserModalConfirm}
+        onSubmit={handleUserModalConfirm}
       />
     </Container>
   );

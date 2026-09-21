@@ -4,30 +4,30 @@ import { useAppUserStore } from "../stores/app-user-store";
 import { reportError } from "../utils/report-error";
 
 interface AddRemoveUsersFromGroupModalProps {
-  isOpen: boolean;
+  opened: boolean;
   onClose: () => void;
   groupId: number | null;
   mode: "add" | "remove";
-  onConfirm: (userIds: number[]) => Promise<void>;
+  onSubmit: (userIds: number[]) => Promise<void>;
 }
 
-function AddRemoveUsersFromGroupModal({
-  isOpen,
+export function AddRemoveUsersFromGroupModal({
+  opened,
   onClose,
   groupId,
   mode,
-  onConfirm,
+  onSubmit,
 }: AddRemoveUsersFromGroupModalProps) {
   const { itemList: userList, readList: readUserList } = useAppUserStore();
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (opened) {
       // Fetch all users for the security context
       void readUserList().catch((err) => reportError(err, "group membership modal"));
     }
-  }, [isOpen, readUserList]);
+  }, [opened, readUserList]);
   // ============================^ HOOK LINE ^====================
 
   const availableUserList = userList.filter((user) => {
@@ -47,7 +47,7 @@ function AddRemoveUsersFromGroupModal({
     if (selectedUsers.length === 0) return;
     setLoading(true);
     try {
-      await onConfirm(selectedUsers);
+      await onSubmit(selectedUsers);
       setSelectedUsers([]);
       onClose();
     } catch (error) {
@@ -59,7 +59,7 @@ function AddRemoveUsersFromGroupModal({
 
   return (
     <Modal
-      opened={isOpen}
+      opened={opened}
       onClose={onClose}
       title={mode === "add" ? "Add Users to Group" : "Remove Users from Group"}
       size="lg"
@@ -90,5 +90,3 @@ function AddRemoveUsersFromGroupModal({
     </Modal>
   );
 }
-
-export default AddRemoveUsersFromGroupModal;
