@@ -113,8 +113,10 @@ func CheckPasswordHash(password, encodedHash string) bool {
 	return subtle.ConstantTimeCompare(hash, expectedHash) == 1
 }
 
-// GenerateJWT creates a new JWT token
+// GenerateJWT creates a new JWT token. issuer is Config.AppName so a
+// derived app's tokens name it (PS0007).
 func GenerateJWT(
+	issuer string,
 	username string,
 	userID int,
 	sessionID string,
@@ -126,7 +128,7 @@ func GenerateJWT(
 	now := time.Now()
 	claims := &Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:  "proto-go-app",
+			Issuer:  issuer,
 			Subject: username,
 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour *
 				time.Duration(expireHours))),

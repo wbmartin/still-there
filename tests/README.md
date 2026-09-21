@@ -28,7 +28,7 @@ against `src/web-app` first.
 ## Configuration
 
 `TEST_BASE_URL` is read from `etc/loc-api-srv.env` (or the file
-`$PROTO_API_ENV` points at) by `bin/320-test-web-service`, then exported
+`$TEST_API_ENV` points at) by `bin/320-test-web-service`, then exported
 as the `TEST_BASE_URL` environment variable that `conftest.py` fixtures
 read directly. Local default: `http://localhost:8080`.
 

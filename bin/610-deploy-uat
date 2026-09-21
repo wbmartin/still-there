@@ -4,7 +4,7 @@
 #
 #   sudo ./deploy.sh [--no-db] [--no-restart]
 #
-# stop api -> replace DB -> replace libexec/api-srv (+ proto-migrate) -> replace web-pub -> start api -> health
+# stop api -> replace DB -> replace libexec/api-srv (+ <slug>-migrate) -> replace web-pub -> start api -> health
 # First run also installs the systemd unit ($SERVICE.service) and retires any hand-started api-srv.
 #
 # This is the presales (pre-agreement) quick-deploy path — see doc/320-presales-uat-deploy.md
@@ -32,7 +32,7 @@ for var in APP_NAME APP_ROOT SERVICE SVC_USER DB_APP_ROLE; do
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $BUNDLE_ENV / $HOST_ENV"; exit 1; }
 done
 BIN_DST="$APP_ROOT/libexec/api-srv"
-MIGRATE_DST="$APP_ROOT/libexec/proto-migrate"
+MIGRATE_DST="$APP_ROOT/libexec/$APP_NAME-migrate"
 WEB_DST="$APP_ROOT/web-pub"
 ENV_FILE="$APP_ROOT/etc/api-srv.env"
 UNIT_SRC="$APP_ROOT/etc/$SERVICE.service"
@@ -140,12 +140,12 @@ echo "[bin] $BIN_DST"
 [ -f "$BIN_DST" ] && cp -p "$BIN_DST" "$BIN_DST.prev"
 install -o root -g root -m 0755 api-srv "$BIN_DST"
 
-if [ -f proto-migrate ]; then
+if [ -f "$APP_NAME-migrate" ]; then
   echo "[bin] $MIGRATE_DST"
   [ -f "$MIGRATE_DST" ] && cp -p "$MIGRATE_DST" "$MIGRATE_DST.prev"
-  install -o root -g root -m 0755 proto-migrate "$MIGRATE_DST"
+  install -o root -g root -m 0755 "$APP_NAME-migrate" "$MIGRATE_DST"
 else
-  echo "[bin] proto-migrate not in bundle — skipping"
+  echo "[bin] $APP_NAME-migrate not in bundle — skipping"
 fi
 
 # When the server DB was left in place (--no-db), it may be ahead of or behind this
@@ -155,7 +155,7 @@ if [ "$DO_DB" = 0 ]; then
     echo "[migrate] verify (server DB kept, --no-db)"
     "$MIGRATE_DST" -config "$ENV_FILE" verify || echo "[migrate] WARNING: verify reported an issue — check schema_migration manually"
   else
-    echo "[migrate] WARNING: proto-migrate not installed — skipping verify (--no-db)"
+    echo "[migrate] WARNING: $APP_NAME-migrate not installed — skipping verify (--no-db)"
   fi
 fi
 

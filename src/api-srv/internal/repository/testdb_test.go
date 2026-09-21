@@ -13,7 +13,7 @@ import (
 //
 // The suites in this package are integration tests: they create and delete
 // rows in a scratch database built by bin/510-reset-test-db. Where that
-// database is comes ONLY from PROTO_TEST_DATABASE_URL, which
+// database is comes ONLY from TEST_DATABASE_URL, which
 // bin/200-run-tests exports from etc/loc-test.env. There is deliberately no
 // fallback to etc/loc-api-srv.env: that is the developer's live database, and
 // running a suite that inserts and deletes rows against it is not a test.
@@ -28,9 +28,9 @@ import (
 func connectTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	databaseURL := os.Getenv("PROTO_TEST_DATABASE_URL")
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
-		t.Skip("skipping integration tests: PROTO_TEST_DATABASE_URL unset (run bin/200-run-tests go)")
+		t.Skip("skipping integration tests: TEST_DATABASE_URL unset (run bin/200-run-tests go)")
 	}
 	db, err := pgxpool.New(context.Background(), databaseURL)
 	if err != nil {

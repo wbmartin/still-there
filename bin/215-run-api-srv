@@ -7,7 +7,9 @@ echo "Building the API server..."
 # Get the directory of this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-BINARY_PATH="$PROJECT_ROOT/dist/proto-go-app"
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
+BINARY_PATH="$PROJECT_ROOT/dist/$APP_SLUG-api"
 CONFIG_PATH="$PROJECT_ROOT/etc/loc-api-srv.env"
 
 # Build the API server first
@@ -31,7 +33,7 @@ fi
 
 # Kill any existing instances of the server
 echo "Checking for existing server instances..."
-EXISTING_PIDS=$(pgrep -f "proto-go-app" || true)
+EXISTING_PIDS=$(pgrep -f "dist/$APP_SLUG-api" || true)
 
 if [ -n "$EXISTING_PIDS" ]; then
     echo "Found existing server instances (PIDs: $EXISTING_PIDS), terminating..."
@@ -39,7 +41,7 @@ if [ -n "$EXISTING_PIDS" ]; then
 
     # Wait up to 10 seconds for graceful shutdown
     for i in {1..10}; do
-        if ! pgrep -f "proto-go-app" > /dev/null 2>&1; then
+        if ! pgrep -f "dist/$APP_SLUG-api" > /dev/null 2>&1; then
             echo "All existing instances terminated gracefully."
             break
         fi
@@ -48,7 +50,7 @@ if [ -n "$EXISTING_PIDS" ]; then
     done
 
     # Force kill any remaining instances
-    REMAINING_PIDS=$(pgrep -f "proto-go-app" || true)
+    REMAINING_PIDS=$(pgrep -f "dist/$APP_SLUG-api" || true)
     if [ -n "$REMAINING_PIDS" ]; then
         echo "Force killing remaining instances (PIDs: $REMAINING_PIDS)..."
         echo "$REMAINING_PIDS" | xargs kill -KILL 2>/dev/null || true

@@ -57,12 +57,12 @@ The one command, on a laptop or a build host:
 ./bin/200-run-tests e2e      # Playwright only
 ./bin/200-run-tests py       # pytest HTTP suite against a private API instance
 ```
-- Sources `etc/loc-test.env` (override the file with `PROTO_TEST_ENV=...`):
-  scratch database names, `PROTO_PG_URL_BASE` for the migrator,
-  `PROTO_TEST_DATABASE_URL` for the Go repository suite, `PROTO_E2E_API_ENV`
-  for the API instance the e2e/py suites start, `PROTO_TEST_LOG_DIR`.
+- Sources `etc/loc-test.env` (override the file with `TEST_ENV=...`):
+  scratch database names, `TEST_PG_URL_BASE` for the migrator,
+  `TEST_DATABASE_URL` for the Go repository suite, `E2E_API_ENV`
+  for the API instance the e2e/py suites start, `TEST_LOG_DIR`.
 - `go`: rebuilds `loc_starter_test_db` via `bin/510`, runs `go vet ./...` and
-  `go test -v ./...` with `PROTO_TEST_DATABASE_URL` exported. A repository
+  `go test -v ./...` with `TEST_DATABASE_URL` exported. A repository
   suite that cannot reach the database SKIPS (see
   `internal/repository/testdb_test.go`); the runner greps for that skip and
   fails the run, so a green run always includes the integration suites.
@@ -94,13 +94,13 @@ To test the api server (repository + model unit tests, with coverage):
 ```
 ./bin/310-test-repo-model
 ```
-- Connects via `PROTO_TEST_DATABASE_URL` when set, otherwise through
+- Connects via `TEST_DATABASE_URL` when set, otherwise through
   `etc/loc-api-srv.env`. Prefer `./bin/200-run-tests go`.
 
 To test the api server (pytest HTTP suite against a server you started):
 ```
 ./bin/320-test-web-service                                   # server from etc/loc-api-srv.env
-PROTO_API_ENV=etc/e2e-api-srv.env ./bin/320-test-web-service # another server's config
+TEST_API_ENV=etc/e2e-api-srv.env ./bin/320-test-web-service # another server's config
 ```
 
 To load test the api server:
@@ -119,8 +119,8 @@ To load test the api server:
   then `sql/fixtures/015-initialdata.sql`. Refuses any name not ending in
   `_test_db` or `_e2e_db`. Uses psql inside the `loc-postgres` container
   when it is running (`PG_CONTAINER`), a native `psql` otherwise (`PSQL`
-  overrides); the migrator connects with `PROTO_PG_URL_BASE`.
-- `513`/`514` source `etc/loc-test.env` when `PROTO_PG_URL_BASE` is unset.
+  overrides); the migrator connects with `TEST_PG_URL_BASE`.
+- `513`/`514` source `etc/loc-test.env` when `TEST_PG_URL_BASE` is unset.
 - `514` is what Playwright's global setup calls: dropping the database under
   a running API leaves its pool pointing at nothing.
 - Users after a reset: `admin` / `admin123!` and `basic` / `basic123!`.

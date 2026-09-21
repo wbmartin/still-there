@@ -82,12 +82,15 @@ def recipient_of(ticket):
     return ticket.get("recipient") or "Customer"
 
 
-ID_RE = re.compile(r"^PS\d{4}$")
+# Ticket id prefix. A derived app changes this one constant (bin/000-rebrand
+# does it); ids are then <PREFIX> plus four digits everywhere.
+ID_PREFIX = "PS"
+ID_RE = re.compile(rf"^{ID_PREFIX}\d{{4}}$")
 
 
 def num(tid):
     """The numeric part of an id. 'PS1020' -> 1020."""
-    return int(tid[2:])
+    return int(tid[len(ID_PREFIX):])
 
 
 def is_ask(tid):
@@ -223,7 +226,7 @@ def remote_branches():
     return {l.strip().split("/", 1)[-1] for l in local.splitlines()}, False
 
 
-BRANCH_ID = re.compile(r"\bPS\d{4}\b")
+BRANCH_ID = re.compile(rf"\b{ID_PREFIX}\d{{4}}\b")
 
 
 def branch_ticket_id(name):
@@ -325,7 +328,7 @@ def ids_in_use(tickets):
     is gone, a folder still counts so a number is never handed out twice.
     """
     return {t["id"] for t in tickets} | {
-        d.name.split("-")[0] for d in (REPO / "doc").glob("PS*")
+        d.name.split("-")[0] for d in (REPO / "doc").glob(f"{ID_PREFIX}*")
         if d.is_dir() and ID_RE.match(d.name.split("-")[0])
     }
 
@@ -348,7 +351,7 @@ def main():
         if lifecycle in FOLDER_STAGES:
             # One folder per ticket, the ticket file named like the folder.
             # Anything else in the folder is the ticket's working papers.
-            for stray in sorted(directory.glob("PS*.md")):
+            for stray in sorted(directory.glob(f"{ID_PREFIX}*.md")):
                 errors.append(f"tickets/{DIR[lifecycle]}/{stray.name}: {DIR[lifecycle]}/ holds "
                               f"folders, not files -- move it into {stray.stem}/")
             for folder in sorted(d for d in directory.iterdir() if d.is_dir()):
@@ -545,8 +548,8 @@ def status_block(tickets, stamp):
         out.append(f"| {domain} | {count} |")
 
     eng_next, ask_next = next_free(ids_in_use(tickets))
-    out += ["", f"**Next free number:** `PS{eng_next:04d}` (engineering), "
-            f"`PS{ask_next}` (Ask Customer).", "", END]
+    out += ["", f"**Next free number:** `{ID_PREFIX}{eng_next:04d}` (engineering), "
+            f"`{ID_PREFIX}{ask_next}` (Ask Customer).", "", END]
     return "\n".join(out)
 
 
@@ -626,8 +629,8 @@ def report(tickets):
         print(f"  {domain:<16} {count}")
 
     eng_next, ask_next = next_free(ids_in_use(tickets))
-    print(f"\nNext free PS number: PS{eng_next:04d}")
-    print(f"Next free Ask Customer number: PS{ask_next}\n")
+    print(f"\nNext free {ID_PREFIX} number: {ID_PREFIX}{eng_next:04d}")
+    print(f"Next free Ask Customer number: {ID_PREFIX}{ask_next}\n")
 
 
 def stale_prose_ids(tickets):
@@ -645,7 +648,7 @@ def stale_prose_ids(tickets):
     live = {t["id"] for t in tickets if t["_lifecycle"] != "archive"}
     archived = {t["id"] for t in tickets if t["_lifecycle"] == "archive"}
     errors = []
-    for tid in sorted(set(re.findall(r"\bPS\d{4}\b", prose))):
+    for tid in sorted(set(BRANCH_ID.findall(prose))):
         if tid in live:
             continue
         where = "is archived" if tid in archived else "does not exist"

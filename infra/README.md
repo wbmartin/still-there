@@ -61,7 +61,7 @@ only on the host.**
 | Script | Sources | Required keys |
 |---|---|---|
 | `uat-proto-build`, `-install-api`, `-publish-web-client` | `etc/uat-proto-deploy.env` | registry server + credentials, `SERVICE`, `HEALTH_URL`, `DEPLOY_TAG`, `BRANCH_TO_CHECKOUT`, `REPO_URL`, `BUILD_STG`, `SLACK_WEBHOOK` |
-| `uat-proto-run-tests` → `bin/200-run-tests` | `etc/uat-proto-deploy.env` (`BUILD_STG`), then `etc/uat-proto-test.env` via `PROTO_TEST_ENV` | CI role, scratch DB names, harness paths (same keys as `etc/loc-test.env`) |
+| `uat-proto-run-tests` → `bin/200-run-tests` | `etc/uat-proto-deploy.env` (`BUILD_STG`), then `etc/uat-proto-test.env` via `TEST_ENV` | CI role, scratch DB names, harness paths (same keys as `etc/loc-test.env`) |
 | `*-install-api` → `proto-migrate` | `etc/<env>-proto-migrate.env` | the DDL role's `DATABASE_URL` |
 | `*-renew-web-certs` (root cron) | `etc/<env>-proto-deploy.env` | `SITE_NAME`, `CERTBOT_EMAIL`, `CERT_HEALTHCHECK_URL` |
 | `prd-proto-promote-uat`, `-promote-uat-and-deploy`, `-install-api`, `-publish-web-client` | `etc/prd-proto-deploy.env` | registry server + credentials, `SERVICE`, `HEALTH_URL`, `DEPLOY_TAG`, `PROMOTE_FROM_TAG`, `SLACK_WEBHOOK` |

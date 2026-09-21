@@ -73,22 +73,22 @@ func TestEmbeddedMigrationsLoad(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // Integration: a database of its own, created and dropped by the test, on
-// the same server the repository suite uses. PROTO_TEST_DATABASE_URL names a
+// the same server the repository suite uses. TEST_DATABASE_URL names a
 // *_test_db on that server (bin/200-run-tests exports it); without it the
 // tests skip. No fallback to etc/loc-api-srv.env -- that is the developer's
 // live database.
 
 func scratchDatabase(t *testing.T) *pgx.Conn {
 	t.Helper()
-	base := os.Getenv("PROTO_TEST_DATABASE_URL")
+	base := os.Getenv("TEST_DATABASE_URL")
 	if base == "" {
-		t.Skip("skipping integration tests: PROTO_TEST_DATABASE_URL unset (run bin/200-run-tests go)")
+		t.Skip("skipping integration tests: TEST_DATABASE_URL unset (run bin/200-run-tests go)")
 	}
 	parsed, err := url.Parse(base)
 	if err != nil {
 		t.Skipf("skipping integration tests: bad DATABASE_URL (%v)", err)
 	}
-	name := "loc_starter_migrate_test_db"
+	name := "loc_proto_migrate_test_db"
 	if !strings.HasSuffix(strings.TrimPrefix(parsed.Path, "/"), "_test_db") {
 		t.Fatalf("refusing to run against %s: not a _test_db", parsed.Path)
 	}

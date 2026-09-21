@@ -15,7 +15,7 @@ That runs, in order: `CREATE DATABASE`, `src/api-srv/sql/roles.sql` (cluster
 roles, idempotent), `go run ./cmd/migrate ... up` (the embedded
 `sql/migrations/`), then `sql/fixtures/015-initialdata.sql` (seed groups,
 `admin`/`admin123!`, `basic`/`basic123!`, two example rows). See the header of
-that script for `PG_CONTAINER` / `PSQL` / `PGPASSWORD` / `PROTO_PG_URL_BASE`.
+that script for `PG_CONTAINER` / `PSQL` / `PGPASSWORD` / `TEST_PG_URL_BASE`.
 
 Manual path, for a database with a name of your choosing (e.g. the
 `loc_starter_db` that `etc/loc-api-srv.env`'s `DATABASE_URL` points at):

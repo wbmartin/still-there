@@ -1,15 +1,17 @@
 #!/bin/bash
 
 # Build the API server and migrator binaries
-# Output: dist/proto-go-app, dist/proto-migrate
+# Output: dist/<slug>-api, dist/<slug>-migrate (slug from etc/app.env)
 
 set -e
 
 # Get the directory of this script (BASH_SOURCE[0])
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-BINARY_PATH="$PROJECT_ROOT/dist/proto-go-app"
-MIGRATE_PATH="$PROJECT_ROOT/dist/proto-migrate"
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
+BINARY_PATH="$PROJECT_ROOT/dist/$APP_SLUG-api"
+MIGRATE_PATH="$PROJECT_ROOT/dist/$APP_SLUG-migrate"
 
 echo "Building API server..."
 
