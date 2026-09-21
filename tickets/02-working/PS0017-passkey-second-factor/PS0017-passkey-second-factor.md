@@ -1,15 +1,15 @@
 ---
 id: PS0017
-title: Passkey (WebAuthn) as a second factor
-status: in-review
+title: DEFERRED — Passkey (WebAuthn) as an additional second factor
+status: blocked
 blocked_by:
-waiting_on:
+waiting_on: a customer request, then TOTP e2e coverage
 priority: low
 domain: security
 raised: 2026-09-21
 raised_by: PS0006 triage of doc/000-TODO.md
 asked:
-claimed: 2026-09-21 by TKT-PS0017-passkey-second-factor
+claimed:
 merged:
 deployed:
 validated:
@@ -126,7 +126,10 @@ The archived plan's passwordless scope is dropped explicitly.
 
 ## Decision
 
-_Pending Brandon._
+**Deferred (Brandon, 2026-09-21).** Back in `01-open/` as `blocked`; not
+dropped. Pick it up again as reading (b) when the three conditions above
+are met. The investigation stands; do not redo it — re-check
+`user_mfa_handler.go` and the `"MFA"` web step for drift first.
 
 ## Acceptance
 
