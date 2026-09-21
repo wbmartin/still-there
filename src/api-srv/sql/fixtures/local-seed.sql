@@ -119,7 +119,7 @@ WITH common_vars AS (
 )
 INSERT INTO example (
     example_text, example_int, example_float, example_int_array,
-    example_float_array, security_context_id,
+    example_float_array, example_uuid, example_jsonb, security_context_id,
     create_ts, create_user_id, update_ts, update_user_id
 )
 SELECT
@@ -128,6 +128,8 @@ SELECT
     data.example_float,
     data.example_int_array,
     data.example_float_array,
+    gen_random_uuid(),
+    data.example_jsonb,
     1,
     common_vars.ts,
     common_vars.system_id,
@@ -135,9 +137,11 @@ SELECT
     common_vars.system_id
 FROM common_vars,
 (VALUES
-    ('Sample example 1', 42, 3.14, ARRAY[1,2,3], ARRAY[1.1,2.2,3.3]),
-    ('Sample example 2', NULL, NULL, NULL, NULL)
-) AS data(example_text, example_int, example_float, example_int_array, example_float_array)
+    ('Sample example 1', 42, 3.14, ARRAY[1,2,3], ARRAY[1.1,2.2,3.3],
+     '{"colour": "teal", "tagList": ["seed", "sample"]}'::jsonb),
+    ('Sample example 2', NULL, NULL, NULL, NULL, NULL)
+) AS data(example_text, example_int, example_float, example_int_array,
+          example_float_array, example_jsonb)
 WHERE NOT EXISTS (
     SELECT 1
     FROM example

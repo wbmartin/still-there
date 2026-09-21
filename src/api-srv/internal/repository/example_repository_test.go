@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/suite"
@@ -43,6 +44,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExample() {
 	example := &model.ExampleModel{
 		ExampleText:     "RepoTest Example",
 		SecurityContext: 1,
+		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
 		UpdateTS:        1234567890.123,
@@ -61,6 +63,7 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExample() {
 	example := &model.ExampleModel{
 		ExampleText:     "RepoTest Read Example",
 		SecurityContext: 1,
+		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
 		UpdateTS:        1234567890.123,
@@ -85,6 +88,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExample() {
 	example := &model.ExampleModel{
 		ExampleText:     "RepoTest Update Example",
 		SecurityContext: 1,
+		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
 		UpdateTS:        1234567890.123,
@@ -115,6 +119,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExample() {
 	example := &model.ExampleModel{
 		ExampleText:     "RepoTest Delete Example",
 		SecurityContext: 1,
+		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
 		UpdateTS:        1234567890.123,
@@ -146,6 +151,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExampleList() {
 		{
 			ExampleText:     "RepoTest List Example 1",
 			SecurityContext: 1,
+			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
 			UpdateTS:        1234567890.123,
@@ -154,6 +160,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExampleList() {
 		{
 			ExampleText:     "RepoTest List Example 2",
 			SecurityContext: 1,
+			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
 			UpdateTS:        1234567890.123,
@@ -173,6 +180,7 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExampleList() {
 	example1 := &model.ExampleModel{
 		ExampleText:     "RepoTest List Get 1",
 		SecurityContext: 1,
+		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
 		UpdateTS:        1234567890.123,
@@ -181,6 +189,7 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExampleList() {
 	example2 := &model.ExampleModel{
 		ExampleText:     "RepoTest List Get 2",
 		SecurityContext: 1,
+		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
 		UpdateTS:        1234567890.123,
@@ -208,6 +217,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExampleList() {
 		{
 			ExampleText:     "RepoTest Update List 1",
 			SecurityContext: 1,
+			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
 			UpdateTS:        1234567890.123,
@@ -216,6 +226,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExampleList() {
 		{
 			ExampleText:     "RepoTest Update List 2",
 			SecurityContext: 1,
+			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
 			UpdateTS:        1234567890.123,
@@ -249,6 +260,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExampleList() {
 		{
 			ExampleText:     "RepoTest Delete List 1",
 			SecurityContext: 1,
+			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
 			UpdateTS:        1234567890.123,
@@ -257,6 +269,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExampleList() {
 		{
 			ExampleText:     "RepoTest Delete List 2",
 			SecurityContext: 1,
+			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
 			UpdateTS:        1234567890.123,
@@ -280,4 +293,56 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExampleList() {
 	s.NoError(err)
 	s.Len(deletedIDs, 2)
 	s.Equal(ids, deletedIDs)
+}
+
+// example_uuid is fixed at create and example_jsonb is stored verbatim; both
+// come back on a read, and an update keeps the uuid and rewrites the jsonb.
+func (s *ExampleRepositoryTestSuite) TestJSONBAndUUIDRoundTrip() {
+	uuid := model.NewUUID()
+	example := &model.ExampleModel{
+		ExampleText:     "RepoTest JSONB UUID",
+		ExampleUUID:     uuid,
+		ExampleJSONB:    json.RawMessage(`{"colour": "teal", "count": 3, "tagList": ["a", "b"]}`),
+		SecurityContext: 1,
+		CreateTS:        1234567890.123,
+		CreateUserID:    1,
+		UpdateTS:        1234567890.123,
+		UpdateUserID:    1,
+	}
+	created, err := s.repo.CreateExample(context.Background(), example, 1)
+	s.NoError(err)
+
+	retrieved, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
+	s.NoError(err)
+	s.Equal(uuid, retrieved.ExampleUUID)
+	s.JSONEq(`{"colour": "teal", "count": 3, "tagList": ["a", "b"]}`, string(retrieved.ExampleJSONB))
+
+	// Update: a client-supplied uuid is ignored, the jsonb is replaced, and
+	// the row's uuid comes back on the updated copy.
+	retrieved.ExampleUUID = "00000000-0000-4000-8000-000000000000"
+	retrieved.ExampleJSONB = json.RawMessage(`[1, 2, 3]`)
+	retrieved.UpdateTS = 1234567891.456
+	s.NoError(s.repo.UpdateExample(context.Background(), retrieved, 1234567890.123))
+	s.Equal(uuid, retrieved.ExampleUUID)
+
+	updated, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
+	s.NoError(err)
+	s.Equal(uuid, updated.ExampleUUID)
+	s.JSONEq(`[1, 2, 3]`, string(updated.ExampleJSONB))
+
+	// Absent jsonb is SQL NULL, which reads back as a nil RawMessage.
+	updated.ExampleJSONB = nil
+	updated.UpdateTS = 1234567892.789
+	s.NoError(s.repo.UpdateExample(context.Background(), updated, 1234567891.456))
+	cleared, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
+	s.NoError(err)
+	s.Nil(cleared.ExampleJSONB)
+
+	// The uuid is unique across rows.
+	dup := &model.ExampleModel{
+		ExampleText: "RepoTest dup uuid", ExampleUUID: uuid, SecurityContext: 1,
+		CreateTS: 1, CreateUserID: 1, UpdateTS: 1, UpdateUserID: 1,
+	}
+	_, err = s.repo.CreateExample(context.Background(), dup, 1)
+	s.Error(err)
 }
