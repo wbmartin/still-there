@@ -24,7 +24,7 @@ tail -f tmp/server.log
 
 To stop the api server:
 ```
-pkill -f "proto-go-app" || kill $(cat tmp/server.pid 2>/dev/null) 2>/dev/null || true
+pkill -f "dist/proto-api" || kill $(cat tmp/server.pid 2>/dev/null) 2>/dev/null || true
 ```
 
 ## Local Stack
