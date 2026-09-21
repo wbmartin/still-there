@@ -11,7 +11,7 @@
 # for the one-time host prep this expects (etc/api-srv.env already in place, nginx configured).
 #
 # Settings: deploy.env beside this script (written by 600 from etc/uat-deploy.env:
-# APP_NAME, APP_ROOT, SERVICE, SVC_USER), then $APP_ROOT/etc/deploy.env if the host
+# APP_NAME, APP_ROOT, SERVICE, SVC_USER, DB_APP_ROLE), then $APP_ROOT/etc/deploy.env if the host
 # keeps one, which wins. Every key is required; there are no inline defaults.
 
 set -euo pipefail
@@ -28,7 +28,7 @@ if [ -r "$HOST_ENV" ]; then
   # shellcheck disable=SC1090
   source "$HOST_ENV"
 fi
-for var in APP_NAME APP_ROOT SERVICE SVC_USER; do
+for var in APP_NAME APP_ROOT SERVICE SVC_USER DB_APP_ROLE; do
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $BUNDLE_ENV / $HOST_ENV"; exit 1; }
 done
 BIN_DST="$APP_ROOT/libexec/api-srv"
@@ -56,7 +56,7 @@ DB_NAME="$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$ENV_FILE"
 PORT="$(sed -nE 's/^SERVER_PORT=([0-9]+).*/\1/p' "$ENV_FILE" | head -1)"
 [ -n "$PORT" ] || { echo "[ERROR] SERVER_PORT not set in $ENV_FILE"; exit 1; }
 HEALTH="http://127.0.0.1:$PORT/health"
-echo "app=$APP_NAME approot=$APP_ROOT service=$SERVICE db=$DB_NAME health=$HEALTH"
+echo "app=$APP_NAME approot=$APP_ROOT service=$SERVICE db=$DB_NAME role=$DB_APP_ROLE health=$HEALTH"
 
 # --- systemd unit (first run only) -------------------------------------------
 if [ ! -f "$UNIT_DST" ]; then
@@ -112,15 +112,17 @@ if [ "$DO_DB" = 1 ]; then
   sudo -u postgres psql -q -v ON_ERROR_STOP=1 \
      -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$DB_NAME' AND pid<>pg_backend_pid()" \
      -c "DROP DATABASE IF EXISTS $DB_NAME" \
-     -c "CREATE DATABASE $DB_NAME OWNER proto_app_svc_account" >/dev/null
+     -c "CREATE DATABASE $DB_NAME OWNER $DB_APP_ROLE" >/dev/null
   echo "[db] restore db.sql"
   sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d "$DB_NAME" -f db.sql >/dev/null
-  sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d "$DB_NAME" <<'SQL'
-DO $$ DECLARE r record; BEGIN
+  # psql does not expand :vars inside $$ bodies, so hand the role in via set_config
+  sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d "$DB_NAME" -v role="$DB_APP_ROLE" <<'SQL'
+SELECT set_config('deploy.role', :'role', false);
+DO $$ DECLARE r record; o text := current_setting('deploy.role'); BEGIN
   FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' LOOP
-    EXECUTE format('ALTER TABLE public.%I OWNER TO proto_app_svc_account', r.tablename); END LOOP;
+    EXECUTE format('ALTER TABLE public.%I OWNER TO %I', r.tablename, o); END LOOP;
   FOR r IN SELECT sequencename FROM pg_sequences WHERE schemaname='public' LOOP
-    EXECUTE format('ALTER SEQUENCE public.%I OWNER TO proto_app_svc_account', r.sequencename); END LOOP;
+    EXECUTE format('ALTER SEQUENCE public.%I OWNER TO %I', r.sequencename, o); END LOOP;
 END $$;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO db_reader;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO db_writer;
