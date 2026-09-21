@@ -90,3 +90,10 @@ Plus, in code and config that a sed will not reach cleanly:
 ## Deploy needs
 
 None for the doc. Renames touch UAT if the binary/env names change (PS0004).
+
+## Direction (Brandon, 2026-09-21)
+
+Approved as written. Still blocked on PS0003 (now decided: shrmpl kv/log
+sunset — vault pending) and PS0004 (now a documentation ticket, so the
+binary/role names stay as they are today; the checklist documents both
+deploy paths' names until they converge).

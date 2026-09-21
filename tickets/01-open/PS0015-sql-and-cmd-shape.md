@@ -71,3 +71,10 @@ shapes for six endpoints; `grants.go` is really an authz catalog;
 
 Go binary (migrate). If `roles.sql` moves, `bin/600` and `bin/610` follow
 in the same PR.
+
+## Direction (Brandon, 2026-09-21)
+
+No comment given. PS0004 is now documentation-only, so the role-model
+question this ticket was blocked on is *not* going to be decided there.
+Still needs Brandon's call: presales one-role vs infra three-role, or
+keep both and document. `cmd/load-test` relocation moved to PS0014.

@@ -95,3 +95,7 @@ been committed. Small, independent commits are fine.
 
 Go binary rebuild (items 1-4). No migration. No web build unless 5-6 ship
 with it.
+
+## Direction (Brandon, 2026-09-21)
+
+"Just looks like fixes." Proceed as written; no decisions pending.

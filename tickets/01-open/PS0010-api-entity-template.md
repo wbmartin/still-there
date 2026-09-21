@@ -1,8 +1,8 @@
 ---
 id: PS0010
 title: Make the example entity a lean, copyable template — error mapping, scoped queries, retry removal, doc/810 rewrite
-status: ready
-blocked_by:
+status: blocked
+blocked_by: [PS0009]
 waiting_on:
 priority: high
 domain: api
@@ -109,3 +109,15 @@ requires `GrantUserCreate` (`user_handler.go:304, 316`).
 
 Go binary. No migration unless the throwaway-entity check leaves one (it
 must not).
+
+## Direction (Brandon, 2026-09-21)
+
+"It's anticipated more complicated scenarios; discuss after PS0009." Do
+not claim. Some of what reads as ceremony (per-method error switches,
+positional scans, separate existence checks) is headroom for entities
+that will not be simple CRUD. The discussion should sort each item into
+*headroom to keep* vs *drift to fix*; the review's candidates for
+"drift regardless": group existence checks missing
+`security_context_id`, `strings.Contains` error detection, the inert
+retry helper, `DeleteExampleList` ignoring RowsAffected, the stale
+`doc/810`.

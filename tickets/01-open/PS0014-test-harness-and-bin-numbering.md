@@ -134,3 +134,10 @@ two tickets takes it).
 ## Deploy needs
 
 None. `deployed: none`.
+
+## Direction (Brandon, 2026-09-21)
+
+"Seems fine." Proceed. Assumed: pytest **stays** as the API contract
+suite (option a) — PS0001 chose keep and Brandon did not reverse it.
+Correct this line if wrong. Item "cmd/load-test out of cmd/" is taken
+by this ticket, not PS0015.

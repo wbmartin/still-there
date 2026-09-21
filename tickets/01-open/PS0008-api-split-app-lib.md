@@ -1,8 +1,8 @@
 ---
 id: PS0008
-title: Split internal/app_lib into packages named by role
-status: ready
-blocked_by:
+title: Split internal/app_lib into packages named by role (no KV/log interfaces)
+status: blocked
+blocked_by: [PS0003]
 waiting_on:
 priority: medium
 domain: api
@@ -16,61 +16,60 @@ validated:
 ---
 # PS0008 — `app_lib` is a grab-bag named by history
 
-**Source:** template review 2026-09-21. Do after PS0003 (removing the
-shrmpl clients shrinks what has to move) but not blocked on it.
+**Source:** template review 2026-09-21.
+**Decision (Brandon, 2026-09-21):** "KV and log as distinct interfaces
+should go away." Combined with PS0003 (sunset shrmpl kv/log): the split
+does **not** create `internal/kv` and `internal/logx` packages with
+interfaces. The in-process store is one concrete type; logging is
+`log/slog`. Blocked on PS0003 so the move happens once, on the smaller
+tree.
 
 ## Problem
 
-`src/api-srv/internal/app_lib/` holds everything that was not a handler,
+`src/api-srv/internal/app_lib/` holds everything that is not a handler,
 model or repository:
 
 | File | Contents |
 |---|---|
-| `config.go` | env-file parser (200 lines, hand-rolled), `Config` struct, **and** `VaultClient` (mTLS secrets fetch, lines 42-141) |
+| `config.go` | env-file parser, `Config` struct, and (until PS0003) `VaultClient` |
 | `auth.go` | JWT sign/verify (HS256), Argon2id password hashing |
-| `app_helper.go` | the per-request security check state machine (`AppHelper`, five `*Checked` booleans), two rate-limit implementations, user-block check, `GetContext`/`CanProceed` (unused) |
-| `kv_client.go` / `kv_memory.go` | the `KV` interface, external shrmpl TCP client, in-process implementation |
-| `logging_client.go` | custom TCP log client + stdout fallback |
-| `rbac.go` | grant checks (two functions self-flagged "I don't think is used", :66-83) |
+| `app_helper.go` | per-request security check orchestrator (`AppHelper`), two rate-limit implementations, user-block check |
+| `kv_memory.go` | in-process KV store (the only one after PS0003) |
+| `rbac.go` | grant checks |
 | `security_headers.go` | middleware |
-| `services.go` | `AppServices` DI struct — exposes `DBPool` to handlers (no handler uses it; 2 refs = def + main) |
+| `services.go` | `AppServices` DI struct — exposes `DBPool` to handlers (no handler uses it) |
 
 `golangci-lint` flags the package name three times (revive: underscore).
-The handler package also owns crypto it should not: `user_mfa_handler.go:33-133`
-generates TOTP secrets, AES-GCM-encrypts/decrypts seeds and builds otpauth
-URIs.
+`handler/user_mfa_handler.go:33-133` owns TOTP secret generation and
+AES-GCM seed encryption that belong beside the other crypto.
 
-## Target
+## Target (proposal — names are Brandon's call)
 
 ```
-internal/config/    env loader (table-driven — PS0011), Config struct; vault only if PS0003 keeps it
+internal/config/    env loader, Config struct
 internal/auth/      jwt.go, password.go (argon2), totp.go (from user_mfa_handler), rbac.go, claims
-internal/httpx/     AppHelper → middleware (PS0009), security headers, rate limit, client IP
-internal/kv/        KV interface, memory impl (shrmpl impl only if PS0003 keeps it)
-internal/logx/      slog setup (or the shrmpl client if kept)
+internal/security/  AppHelper as-is (PS0009 decides its future), rate limit, user block, client IP, security headers
+internal/cache/     the in-process store (concrete struct, no interface)
 internal/app/       AppServices without DBPool
 ```
 
-Names are a proposal; the point is one package per role and no package
-whose name is a historical accident.
-
 ## What to do
 
-- Move files; fix imports; keep behaviour identical. `go build`, `go vet`,
-  `go test ./...` stay green at every commit.
-- Drop `DBPool` from `AppServices` so handlers can only reach the DB
-  through repositories.
-- Do not fix logic here — PS0009 (middleware), PS0010 (entity template),
-  PS0011 (dead code, config loader) own the behaviour changes. Moving
-  first makes those diffs readable.
+- Move files; fix imports; **behaviour identical**. `go build`, `go vet`,
+  `go test ./...` green at every commit. Pure mechanical PR.
+- Drop `DBPool` from `AppServices`.
+- Logging: after PS0003 the call sites use whatever thin wrapper PS0003
+  chose; no separate package unless the wrapper needs one.
+- Do not fix logic here — PS0009/PS0010/PS0011 own that and are on hold.
+  Moving first makes their eventual diffs readable.
 
 ## Acceptance
 
-- No `internal/app_lib`. `golangci-lint run` no longer reports revive
-  package-name findings.
-- `grep -rn 'aes\|totp' internal/handler` → only calls into
-  `internal/auth`.
+- No `internal/app_lib`. No revive package-name findings.
+- No Go interface whose only implementation is the in-process store or
+  the logger.
+- `grep -rn 'aes\|totp' internal/handler` → only calls into `internal/auth`.
 
 ## Deploy needs
 
-Go binary. No migration, no config-key changes.
+Go binary. No config-key changes.

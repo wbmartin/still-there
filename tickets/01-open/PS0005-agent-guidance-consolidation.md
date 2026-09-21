@@ -77,3 +77,23 @@ None (docs only). `deployed: none`.
 ## Related
 
 PS0006 (template-vs-history split decides what else lives in `doc/`).
+
+## Direction (Brandon, 2026-09-21)
+
+Folding into `CLAUDE.md` is fine **but do not bloat context.** So:
+
+- `CLAUDE.md` gains a *Conventions* section of ≤ 12 lines: the rules that
+  bite on every change (no FKs/triggers, `security_context_id` on every
+  table, `List` suffix + camelCase, 80-col Go/TS line breaks, git
+  preferences) each as one line, plus a path pointer for the long form.
+- `doc/900-database-guidelines.md` and `doc/905-config-guidance.md` stay
+  as files and are pointed at, not inlined.
+- `901`, `906`, `907`, `908` are short enough to become those single
+  lines and be deleted.
+- `903`, `904` retired as proposed (904 only if PS0014 keeps pytest —
+  it does, see PS0014).
+- `opencode.json`: delete unless Brandon says opencode is still a host
+  (he has not; default = delete).
+- Alternative if the section still feels heavy: a `conventions` skill in
+  `.claude/skills/` that loads on demand. Prefer the CLAUDE.md lines
+  first; measure the token cost before adding a skill.

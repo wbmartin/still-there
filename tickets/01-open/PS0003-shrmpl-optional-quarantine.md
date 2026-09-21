@@ -1,6 +1,6 @@
 ---
 id: PS0003
-title: Decide shrmpl's place in the template and quarantine or remove it
+title: Sunset the shrmpl kv and log clients and their local tooling; decide the vault
 status: ready
 blocked_by:
 waiting_on:
@@ -14,88 +14,81 @@ merged:
 deployed:
 validated:
 ---
-# PS0003 — shrmpl: optional since June, still ~30% of the tooling surface
+# PS0003 — Sunset shrmpl kv/log; in-process KV and slog are the template
 
-**Source:** template review 2026-09-21. **Decision ticket** — Brandon
-decides the scope; the agent then executes.
+**Source:** template review 2026-09-21.
+**Decision (Brandon, 2026-09-21):** "Sunset the shrmpl server binaries for
+logging and KV. We will wire those in if there is ever a time." And
+(PS0008): "KV and log as distinct interfaces should go away." So: no
+pluggable KV interface, no pluggable logger — one concrete in-process
+KV store and `log/slog`.
+
+**Still open: the vault.** Brandon did not mention it. Recommendation:
+sunset it too (nothing deployed uses it; UAT/infra envs set
+`DATABASE_URL` directly; `etc/e2e-api-srv.env` already inlines secrets).
+If it stays, the hardcoded laptop path below becomes a config key and
+`bin/410` + the 9 `shrmpl_vault_*` certs stay. **Brandon to confirm
+before claiming.**
 
 ## Background
 
-Commit `32c4490` (2026-06-15, "Add in-process KV backend (default),
-replacing the external shrmpl-kv dependency") made `KV_BACKEND=memory` the
-default in every env file (loc, e2e, uat example, infra uat/prd).
-`LOG_RECEIVER_HOST_PORT` is optional (unset = stdout) and is commented out
-in e2e/infra envs. The vault is contacted only when all five `VAULT_*` keys
-are set, and only `etc/loc-api-srv.env` sets them. UAT/infra envs set
-`DATABASE_URL` directly.
+Commit `32c4490` (2026-06-15) made `KV_BACKEND=memory` the default
+everywhere; `LOG_RECEIVER_HOST_PORT` is optional and commented out in
+e2e/infra envs. The template still carries the full local stack.
 
-Yet the template still carries the full shrmpl local stack and three Go
-clients. A derived app inherits all of it and has to learn what is live.
-
-## What is shrmpl-only today
+## Remove
 
 | Area | Files |
 |---|---|
-| bin | `010-download-shrmpl` (mac-only binaries from `raw.githubusercontent.com/wbmartin/shrmpl-srv-preview`, no checksum, list omits `shrmpl-vault-cli` which is on disk), `210-run-shrmpl-app-infra`, `211-stop-shrmpl-app-infra`, `410-regenerate-vault-mtls-certs` |
-| etc | `loc-shrmpl-kv-srv.env`, `loc-shrmpl-log-srv.env`, `loc-shrmpl-vault-srv.env`, `vault-configs/*` (tracked secrets — removal from git is PS0002), 9 of the 11 `etc/crt/*.pem` (all `shrmpl_vault_*`), `bin/tools/*` (5 binaries, ~11 MB, gitignored) |
-| Go | `internal/app_lib/kv_client.go` (409 lines, external TCP KV), `internal/app_lib/logging_client.go` (custom TCP wire format), `VaultClient` in `internal/app_lib/config.go:42-141` |
-| docs | `doc/850-mtls-troubleshooting.md`, and `doc/050`, `doc/060`, `doc/105`, `doc/902`, `README.md` all still present 010/210/410 as the start-up path |
-| infra | `infra/*/shrmpl-etc/` is the **shrmpl-hook** webhook receiver — a different shrmpl product, still load-bearing for the post-sales pipeline (PS0004). Not in scope here. |
+| Go | `internal/app_lib/kv_client.go` (409 lines, external TCP KV), the `KV` interface and `KV_BACKEND` config key — `kv_memory.go` becomes the concrete store (rename to `kv.go` or `cache.go`); `internal/app_lib/logging_client.go` (custom TCP wire format) → `log/slog` to stdout/stderr; `LOG_RECEIVER_HOST_PORT` config key; the `"shrmpl"` mode literal (`config.go:326`) |
+| bin | `010-download-shrmpl`, `210-run-shrmpl-app-infra`, `211-stop-shrmpl-app-infra` (also does `pkill -f vite`) |
+| etc | `loc-shrmpl-kv-srv.env`, `loc-shrmpl-log-srv.env`; `bin/tools/*` (gitignored binaries — note in the doc that they can be deleted locally); `.gitignore` entry `bin/tools/*` |
+| docs | `doc/050`, `doc/060`, `doc/105`, `doc/902`, `README.md` drop 010/210/211 from the start-up path; `doc/811-non-entity-notes.md` (shrmpl client notes) → PS0006's history archive |
+| vault, if sunset | `VaultClient` in `config.go:42-141`, the five `VAULT_*` keys, `bin/410-regenerate-vault-mtls-certs`, `etc/loc-shrmpl-vault-srv.env`, `etc/vault-configs/` (PS0002 untracks it first), 9 `etc/crt/shrmpl_vault_*.pem` (gitignored), `doc/850-mtls-troubleshooting.md` → history |
 
-## Defects inside the shrmpl code paths (fix or delete, not leave)
+`infra/*/shrmpl-etc/` is **shrmpl-hook**, the webhook receiver for the
+post-sales pipeline — a different product. Not in scope; PS0004 documents
+it.
 
-- `config.go:70` hardcodes
+## Keep / change
+
+- The ~300 `app.Info("EX_CR_START", ...)` call sites: the current logger
+  drops the `code` argument (sends literal `"0000"`, omits it from the
+  stderr line). With slog, make the code a structured attribute
+  (`slog.Info(msg, "code", code, ...)`) so the codes become searchable
+  rather than deleting them. Decide the wrapper signature so the call
+  sites do not all change (a thin `app.Info(code, msg, kv...)` over slog
+  is fine).
+- Account-lockout and rate-limit paths use the KV; they keep working on
+  the in-process store. The "fail open when KV unavailable" branch
+  (commit 2026-06-15) becomes dead and goes.
+- `etc/loc-api-srv.env` becomes self-contained: inline `DATABASE_URL`,
+  `JWT_SECRET`, `TOTP_ENCRYPTION_KEY` like `etc/e2e-api-srv.env`; drop the
+  10 absolute `/Users/brandon/...` paths, `TLS_NAME=local-atticus-snipper.teamtaggle.com`,
+  `VAULT_SERVER=loc-proto.cnfg.li:7474`. This also fixes `bin/600`
+  failing by default (PS0004 background).
+- `config.go:70` hardcoded
   `/Users/brandon/Code/ProtoStack-ReactGo/etc/crt/shrmpl_vault_server_fullchain.pem`
-  in Go source. If the vault stays, this becomes a config key.
-- `logging_client.go` `log(level, code, ...)` never uses `code`: sends the
-  literal `"0000"` to shrmpl-log (`:131`) and omits it from the stderr line
-  (`:148`). ~300 `app.Info("EX_CR_START", ...)` call sites carry dead
-  codes. Either output the code or drop the code parameter.
-- `logging_client.go:113-124` dials the receiver with a 5 s timeout
-  **while holding `l.mu`** whenever the client is nil and a host is
-  configured. Receiver down ⇒ every request serializes on a 5 s dial per
-  log line.
-- `bin/211` runs `pkill -f vite` and `pkill -f proto-go-app` — kills every
-  Vite dev server on the machine.
-- `etc/loc-*.env` files carry 10 absolute `/Users/brandon/...` paths (two
-  spelled `/Users/Brandon`, working only because macOS is
-  case-insensitive), `TLS_NAME=local-atticus-snipper.teamtaggle.com` and
-  `VAULT_SERVER=loc-proto.cnfg.li:7474`.
+  goes with the vault, or becomes `VAULT_SERVER_CERT_PATH` if the vault
+  stays.
 
-## Options
+## Acceptance
 
-**A. Remove.** Delete the shrmpl kv/log/vault clients, scripts, envs,
-certs, docs. Keep the `KV` interface + memory impl (leave a slot for a
-Redis impl). Replace the logger with `log/slog` to stdout (journald
-captures it on the servers). Local dev secrets inline in
-`etc/loc-api-srv.env` like `etc/e2e-api-srv.env` already does. Simplest
-template; PS0001 said "keep shrmpl optional", so this reverses that.
-
-**B. Quarantine.** Move the local shrmpl stack to `optional/shrmpl/`
-(scripts, envs, certs, one README) and the Go clients behind a build tag
-or into `internal/kv/shrmpl`, `internal/logx/shrmpl`. `loc-api-srv.env`
-becomes vault-free by default. Docs demote 010/210/410 to an appendix.
-Keeps the option without the cost on the happy path.
-
-**C. Keep as-is** and only fix the defects above.
-
-Recommendation from the review: **B for kv, A for log and vault.** Nothing
-deployed uses vault or shrmpl-log; the KV interface is worth keeping.
-
-## Acceptance (once decided)
-
-- A fresh clone runs `bin/100`, `bin/215`, `bin/220`, `bin/200 all` with no
-  shrmpl binary, no vault, no absolute path edits.
-- No `/Users/` string anywhere under `src/`, `bin/`, `etc/`.
-- `doc/050`, `doc/060`, `README.md` describe the vault-free path first.
-- If A: `go.mod` loses nothing shrmpl-specific (there is no shrmpl module;
-  the clients are hand-written), `internal/app_lib` shrinks by ~700 lines.
+- Fresh clone: `bin/100`, `bin/215`, `bin/220`, `bin/200 all` run with no
+  shrmpl binary and no absolute-path edits.
+- `grep -rn 'shrmpl' src bin etc doc README.md CLAUDE.md` → only
+  `infra/` (shrmpl-hook) and PS0004's migration doc.
+- `grep -rn '/Users/' src bin etc` → nothing.
+- Log lines carry the code: pick one and find it in `bin/215` output.
+- pytest suite green (it exercises lockout and rate limiting).
 
 ## Deploy needs
 
-Go binary; env-file changes on UAT if keys are renamed. No migration.
+Go binary. UAT env file loses `KV_BACKEND`, `LOG_RECEIVER_HOST_PORT`
+(and `VAULT_*` if sunset) — update `etc/uat-api-srv.env.example`,
+`infra/*/etc/*-api.env` redacted copies, and the live UAT env at deploy.
 
 ## Related
 
-PS0002 (vault-configs out of git), PS0007 (rename checklist depends on what
-survives), PS0008 (`app_lib` split is easier after this).
+PS0002 (vault-configs out of git), PS0008 (package split after this),
+PS0007 (checklist names what survives).

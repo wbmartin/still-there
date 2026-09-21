@@ -1,11 +1,11 @@
 ---
 id: PS0004
-title: One deploy story — make presales 600/610 the degenerate case of the infra/ pipeline
+title: Document the presales → post-sales deploy migration; fix bin/600 fail-fast
 status: ready
 blocked_by:
 waiting_on:
 priority: high
-domain: deploy
+domain: docs
 raised: 2026-09-21
 raised_by: template review 2026-09-21
 asked:
@@ -14,16 +14,16 @@ merged:
 deployed:
 validated:
 ---
-# PS0004 — Two deploy stories with incompatible contracts
+# PS0004 — Two deploy paths; the move between them is a migration
 
-**Source:** template review 2026-09-21. **Decision ticket.**
+**Source:** template review 2026-09-21.
+**Decision (Brandon, 2026-09-21):** "Agree it's a migration, one we need
+to plan for and should be addressed in documents." So: **no code
+unification now.** Both paths stay. This ticket writes the plan and the
+runbook, and makes the small script fixes that do not change either
+contract.
 
-## Background
-
-PS0001 brought two deploy paths into the template. `infra/README.md`
-presents them as stages of one journey ("presales uses 600/610; post-sales
-fills in infra/<host>"). In practice they have different contracts, so
-moving a host from presales to post-sales is a migration, not a fill-in.
+## The two contracts (as found)
 
 | | Presales `bin/600-bundle-uat` + `bin/610-deploy-uat` | Post-sales `infra/uat/bin/uat-proto-*` |
 |---|---|---|
@@ -32,68 +32,60 @@ moving a host from presales to post-sales is a migration, not a fill-in.
 | API binary name | `api-srv` | `proto-api` |
 | Migrator | `proto-migrate` (verify only, with `--no-db`) | `proto-migrate verify → pending → dump → up` |
 | DB roles | `proto_app_svc_account` owner + DML (`src/api-srv/sql/roles.sql`) | `proto_ddl` owner, `<env>_proto_user` DML, `proto_ci` (`sql/ddl-role-host-setup.sql`) |
-| Migrator config | the API env file passed as `-config` (works only because one role) | dedicated `*-migrate.env` with the DDL role |
+| Migrator config | the API env passed as `-config` | dedicated `*-migrate.env` with the DDL role |
 | Env file on host | `etc/api-srv.env` | `etc/uat-proto-api.env` |
-| systemd unit | generated on first run, `User=` from `SVC_USER` (www-data) | shipped from `infra/uat/etc/uat-proto-api.service`, `User=proto`, restart via root-owned `.path` unit |
+| systemd unit | generated on first run, `User=` from `SVC_USER` | shipped from `infra/uat/etc/*.service`, `User=proto`, root-owned `.path` restart unit |
 | Install layout | `$APP_ROOT/libexec/api-srv` | `libexec/proto-api` |
-| DB refresh | `pg_dump` from laptop, wholesale restore | none (migrations only) |
+| DB refresh | `pg_dump` from laptop, wholesale restore | migrations only |
 
 `bin/100-build-api-server` emits a third name, `dist/proto-go-app`.
+`infra/prd/` is `infra/uat/` + promote + backup (17 files); the README
+says the pipeline "is not wired up or exercised today".
 
-Also found:
+## Deliverables
 
-- **`bin/600` fails by default in this repo.** `etc/uat-deploy.env` sets
-  `LOCAL_ENV_FILE=etc/loc-api-srv.env`, which has no `DATABASE_URL` line
-  (secrets come from the vault), so step 4 dies with "cannot determine the
-  local database" — after ~a minute of building Go + web. Fails-fast
-  ordering and a vault-free local env (PS0003) both fix this.
-- `bin/600`'s header says "no inline defaults" but it generates
-  `000-roles.sql` with inline role names and `CREATE USER
-  proto_app_svc_account` if `roles.sql` is absent (it never is).
-- Role names are inline in `bin/610` (3 places), not env-driven.
-- `infra/prd/` is `infra/uat/` plus promote + backup: 17 files of
-  duplication for a pipeline the README says "is not wired up or exercised
-  today". `infra/` totals 34 files / ~1,277 lines and hardcodes
-  `shrmpl-hook` user, `oras`, `jq`, Slack, `/build-stg/proto`,
-  `/srv/<env>-proto`, unix user `proto`, port 8088, `HOOKID` filename
-  convention. It is coherent and env-driven, so it has value — but a
-  derived app must sed ~100 `uat-proto|prd-proto` occurrences.
-- `infra/README.md` "One-time host setup" is already half a runbook and
-  overlaps `doc/320-presales-uat-deploy.md`.
+1. **`doc/3xx-presales-to-postsales-migration.md`** — the runbook for a
+   host that was deployed with 600/610 and is moving to the infra
+   pipeline. Ordered steps with the state before/after each: stop the
+   presales unit; create the three roles and reassign ownership from
+   `proto_app_svc_account` (exact `ALTER … OWNER TO`, `REASSIGN OWNED`);
+   rename `libexec/api-srv` → `libexec/proto-api` or symlink; rename the
+   env file and diff its keys against `infra/uat/etc/uat-proto-api.env`;
+   replace the generated unit with the shipped one + `.path` unit;
+   install shrmpl-hook + oras; first webhook build; verify; roll back
+   path. Reference `infra/README.md`'s one-time host setup rather than
+   repeat it.
+2. **A "which path am I on" table** at the top of `doc/320-presales-uat-deploy.md`
+   and `infra/README.md` pointing at each other and at the migration
+   doc, so a derived app knows the two are different and where the seam
+   is.
+3. **Script fixes that change no contract:**
+   - `bin/600`: check the local DB / `LOCAL_ENV_FILE` **before** building
+     (today it builds Go + web for ~a minute, then dies with "cannot
+     determine the local database" because `etc/loc-api-srv.env` has no
+     `DATABASE_URL` — PS0003 also fixes the env side).
+   - `bin/600`: remove the fallback branch that generates `000-roles.sql`
+     with inline role names when `roles.sql` is absent (it never is;
+     CLAUDE.md makes it mandatory). Header says "no inline defaults".
+   - `bin/610`: the three inline `proto_app_svc_account` occurrences read
+     from `etc/uat-deploy.env` instead.
+4. **PS0007 input:** list every name that differs between the paths so
+   the derivation checklist can say "rename in both".
 
-## Options
+## Not doing (recorded so nobody re-opens it by accident)
 
-**A. Unify (recommended).** Same host layout, same role model, same binary
-names, same env file names, same unit file for both paths. `bin/610`
-becomes "install this bundle the way `uat-proto-install-api` would", so
-post-sales only *adds* the webhook/registry front end. Pick one role model
-(the infra three-role one is the safer production shape; the presales
-one-role is simpler — decide). Parameterise role names and the app slug
-from one env file (ties to PS0007).
+Unifying binary names, role models, unit files or env names across the
+two paths; deleting `infra/prd/`. Revisit when a derived app actually
+makes the migration and the runbook has been exercised once.
 
-**B. Keep both, document the migration.** Cheapest now; every derived app
-pays the migration later.
+## Acceptance
 
-**C. Drop `infra/` from the template**, keep it as a design note in
-`doc/`, stage it in the derived app that first goes post-sales.
-
-Independent of A/B/C: drop `infra/prd/` until a UAT is real (re-derive it
-then), and fix the `bin/600` fail-by-default.
-
-## Acceptance (once decided)
-
-- `bin/600 && bin/610` works on a fresh clone with the vault-free local
-  env, and fails before building when the local DB cannot be determined.
-- One binary name, one env file name, one role model across `bin/`,
-  `infra/`, `etc/*.example`, `doc/320`, `infra/README.md`.
-- `grep -rn 'proto_app_svc_account\|proto_ddl' bin infra etc src/api-srv/sql`
-  shows the chosen model only.
+- The migration doc exists and `infra/README.md` + `doc/320` link it.
+- `bin/600` with a bad `LOCAL_ENV_FILE` fails in < 2 s.
+- `grep -n proto_app_svc_account bin/610` → 0 (reads a variable).
+- `bin/600 && bin/610` still works end-to-end on UAT (Brandon runs).
 
 ## Deploy needs
 
-Changes the UAT host layout if A. Coordinate with Brandon's next UAT deploy.
-
-## Related
-
-PS0003 (vault-free local env), PS0007 (single rename point), PS0015 (sql/
-role files).
+None for the docs. The `bin/610` change is exercised on the next UAT
+deploy.

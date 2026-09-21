@@ -1,7 +1,7 @@
 ---
 id: PS0009
 title: Replace the AppHelper check state machine with Protected(grant) middleware; one handler style; route registry
-status: ready
+status: needs-triage
 blocked_by:
 waiting_on:
 priority: high
@@ -99,3 +99,31 @@ path convention changes, web build + `constants/api.ts` in the same PR.
 
 PS0008 (do the package move first or together), PS0010, PS0002 item 3
 (anon rate-limit key — fix there, fold here).
+
+## Direction (Brandon, 2026-09-21)
+
+**Not aligned. Discuss in depth before any work.** Do not claim.
+
+Points to settle in that discussion (agent's read of where the
+disagreement may lie — Brandon to confirm or correct):
+
+1. Is the explicit per-handler check sequence (`CheckJWT`, `CheckRate…`,
+   `CheckCSRF`, `CheckAuthorization`, `CheckAllChecksComplete`) a
+   deliberate design — checks visible in the handler body, varied per
+   endpoint, greppable — rather than an accident? If so, the ticket's
+   framing ("state machine instead of middleware") is wrong and the
+   real defects are narrower: the closures that never call
+   `CheckAllChecksComplete`, the unused params, the four cookie builds.
+2. Which endpoints legitimately need a *different* check set (login: no
+   JWT, rate-limited by IP; MFA setup: JWT but no grant; health: nothing;
+   error-report: none but body cap)? A middleware chain must express
+   each of these as clearly as the current code does or it is a loss.
+3. Handler style: is struct-vs-closure a real problem or cosmetic? The
+   cost is helper sharing (`setAuthCookie`) and mockability.
+4. Route table: is a `Routes(mux)` per handler wanted, or is one flat
+   list in `main.go` preferred *because* it is the one place to read
+   every route?
+5. The `ExampleHandler`-on-interfaces point stands on its own (it is
+   the copy-me and is the only untestable handler); could be split out.
+
+PS0010 is blocked behind this.

@@ -1,10 +1,10 @@
 ---
 id: PS0011
 title: API dead code, duplicated helpers, table-driven config loader, lint baseline
-status: ready
+status: needs-triage
 blocked_by:
 waiting_on:
-priority: medium
+priority: low
 domain: api
 raised: 2026-09-21
 raised_by: template review 2026-09-21
@@ -87,3 +87,11 @@ rendering in the web app.
 Go binary. If the server binary's CLI changes from positional to
 `-config`, update `bin/215`, `bin/610`, `infra/*/etc/*.service` in the
 same PR.
+
+## Direction (Brandon, 2026-09-21)
+
+**Hold.** "It may be hard to separate leftovers from anticipated
+scenarios." Do not claim until PS0009/PS0010 are settled; then walk the
+dead-code table with Brandon item by item before deleting. The
+`security_model.go` DTOs and `user_grant_model.go` in particular may be
+placeholders for planned endpoints/tables.
