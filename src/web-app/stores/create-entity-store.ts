@@ -207,7 +207,7 @@ export const createEntityStore = <
     };
 
     const extra = extend ? extend(set, get, api) : ({} as TExtra);
-    return { ...base, ...extra } as Store;
+    return { ...base, ...extra };
   });
 
   // Sign-out and context switches must not leave another tenant's rows in

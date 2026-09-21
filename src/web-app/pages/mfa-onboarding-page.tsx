@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Container,
@@ -30,12 +30,11 @@ function MFAOnboardingPage() {
   const [mfaAlreadySetup, setMfaAlreadySetup] = useState(false);
   const navigate = useNavigate();
   const { tempToken } = useAuthStore();
-  const [hasFetched, setHasFetched] = useState(false);
+  const hasFetched = useRef(false);
 
   useEffect(() => {
-    if (!tempToken || hasFetched) return;
-
-    setHasFetched(true);
+    if (!tempToken || hasFetched.current) return;
+    hasFetched.current = true;
 
     const fetchSetup = async () => {
       setLoading(true);
@@ -99,7 +98,7 @@ function MFAOnboardingPage() {
           color: "green",
         });
       }
-      void navigate(`/${ROUTES.DASHBOARD}`);
+      void navigate(ROUTES.DASHBOARD);
     } catch (err) {
       notifications.show({
         title: "Verification Failed",

@@ -129,7 +129,7 @@ function ExampleListPage() {
       <Group justify="space-between" mb="lg">
         <Title order={1}>Examples</Title>
         <Button
-          onClick={() => void navigate(`/${ROUTES.EXAMPLE_EDIT}?exampleId=new`)}
+          onClick={() => void navigate(`${ROUTES.EXAMPLE_EDIT}?exampleId=new`)}
         >
           Add Example
         </Button>
@@ -184,7 +184,7 @@ function ExampleListPage() {
                   size="xs"
                   onClick={() =>
                     void navigate(
-                      `/${ROUTES.EXAMPLE_EDIT}?exampleId=${example.exampleId}`,
+                      `${ROUTES.EXAMPLE_EDIT}?exampleId=${example.exampleId}`,
                     )
                   }
                 >

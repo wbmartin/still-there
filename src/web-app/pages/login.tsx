@@ -40,7 +40,7 @@ function Login() {
   useEffect(() => {
      if (authState === "YES") {
        // Navigate to postAuthDestination or dashboard
-        const destination = postAuthDestination || `/${ROUTES.DASHBOARD}`;
+        const destination = postAuthDestination || ROUTES.DASHBOARD;
        void navigate(destination);
      }
    }, [authState, postAuthDestination, navigate]);
@@ -53,7 +53,7 @@ function Login() {
     const state = useAuthStore.getState();
     if (state.authState === "MFA") {
       // MFA required, navigate to setup
-      void navigate(`/${ROUTES.MFA_SETUP}`);
+      void navigate(ROUTES.MFA_SETUP);
     } else if (state.authState !== "YES") {
       notifications.show({
         title: "Login Failed",

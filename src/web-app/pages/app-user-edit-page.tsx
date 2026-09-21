@@ -59,50 +59,48 @@ function UserEditPage() {
       email: (value) => (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? 'Invalid email address' : null),
     },
   });
-   const requiredGrant = isNew ? grants.CREATE_USER : grants.UPDATE_USER;
-   const authState = useAuthGuard([requiredGrant, grants.READ_USER]);
-   const grantList = useAuthStore.getState().grantList;
+  const requiredGrant = isNew ? grants.CREATE_USER : grants.UPDATE_USER;
+  const authState = useAuthGuard([requiredGrant, grants.READ_USER]);
+  const grantList = useAuthStore((state) => state.grantList);
   const [userLoading, setUserLoading] = useState(!isNew && numericId !== null);
   const hasFetched = useRef(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
-   const [passwordChangeError, setPasswordChangeError] = useState<
-     string | undefined
-   >();
-   const [resetMFALoading, setResetMFALoading] = useState(false);
+  const [passwordChangeError, setPasswordChangeError] = useState<
+    string | undefined
+  >();
+  const [resetMFALoading, setResetMFALoading] = useState(false);
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
       void readAppUserGroupList().catch((err) => reportError(err, "user edit"));
       if (numericId && !isNew) {
-        // Fetch the user directly
-        void readUserById(numericId).then((user) => {
-          if (user) {
-            form.setValues({
-              userName: user.userName,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              email: user.email,
-              appUserGroupMembershipList: user.appUserGroupMembershipList,
-              mfaExempt: user.mfaExempt,
-              pwHash: "",
-              updateTs: user.updateTs.toString(),
-            });
-          }
-          setTimeout(() => {
+        void readUserById(numericId)
+          .then((user) => {
+            if (user) {
+              form.setValues({
+                userName: user.userName,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                email: user.email,
+                appUserGroupMembershipList: user.appUserGroupMembershipList,
+                mfaExempt: user.mfaExempt,
+                pwHash: "",
+                updateTs: user.updateTs.toString(),
+              });
+            }
+          })
+          .catch((error: unknown) => {
+            reportError(error, "loading user");
+          })
+          .finally(() => {
             setUserLoading(false);
-          }, 0);
-        }).catch((error: unknown) => {
-          reportError(error, "loading user");
-          setUserLoading(false);
-        });
-      } else {
-        setTimeout(() => {
-          setUserLoading(false);
-        }, 0);
+          });
       }
     }
+    // `form` is a new object every render; hasFetched makes this a one-shot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authState, numericId, isNew, readAppUserGroupList, readUserById]);
 
   //============================^ HOOK LINE ^====================
@@ -150,7 +148,7 @@ function UserEditPage() {
           withCloseButton: false,
         });
       }
-      void navigate(`/${ROUTES.APP_USER_LIST}`);
+      void navigate(ROUTES.APP_USER_LIST);
     } catch (error) {
       reportError(error, "saving user");
       notifications.show({
@@ -178,7 +176,7 @@ function UserEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-        void navigate(`/${ROUTES.APP_USER_LIST}`);
+        void navigate(ROUTES.APP_USER_LIST);
       } catch (error) {
         reportError(error, "deleting user");
         notifications.show({
@@ -340,7 +338,7 @@ function UserEditPage() {
            )}
           <Button
             variant="outline"
-            onClick={() => void navigate(`/${ROUTES.APP_USER_LIST}`)}
+            onClick={() => void navigate(ROUTES.APP_USER_LIST)}
           >
             Cancel
           </Button>

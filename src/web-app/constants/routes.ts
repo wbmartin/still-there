@@ -1,17 +1,20 @@
+// Absolute paths, so a consumer never has to remember the leading slash.
+// Edit pages take their id as a query string: `${ROUTES.EXAMPLE_EDIT}?exampleId=N`
+// (or `=new`).
 export const ROUTES = {
   // User management
-  APP_USER_LIST: 'appUserList',
-  APP_USER_EDIT: 'appUserEdit', // Base path; append ?id or ?new
+  APP_USER_LIST: "/appUserList",
+  APP_USER_EDIT: "/appUserEdit",
 
   // User group management
-  APP_USER_GROUP_LIST: 'appUserGroupList',
-  APP_USER_GROUP_EDIT: 'appUserGroupEdit', // Base path; append ?id
+  APP_USER_GROUP_LIST: "/appUserGroupList",
+  APP_USER_GROUP_EDIT: "/appUserGroupEdit",
 
-    // Other
-    DASHBOARD: 'dashboard',
-    EXAMPLE_LIST: 'exampleList',
-    EXAMPLE_EDIT: 'example', // Base path; append ?exampleId
-    LOGIN: 'login',
-    USER_PREFERENCES: 'userPreferences',
-    MFA_SETUP: 'mfa-setup',
+  // Other
+  DASHBOARD: "/dashboard",
+  EXAMPLE_LIST: "/exampleList",
+  EXAMPLE_EDIT: "/example",
+  LOGIN: "/login",
+  USER_PREFERENCES: "/userPreferences",
+  MFA_SETUP: "/mfa-setup",
 } as const;

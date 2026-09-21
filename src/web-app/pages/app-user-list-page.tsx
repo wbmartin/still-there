@@ -113,7 +113,7 @@ function UserAdminPage() {
         <Title order={1}>User Admin</Title>
         <Button
           onClick={() => {
-            void navigate(`/${ROUTES.APP_USER_EDIT}?appUserId=new`);
+            void navigate(`${ROUTES.APP_USER_EDIT}?appUserId=new`);
           }}
         >
           Add User
@@ -175,7 +175,7 @@ function UserAdminPage() {
                    size="xs"
                    onClick={() => {
                      void navigate(
-                       `/${ROUTES.APP_USER_EDIT}?appUserId=${user.appUserId}`,
+                       `${ROUTES.APP_USER_EDIT}?appUserId=${user.appUserId}`,
                      );
                    }}
                  >

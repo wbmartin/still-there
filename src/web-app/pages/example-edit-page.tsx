@@ -45,7 +45,7 @@ function ExampleEditPage() {
   const hasFetched = useRef(false);
 
   useEffect(() => {
-    if (numericId && !isNew && !hasFetched.current) {
+    if (!hasFetched.current && authState === "YES" && numericId && !isNew) {
       hasFetched.current = true;
       void readExampleById(numericId)
         .then((existingExample) => {
@@ -69,7 +69,9 @@ function ExampleEditPage() {
           setExampleLoading(false);
         });
     }
-  }, [numericId, isNew, readExampleById]);
+    // `form` is a new object every render; hasFetched makes this a one-shot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authState, numericId, isNew, readExampleById]);
 
   //============================^ HOOK LINE ^====================
   if (authState === "CHECKING") {
@@ -119,7 +121,7 @@ function ExampleEditPage() {
           withCloseButton: false,
         });
       }
-      void navigate(`/${ROUTES.EXAMPLE_LIST}`);
+      void navigate(ROUTES.EXAMPLE_LIST);
     } catch (error) {
       reportError(error, "saving example");
       notifications.show({
@@ -147,7 +149,7 @@ function ExampleEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-      void navigate(`/${ROUTES.EXAMPLE_LIST}`);
+      void navigate(ROUTES.EXAMPLE_LIST);
       } catch (error) {
         reportError(error, "deleting example");
         notifications.show({
@@ -201,7 +203,7 @@ function ExampleEditPage() {
           )}
           <Button
             variant="outline"
-            onClick={() => void navigate(`/${ROUTES.EXAMPLE_LIST}`)}
+            onClick={() => void navigate(ROUTES.EXAMPLE_LIST)}
           >
             Cancel
           </Button>

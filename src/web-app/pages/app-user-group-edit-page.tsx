@@ -20,7 +20,6 @@ import { notifications } from "@mantine/notifications";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAppUserStore } from "../stores/app-user-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import type { AppUserGroup } from "../types/app-user-group-type";
 import { confirmDelete } from "../utils/confirm-delete";
 import { AddRemoveUsersFromGroupModal } from "../components/add-remove-users-from-group-modal";
 import { defaultAppUserGroupFormData } from "../types/app-user-group-type";
@@ -35,6 +34,7 @@ function AppUserGroupEditPage() {
     : grantConstants.UPDATE_USER_GROUP;
   const authState = useAuthGuard([requiredGrant]);
   const {
+    readAppUserGroupById,
     createItem: createAppUserGroup,
     updateItem: updateAppUserGroup,
     deleteItem: deleteAppUserGroup,
@@ -60,31 +60,40 @@ function AppUserGroupEditPage() {
 
   const grants = grantConstants.getGrantList();
 
+  const [groupLoading, setGroupLoading] = useState(
+    !isNew && numericId !== null,
+  );
   const hasFetched = useRef(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [userModalMode, setUserModalMode] = useState<"add" | "remove">("add");
 
   useEffect(() => {
-    if (!hasFetched.current && numericId) {
+    if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      // Find group from store
-      const groups = useAppUserGroupStore.getState().itemList;
-      const existingGroup = groups.find(
-        (g: AppUserGroup) => g.appUserGroupId === numericId,
-      );
-      if (existingGroup) {
-        setTimeout(() => {
-          form.setValues({
-            groupName: existingGroup.groupName,
-            userGrantList: existingGroup.userGrantList,
-            updateTs: existingGroup.updateTs.toString(),
+      if (numericId && !isNew) {
+        // Users are only needed for the add/remove-member modal
+        void readUserList().catch((err) => reportError(err, "user group edit"));
+        void readAppUserGroupById(numericId)
+          .then((existingGroup) => {
+            if (existingGroup) {
+              form.setValues({
+                groupName: existingGroup.groupName,
+                userGrantList: existingGroup.userGrantList,
+                updateTs: existingGroup.updateTs.toString(),
+              });
+            }
+          })
+          .catch((error: unknown) => {
+            reportError(error, "loading user group");
+          })
+          .finally(() => {
+            setGroupLoading(false);
           });
-        }, 0);
       }
-      // Load users for the group management
-      void readUserList().catch((err) => reportError(err, "user group edit"));
     }
-  }, [numericId, readUserList]);
+    // `form` is a new object every render; hasFetched makes this a one-shot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authState, numericId, isNew, readUserList, readAppUserGroupById]);
 
   //============================^ HOOK LINE ^====================
 
@@ -93,6 +102,10 @@ function AppUserGroupEditPage() {
   }
   if (authState !== "YES") {
     return <Container size={1280} px={32} py={32} mx="auto"><Alert color="red">Authentication required.</Alert></Container>;
+  }
+
+  if (groupLoading) {
+    return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
   }
 
   const handleSubmit = async (values: typeof defaultAppUserGroupFormData) => {
@@ -128,7 +141,7 @@ function AppUserGroupEditPage() {
           withCloseButton: false,
         });
       }
-      void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`);
+      void navigate(ROUTES.APP_USER_GROUP_LIST);
     } catch (error) {
       reportError(error, "saving user group");
       notifications.show({
@@ -156,7 +169,7 @@ function AppUserGroupEditPage() {
           autoClose: 3000,
           withCloseButton: false,
         });
-        void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`);
+        void navigate(ROUTES.APP_USER_GROUP_LIST);
       } catch (error) {
         reportError(error, "deleting user group");
         notifications.show({
@@ -224,7 +237,7 @@ function AppUserGroupEditPage() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`)}
+            onClick={() => void navigate(ROUTES.APP_USER_GROUP_LIST)}
           >
             Cancel
           </Button>

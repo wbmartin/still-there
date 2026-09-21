@@ -97,7 +97,7 @@ function AppUserGroupListPage() {
         {canCreateUserGroup && (
           <Button
             onClick={() =>
-              void navigate(`/${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=new`)
+              void navigate(`${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=new`)
             }
           >
             Add User Group
@@ -134,7 +134,7 @@ function AppUserGroupListPage() {
                        size="xs"
                        onClick={() =>
                          void navigate(
-                           `/${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=${group.appUserGroupId}`,
+                           `${ROUTES.APP_USER_GROUP_EDIT}?appUserGroupId=${group.appUserGroupId}`,
                          )
                        }
                      >
