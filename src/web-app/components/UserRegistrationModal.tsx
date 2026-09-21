@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Modal, TextInput, PasswordInput, Button, Group, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
-import { apiRequest } from "../utils/api";
+import { apiJson, jsonBody } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { PasswordGenerator } from "./PasswordGenerator";
 
@@ -45,19 +45,15 @@ export function UserRegistrationModal({
     setLoading(true);
 
     try {
-      const response = await apiRequest(API_ENDPOINTS.USER_SELF_CREATE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: values.username,
-          password: values.password,
-        }),
-      });
-
-       if (!response.ok) {
-         const errorData = (await response.json()) as { message: string };
-         throw new Error(errorData.message || "Registration failed");
-       }
+      // anonymous: registration happens before there is a session
+      await apiJson<unknown>(
+        API_ENDPOINTS.USER_SELF_CREATE,
+        {
+          method: "POST",
+          ...jsonBody({ username: values.username, password: values.password }),
+        },
+        { anonymous: true },
+      );
 
       notifications.show({
         title: "Registration Successful",

@@ -1,4 +1,5 @@
-import type { Example, ApiResponse } from "../types/example-type";
+import type { Example } from "../types/example-type";
+import type { ApiResponse } from "../types/api";
 import { apiRequest, throwForFailedResponse } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { createEntityStore } from "./create-entity-store";

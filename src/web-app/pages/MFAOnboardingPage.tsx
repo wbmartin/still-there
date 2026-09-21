@@ -14,7 +14,7 @@ import {
 } from "@mantine/core";
 import { IconCopy, IconCheck } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { apiRequest } from "../utils/api";
+import { apiJson, jsonBody } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { useAuthStore } from "../stores/auth-store";
 import { ROUTES } from "../constants/routes";
@@ -40,21 +40,18 @@ function MFAOnboardingPage() {
     const fetchSetup = async () => {
       setLoading(true);
       try {
-        const response = await apiRequest(API_ENDPOINTS.MFA_SETUP, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tempToken }),
-        });
-        if (!response.ok) {
-          throw new Error("Failed to get MFA setup data");
-        }
-        const data = (await response.json()) as {
+        // anonymous: this runs on a temp token, before there is a session
+        const data = await apiJson<{
           data: {
             secret: string;
             qrCodeImage: string;
             mfaAlreadySetup: boolean;
           };
-        };
+        }>(
+          API_ENDPOINTS.MFA_SETUP,
+          { method: "POST", ...jsonBody({ tempToken }) },
+          { anonymous: true },
+        );
         setSecret(data.data.secret);
         setQrCodeImage(data.data.qrCodeImage);
         setMfaAlreadySetup(data.data.mfaAlreadySetup || false);
@@ -77,16 +74,12 @@ function MFAOnboardingPage() {
   const handleVerify = async () => {
     setVerifying(true);
     try {
-      const response = await apiRequest(API_ENDPOINTS.MFA_VERIFY, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tempToken, totpCode }),
-      });
-      if (!response.ok) {
-        throw new Error("MFA verification failed");
-      }
-      // On success, update auth state and navigate
-      const data = (await response.json()) as LoginResponse;
+      // anonymous: a wrong code is a 401 that must not end the session
+      const data = await apiJson<LoginResponse>(
+        API_ENDPOINTS.MFA_VERIFY,
+        { method: "POST", ...jsonBody({ tempToken, totpCode }) },
+        { anonymous: true },
+      );
       if (data.user) {
         // Update auth store with user data
         useAuthStore.setState({
