@@ -30,8 +30,11 @@ type Config struct {
 }
 
 // ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,
-// no quoting or interpolation -- into a map. Shared by LoadConfig and by
-// cmd/migrate, which needs only DATABASE_URL from a file of the same shape.
+// no interpolation -- into a map. A value wrapped in matching double or
+// single quotes has the quotes removed (so APP_NAME="Proto App" is
+// Proto App, not "Proto App"); anything else is taken verbatim after
+// trimming whitespace. Shared by LoadConfig and by cmd/migrate, which needs
+// only DATABASE_URL from a file of the same shape.
 func ReadEnvFile(path string) (map[string]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -49,14 +52,22 @@ func ReadEnvFile(path string) (map[string]string, error) {
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
-			value := strings.TrimSpace(parts[1])
-			env[key] = value
+			env[key] = unquote(strings.TrimSpace(parts[1]))
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading configuration file: %w", err)
 	}
 	return env, nil
+}
+
+// unquote strips one pair of matching surrounding quotes. An unmatched or
+// lone quote is content, not syntax.
+func unquote(v string) string {
+	if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+		return v[1 : len(v)-1]
+	}
+	return v
 }
 
 // LoadConfig loads configuration from a .env file
