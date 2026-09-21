@@ -1,6 +1,6 @@
 # ProtoStack
 
-The generic starter template other apps derive from: a Go stdlib
+The template other apps derive from: a Go stdlib
 `net/http` + `pgx` API in `src/api-srv`, a React 19 / TypeScript / Vite /
 Mantine web app in `src/web-app`. Nothing here is customer- or
 app-specific — anything that becomes so belongs in the derived app, not

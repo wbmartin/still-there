@@ -66,6 +66,7 @@ perl -pi -e "
   s#/build-stg/${OLD}\b#/build-stg/${NEW}#g;
   s/\b(build|promote)-${OLD}_/\$1-${NEW}_/g;
   s/vnd\.${OLD}\./vnd.${NEW}./g;
+  s/\b${OLD}_api_server\b/${NEW}_api_server/g;
   s/\Q${OLD_NAME}\E/${NEW_NAME}/g;
   s/\b\u${OLD} API\b/${NEW_NAME} API/g;
   s/\b${OLD}\b/${NEW}/g;
@@ -85,8 +86,8 @@ if [ -n "$NEW_PREFIX" ] && [ "$NEW_PREFIX" != "$OLD_PREFIX" ]; then
 fi
 
 # --- 4. files and directories that carry the slug in their name --------------
-git ls-files infra | grep -E "(uat|prd|build|promote)-${OLD}[_-]" | sort -r | while read -r old; do
-  new="$(printf '%s' "$old" | perl -pe "s/(uat|prd|build|promote)-${OLD}([_-])/\$1-${NEW}\$2/g")"
+git ls-files infra | grep -E "(^|[_-])${OLD}[_.-]" | sort -r | while read -r old; do
+  new="$(printf '%s' "$old" | perl -pe "s/(^|[_-])${OLD}([_.-])/\$1${NEW}\$2/g")"
   mkdir -p "$(dirname "$new")"; git mv "$old" "$new"
 done
 
@@ -96,7 +97,11 @@ perl -pi -e "s/^APP_SLUG=.*/APP_SLUG=${NEW}/; s/^APP_DISPLAY_NAME=.*/APP_DISPLAY
 # --- 6. prove it compiles ------------------------------------------------------
 ( cd src/api-srv && go build ./... ) && echo "[ok] go build"
 ( cd src/web-app && npx tsc --noEmit -p tsconfig.app.json ) && echo "[ok] tsc"
-python3 scripts/lint-tickets.py >/dev/null && echo "[ok] lint-tickets"
+if [ -n "$NEW_PREFIX" ] && [ "$NEW_PREFIX" != "$OLD_PREFIX" ]; then
+  echo "[--] lint-tickets skipped: tickets/ still carries ${OLD_PREFIX} ids until you reset it"
+else
+  python3 scripts/lint-tickets.py >/dev/null && echo "[ok] lint-tickets"
+fi
 
 echo
 echo "Renamed. Review with: git status && git diff --stat"

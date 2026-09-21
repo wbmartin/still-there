@@ -7,8 +7,8 @@ or a native server). The schema is applied by the migrator, never by hand.
 Fastest path -- a scratch database, rebuilt from nothing every time:
 
 ```bash
-bin/510-reset-test-db                    # -> loc_starter_test_db
-bin/510-reset-test-db loc_starter_e2e_db # any *_test_db / *_e2e_db name
+bin/510-reset-test-db                    # -> loc_proto_test_db
+bin/510-reset-test-db loc_proto_e2e_db # any *_test_db / *_e2e_db name
 ```
 
 That runs, in order: `CREATE DATABASE`, `src/api-srv/sql/roles.sql` (cluster
@@ -18,17 +18,17 @@ roles, idempotent), `go run ./cmd/migrate ... up` (the embedded
 that script for `PG_CONTAINER` / `PSQL` / `PGPASSWORD` / `TEST_PG_URL_BASE`.
 
 Manual path, for a database with a name of your choosing (e.g. the
-`loc_starter_db` that `etc/loc-api-srv.env`'s `DATABASE_URL` points at):
+`loc_proto_db` that `etc/loc-api-srv.env`'s `DATABASE_URL` points at):
 
 ```bash
-psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE loc_starter_db;"
+psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE loc_proto_db;"
 psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -f src/api-srv/sql/roles.sql
 cd src/api-srv
-go run ./cmd/migrate -url "postgres://postgres:<pw>@127.0.0.1:5432/loc_starter_db" up
+go run ./cmd/migrate -url "postgres://postgres:<pw>@127.0.0.1:5432/loc_proto_db" up
 #   or, when the env file carries DATABASE_URL for a role that owns the schema:
 #   go run ./cmd/migrate -config ../../etc/loc-api-srv.env up
-psql -h 127.0.0.1 -U postgres -d loc_starter_db -v ON_ERROR_STOP=1 -f sql/fixtures/015-initialdata.sql
-go run ./cmd/migrate -url "postgres://postgres:<pw>@127.0.0.1:5432/loc_starter_db" status
+psql -h 127.0.0.1 -U postgres -d loc_proto_db -v ON_ERROR_STOP=1 -f sql/fixtures/015-initialdata.sql
+go run ./cmd/migrate -url "postgres://postgres:<pw>@127.0.0.1:5432/loc_proto_db" status
 #   expect: 0001  initial_schema   applied <now> by postgres
 ```
 

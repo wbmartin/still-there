@@ -61,14 +61,14 @@ The one command, on a laptop or a build host:
   scratch database names, `TEST_PG_URL_BASE` for the migrator,
   `TEST_DATABASE_URL` for the Go repository suite, `E2E_API_ENV`
   for the API instance the e2e/py suites start, `TEST_LOG_DIR`.
-- `go`: rebuilds `loc_starter_test_db` via `bin/510`, runs `go vet ./...` and
+- `go`: rebuilds `loc_proto_test_db` via `bin/510`, runs `go vet ./...` and
   `go test -v ./...` with `TEST_DATABASE_URL` exported. A repository
   suite that cannot reach the database SKIPS (see
   `internal/repository/testdb_test.go`); the runner greps for that skip and
   fails the run, so a green run always includes the integration suites.
-- `e2e`: rebuilds `loc_starter_e2e_db` via `bin/513`, installs Chromium if
+- `e2e`: rebuilds `loc_proto_e2e_db` via `bin/513`, installs Chromium if
   needed, runs `bin/230-run-web-app-e2e`.
-- `py`: rebuilds `loc_starter_e2e_db`, builds the API and starts it on
+- `py`: rebuilds `loc_proto_e2e_db`, builds the API and starts it on
   `127.0.0.1:8082` from a copy of `etc/e2e-api-srv.env` with the developer
   rate limits (the pytest suite asserts a 429), runs
   `bin/320-test-web-service --skip-lint`, stops the API.
@@ -111,8 +111,8 @@ To load test the api server:
 ## Scratch Databases
 
 ```
-./bin/510-reset-test-db [dbname]   # default loc_starter_test_db
-./bin/513-reset-e2e-db             # loc_starter_e2e_db (thin wrapper on 510)
+./bin/510-reset-test-db [dbname]   # default loc_proto_test_db
+./bin/513-reset-e2e-db             # loc_proto_e2e_db (thin wrapper on 510)
 ./bin/514-reset-e2e-fixtures       # TRUNCATE + re-seed e2e db without dropping it
 ```
 - `510`: DROP + CREATE, `sql/roles.sql`, schema through `cmd/migrate up`,

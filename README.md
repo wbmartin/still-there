@@ -1,6 +1,6 @@
 # ProtoStack-ReactGo
 
-A production-ready starter/scaffold application combining a Go API server with a React frontend. Designed as a foundation for building secure, multi-tenant CRUD applications with JWT authentication, RBAC, and MFA support.
+A production-ready scaffold application combining a Go API server with a React frontend. Designed as a foundation for building secure, multi-tenant CRUD applications with JWT authentication, RBAC, and MFA support.
 
 ## Architecture Overview
 
