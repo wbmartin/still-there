@@ -12,7 +12,7 @@ type AppUserModel struct {
 	AppUserGroupMembershipList []int    `json:"appUserGroupMembershipList" db:"app_user_group_membership_list"`
 	MFAExempt                  bool     `json:"mfaExempt"                  db:"mfa_exempt"`
 	MFASetup                   bool     `json:"mfaSetup"                   db:"mfa_setup"`
-	TOTPSeed                   *string  `json:"totpSeed,omitempty"         db:"totp_seed"`
+	TOTPSeed                   *string  `json:"-"                          db:"totp_seed"` // Never serialize
 	CreateTS                   float64  `json:"createTs"                   db:"create_ts"`
 	CreateUserID               int      `json:"createUserId"               db:"create_user_id"`
 	UpdateTS                   float64  `json:"updateTs"                   db:"update_ts"`

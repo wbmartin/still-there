@@ -282,5 +282,5 @@ func (r *AppUserGroupRepository) DeleteAppUserGroup(
 		return 0, ErrConflict
 	}
 
-	return int(result.RowsAffected()), nil
+	return groupID, nil
 }

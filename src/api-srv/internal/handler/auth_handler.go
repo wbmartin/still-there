@@ -5,10 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
@@ -19,27 +17,6 @@ import (
 // and password) and ChangeSecurityContextHandler (one integer), both of which
 // decode the body before any rate-limit or JWT check runs.
 const maxAuthBodyBytes = 4 << 10 // 4 KiB
-
-// getClientIP extracts the client IP address from the request, checking X-Forwarded-For header first
-func getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header (for proxies)
-	xff := r.Header.Get("X-Forwarded-For")
-	if xff != "" {
-		// Take the first IP in the list
-		ips := strings.Split(xff, ",")
-		ip := strings.TrimSpace(ips[0])
-		if net.ParseIP(ip) != nil {
-			return ip
-		}
-	}
-
-	// Fall back to RemoteAddr
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr // fallback if parsing fails
-	}
-	return ip
-}
 
 // isAccountLocked checks if the IP or username is currently locked out
 func isAccountLocked(
@@ -182,7 +159,7 @@ func AuthHandler(
 		)
 
 		// Check for account lockout
-		clientIP := getClientIP(r)
+		clientIP := app_lib.ClientIP(r)
 		locked, err := isAccountLocked(appServices.KV, clientIP, req.UserName)
 		if err != nil {
 			// Fail open: if the KV store is unavailable, don't block login. Account lockout is a
