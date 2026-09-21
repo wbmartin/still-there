@@ -8,6 +8,7 @@ import {
   TextInput,
   Button,
   Group,
+  Image,
   CopyButton,
   ActionIcon,
   Tooltip,
@@ -138,14 +139,16 @@ function MFAOnboardingPage() {
 
         {!mfaAlreadySetup && qrCodeImage && (
           <Group justify="center" mb="md">
-            <div style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '10px', display: 'inline-block' }}>
-              <img
+            <Paper withBorder radius="md" p={10} display="inline-block">
+              <Image
                 src={qrCodeImage}
                 alt="QR Code for MFA Setup - Scan with your authenticator app"
-                style={{ width: '200px', height: '200px', objectFit: 'contain' }}
+                w={200}
+                h={200}
+                fit="contain"
                 onError={() => reportError(new Error("QR code image failed to load"), "mfa onboarding")}
               />
-            </div>
+            </Paper>
           </Group>
         )}
 

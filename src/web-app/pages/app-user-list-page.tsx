@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Table, Button, Title, Group, Pagination, Container, Loader, Alert } from "@mantine/core";
 import { useAppUserStore } from "../stores/app-user-store";
@@ -22,7 +22,15 @@ function UserAdminPage() {
     useAppUserGroupStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [page, setPage] = useState(1);
+  // Page lives in the URL so a refresh or a shared link keeps its place.
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
+  const setPage = (nextPage: number) =>
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (nextPage > 1) next.set("page", String(nextPage));
+      else next.delete("page");
+      return next;
+    });
   const itemsPerPage = 15;
   const hasFetched = useRef(false);
 
@@ -103,8 +111,8 @@ function UserAdminPage() {
   const handleSort = (column: string) => {
     const newDirection =
       sortColumn === column && sortDirection === "asc" ? "desc" : "asc";
+    // Dropping "page" resets to the first page
     setSearchParams({ sort: column, dir: newDirection });
-    setPage(1); // Reset to first page when sorting
   };
 
   return (
@@ -123,7 +131,7 @@ function UserAdminPage() {
         <Table.Thead>
           <Table.Tr>
             <Table.Th
-              style={{ cursor: "pointer" }}
+              className="sortable-column"
               onClick={() => handleSort("appUserId")}
             >
               ID{" "}
@@ -131,7 +139,7 @@ function UserAdminPage() {
                 (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
-              style={{ cursor: "pointer" }}
+              className="sortable-column"
               onClick={() => handleSort("userName")}
             >
               Username{" "}
@@ -139,14 +147,14 @@ function UserAdminPage() {
                 (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
-              style={{ cursor: "pointer" }}
+              className="sortable-column"
               onClick={() => handleSort("name")}
             >
               Name{" "}
               {sortColumn === "name" && (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
-              style={{ cursor: "pointer" }}
+              className="sortable-column"
               onClick={() => handleSort("email")}
             >
               Email{" "}
@@ -170,28 +178,29 @@ function UserAdminPage() {
                   .map((id) => getGroupName(id))
                   .join(", ")}
               </Table.Td>
-               <Table.Td style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>
-                 <Button
-                   size="xs"
-                   onClick={() => {
-                     void navigate(
-                       `${ROUTES.APP_USER_EDIT}?appUserId=${user.appUserId}`,
-                     );
-                   }}
-                 >
-                   Edit
-                 </Button>
-                 <Button
-                   size="xs"
-                   color="red"
-                   ml="xs"
-                   onClick={() => {
-                     handleDeleteClick(user.appUserId);
-                   }}
-                 >
-                   Delete
-                 </Button>
-               </Table.Td>
+              <Table.Td>
+                <Group gap="xs" wrap="nowrap">
+                  <Button
+                    size="xs"
+                    onClick={() => {
+                      void navigate(
+                        `${ROUTES.APP_USER_EDIT}?appUserId=${user.appUserId}`,
+                      );
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    size="xs"
+                    color="red"
+                    onClick={() => {
+                      handleDeleteClick(user.appUserId);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </Group>
+              </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Table,
@@ -28,7 +28,15 @@ function ExampleListPage() {
   } = useExamplesStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [page, setPage] = useState(1);
+  // Page lives in the URL so a refresh or a shared link keeps its place.
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
+  const setPage = (nextPage: number) =>
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (nextPage > 1) next.set("page", String(nextPage));
+      else next.delete("page");
+      return next;
+    });
   const itemsPerPage = 15;
   const hasFetched = useRef(false);
 
@@ -120,8 +128,8 @@ function ExampleListPage() {
   const handleSort = (column: string) => {
     const newDirection =
       sortColumn === column && sortDirection === "asc" ? "desc" : "asc";
+    // Dropping "page" resets to the first page
     setSearchParams({ sort: column, dir: newDirection });
-    setPage(1); // Reset to first page when sorting
   };
 
   return (
@@ -138,7 +146,7 @@ function ExampleListPage() {
         <Table.Thead>
           <Table.Tr>
             <Table.Th
-              style={{ cursor: "pointer" }}
+              className="sortable-column"
               onClick={() => handleSort("exampleId")}
             >
               ID{" "}
@@ -146,7 +154,7 @@ function ExampleListPage() {
                 (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
-              style={{ cursor: "pointer" }}
+              className="sortable-column"
               onClick={() => handleSort("exampleText")}
             >
               Text{" "}
@@ -154,7 +162,7 @@ function ExampleListPage() {
                 (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
-              style={{ cursor: "pointer" }}
+              className="sortable-column"
               onClick={() => handleSort("exampleInt")}
             >
               Int{" "}
@@ -162,7 +170,7 @@ function ExampleListPage() {
                 (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th
-              style={{ cursor: "pointer" }}
+              className="sortable-column"
               onClick={() => handleSort("exampleFloat")}
             >
               Float{" "}

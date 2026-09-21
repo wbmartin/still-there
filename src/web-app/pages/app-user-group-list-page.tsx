@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Table,
   Button,
@@ -32,7 +32,16 @@ function AppUserGroupListPage() {
     deleteItem: deleteAppUserGroup,
   } = useAppUserGroupStore();
   const navigate = useNavigate();
-  const [page, setPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Page lives in the URL so a refresh or a shared link keeps its place.
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
+  const setPage = (nextPage: number) =>
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (nextPage > 1) next.set("page", String(nextPage));
+      else next.delete("page");
+      return next;
+    });
   const itemsPerPage = 15;
   const hasFetched = useRef(false);
 
@@ -118,7 +127,7 @@ function AppUserGroupListPage() {
             <Table.Tr key={group.appUserGroupId}>
               <Table.Td>{group.appUserGroupId}</Table.Td>
               <Table.Td>{group.groupName}</Table.Td>
-               <Table.Td style={{ maxWidth: '300px' }}>
+              <Table.Td maw={300}>
                  <Flex gap="xs" wrap="wrap">
                    {group.userGrantList.map((id) => (
                      <Badge key={id} variant="light" size="sm">

@@ -64,7 +64,7 @@ function Login() {
   });
 
   return (
-    <Center style={{ height: '100vh' }}>
+    <Center h="100vh">
       <Container size="sm">
         <Paper shadow="md" p="xl">
           <Title order={2} mb="md" ta="center">
