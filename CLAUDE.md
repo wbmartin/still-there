@@ -10,6 +10,9 @@ here.
 
 - `bin/` — numbered scripts: `1xx` build, `2xx` run/test-runner, `3xx`
   tests, `4xx` certs, `5xx` db, `6xx` deploy.
+- `etc/app.env` — the app's identity (`APP_SLUG`, `APP_DISPLAY_NAME`);
+  every `bin/` script derives names from it. `DERIVING.md` + `bin/000-rebrand`
+  turn this template into a new app.
 - `etc/` — environment files. `uat-deploy.env` drives the presales
   `bin/600`/`610` pair (no inline defaults in the scripts).
 - `infra/<host>/` — mirror of `/srv/<env>-proto/{bin,etc}` on a server.

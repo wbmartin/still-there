@@ -154,10 +154,10 @@ full runbook belongs.
 
 ## Deriving an app from this
 
-Rename `infra/uat/` → `infra/<real-uat-host>/` and `infra/prd/` →
-`infra/<real-prd-host>/`, and `proto` → `<app>` throughout (`sed` over the
-tree: `uat-proto` → `uat-<app>`, `proto-api` → `<app>-api`, `proto_ddl`
-etc. stay unless the app renames its roles). Then add the
-`infra/<host>/` bullet in the app's `CLAUDE.md` Layout section and write
-the runbook. Nothing in `bin/` needs to change for a new host — only
+The whole-repo procedure is `DERIVING.md`; `bin/000-rebrand <slug>` does
+the `proto` → `<app>` rename here too (file names, contents, roles, nginx
+upstream). What is left for a human on this tree: rename `infra/uat/` →
+`infra/<real-uat-host>/` and `infra/prd/` → `infra/<real-prd-host>/`, add
+the `infra/<host>/` bullet to the app's `CLAUDE.md` Layout section, and
+write the runbook. Nothing in `bin/` needs to change for a new host — only
 `etc/`.
