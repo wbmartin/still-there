@@ -6,11 +6,11 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 14:15 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 14:21 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (11)
+## Engineering — ready to start (12)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
@@ -24,6 +24,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0012** | Web — fix the entity-page bugs; document that pages are deliberate scaffolding | medium | web |
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | medium | web |
 | **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | medium | tooling |
+| **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | medium | api |
 | **PS0011** | API dead code, duplicated helpers, table-driven config loader, lint baseline | low | api |
 
 ## Engineering — validated, awaiting archive (1)
@@ -32,13 +33,12 @@ picks up the next piece of work. Do not edit below the marker.
 |---|---|---|
 | **PS0001** | Backport infra, ticketing and tooling from derivative apps | 2026-09-21 |
 
-## Engineering — blocked (3)
+## Engineering — blocked (2)
 
 | Ticket | Title | Priority | Waiting on |
 |---|---|---|---|
 | **PS0007** | Single rename point and a "deriving a new app" checklist | high | PS0003, PS0004 |
 | **PS0008** | Split internal/app_lib into packages named by role (no KV/log interfaces) | medium | PS0003 |
-| **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | low | PS0004 |
 
 ## Open tickets by domain
 

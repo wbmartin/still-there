@@ -137,7 +137,11 @@ None. `deployed: none`.
 
 ## Direction (Brandon, 2026-09-21)
 
-"Seems fine." Proceed. Assumed: pytest **stays** as the API contract
-suite (option a) — PS0001 chose keep and Brandon did not reverse it.
-Correct this line if wrong. Item "cmd/load-test out of cmd/" is taken
+"Seems fine." Proceed. **pytest stays** for black-box / e2e API tests
+(Brandon, 2026-09-21: "pytest is fine… I've got python for the e2e
+tests"). His stated preference for the *unit* level: tests in Go, with
+the mockable logic separated from the HTTP layer that calls it — i.e.
+handlers stay thin and explicit (PS0009), the functions they call are
+testable without `httptest`. Apply that when adding Go tests here; do
+not port the pytest suite to Go. Item "cmd/load-test out of cmd/" is taken
 by this ticket, not PS0015.

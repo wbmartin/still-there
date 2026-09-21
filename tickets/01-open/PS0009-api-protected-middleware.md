@@ -61,7 +61,10 @@ should read this ticket and stop.
    `user_handler_test.go` that exercises the check sequence (e.g. a
    request without JWT gets 401 before the repo is touched). This is
    what makes the explicit sequence *testable* per handler, which is the
-   design's own strength.
+   design's own strength. Brandon's unit-test preference (PS0014):
+   separate the mockable logic from the HTTP function that calls it, so
+   the logic is tested in Go without `httptest` and the handler stays a
+   readable sequence of checks + calls.
 
 ## Explicitly not in scope (needs a separate conversation if ever)
 

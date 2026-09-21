@@ -126,10 +126,15 @@ Web build only.
 Fine to proceed on: dependencies, dead code, error-handling helpers,
 console noise, naming, modal API, lint/config.
 
-**Do not touch the "Backend coupling" section** (generated
-`grants.ts`/`api.ts`, `apiRequest` restricted to `API_ENDPOINTS`) until
-Brandon has talked it through. Questions for that talk: is the web
-supposed to stay decoupled from the API's Go source (copyable to a
-different backend), and is a hand-maintained constants file the
-intended contract? If yes, the fix is a test that pins the two, not a
-generator.
+**Backend coupling — decided (Brandon, 2026-09-21):** "Continue
+maintaining the lists separately to minimize true coupling." So **no
+generator**, no build-time link between `src/web-app/constants/*.ts` and
+`src/api-srv`. Strike the "Backend coupling" section's generation
+proposal. What stays from it: make the stores use `API_ENDPOINTS` rather
+than hardcoded paths (`auth-store.ts:54, 104, 152, 175, 204`,
+`app-user-store.ts:124`) so there is one list on the web side; a header
+comment in `grants.ts` and `api.ts` naming the Go files they mirror
+(`internal/model/grants.go`, `cmd/server/main.go`) so a human updates
+both. A drift *test* is optional and only if it reads both files at test
+time without either side importing the other — Brandon has not asked for
+it; skip unless cheap.

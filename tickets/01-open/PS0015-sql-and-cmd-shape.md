@@ -1,10 +1,10 @@
 ---
 id: PS0015
 title: sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/
-status: blocked
-blocked_by: [PS0004]
+status: ready
+blocked_by: 
 waiting_on:
-priority: low
+priority: medium
 domain: api
 raised: 2026-09-21
 raised_by: template review 2026-09-21
@@ -16,8 +16,10 @@ validated:
 ---
 # PS0015 — `sql/` and `cmd/` carry names from earlier eras
 
-**Source:** template review 2026-09-21. Blocked on PS0004 (which role
-model survives). Small ticket; can be folded into PS0004's execution.
+**Source:** template review 2026-09-21.
+**Decision (Brandon, 2026-09-21):** the role model is **three roles —
+app, ci, ddl** — and some of them are set up manually as part of server
+setup. That resolves what this ticket was blocked on.
 
 ## `src/api-srv/sql/`
 
@@ -26,10 +28,18 @@ model survives). Small ticket; can be folded into PS0004's execution.
 - `ddl-role-host-setup.sql` is 100% commented-out prose: a document, not
   SQL. → `doc/9xx-db-host-setup.md` (or fold into `infra/README.md`'s
   one-time host setup).
-- `roles.sql` creates a local service account with a plaintext password
-  (`:36`, `reallygoodPSQLpassword`) and `bin/600` ships it to UAT as
-  `000-roles.sql`. → `sql/local/roles.sql` for local dev; production roles
-  come from the host setup only. PS0004 decides the model.
+- `roles.sql` today creates `db_reader`/`db_writer`/`proto_app_svc_account`
+  (owner + DML, plaintext password `:36`) and `bin/600` ships it to UAT
+  as `000-roles.sql`. Target: the three named roles. `ddl` (owner, runs
+  migrations) and `ci` (CREATEDB) are created **manually at host setup**
+  and documented, never by a shipped script; `app` (DML only) is what
+  `roles.sql` creates idempotently for local dev and what the presales
+  bundle may create on first install. Table ownership belongs to `ddl`,
+  so the presales path's "app owns everything" is a documented
+  divergence the PS0004 runbook fixes at migration time (REASSIGN OWNED).
+  Decide the role *names* once (today: `proto_ddl`, `proto_ci`,
+  `proto_app_svc_account` / `<env>_proto_user` — two names for the app
+  role) and derive from `APP_SLUG` (PS0007).
 - `fixtures/015-initialdata.sql` keeps a legacy `015-` number from the
   deleted `010-initialcreate.sql` era; admin password `admin123!`. →
   `fixtures/local-seed.sql`; the derivation checklist (PS0007) says to
@@ -74,7 +84,5 @@ in the same PR.
 
 ## Direction (Brandon, 2026-09-21)
 
-No comment given. PS0004 is now documentation-only, so the role-model
-question this ticket was blocked on is *not* going to be decided there.
-Still needs Brandon's call: presales one-role vs infra three-role, or
-keep both and document. `cmd/load-test` relocation moved to PS0014.
+Three roles: app, ci, ddl. ddl and ci are manual host setup. Claimable.
+`cmd/load-test` relocation is PS0014's.
