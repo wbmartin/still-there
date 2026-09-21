@@ -6,7 +6,7 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 14:32 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 14:49 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
@@ -24,11 +24,11 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | medium | tooling |
 | **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | medium | api |
 
-## Engineering — in progress (1)
+## Engineering — merged, awaiting validation (1)
 
-| Ticket | Title | Claimed |
-|---|---|---|
-| **PS0002** | Security and correctness hygiene found in the 2026-09-21 template review | 2026-09-21 by TKT-PS0002-security-correctness-hygiene |
+| Ticket | Title | Merged | Deployed |
+|---|---|---|---|
+| **PS0002** | Security and correctness hygiene found in the 2026-09-21 template review | ea5f4f0 | — |
 
 ## Engineering — validated, awaiting archive (1)
 
