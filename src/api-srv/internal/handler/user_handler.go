@@ -60,6 +60,13 @@ type UserRepositoryInterface interface {
 		updateTS float64,
 		updateUserID int,
 	) (float64, error)
+	UpdateUserMFASetup(
+		ctx context.Context,
+		userID int,
+		mfaSetup bool,
+		expectedUpdateTS float64,
+		updateUserID int,
+	) (float64, error)
 	UpdateUserMFAExempt(
 		ctx context.Context,
 		userID int,

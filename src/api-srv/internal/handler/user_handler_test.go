@@ -76,6 +76,17 @@ func (m *MockUserRepository) UpdateUserPassword(
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) UpdateUserMFASetup(
+	ctx context.Context,
+	userID int,
+	mfaSetup bool,
+	expectedUpdateTS float64,
+	updateUserID int,
+) (float64, error) {
+	args := m.Called(ctx, userID, mfaSetup, expectedUpdateTS, updateUserID)
+	return args.Get(0).(float64), args.Error(1)
+}
+
 func (m *MockUserRepository) UpdateUserTOTPSeed(
 	ctx context.Context,
 	userID int,

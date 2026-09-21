@@ -43,7 +43,10 @@ class TestClient:
         # factor cannot be completed from a test, so say so rather than
         # pretend: the old /auth2 branch here called an endpoint that does
         # not exist (the real step is POST /mfaVerify with a TOTP code).
-        if "tempToken" in data or "temp_token" in data:
+        # The token sits inside "user" (AuthResponseWrapper); the top-level
+        # check is kept for older shapes. MFA itself is covered by
+        # test_zz_mfa_totp.py, which drives /auth directly.
+        if "tempToken" in data or "tempToken" in data.get("user", {}):
             pytest.fail(f"user {username} requires MFA; test users must be mfa_exempt")
 
         # Extract tokens from final response
