@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // End-to-end tests for the React app.
 //
@@ -6,11 +9,32 @@ import { defineConfig, devices } from "@playwright/test";
 // servers on 5173/8080 keep running untouched while this suite drives its own
 // pair, so a test run never fights whatever is open in a browser tab -- and
 // never writes to the database the developer is looking at.
+//
+// The API's config file is the one source for its port and bind address:
+// E2E_API_ENV (bin/300 exports it from etc/loc-test.env) or the repo's
+// etc/e2e-api-srv.env. Read here so the two cannot disagree.
+const HERE = dirname(fileURLToPath(import.meta.url));
+export const E2E_API_ENV_PATH = resolve(
+  HERE,
+  process.env.E2E_API_ENV ?? "../../etc/e2e-api-srv.env",
+);
+const apiEnv = Object.fromEntries(
+  readFileSync(E2E_API_ENV_PATH, "utf8")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#") && l.includes("="))
+    .map((l) => {
+      const i = l.indexOf("=");
+      return [l.slice(0, i).trim(), l.slice(i + 1).trim()];
+    }),
+);
+if (!apiEnv.SERVER_PORT) {
+  throw new Error(`SERVER_PORT missing from ${E2E_API_ENV_PATH}`);
+}
 export const E2E_WEB_PORT = 5182;
-export const E2E_API_PORT = 8082;
+export const E2E_API_PORT = Number(apiEnv.SERVER_PORT);
 export const E2E_BASE_URL = `http://localhost:${E2E_WEB_PORT}`;
-// The API binds loopback only (SERVER_BIND_ADDRESS in etc/e2e-api-srv.env).
-export const E2E_API_ROOT = `http://127.0.0.1:${E2E_API_PORT}`;
+export const E2E_API_ROOT = `http://${apiEnv.SERVER_BIND_ADDRESS || "127.0.0.1"}:${E2E_API_PORT}`;
 
 // One place, so a spec and the seed cannot disagree about who is signing in.
 // The defaults are the fixture user bin/510 seeds from
@@ -52,12 +76,9 @@ export default defineConfig({
   // self-contained rather than testing whatever happens to be listening.
   webServer: [
     {
-      // The API's config file. A developer's copy points at the Docker
-      // database; a build host supplies its own via E2E_API_ENV
-      // (bin/211 makes a project-relative value absolute first).
-      command: `go run ./cmd/server ${
-        process.env.E2E_API_ENV ?? "../../etc/e2e-api-srv.env"
-      }`,
+      // The API's config file (see E2E_API_ENV_PATH above; bin/230 makes
+      // a project-relative E2E_API_ENV absolute first).
+      command: `go run ./cmd/server ${E2E_API_ENV_PATH}`,
       cwd: "../api-srv",
       url: `${E2E_API_ROOT}/health`,
       reuseExistingServer: !process.env.CI,

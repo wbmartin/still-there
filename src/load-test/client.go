@@ -15,6 +15,8 @@ type APIClient struct {
 	client    *http.Client
 	jwtToken  string
 	csrfToken string
+	userName  string
+	password  string
 }
 
 type AuthResponse struct {
@@ -40,15 +42,17 @@ type ExampleResponse struct {
 	} `json:"data"`
 }
 
-func NewAPIClient(baseURL string) *APIClient {
-	// Create HTTP client with TLS config that skips certificate verification
-	// (for self-signed certificates in testing)
+func NewAPIClient(baseURL, userName, password string, insecure bool) *APIClient {
+	// -insecure skips certificate verification for a self-signed local cert
+	// (bin/400-make-local-dev-certs); never against a real host.
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec // opt-in flag
 	}
 
 	return &APIClient{
-		baseURL: baseURL,
+		userName: userName,
+		password: password,
+		baseURL:  baseURL,
 		client: &http.Client{
 			Transport: tr,
 			Timeout:   30 * time.Second,
@@ -59,8 +63,8 @@ func NewAPIClient(baseURL string) *APIClient {
 func (c *APIClient) Login() error {
 	// Authentication request
 	authData := map[string]string{
-		"userName": "admin",
-		"password": "admin123!",
+		"userName": c.userName,
+		"password": c.password,
 	}
 
 	jsonData, _ := json.Marshal(authData)

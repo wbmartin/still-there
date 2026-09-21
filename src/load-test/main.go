@@ -22,6 +22,9 @@ type Config struct {
 	BaseURL       string
 	MonitorServer bool
 	OutputFile    string
+	UserName      string
+	Password      string
+	Insecure      bool
 }
 
 type Operation string
@@ -123,7 +126,7 @@ func main() {
 	if config.OutputFile == "" {
 		timestamp := time.Now().Format("2006-01-02_15-04-05")
 		config.OutputFile = fmt.Sprintf(
-			"tests/reports/load_test_%s.html",
+			"tmp/test-reports/load_test_%s.html",
 			timestamp,
 		)
 	}
@@ -159,6 +162,8 @@ func parseFlags() Config {
 	var baseURL string
 	var monitorServer bool
 	var outputFile string
+	var userName, password string
+	var insecure bool
 
 	flag.StringVar(
 		&durationStr,
@@ -174,6 +179,9 @@ func parseFlags() Config {
 	)
 	flag.IntVar(&concurrency, "concurrency", 100, "Number of concurrent users")
 	flag.StringVar(&baseURL, "base-url", "", "Base URL of the API server")
+	flag.StringVar(&userName, "user", "admin", "User to log in as (the seeded admin from sql/fixtures)")
+	flag.StringVar(&password, "password", "admin123!", "That user's password")
+	flag.BoolVar(&insecure, "insecure", false, "Skip TLS certificate verification (self-signed local cert only)")
 	flag.BoolVar(
 		&monitorServer,
 		"monitor-server",
@@ -200,6 +208,9 @@ func parseFlags() Config {
 		BaseURL:       baseURL,
 		MonitorServer: monitorServer,
 		OutputFile:    outputFile,
+		UserName:      userName,
+		Password:      password,
+		Insecure:      insecure,
 	}
 }
 
@@ -301,7 +312,7 @@ func runWorker(
 	metricsChan chan<- OperationMetric,
 	stopChan <-chan struct{},
 ) {
-	client := NewAPIClient(config.BaseURL)
+	client := NewAPIClient(config.BaseURL, config.UserName, config.Password, config.Insecure)
 
 	iteration := 0
 	for {
@@ -751,18 +762,17 @@ func generateHTMLReport(results *TestResults) error {
 		templateData.SystemMetrics.MemoryMax = maxMem
 	}
 
-	// Create output directory if it doesn't exist
-	// Always put reports in tests/reports relative to current working directory
-	reportsDir := "tests/reports"
-	os.MkdirAll(reportsDir, 0755)
-
-	// If output file doesn't contain a path separator, put it in tests/reports
+	// A bare file name lands in tmp/test-reports (bin/330 passes a full path)
+	reportsDir := "tmp/test-reports"
 	if !strings.Contains(results.Config.OutputFile, "/") &&
 		!strings.Contains(results.Config.OutputFile, "\\") {
 		results.Config.OutputFile = filepath.Join(
 			reportsDir,
 			results.Config.OutputFile,
 		)
+	}
+	if err := os.MkdirAll(filepath.Dir(results.Config.OutputFile), 0o755); err != nil {
+		return fmt.Errorf("failed to create report directory: %w", err)
 	}
 
 	// Generate HTML

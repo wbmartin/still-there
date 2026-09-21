@@ -7,10 +7,13 @@ export default defineConfig(({ mode }) => {
   // (development, production, etc.)
   const env = loadEnv(mode, process.cwd(), '');
 
-  // Get API proxy URL from environment variable,
-  // fallback to localhost for development
-  // Set VITE_API_PROXY_URL in .env.development or .env.production files
-  const apiProxyUrl = env.VITE_API_PROXY_URL || 'http://localhost:8080';
+  // The API the dev server proxies /api to. Comes from .env.development
+  // (or the process environment -- playwright.config.ts sets it for the e2e
+  // stack); there is no fallback, so a missing value fails here, by name.
+  const apiProxyUrl = env.VITE_API_PROXY_URL;
+  if (!apiProxyUrl) {
+    throw new Error("VITE_API_PROXY_URL is not set (src/web-app/.env.development)");
+  }
 
   return {
     root: ".",
