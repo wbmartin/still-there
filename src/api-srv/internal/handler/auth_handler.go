@@ -18,6 +18,9 @@ import (
 // decode the body before any rate-limit or JWT check runs.
 const maxAuthBodyBytes = 4 << 10 // 4 KiB
 
+// maxUserNameLen matches app_user.user_name VARCHAR(50).
+const maxUserNameLen = 50
+
 // isAccountLocked checks if the IP or username is currently locked out
 func isAccountLocked(
 	kv *app_lib.KV,
@@ -116,6 +119,13 @@ func AuthHandler(
 				"INV_REQ_BODY",
 				err,
 			)
+			return
+		}
+		// user_name is VARCHAR(50); anything longer cannot be a user and would
+		// only overflow the lockout keys in the store. Same answer as a bad
+		// password so the check leaks nothing.
+		if req.UserName == "" || len(req.UserName) > maxUserNameLen {
+			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "INVALID_CREDS", nil)
 			return
 		}
 
