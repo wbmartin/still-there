@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -36,6 +37,7 @@ func (r *UserRepository) RetrieveUserByUserName(
 	query := `
 		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
 		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
+		       preference_jsonb,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
@@ -49,6 +51,7 @@ func (r *UserRepository) RetrieveUserByUserName(
 			&user.LastName, &user.Email, &user.SecurityContext,
 			&user.AppUserGroupMembershipList, &user.MFAExempt, &user.TOTPSeed,
 			&user.MFASetup,
+			&user.PreferenceJSONB,
 			&user.CreateTS, &user.CreateUserID, &user.UpdateTS,
 			&user.UpdateUserID, &user.DeleteTS, &user.DeleteUserID,
 		)
@@ -302,6 +305,7 @@ func (r *UserRepository) RetrieveUserList(
 	query := `
 		SELECT app_user_id, user_name, first_name, last_name, email,
 		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
+		       preference_jsonb,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
@@ -344,6 +348,7 @@ func (r *UserRepository) RetrieveUserList(
 				&user.MFAExempt,
 				&user.TOTPSeed,
 				&user.MFASetup,
+				&user.PreferenceJSONB,
 				&user.CreateTS,
 				&user.CreateUserID,
 				&user.UpdateTS,
@@ -602,4 +607,103 @@ func removeDuplicates(slice []int) []int {
 		}
 	}
 	return resultList
+}
+
+// RetrieveUserByID reads one live user in the caller's security context. It
+// is the read behind GET /me; the id comes from the JWT, never the client.
+func (r *UserRepository) RetrieveUserByID(
+	ctx context.Context,
+	userID int,
+	securityContext int,
+) (*model.AppUserModel, error) {
+	query := `
+		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
+		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
+		       preference_jsonb,
+		       create_ts, create_user_id, update_ts, update_user_id,
+		       delete_ts, delete_user_id
+		FROM app_user
+		WHERE app_user_id = $1 AND security_context_id = $2 AND delete_user_id IS NULL`
+
+	var user model.AppUserModel
+	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+		return r.db.QueryRow(ctx, query, userID, securityContext).Scan(
+			&user.AppUserID,
+			&user.UserName,
+			&user.PwHash,
+			&user.FirstName,
+			&user.LastName,
+			&user.Email,
+			&user.SecurityContext,
+			&user.AppUserGroupMembershipList,
+			&user.MFAExempt,
+			&user.TOTPSeed,
+			&user.MFASetup,
+			&user.PreferenceJSONB,
+			&user.CreateTS,
+			&user.CreateUserID,
+			&user.UpdateTS,
+			&user.UpdateUserID,
+			&user.DeleteTS,
+			&user.DeleteUserID,
+		)
+	})
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to retrieve user by id: %w", err)
+	}
+	return &user, nil
+}
+
+// UpdateOwnProfile is the narrow write behind PUT /me: the columns a user
+// may change about themselves, nothing else (no user name, groups, MFA
+// flags). Optimistic lock on update_ts; the row's new update_ts is returned.
+func (r *UserRepository) UpdateOwnProfile(
+	ctx context.Context,
+	userID int,
+	securityContext int,
+	firstName string,
+	lastName string,
+	email string,
+	preference json.RawMessage,
+	expectedUpdateTS float64,
+) (newUpdateTS float64, err error) {
+	newUpdateTS = CurrentTimestamp()
+	query := `
+		UPDATE app_user
+		SET first_name = $1, last_name = $2, email = $3, preference_jsonb = $4,
+		    update_ts = $5, update_user_id = $6
+		WHERE app_user_id = $6 AND security_context_id = $7 AND update_ts = $8
+		      AND delete_user_id IS NULL`
+
+	var result pgconn.CommandTag
+	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+		var execErr error
+		result, execErr = r.db.Exec(ctx, query,
+			firstName, lastName, email, jsonbParam(preference),
+			newUpdateTS, userID, securityContext, expectedUpdateTS)
+		return execErr
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to update own profile: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		var exists bool
+		checkErr := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+			return r.db.QueryRow(ctx,
+				`SELECT EXISTS(SELECT 1 FROM app_user
+				 WHERE app_user_id = $1 AND security_context_id = $2 AND delete_user_id IS NULL)`,
+				userID, securityContext).Scan(&exists)
+		})
+		if checkErr != nil {
+			return 0, fmt.Errorf("failed to assess user state: %w", checkErr)
+		}
+		if !exists {
+			return 0, ErrNotFound
+		}
+		return 0, ErrConflict
+	}
+	return newUpdateTS, nil
 }

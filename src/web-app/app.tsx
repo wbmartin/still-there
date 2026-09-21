@@ -14,7 +14,12 @@ import {
   Flex,
   Alert,
   Text,
+  useMantineColorScheme,
 } from '@mantine/core'
+import { useEffect } from 'react'
+import { useProfileStore } from './stores/profile-store'
+import { usePreference } from './hooks/use-preference'
+import { reportError } from './utils/report-error'
 import Login from './pages/login'
 import Dashboard from './pages/dashboard'
 import ExampleListPage from './pages/example-list-page'
@@ -139,8 +144,24 @@ const router = createBrowserRouter([
 ])
 
 function AppLayout() {
-  const { logout, authState, grantList } = useAuthStore();
+  const { logout, authState, grantList, securityContext } = useAuthStore();
   const navigate = useNavigate();
+  const readProfile = useProfileStore((state) => state.readProfile);
+  const { colorScheme } = usePreference();
+  const { setColorScheme } = useMantineColorScheme();
+
+  // The profile (and with it the preferences) follows the session: loaded
+  // when it is known, again after a security-context switch. The caches
+  // are cleared on sign-out, so a new session starts from defaults.
+  useEffect(() => {
+    if (authState === 'YES') {
+      void readProfile().catch((err) => reportError(err, 'profile'));
+    }
+  }, [authState, securityContext, readProfile]);
+
+  useEffect(() => {
+    setColorScheme(colorScheme);
+  }, [colorScheme, setColorScheme]);
 
   const handleLogout = async () => {
     await logout();
@@ -162,7 +183,7 @@ function AppLayout() {
                 <NavLink component={Link} to={ROUTES.EXAMPLE_LIST} label="Examples" />
                 {canManageUsers && <NavLink component={Link} to={ROUTES.APP_USER_LIST} label="User Admin" />}
                 {canManageUserGroups && <NavLink component={Link} to={ROUTES.APP_USER_GROUP_LIST} label="User Groups" />}
-                <NavLink component={Link} to={ROUTES.USER_PREFERENCES} label="Preferences" />
+                <NavLink component={Link} to={ROUTES.USER_PREFERENCES} label="Profile" />
                 <Button variant="subtle" onClick={() => void handleLogout()} fullWidth justify="flex-start">
                   Logout
                 </Button>

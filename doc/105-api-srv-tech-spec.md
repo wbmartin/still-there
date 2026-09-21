@@ -89,6 +89,8 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
 | GET | /refresh | Yes | No | N/A | Refresh JWT token |
 | POST | /changeSecurityContext | Yes | No | N/A | Switch security context |
 | POST | /logoff | Yes | No | N/A | Clear authentication cookie |
+| GET | /me | Yes | No | LOGON | The caller's own user row (profile + preferences) |
+| PUT | /me | Yes | Yes | LOGON | Update own firstName/lastName/email/preferenceJsonb, optimistic lock |
 | GET | /example | Yes | No | GET_EXAMPLE | Retrieve single example |
 | GET | /exampleList | Yes | No | GET_EXAMPLE | Retrieve multiple examples |
 | POST | /example | Yes | Yes | ADD_EXAMPLE | Create new example |

@@ -12,6 +12,7 @@ import {
 } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
+import { useRowsPerPage } from "../hooks/use-preference";
 import { confirmDelete } from "../utils/confirm-delete";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
@@ -37,7 +38,7 @@ function ExampleListPage() {
       else next.delete("page");
       return next;
     });
-  const itemsPerPage = 15;
+  const itemsPerPage = useRowsPerPage();
   const hasFetched = useRef(false);
 
   // Sort state from URL params

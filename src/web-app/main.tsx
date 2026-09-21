@@ -10,7 +10,7 @@ import ErrorBoundary from './components/error-boundary.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MantineProvider>
+    <MantineProvider defaultColorScheme="auto">
       <ModalsProvider>
         <Notifications position="bottom-right" />
         <ErrorBoundary>

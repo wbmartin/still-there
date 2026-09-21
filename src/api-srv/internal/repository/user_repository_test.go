@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/suite"
 	"github.com/wbmartin/starter-api/internal/model"
@@ -689,4 +690,55 @@ func (s *UserRepositoryTestSuite) TestCurrentTimestamp() {
 
 	s.True(ts2 > ts1, "Second timestamp should be greater than first")
 	s.True(ts1 > 0, "Timestamp should be positive")
+}
+
+// GET/PUT /me round trip: read by id, narrow update of the profile columns
+// and the preferences document, optimistic lock, and nothing else touched.
+func (s *UserRepositoryTestSuite) TestOwnProfileRoundTrip() {
+	user := &model.AppUserModel{
+		UserName:                   "ProfileUser_" + time.Now().Format("20060102150405"),
+		PwHash:                     "$2a$10$example.hash.here",
+		FirstName:                  "Before",
+		LastName:                   "Change",
+		Email:                      "before@example.com",
+		SecurityContext:            1,
+		AppUserGroupMembershipList: []int{1},
+		CreateTS:                   1234567890.123,
+		CreateUserID:               1,
+		UpdateTS:                   1234567890.123,
+		UpdateUserID:               1,
+	}
+	created, err := s.repo.CreateUser(context.Background(), user, 1)
+	s.Require().NoError(err)
+
+	read, err := s.repo.RetrieveUserByID(context.Background(), created.AppUserID, 1)
+	s.Require().NoError(err)
+	s.Equal("Before", read.FirstName)
+	s.Nil(read.PreferenceJSONB) // no preferences yet: SQL NULL
+
+	newTS, err := s.repo.UpdateOwnProfile(context.Background(),
+		created.AppUserID, 1, "After", "Changed", "after@example.com",
+		json.RawMessage(`{"colorScheme": "dark", "rowsPerPage": 25}`), read.UpdateTS)
+	s.Require().NoError(err)
+	s.Greater(newTS, read.UpdateTS)
+
+	updated, err := s.repo.RetrieveUserByID(context.Background(), created.AppUserID, 1)
+	s.Require().NoError(err)
+	s.Equal("After", updated.FirstName)
+	s.Equal("after@example.com", updated.Email)
+	s.Equal(newTS, updated.UpdateTS)
+	s.Equal(created.AppUserID, updated.UpdateUserID) // the user is their own updater
+	s.JSONEq(`{"colorScheme": "dark", "rowsPerPage": 25}`, string(updated.PreferenceJSONB))
+	s.Equal(user.UserName, updated.UserName)
+	s.Equal([]int{1}, updated.AppUserGroupMembershipList)
+
+	// Stale lock → ErrConflict; wrong context → ErrNotFound.
+	_, err = s.repo.UpdateOwnProfile(context.Background(),
+		created.AppUserID, 1, "X", "Y", "x@y.z", nil, read.UpdateTS)
+	s.ErrorIs(err, ErrConflict)
+	_, err = s.repo.UpdateOwnProfile(context.Background(),
+		created.AppUserID, 999, "X", "Y", "x@y.z", nil, newTS)
+	s.ErrorIs(err, ErrNotFound)
+	_, err = s.repo.RetrieveUserByID(context.Background(), created.AppUserID, 999)
+	s.ErrorIs(err, ErrNotFound)
 }
