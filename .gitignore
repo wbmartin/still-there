@@ -1,11 +1,7 @@
 .DS_Store
 examples
-bin/tools/*
 dist
 etc/crt/*.pem
-# Vault secrets (DATABASE_URL, JWT_SECRET, TOTP key); keep only the .example
-etc/vault-configs/*
-!etc/vault-configs/*.example
 tmp/
 src/api-srv/server
 tests/.venv/
