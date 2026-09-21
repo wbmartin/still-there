@@ -1,0 +1,25 @@
+#!/bin/bash
+# Self-signed TLS certificate for running the API locally with ENABLE_TLS=true.
+#   Output: etc/crt/api-srv-fullchain.pem, etc/crt/api-srv-privkey.pem (gitignored)
+# Local dev runs plain http by default (etc/loc-api-srv.env ENABLE_TLS=false);
+# this is for testing the TLS path itself. Real hosts get certificates from
+# certbot (doc/310-api-srv-cert-renewal.md, infra/*/bin/*-renew-web-certs).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+CRT_DIR="$PROJECT_ROOT/etc/crt"
+HOST="${1:-localhost}"
+
+command -v openssl >/dev/null 2>&1 || { echo "[ERROR] openssl not on PATH"; exit 1; }
+mkdir -p "$CRT_DIR"
+if [ -f "$CRT_DIR/api-srv-fullchain.pem" ] && [ "${FORCE:-0}" != 1 ]; then
+  echo "[ERROR] $CRT_DIR/api-srv-fullchain.pem exists; FORCE=1 to overwrite"; exit 1
+fi
+
+openssl req -x509 -newkey rsa:2048 -sha256 -days 365 -nodes \
+  -keyout "$CRT_DIR/api-srv-privkey.pem" -out "$CRT_DIR/api-srv-fullchain.pem" \
+  -subj "/CN=$HOST" -addext "subjectAltName=DNS:$HOST,IP:127.0.0.1" >/dev/null 2>&1
+chmod 600 "$CRT_DIR/api-srv-privkey.pem"
+echo "[ok] $CRT_DIR/api-srv-{fullchain,privkey}.pem for $HOST (365 days, self-signed)"
+echo "     set ENABLE_TLS=true in etc/loc-api-srv.env to use it"

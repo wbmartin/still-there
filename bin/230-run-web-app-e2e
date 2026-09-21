@@ -9,7 +9,7 @@ set -euo pipefail
 # here is a prerequisite the runner does not enforce for itself.
 #
 # Requires the loc-postgres container to be up (doc/060-dev-env-start.md) and
-# loc_<slug>_e2e_db to exist (bin/513-reset-e2e-db; global setup builds it
+# loc_<slug>_e2e_db to exist (bin/510-reset-test-db <name>; global setup builds it
 # on first run when it is missing).
 #
 # Ports 8082 and 5182, chosen so a developer's stack on 8080/5173 keeps

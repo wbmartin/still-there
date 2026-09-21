@@ -201,7 +201,7 @@ class TestErrorScenarios:
 
 #     def test_account_lockout_after_failed_attempts(self):
 #         """Test that account gets locked after too many failed login attempts"""
-#         base_url = os.environ.get("TEST_BASE_URL", "http://localhost:8080")
+#         base_url = os.environ["TEST_BASE_URL"]
 #         client = TestClient(base_url)
 
 #         # Attempt login with wrong password multiple times

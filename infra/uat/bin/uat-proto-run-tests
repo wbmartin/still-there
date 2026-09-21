@@ -11,4 +11,4 @@ for var in BUILD_STG; do
 done
 
 export TEST_ENV="$SRV_ROOT/etc/uat-proto-test.env"
-exec "$BUILD_STG/bin/200-run-tests" "$@"
+exec "$BUILD_STG/bin/300-run-tests" "$@"

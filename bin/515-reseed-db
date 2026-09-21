@@ -1,8 +1,11 @@
 #!/bin/bash
 
-# Return loc_<slug>_e2e_db to its seeded state, WITHOUT dropping it.
+# Return a scratch database to its seeded state, WITHOUT dropping it.
 #
-# The obvious way to reset is DROP DATABASE, which 513 does. It cannot be used
+#   bin/515-reseed-db                    # loc_<slug>_e2e_db (E2E_DB from etc/loc-test.env)
+#   bin/515-reseed-db loc_<slug>_test_db # any *_test_db / *_e2e_db
+#
+# The obvious way to reset is DROP DATABASE, which 510 does. It cannot be used
 # between test runs: the API server is already running by the time Playwright's
 # global setup executes, and dropping the database underneath it leaves every
 # connection in its pgx pool pointing at something that no longer exists. The
@@ -16,18 +19,22 @@
 # created is gone. The fixture is idempotent, so re-running it is the same
 # INSERTs 510 issued.
 #
-# Falls back to the full rebuild when the database is not there yet, so a fresh
-# checkout needs no separate setup step.
+# Falls back to the full rebuild (bin/510) when the database is not there yet,
+# so a fresh checkout needs no separate setup step.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # shellcheck disable=SC1091
-# shellcheck disable=SC1091
 source "$PROJECT_ROOT/etc/app.env"
+# shellcheck disable=SC1091
 [ -n "${TEST_PG_URL_BASE:-}" ] || source "$PROJECT_ROOT/etc/loc-test.env"
-E2E_DB="${E2E_DB:-loc_${APP_SLUG}_e2e_db}"
+DB="${1:-${E2E_DB:-loc_${APP_SLUG}_e2e_db}}"
+case "$DB" in
+  *_test_db|*_e2e_db) ;;
+  *) echo "[ERROR] Refusing to reseed '$DB': scratch databases end in _test_db or _e2e_db"; exit 1 ;;
+esac
 FIXTURES="$PROJECT_ROOT/src/api-srv/sql/fixtures/015-initialdata.sql"
 
 # Same psql selection as bin/510: inside the container when it is up, native
@@ -43,21 +50,21 @@ if [ -z "${PSQL:-}" ]; then
 fi
 export PGPASSWORD
 
-if ! $PSQL -d postgres -lqt | cut -d \| -f 1 | grep -qw "$E2E_DB"; then
-  echo "[INFO] $E2E_DB does not exist yet; building it"
-  exec "$SCRIPT_DIR/513-reset-e2e-db"
+if ! $PSQL -d postgres -lqt | cut -d \| -f 1 | grep -qw "$DB"; then
+  echo "[INFO] $DB does not exist yet; building it"
+  exec "$SCRIPT_DIR/510-reset-test-db" "$DB"
 fi
 
 # RESTART IDENTITY so ids are stable run to run: the seeded rows get the same
 # ids every time, which makes a failing run far easier to reason about
 # against the database. schema_migrations is deliberately not in the list.
-$PSQL -d "$E2E_DB" -q -v ON_ERROR_STOP=1 -c "
+$PSQL -d "$DB" -q -v ON_ERROR_STOP=1 -c "
 TRUNCATE TABLE
   example,
   app_user,
   app_user_group
 RESTART IDENTITY CASCADE;"
 
-$PSQL -d "$E2E_DB" -q -v ON_ERROR_STOP=1 < "$FIXTURES"
+$PSQL -d "$DB" -q -v ON_ERROR_STOP=1 < "$FIXTURES"
 
-echo "[INFO] e2e fixtures reset"
+echo "[INFO] $DB reseeded"

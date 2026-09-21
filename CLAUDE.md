@@ -8,8 +8,8 @@ here.
 
 ## Layout
 
-- `bin/` — numbered scripts: `1xx` build, `2xx` run/test-runner, `3xx`
-  tests, `4xx` certs, `5xx` db, `6xx` deploy.
+- `bin/` — numbered scripts: `1xx` build, `2xx` run, `3xx` tests, `4xx`
+  certs, `5xx` db, `6xx` deploy.
 - `etc/app.env` — the app's identity (`APP_SLUG`, `APP_DISPLAY_NAME`);
   every `bin/` script derives names from it. `DERIVING.md` + `bin/000-rebrand`
   turn this template into a new app.

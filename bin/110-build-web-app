@@ -1,0 +1,25 @@
+#!/bin/bash
+# Build the web app (vite, production) and pack it for a hand deploy.
+#   Output: dist/<slug>-web_YYYYMMDD_hhmmss.tar.gz  (dist/ is gitignored)
+# The presales deploy (bin/600) does its own build; this is for anyone who
+# wants the tarball alone.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
+cd "$PROJECT_ROOT"
+
+command -v npm >/dev/null 2>&1 || { echo "[ERROR] npm not on PATH"; exit 1; }
+mkdir -p dist
+TARBALL="$PROJECT_ROOT/dist/${APP_SLUG}-web_$(date +%Y%m%d_%H%M%S).tar.gz"
+
+echo "[1/2] vite build"
+( cd src/web-app && rm -rf dist && npm run build >/dev/null )
+[ -f src/web-app/dist/index.html ] || { echo "[ERROR] web build produced no index.html"; exit 1; }
+
+echo "[2/2] pack"
+COPYFILE_DISABLE=1 tar --no-xattrs -C src/web-app/dist -czf "$TARBALL" .
+echo "      $TARBALL ($(du -h "$TARBALL" | cut -f1))"
+echo "Deploy by extracting it into the directory nginx serves (web-pub/)."

@@ -9,7 +9,7 @@ class TestAuthentication:
 
     def test_successful_authentication(self):
         """Test successful login with valid credentials"""
-        base_url = os.environ.get("TEST_BASE_URL", "http://localhost:8080")
+        base_url = os.environ["TEST_BASE_URL"]
         client = TestClient(base_url)
         response = client.authenticate("admin", "admin123!")
 
@@ -26,7 +26,7 @@ class TestAuthentication:
 
     def test_invalid_credentials(self):
         """Test authentication with invalid credentials"""
-        base_url = os.environ.get("TEST_BASE_URL", "http://localhost:8080")
+        base_url = os.environ["TEST_BASE_URL"]
         client = TestClient(base_url)
         with pytest.raises(requests.HTTPError):
             client.authenticate("invalid", "invalid")
@@ -66,7 +66,7 @@ class TestAuthentication:
 
     def test_malformed_auth_request(self):
         """Test authentication with malformed request"""
-        base_url = os.environ.get("TEST_BASE_URL", "http://localhost:8080")
+        base_url = os.environ["TEST_BASE_URL"]
         client = TestClient(base_url)
 
         # Missing password
@@ -90,7 +90,7 @@ class TestAuthentication:
 
     def test_health_check(self):
         """Test that health endpoint works without authentication"""
-        base_url = os.environ.get("TEST_BASE_URL", "http://localhost:8080")
+        base_url = os.environ["TEST_BASE_URL"]
         response = requests.get(f"{base_url}/health", verify=False)
         assert response.status_code == 200
 

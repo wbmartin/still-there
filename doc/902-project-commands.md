@@ -41,10 +41,10 @@ To run the web app (Vite on :5173, proxying /api to :8080):
 
 To build and package the web app for deployment:
 ```
-./bin/222-build-web-app
+./bin/110-build-web-app
 ```
-- Builds the web app using `npm run build`
-- Creates a timestamped tar.gz archive (e.g., `web-app_20251221_074106.tar.gz`)
+- Builds the web app using `vite build`
+- Creates a timestamped tar.gz archive in `dist/` (e.g., `<slug>-web_20251221_074106.tar.gz`)
 - Archive contains all built files ready for deployment
 - Copy the archive to your web server and extract with `tar -xzf filename.tar.gz`
 
@@ -52,10 +52,12 @@ To build and package the web app for deployment:
 
 The one command, on a laptop or a build host:
 ```
-./bin/200-run-tests          # all: go + e2e + py
-./bin/200-run-tests go       # go vet + go test (seconds; run before every commit)
-./bin/200-run-tests e2e      # Playwright only
-./bin/200-run-tests py       # pytest HTTP suite against a private API instance
+./bin/300-run-tests            # all: go + unit + e2e + py (load is not part of all)
+./bin/300-run-tests go         # go vet + go test (seconds; run before every commit)
+./bin/300-run-tests unit       # vitest (src/web-app/tests)
+./bin/300-run-tests e2e        # Playwright only
+./bin/300-run-tests py         # pytest HTTP suite against a private API instance
+./bin/300-run-tests load       # load test against a running API (see below); not part of `all`
 ```
 - Sources `etc/loc-test.env` (override the file with `TEST_ENV=...`):
   scratch database names, `TEST_PG_URL_BASE` for the migrator,
@@ -66,15 +68,18 @@ The one command, on a laptop or a build host:
   suite that cannot reach the database SKIPS (see
   `internal/repository/testdb_test.go`); the runner greps for that skip and
   fails the run, so a green run always includes the integration suites.
-- `e2e`: rebuilds `loc_proto_e2e_db` via `bin/513`, installs Chromium if
+- `unit`: `npm run test:unit` (vitest) against `src/web-app/tests`.
+- `e2e`: rebuilds `loc_proto_e2e_db` via `bin/510`, installs Chromium if
   needed, runs `bin/230-run-web-app-e2e`.
 - `py`: rebuilds `loc_proto_e2e_db`, builds the API and starts it on
   `127.0.0.1:8082` from a copy of `etc/e2e-api-srv.env` with the developer
-  rate limits (the pytest suite asserts a 429), runs
-  `bin/320-test-web-service --skip-lint`, stops the API.
-- Logs land in `tmp/test-logs/` (`go-test.log`, `playwright.log`,
-  `pytest.log`, `py-api.log`). Ends with a summary line, e.g.
-  `[INFO] tests passed (all): go=105 e2e=3 py=63`.
+  rate limits (the pytest suite asserts a 429), bootstraps the pytest venv
+  at `tests/.venv` itself, runs the suite, stops the API.
+- `load`: delegates to `bin/330-test-load` (see below).
+- No test script writes to the source tree any more: pytest's HTML report
+  goes to `tmp/test-reports/`; logs land in `tmp/test-logs/` (`go-test.log`,
+  `playwright.log`, `pytest.log`, `py-api.log`). Ends with a summary line,
+  e.g. `[INFO] tests passed (all): go=105 unit=42 e2e=3 py=63`.
 - Requires the `loc-postgres` container (doc/060-dev-env-start.md); nothing
   else -- the e2e API config has `DATABASE_URL` inline.
 
@@ -85,44 +90,41 @@ To run the Playwright end-to-end suite directly:
 ```
 - `src/web-app/playwright.config.ts` starts its own stack: the Go API on
   :8082 from `etc/e2e-api-srv.env` and Vite on :5182 proxying to it, so a
-  developer's 8080/5173 keep running. Global setup runs `bin/514`, signs in
+  developer's 8080/5173 keep running. Global setup runs `bin/515`, signs in
   once as the fixture user (`admin` / `admin123!`) and saves the cookie to
-  `tests/e2e/.auth/` (gitignored); specs start already signed in.
+  `tests/e2e/.auth/` (gitignored); specs start already signed in. The
+  reseed is skipped when `bin/300` already rebuilt the database
+  (`E2E_DB_SEEDED=1`), so a `bin/300-run-tests` run reseeds only once.
 - Specs are `src/web-app/tests/e2e/*.spec.ts`; vitest owns `*.test.ts`.
 
-To test the api server (repository + model unit tests, with coverage):
-```
-./bin/310-test-repo-model
-```
-- Connects via `TEST_DATABASE_URL` when set, otherwise through
-  `etc/loc-api-srv.env`. Prefer `./bin/200-run-tests go`.
-
-To test the api server (pytest HTTP suite against a server you started):
-```
-./bin/320-test-web-service                                   # server from etc/loc-api-srv.env
-TEST_API_ENV=etc/e2e-api-srv.env ./bin/320-test-web-service # another server's config
-```
-
-To load test the api server:
+To load test the api server against a server you started (reads
+`TEST_BASE_URL` from `etc/loc-api-srv.env`, or `LOAD_TEST_ENV=<file>` for
+another):
 ```
 ./bin/330-test-load
+./bin/330-test-load --user admin --password 'admin123!'   # defaults shown
+./bin/330-test-load --insecure                             # opt-in TLS skip
 ```
+- Builds `src/load-test` (its own Go module) and writes its report to
+  `tmp/test-reports/`.
 
 ## Scratch Databases
 
 ```
-./bin/510-reset-test-db [dbname]   # default loc_proto_test_db
-./bin/513-reset-e2e-db             # loc_proto_e2e_db (thin wrapper on 510)
-./bin/514-reset-e2e-fixtures       # TRUNCATE + re-seed e2e db without dropping it
+./bin/510-reset-test-db [dbname]   # default loc_proto_test_db; DROP + rebuild
+./bin/515-reseed-db [dbname]       # default loc_proto_e2e_db; TRUNCATE + re-seed without dropping
 ```
 - `510`: DROP + CREATE, `sql/roles.sql`, schema through `cmd/migrate up`,
   then `sql/fixtures/015-initialdata.sql`. Refuses any name not ending in
   `_test_db` or `_e2e_db`. Uses psql inside the `loc-postgres` container
   when it is running (`PG_CONTAINER`), a native `psql` otherwise (`PSQL`
-  overrides); the migrator connects with `TEST_PG_URL_BASE`.
-- `513`/`514` source `etc/loc-test.env` when `TEST_PG_URL_BASE` is unset.
-- `514` is what Playwright's global setup calls: dropping the database under
-  a running API leaves its pool pointing at nothing.
+  overrides); the migrator connects with `TEST_PG_URL_BASE`. This also
+  covers what used to be the e2e-only reset: `bin/510-reset-test-db
+  loc_proto_e2e_db`.
+- `515` sources `etc/loc-test.env` when `TEST_PG_URL_BASE` is unset, and
+  falls back to `510` if the database doesn't exist yet.
+- `515` is what Playwright's global setup calls: dropping the database
+  under a running API leaves its pool pointing at nothing.
 - Users after a reset: `admin` / `admin123!` and `basic` / `basic123!`.
 
 ## Presales UAT Deploy
@@ -134,5 +136,5 @@ sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside
 - Settings come from `etc/uat-deploy.env` (`APP_NAME`, `UAT_HOST`, `PG_CONTAINER`,
   `LOCAL_ENV_FILE`, `APP_ROOT`, `SERVICE`, `SVC_USER`); `PRESALES_ENV=<file>`
   swaps the file. No inline defaults -- a missing key stops the run.
-- See doc/320-presales-uat-deploy.md. Run `./bin/200-run-tests` first.
+- See doc/320-presales-uat-deploy.md. Run `./bin/300-run-tests` first.
 - Post-sales pipeline placeholders: `infra/{uat,prd}/` (see `infra/README.md`).

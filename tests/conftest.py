@@ -4,7 +4,6 @@ import requests
 import time
 import warnings
 import urllib3
-import psycopg2
 from typing import Dict, Optional, List, Tuple
 
 # Suppress SSL warnings for local development
@@ -40,16 +39,12 @@ class TestClient:
 
         data = response.json()
 
-        # Check if MFA is required
-        if "temp_token" in data:
-            # MFA required, complete 2FA
-            temp_token = data["temp_token"]
-            response = self.session.post(f"{self.base_url}/auth2", json={
-                "tempToken": temp_token,
-                "totp": "123456"  # Placeholder TOTP code
-            })
-            response.raise_for_status()
-            data = response.json()
+        # The suite's users are seeded mfa_exempt (sql/fixtures). A second
+        # factor cannot be completed from a test, so say so rather than
+        # pretend: the old /auth2 branch here called an endpoint that does
+        # not exist (the real step is POST /mfaVerify with a TOTP code).
+        if "tempToken" in data or "temp_token" in data:
+            pytest.fail(f"user {username} requires MFA; test users must be mfa_exempt")
 
         # Extract tokens from final response
         # Manually parse Set-Cookie header for JWT token (workaround for HTTP/2 cookie issues)

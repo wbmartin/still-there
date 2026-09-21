@@ -32,10 +32,14 @@ export default async function globalSetup() {
   // time this executes, so dropping the database leaves every connection in
   // its pgx pool pointing at something that no longer exists -- the app then
   // renders "Cannot reach the server" and the suite fails for a reason that
-  // has nothing to do with the code under test. See bin/514.
-  execFileSync(resolve(HERE, "../../../../bin/514-reset-e2e-fixtures"), {
-    stdio: "inherit",
-  });
+  // has nothing to do with the code under test. See bin/515.
+  // bin/300-run-tests has just rebuilt the database when it sets
+  // E2E_DB_SEEDED; reseeding again would only cost time.
+  if (!process.env.E2E_DB_SEEDED) {
+    execFileSync(resolve(HERE, "../../../../bin/515-reseed-db"), {
+      stdio: "inherit",
+    });
+  }
 
   const session = await signIn(E2E_USER_NAME, E2E_PASSWORD);
 

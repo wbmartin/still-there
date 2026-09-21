@@ -7,28 +7,27 @@ over plain HTTP — there is no TLS locally.
 ## Running
 
 ```bash
-bin/200-run-tests py        # from the repo root; starts a private API
+bin/300-run-tests py        # from the repo root; starts a private API
                              # instance from etc/e2e-api-srv.env on
                              # http://127.0.0.1:8082, runs pytest, stops it
 ```
 
-or, against a server you start yourself:
+or, by hand against a server you start yourself:
 
 ```bash
-bin/215-run-api-srv          # reads TEST_BASE_URL from etc/loc-api-srv.env
-bin/320-test-web-service
+bin/215-run-api-srv                        # reads TEST_BASE_URL from etc/loc-api-srv.env
+TEST_BASE_URL=https://localhost:8080 tests/.venv/bin/python -m pytest tests/
 ```
 
-`bin/320-test-web-service` creates/updates a venv at `tests/.venv`,
-installs `tests/requirements.txt`, checks `GET /health`, then runs pytest
-with an HTML report written under `tests/reports/` (gitignored). Pass
-`--skip-lint` to skip the `npm run lint -- --fix` step it otherwise runs
-against `src/web-app` first.
+`bin/300-run-tests` bootstraps the venv at `tests/.venv` itself (creating
+it and installing `tests/requirements.txt` on first run), checks
+`GET /health`, then runs pytest with an HTML report written to
+`tmp/test-reports/` (gitignored).
 
 ## Configuration
 
 `TEST_BASE_URL` is read from `etc/loc-api-srv.env` (or the file
-`$TEST_API_ENV` points at) by `bin/320-test-web-service`, then exported
+`$TEST_API_ENV` points at) by `bin/300-run-tests`, then exported
 as the `TEST_BASE_URL` environment variable that `conftest.py` fixtures
 read directly. Local default: `http://localhost:8080`.
 
@@ -59,4 +58,4 @@ authenticates in one step. Fixtures:
 
 ## Requirements
 
-`requirements.txt`: pytest, requests, pytest-html, psycopg2-binary.
+`requirements.txt`: pytest, requests, pytest-html.

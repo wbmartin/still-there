@@ -59,7 +59,7 @@ export const signIn = async (
   if (!response.ok) {
     throw new Error(
       `fixture sign-in failed: ${response.status} ${text}. ` +
-        `Has bin/513-reset-e2e-db been run?`,
+        `Has bin/515-reseed-db been run?`,
     );
   }
 

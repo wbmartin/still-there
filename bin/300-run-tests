@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# The test run -- the same one on a laptop and on a build host.
+# The test gate -- the same one on a laptop and on a build host. The only
+# script that runs tests; none of them writes to the source tree.
 #
-#   bin/200-run-tests          # all: rebuild both scratch DBs, go vet + test,
-#                              #      playwright, pytest
-#   bin/200-run-tests go       # the Go suites only (seconds; run before every commit)
-#   bin/200-run-tests e2e      # Playwright only (bin/230-run-web-app-e2e)
-#   bin/200-run-tests py       # pytest HTTP suite (tests/) against a private
+#   bin/300-run-tests          # all: rebuild both scratch DBs, go vet + test,
+#                              #      vitest, playwright, pytest
+#   bin/300-run-tests go       # the Go suites only (seconds; run before every commit)
+#   bin/300-run-tests unit     # vitest (src/web-app/tests), no database
+#   bin/300-run-tests e2e      # Playwright only (bin/230-run-web-app-e2e)
+#   bin/300-run-tests py       # pytest HTTP suite (tests/) against a private
 #                              #   API instance this script starts and stops
+#   bin/300-run-tests load     # bin/330-test-load against a running API (not in all)
+#
+# Output: tmp/test-logs/ (logs, the private API's env and binary) and
+# tmp/test-reports/ (pytest HTML). Both gitignored.
 #
 # Everything environment-specific comes from ONE sourced file, so "it passed
 # for me" and "it passed on the host" mean the same thing:
@@ -22,7 +28,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 MODE="${1:-all}"
-case "$MODE" in all|go|e2e|py) ;; *) echo "usage: $0 [all|go|e2e|py]"; exit 2 ;; esac
+case "$MODE" in all|go|unit|e2e|py|load) ;; *) echo "usage: $0 [all|go|unit|e2e|py|load]"; exit 2 ;; esac
 
 # shellcheck disable=SC1091
 source "$PROJECT_ROOT/etc/app.env"
@@ -39,13 +45,14 @@ export E2E_API_ENV
 [ -r "$E2E_API_ENV" ] || { echo "[ERROR] e2e API env not readable: $E2E_API_ENV"; exit 1; }
 LOG_DIR="${TEST_LOG_DIR:-$PROJECT_ROOT/tmp/test-logs}"
 case "$LOG_DIR" in /*) ;; *) LOG_DIR="$PROJECT_ROOT/$LOG_DIR" ;; esac
-mkdir -p "$LOG_DIR"
+REPORT_DIR="$PROJECT_ROOT/tmp/test-reports"
+mkdir -p "$LOG_DIR" "$REPORT_DIR"
 
 for tool in go npm; do
     command -v "$tool" >/dev/null 2>&1 || { echo "[ERROR] $tool not on PATH"; exit 1; }
 done
 
-GO_COUNT=0; E2E_COUNT=0; PY_COUNT=0
+GO_COUNT=0; UNIT_COUNT=0; E2E_COUNT=0; PY_COUNT=0
 SUMMARY=()
 
 # ------------------------------------------------------------------------------
@@ -81,10 +88,26 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
 fi
 
 # ------------------------------------------------------------------------------
+if [ "$MODE" = all ] || [ "$MODE" = unit ]; then
+    pushd "$PROJECT_ROOT/src/web-app" > /dev/null
+    echo "[INFO] vitest"
+    UNIT_LOG="$LOG_DIR/vitest.log"
+    if ! NO_COLOR=1 npx vitest run > "$UNIT_LOG" 2>&1; then
+        echo "[ERROR] vitest failed -- full log: $UNIT_LOG"
+        grep -E 'FAIL|×|Error' "$UNIT_LOG" | head -30
+        exit 1
+    fi
+    UNIT_COUNT=$(grep -oE 'Tests\s+[0-9]+ passed' "$UNIT_LOG" | grep -oE '[0-9]+' | head -1)
+    echo "[INFO] unit: $UNIT_COUNT passed"
+    SUMMARY+=("unit=$UNIT_COUNT")
+    popd > /dev/null
+fi
+
+# ------------------------------------------------------------------------------
 if [ "$MODE" = all ] || [ "$MODE" = e2e ]; then
     echo "[INFO] Rebuilding $E2E_DB"
-    "$SCRIPT_DIR/513-reset-e2e-db" > "$LOG_DIR/reset-e2e-db.log" 2>&1 \
-        || { echo "[ERROR] bin/513 failed -- $LOG_DIR/reset-e2e-db.log:"; tail -20 "$LOG_DIR/reset-e2e-db.log"; exit 1; }
+    "$SCRIPT_DIR/510-reset-test-db" "$E2E_DB" > "$LOG_DIR/reset-e2e-db.log" 2>&1 \
+        || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-e2e-db.log:"; tail -20 "$LOG_DIR/reset-e2e-db.log"; exit 1; }
 
     pushd "$PROJECT_ROOT/src/web-app" > /dev/null
     # The browser download is a no-op once cached. Its system libraries are a
@@ -92,7 +115,9 @@ if [ "$MODE" = all ] || [ "$MODE" = e2e ]; then
     echo "[INFO] playwright"
     npx playwright install chromium
     E2E_LOG="$LOG_DIR/playwright.log"
-    if ! "$SCRIPT_DIR/230-run-web-app-e2e" 2>&1 | tee "$E2E_LOG"; then
+    # The database was just rebuilt and seeded; tell global setup not to
+    # reseed it a second time (it does when Playwright runs on its own).
+    if ! E2E_DB_SEEDED=1 "$SCRIPT_DIR/230-run-web-app-e2e" 2>&1 | tee "$E2E_LOG"; then
         echo "[ERROR] playwright failed -- full log: $E2E_LOG"
         exit 1
     fi
@@ -104,14 +129,14 @@ fi
 
 # ------------------------------------------------------------------------------
 if [ "$MODE" = all ] || [ "$MODE" = py ]; then
-    # bin/320 expects a server that is already listening. Start a private one
-    # on :8082 from the e2e config -- same database and fixtures Playwright
-    # uses, rebuilt first so the suite never sees another run's leftovers --
-    # and stop it again whatever happens.
+    # pytest expects a server that is already listening. Start a private one
+    # on the e2e port from the e2e config -- same database and fixtures
+    # Playwright uses, rebuilt first so the suite never sees another run's
+    # leftovers -- and stop it again whatever happens.
     command -v python3 >/dev/null 2>&1 || { echo "[ERROR] python3 not on PATH"; exit 1; }
     echo "[INFO] Rebuilding $E2E_DB"
-    "$SCRIPT_DIR/513-reset-e2e-db" > "$LOG_DIR/reset-e2e-db.log" 2>&1 \
-        || { echo "[ERROR] bin/513 failed -- $LOG_DIR/reset-e2e-db.log:"; tail -20 "$LOG_DIR/reset-e2e-db.log"; exit 1; }
+    "$SCRIPT_DIR/510-reset-test-db" "$E2E_DB" > "$LOG_DIR/reset-e2e-db.log" 2>&1 \
+        || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-e2e-db.log:"; tail -20 "$LOG_DIR/reset-e2e-db.log"; exit 1; }
 
     API_LOG="$LOG_DIR/py-api.log"
     # The e2e config lifts the rate limits so Playwright's page-load bursts
@@ -156,10 +181,24 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     done
     curl -sf "$API_BASE_URL/health" >/dev/null 2>&1 || { echo "[ERROR] API never became healthy. $API_LOG:"; tail -20 "$API_LOG"; exit 1; }
 
+    # The venv's binaries are called by path rather than through `activate`:
+    # activate bakes in the absolute path the venv was created at, so a moved
+    # checkout would silently fall through to the system python. A venv whose
+    # python no longer runs is rebuilt.
+    VENV_DIR="$PROJECT_ROOT/tests/.venv"
+    VENV_PY="$VENV_DIR/bin/python3"
+    if [ ! -x "$VENV_PY" ] || ! "$VENV_PY" -c 'import sys' >/dev/null 2>&1; then
+        echo "[INFO] Creating $VENV_DIR"
+        rm -rf "$VENV_DIR"
+        python3 -m venv "$VENV_DIR"
+    fi
+    "$VENV_PY" -m pip install -q -r "$PROJECT_ROOT/tests/requirements.txt"
+
     PY_LOG="$LOG_DIR/pytest.log"
-    echo "[INFO] pytest (bin/320-test-web-service against $API_BASE_URL)"
-    # --skip-lint: a test run must not rewrite web-app sources.
-    if ! TEST_API_ENV="$PY_API_ENV" "$SCRIPT_DIR/320-test-web-service" --skip-lint 2>&1 | tee "$PY_LOG"; then
+    PY_REPORT="$REPORT_DIR/pytest_$(date +%Y%m%d_%H%M%S).html"
+    echo "[INFO] pytest against $API_BASE_URL (report: $PY_REPORT)"
+    if ! (cd "$PROJECT_ROOT" && TEST_BASE_URL="$API_BASE_URL" "$VENV_PY" -m pytest tests \
+            --maxfail=1 -v --tb=short --html="$PY_REPORT" --self-contained-html) 2>&1 | tee "$PY_LOG"; then
         echo "[ERROR] pytest failed -- full log: $PY_LOG, API log: $API_LOG"
         exit 1
     fi
@@ -168,6 +207,14 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     SUMMARY+=("py=$PY_COUNT")
     stop_api
     trap - EXIT
+fi
+
+# ------------------------------------------------------------------------------
+if [ "$MODE" = load ]; then
+    # Not part of "all": it needs a developer's API already running and takes
+    # a minute by design.
+    "$SCRIPT_DIR/330-test-load"
+    SUMMARY+=("load=done")
 fi
 
 echo "[INFO] tests passed ($MODE): ${SUMMARY[*]}"

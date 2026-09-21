@@ -1,7 +1,7 @@
 ---
 id: PS0014
 title: Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps
-status: ready
+status: in-review
 blocked_by:
 waiting_on:
 priority: medium
@@ -128,20 +128,91 @@ two tickets takes it).
   test (a test `AppServices` with the in-process KV and a buffer logger is
   cheap after PS0003) or stay covered by pytest only.
 
-## Acceptance
+## What changed and why
 
-- `bin/300-run-tests all` runs Go + vitest + Playwright (+ pytest if kept)
-  and is the only gate; no test script mutates sources.
-- Every `bin/` script sources its env file and dies by key name; no
-  `localhost:` literal outside `etc/`.
-- One e2e reseed per run.
-- `git status` clean after `bin/300 all`.
-- `doc/902-project-commands.md`, `README.md` key-commands table,
-  `ticket-workflow` skill check step, `tests/README.md` all match.
+Branch `TKT-PS0014-test-harness-and-bin-numbering`. pytest stays (Brandon).
+The layout is the ticket's proposal, executed:
+
+| Script | Was | Now |
+|---|---|---|
+| `300-run-tests [all\|go\|unit\|e2e\|py\|load]` | `200-run-tests [all\|go\|e2e\|py]` | the one gate. **`unit`** runs vitest (28 tests, never wired before). **`py`** bootstraps `tests/.venv` and runs pytest itself (320 gone), report to `tmp/test-reports/`. **`load`** calls 330 (not in `all`). Logs in `tmp/test-logs/`. |
+| `110-build-web-app` | `222-build-web-app` | build band; tarball `dist/<slug>-web_<ts>.tar.gz` (was the repo root); env contract. |
+| `515-reseed-db [name]` | `514-reset-e2e-fixtures` | truncate + fixtures for any scratch db; falls back to 510. `513` deleted (`510 <name>`). |
+| `400-make-local-dev-certs` | — | self-signed `etc/crt/api-srv-*.pem` for the TLS path; the `4xx` band is no longer empty. |
+| `330-test-load` | ad-hoc | env contract (`TEST_BASE_URL` from `etc/loc-api-srv.env`, die by name; the old `\|\| echo localhost` fallback never fired), health check first, report to `tmp/test-reports/`. |
+| `215-run-api-srv` | `tmp/server.*` CWD-relative | `$PROJECT_ROOT/tmp/api-srv/server.{log,pid}`, `mkdir -p`. |
+| deleted | `310-test-repo-model`, `320-test-web-service` | both mutated sources (`golines -w`, `eslint --fix`); 310 was a subset of `300 go`. |
+
+**One e2e reseed per run.** `300 e2e` rebuilds via 510 and exports
+`E2E_DB_SEEDED=1`; `global-setup.ts` then skips its own reseed. A bare
+`npx playwright test` still reseeds itself (via 515). `300 py` rebuilds
+its own instance's database — two rebuilds in `all`, one per suite, by
+design.
+
+**Ports and passwords derived, not repeated.** `playwright.config.ts`
+reads `SERVER_PORT` and `SERVER_BIND_ADDRESS` from the e2e API env file
+(exported as `E2E_API_ENV_PATH`); the hard-coded 8082 is gone.
+`etc/loc-test.env` and `infra/uat/etc/uat-proto-test.env` hold
+`PGUSER/PGPASSWORD/PGHOST/PGPORT` once and build `TEST_PG_URL_BASE` and
+`TEST_DATABASE_URL` from them (password ×3 → ×1). `vite.config.ts` and
+`tests/test_auth_flow.py` lose their `localhost:8080` fallbacks; the
+values live in `.env.development` / `TEST_BASE_URL` and a missing one
+fails by name.
+
+**`cmd/load-test` → `src/load-test/`**, its own Go module (stdlib only),
+so `go build ./...` in the API no longer builds a tool whose TLS check
+was off. `--user`/`--password` flags (default the seeded admin) replace
+the hard-coded credentials; `--insecure` (default false) replaces the
+unconditional `InsecureSkipVerify`; reports go to `tmp/test-reports/`.
+
+**Coverage.** 50 new Go unit tests (subagent, verified): `auth/jwt_test.go`
+(round trip, wrong secret, tampered, expired, alg=none rejected),
+`auth/password_test.go` (round trip, salt randomness, 10 malformed-hash
+cases without panic), `auth/rbac_test.go`, `security/security_headers_test.go`
+(headers, assets exemption, no-cache on /health, CORS allowed/denied/
+preflight), `repository/scoped_query_test.go` (`buildScopedWhere`,
+`withLiveParent`, `buildParentScopedWhere` — placeholder numbering).
+Go 113 → 163. Web unit coverage gaps (pages, `use-auth-guard`, store
+extras) are listed in the ticket and left for PS0012/PS0013 — vitest is
+now in the gate so they will count when written.
+
+**pytest hygiene.** `pytest 8.4.2`, `requests 2.32.5` (CVE-2024-35195
+fixed), `psycopg2-binary` removed (never used). The dead `/auth2` branch
+in `conftest.py` (PS0006 finding) replaced by a `pytest.fail` naming the
+`mfa_exempt` requirement.
+
+**Docs** (subagent sweep, greps clean): `README.md`, `DERIVING.md`,
+`CLAUDE.md` Layout, `doc/902`, `doc/330`, `tests/README.md`,
+`infra/README.md`, `ticket-workflow` skill, package READMEs, plus
+comment-only updates in the env files and tests that named `bin/200`,
+`513`, `514`, `320`.
+
+## Files modified
+
+- `bin/`: `300-run-tests` (from 200), `110-build-web-app` (from 222), `515-reseed-db` (from 514), `400-make-local-dev-certs` (new), `330-test-load`, `215-run-api-srv`, `230-run-web-app-e2e`; deleted `310`, `320`, `513`
+- `src/load-test/{go.mod,main.go,client.go}` (from `src/api-srv/cmd/load-test/`)
+- `src/api-srv/internal/{auth,security,repository}/*_test.go` (5 new)
+- `src/web-app/playwright.config.ts`, `vite.config.ts`, `tests/e2e/global-setup.ts`
+- `etc/loc-test.env`, `infra/uat/etc/uat-proto-test.env`, `infra/uat/bin/uat-proto-run-tests`
+- `tests/requirements.txt`, `tests/conftest.py`, `tests/test_auth_flow.py`, `tests/test_z_error_scenarios.py`
+- `.gitignore` (the `tests/reports/` line)
+- docs listed above
+
+## Endpoints introduced or modified
+
+None.
+
+## Acceptance (met 2026-09-21)
+
+- [x] `bin/300-run-tests all` runs Go + vitest + Playwright + pytest and is the only gate: **go=163 unit=28 e2e=3 py=63**; no test script mutates sources.
+- [x] Every `bin/` script sources its env file and dies by key name; `localhost:` literals outside `etc/`: only `playwright.config.ts`'s own web origin (`http://localhost:${E2E_WEB_PORT}` — the port the suite hosts) and `src/web-app/.env.development` (an env file).
+- [x] One e2e reseed per run (playwright.log shows no reseed under `300`; standalone run reseeds once).
+- [x] `git status` clean after `bin/300 all`.
+- [x] `doc/902`, `README.md`, `ticket-workflow` skill, `tests/README.md` match (grep for retired names empty).
 
 ## Deploy needs
 
-None. `deployed: none`.
+None (`deployed: none`). The UAT build host's `uat-proto-run-tests` now calls `bin/300`; its `uat-proto-test.env` gains `PGUSER/PGHOST/PGPORT` — carry across by hand per `infra/README.md`.
 
 ## Direction (Brandon, 2026-09-21)
 
