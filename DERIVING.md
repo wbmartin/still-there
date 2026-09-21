@@ -86,7 +86,8 @@ bin/215-run-api-srv && bin/220-run-web-app                                 # htt
 ## 7. Check
 
 ```bash
-grep -rn -i 'proto\|wbmartin' bin etc src infra scripts .claude CLAUDE.md README.md doc \
+# pr[o]to: spelled so bin/000-rebrand leaves this line alone
+grep -rn -i 'pr[o]to\|wbmartin' bin etc src infra scripts .claude CLAUDE.md README.md doc \
   | grep -v 'ProtoStack\|protocol\|X-Forwarded-Proto\|lockKey'
 ```
 
