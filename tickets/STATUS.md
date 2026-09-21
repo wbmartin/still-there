@@ -6,7 +6,7 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 17:21 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 17:33 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
@@ -18,13 +18,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0017** | Passkey (WebAuthn) as a second factor | low | security |
 | **PS0018** | User profile page: preferences and avatar | low | web |
 
-## Engineering — in progress (1)
-
-| Ticket | Title | Claimed |
-|---|---|---|
-| **PS0012** | Web — fix the entity-page bugs; document that pages are deliberate scaffolding | 2026-09-21 by TKT-PS0012-web-entity-pages-and-routing |
-
-## Engineering — merged, awaiting validation (9)
+## Engineering — merged, awaiting validation (10)
 
 | Ticket | Title | Merged | Deployed |
 |---|---|---|---|
@@ -34,6 +28,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0007** | Single rename point and a "deriving a new app" checklist | 9d74ba9 | — |
 | **PS0008** | Split internal/app_lib into packages named by role (no KV/log interfaces) | 5ce23c6 | — |
 | **PS0009** | Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable | 0985e19 | — |
+| **PS0012** | Web — fix the entity-page bugs; document that pages are deliberate scaffolding | f76f1fb | — |
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | 6f0aff1 | — |
 | **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | 1fa0001 | — |
 | **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | 67bb62c | — |
