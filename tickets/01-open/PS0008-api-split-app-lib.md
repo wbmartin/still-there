@@ -31,7 +31,7 @@ model or repository:
 
 | File | Contents |
 |---|---|
-| `config.go` | env-file parser, `Config` struct, and (until PS0003) `VaultClient` |
+| `config.go` | env-file parser, `Config` struct (VaultClient gone with PS0003) |
 | `auth.go` | JWT sign/verify (HS256), Argon2id password hashing |
 | `app_helper.go` | per-request security check orchestrator (`AppHelper`), two rate-limit implementations, user-block check |
 | `kv_memory.go` | in-process KV store (the only one after PS0003) |
@@ -48,7 +48,7 @@ AES-GCM seed encryption that belong beside the other crypto.
 ```
 internal/config/    env loader, Config struct
 internal/auth/      jwt.go, password.go (argon2), totp.go (from user_mfa_handler), rbac.go, claims
-internal/security/  AppHelper as-is (PS0009 decides its future), rate limit, user block, client IP, security headers
+internal/security/  AppHelper as-is (explicit per-handler checks are by design — PS0009), rate limit, user block, client IP, security headers
 internal/cache/     the in-process store (concrete struct, no interface)
 internal/app/       AppServices without DBPool
 ```

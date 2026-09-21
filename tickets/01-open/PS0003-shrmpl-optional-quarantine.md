@@ -1,6 +1,6 @@
 ---
 id: PS0003
-title: Sunset the shrmpl kv and log clients and their local tooling; decide the vault
+title: Sunset the shrmpl kv, log and vault clients and all their local tooling
 status: ready
 blocked_by:
 waiting_on:
@@ -23,12 +23,7 @@ logging and KV. We will wire those in if there is ever a time." And
 pluggable KV interface, no pluggable logger — one concrete in-process
 KV store and `log/slog`.
 
-**Still open: the vault.** Brandon did not mention it. Recommendation:
-sunset it too (nothing deployed uses it; UAT/infra envs set
-`DATABASE_URL` directly; `etc/e2e-api-srv.env` already inlines secrets).
-If it stays, the hardcoded laptop path below becomes a config key and
-`bin/410` + the 9 `shrmpl_vault_*` certs stay. **Brandon to confirm
-before claiming.**
+**Vault (Brandon, 2026-09-21): goes away too.** Nothing pending; claimable.
 
 ## Background
 
@@ -44,7 +39,7 @@ e2e/infra envs. The template still carries the full local stack.
 | bin | `010-download-shrmpl`, `210-run-shrmpl-app-infra`, `211-stop-shrmpl-app-infra` (also does `pkill -f vite`) |
 | etc | `loc-shrmpl-kv-srv.env`, `loc-shrmpl-log-srv.env`; `bin/tools/*` (gitignored binaries — note in the doc that they can be deleted locally); `.gitignore` entry `bin/tools/*` |
 | docs | `doc/050`, `doc/060`, `doc/105`, `doc/902`, `README.md` drop 010/210/211 from the start-up path; `doc/811-non-entity-notes.md` (shrmpl client notes) → PS0006's history archive |
-| vault, if sunset | `VaultClient` in `config.go:42-141`, the five `VAULT_*` keys, `bin/410-regenerate-vault-mtls-certs`, `etc/loc-shrmpl-vault-srv.env`, `etc/vault-configs/` (PS0002 untracks it first), 9 `etc/crt/shrmpl_vault_*.pem` (gitignored), `doc/850-mtls-troubleshooting.md` → history |
+| vault | `VaultClient` in `config.go:42-141`, the five `VAULT_*` keys, `bin/410-regenerate-vault-mtls-certs`, `etc/loc-shrmpl-vault-srv.env`, `etc/vault-configs/` (PS0002 untracks it first), 9 `etc/crt/shrmpl_vault_*.pem` (gitignored), `doc/850-mtls-troubleshooting.md` → history |
 
 `infra/*/shrmpl-etc/` is **shrmpl-hook**, the webhook receiver for the
 post-sales pipeline — a different product. Not in scope; PS0004 documents
@@ -69,8 +64,8 @@ it.
   failing by default (PS0004 background).
 - `config.go:70` hardcoded
   `/Users/brandon/Code/ProtoStack-ReactGo/etc/crt/shrmpl_vault_server_fullchain.pem`
-  goes with the vault, or becomes `VAULT_SERVER_CERT_PATH` if the vault
-  stays.
+  goes with the vault. Secrets for every environment come from the env
+  file (`SERVERONLY`-redacted in the repo, as infra/ already does).
 
 ## Acceptance
 
@@ -85,7 +80,7 @@ it.
 ## Deploy needs
 
 Go binary. UAT env file loses `KV_BACKEND`, `LOG_RECEIVER_HOST_PORT`
-(and `VAULT_*` if sunset) — update `etc/uat-api-srv.env.example`,
+and `VAULT_*` — update `etc/uat-api-srv.env.example`,
 `infra/*/etc/*-api.env` redacted copies, and the live UAT env at deploy.
 
 ## Related

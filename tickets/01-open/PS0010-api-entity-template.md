@@ -1,8 +1,8 @@
 ---
 id: PS0010
 title: Make the example entity a lean, copyable template — error mapping, scoped queries, retry removal, doc/810 rewrite
-status: blocked
-blocked_by: [PS0009]
+status: needs-triage
+blocked_by: 
 waiting_on:
 priority: high
 domain: api
@@ -112,8 +112,11 @@ must not).
 
 ## Direction (Brandon, 2026-09-21)
 
-"It's anticipated more complicated scenarios; discuss after PS0009." Do
-not claim. Some of what reads as ceremony (per-method error switches,
+"It's anticipated more complicated scenarios; discuss after PS0009."
+PS0009 is now decided (explicit per-handler checks stay, by design), so
+strike the "ceremony per handler method" security-check portion of this
+ticket entirely; the error-mapping switch and the rest are what is left
+to discuss. **Discussion still pending; do not claim.** Some of what reads as ceremony (per-method error switches,
 positional scans, separate existence checks) is headroom for entities
 that will not be simple CRUD. The discussion should sort each item into
 *headroom to keep* vs *drift to fix*; the review's candidates for

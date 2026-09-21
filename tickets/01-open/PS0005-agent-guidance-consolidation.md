@@ -92,8 +92,12 @@ Folding into `CLAUDE.md` is fine **but do not bloat context.** So:
   lines and be deleted.
 - `903`, `904` retired as proposed (904 only if PS0014 keeps pytest —
   it does, see PS0014).
-- `opencode.json`: delete unless Brandon says opencode is still a host
-  (he has not; default = delete).
+- `opencode.json`: **delete** (Brandon, 2026-09-21).
+- Add one conventions line that records the PS0009 decision so no agent
+  proposes it again: *"Security checks are called explicitly in each
+  handler (JWT → rate limit → CSRF → authorization →
+  `CheckAllChecksComplete`); exceptions are written in the handler, not
+  hidden in middleware. Non-negotiable."*
 - Alternative if the section still feels heavy: a `conventions` skill in
   `.claude/skills/` that loads on demand. Prefer the CLAUDE.md lines
   first; measure the token cost before adding a skill.

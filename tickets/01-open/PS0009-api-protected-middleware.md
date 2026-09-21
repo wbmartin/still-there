@@ -1,10 +1,10 @@
 ---
 id: PS0009
-title: Replace the AppHelper check state machine with Protected(grant) middleware; one handler style; route registry
-status: needs-triage
+title: Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable
+status: ready
 blocked_by:
 waiting_on:
-priority: high
+priority: medium
 domain: api
 raised: 2026-09-21
 raised_by: template review 2026-09-21
@@ -14,116 +14,68 @@ merged:
 deployed:
 validated:
 ---
-# PS0009 — Security checks are a stateful orchestrator, not middleware
+# PS0009 — The check sequence in each handler is deliberate
 
-**Source:** template review 2026-09-21. `doc/110-api-server-code-review.md`
-(2025-12-24) called this critical; it is still open.
+**Source:** template review 2026-09-21, which proposed replacing the
+`AppHelper` check sequence with `Protected(grant)` middleware.
 
-## Problem
+**Decision (Brandon, 2026-09-21), verbatim:** "It is deliberate and
+non-negotiable. I will not sacrifice the clarity of the code and visual
+auditability for a convention of middleware. The files you listed are
+exceptions, which also happen on middleware, but this puts them in a
+fixed place."
 
-`internal/app_lib/app_helper.go:21-35` — every request constructs an
-`AppHelper` carrying five `*Checked` booleans (JWT, rate limit, CSRF,
-authorization, …) and `Skip*` methods. Handlers call the checks in
-sequence and then `CheckAllChecksComplete`. Consequences:
+So: every handler calls its checks explicitly, in order, in its own body
+(`CheckJWT` → rate limit → `CheckCSRF` → `CheckAuthorization` →
+`CheckAllChecksComplete`), and an endpoint that needs a different set
+(login, self-register, MFA setup, health, error-report) writes that
+difference in the handler where an auditor reads it. `doc/110`'s
+"critical" finding on this is closed as *by design*. No middleware, no
+route wrapper, no `Skip*` removal. Any future agent proposing otherwise
+should read this ticket and stop.
 
-- `HealthHandler` must call five `Skip*` methods to say "public"
-  (`handler/health_handler.go:13-17`).
-- The auth handlers are closures (`auth_handler.go`, `user_mfa_handler.go`:
-  `AuthHandler`, `RefreshHandler`, `MFASetupHandler`, `UserSelfCreateHandler`
-  …) that build an AppHelper but **never call `CheckAllChecksComplete`**
-  (`auth_handler.go:159`), so the invariant is unenforceable for exactly
-  the endpoints that matter most.
-- Every entity handler method repeats the same four check lines + the
-  complete check (`example_handler.go:76-108, 284-332, 405-450`, and the
-  same in user/group handlers). That is most of the ~900 lines of
-  per-entity ceremony (rest is PS0010).
-- `app_helper.go:52` logs INFO "AppHelper instantiated" on every request.
-- `auth_handler.go:148, 409, 539` take `appUserGroupRepo` params that are
-  unused. The auth cookie struct is built four times (`:368, 499, 677,
-  740`).
+## What remains (small)
 
-Two handler construction styles coexist: struct receivers
-(`ExampleHandler`, `UserHandler`, `AppUserGroupHandler`) vs closures (auth,
-MFA). Closures cannot share helpers like a `setAuthCookie`.
+1. **Record the principle** where agents read it: PS0005 adds the
+   conventions line to `CLAUDE.md`; this ticket adds a short
+   "Security checks" paragraph to `doc/105-api-srv-tech-spec.md` (the
+   order, the `CheckAllChecksComplete` contract, how an exception is
+   written — using `health_handler.go`'s five `Skip*` calls and the login
+   handler as the two worked examples). Optionally a one-line comment at
+   the top of `app_helper.go` pointing at it.
+2. **The exceptions' loose ends** (do not change what they check):
+   - `auth_handler.go:148, 409, 539` take `appUserGroupRepo` params that
+     are unused — drop them.
+   - The auth cookie struct is built four times (`auth_handler.go:368,
+     499, 677, 740`) — one `setAuthCookie(w, token)` helper in the
+     handler package.
+   - `app_helper.go:52` logs INFO "AppHelper instantiated" on every
+     request — drop or demote to debug.
+   - `getClientIP` is duplicated (`app_helper.go`, `auth_handler.go:24-42`)
+     — one copy (PS0002 item 3 touches the same code; coordinate).
+3. **`ExampleHandler` on an interface.** `example_handler.go:15-18` takes
+   `*repository.ExampleRepository` concretely; `UserHandler`
+   (`user_handler.go:17-104`) defines `UserRepositoryInterface` and is
+   the only mockable, tested handler. Give the example — the copy-me —
+   the same shape and a `example_handler_test.go` modelled on
+   `user_handler_test.go` that exercises the check sequence (e.g. a
+   request without JWT gets 401 before the repo is touched). This is
+   what makes the explicit sequence *testable* per handler, which is the
+   design's own strength.
 
-The route table (`cmd/server/main.go:127-207`) is 30 hand-wired
-`mux.HandleFunc` lines mixing both styles, constructs
-`adminResetMFAHandler` mid-list (`:184`), and mixes path conventions:
-`/example`, `/exampleList`, `/admin/resetUserMFA`, `/error-report`.
+## Explicitly not in scope (needs a separate conversation if ever)
 
-Only `UserHandler` is built on interfaces (`user_handler.go:17-104`
-`UserRepositoryInterface`, `AppUserGroupRepositoryInterface`) and so is
-the only mockable, tested handler. `ExampleHandler` — the copy-me — takes
-`*repository.ExampleRepository` concretely (`example_handler.go:15-18`).
-
-## Target
-
-- `Protected(grant Grant) func(http.HandlerFunc) http.HandlerFunc` (or
-  `app.Secure(...)`) that runs JWT → rate limit → CSRF → authorization and
-  puts claims on the context. Public routes are simply unwrapped. No
-  booleans, no `CheckAllChecksComplete`, nothing to forget.
-- Public-but-rate-limited (login, self-register, error-report) is a
-  second wrapper, `RateLimited(...)`.
-- One handler style: struct with receiver methods, constructed from
-  interfaces, each exposing `Routes(mux *http.ServeMux)`. `main.go`
-  becomes `for _, h := range handlers { h.Routes(mux) }`.
-- One path convention (decide: `/example` + `/exampleList` as today, or
-  `/examples` REST-ish; keep the web `constants/api.ts` in step — PS0013).
-- `setAuthCookie(w, token)` helper; drop unused params.
-
-## What to do
-
-1. Write the middleware with tests (pure functions over `httptest`; there
-   are currently **no** tests for `app_helper.go`, `auth.go`, `rbac.go`).
-2. Convert handlers one at a time, starting with `ExampleHandler` (it is
-   the template) and adding the interface + a mocked test as
-   `user_handler_test.go` does.
-3. Convert the auth/MFA closures to a struct.
-4. Delete `AppHelper`, the `Skip*` methods, the health-handler skips.
+Struct-receiver vs closure handler style; per-handler `Routes(mux)` vs
+the flat table in `cmd/server/main.go`; path naming conventions. The
+review noted these; Brandon has not asked for them.
 
 ## Acceptance
 
-- `grep -rn 'CheckAllChecksComplete\|Skip[A-Z]' internal` → nothing.
-- Every route in `main.go` is either wrapped in `Protected`/`RateLimited`
-  or is on an explicit public list in one place.
-- pytest suite (`bin/200 py`) green — it is the black-box check on
-  auth/CSRF/rate-limit/isolation behaviour.
-- Handler tests exist for example, user, group, auth.
+- `doc/105` has the paragraph; `CLAUDE.md` has the line (PS0005).
+- `go build`, `go vet`, `go test ./...` green; new example handler test
+  passes; pytest suite green.
+- No behavioural change to any endpoint (pytest is the proof).
 
 ## Deploy needs
 
-Go binary. Behaviour should be identical from the client's view; if the
-path convention changes, web build + `constants/api.ts` in the same PR.
-
-## Related
-
-PS0008 (do the package move first or together), PS0010, PS0002 item 3
-(anon rate-limit key — fix there, fold here).
-
-## Direction (Brandon, 2026-09-21)
-
-**Not aligned. Discuss in depth before any work.** Do not claim.
-
-Points to settle in that discussion (agent's read of where the
-disagreement may lie — Brandon to confirm or correct):
-
-1. Is the explicit per-handler check sequence (`CheckJWT`, `CheckRate…`,
-   `CheckCSRF`, `CheckAuthorization`, `CheckAllChecksComplete`) a
-   deliberate design — checks visible in the handler body, varied per
-   endpoint, greppable — rather than an accident? If so, the ticket's
-   framing ("state machine instead of middleware") is wrong and the
-   real defects are narrower: the closures that never call
-   `CheckAllChecksComplete`, the unused params, the four cookie builds.
-2. Which endpoints legitimately need a *different* check set (login: no
-   JWT, rate-limited by IP; MFA setup: JWT but no grant; health: nothing;
-   error-report: none but body cap)? A middleware chain must express
-   each of these as clearly as the current code does or it is a loss.
-3. Handler style: is struct-vs-closure a real problem or cosmetic? The
-   cost is helper sharing (`setAuthCookie`) and mockability.
-4. Route table: is a `Routes(mux)` per handler wanted, or is one flat
-   list in `main.go` preferred *because* it is the one place to read
-   every route?
-5. The `ExampleHandler`-on-interfaces point stands on its own (it is
-   the copy-me and is the only untestable handler); could be split out.
-
-PS0010 is blocked behind this.
+Go binary. No config change.

@@ -60,8 +60,9 @@ historical framing, not a broken link.
 
 ## What to do
 
-1. Triage `000-TODO.md` with Brandon (a 10-minute pass), file tickets,
-   delete it.
+1. Triage `000-TODO.md` with Brandon — **he wants to start this in the
+   next round**; the agent opens the session by walking the file with
+   him, files tickets, deletes it.
 2. `git mv` the history files into the engineering log with dated names
    and the two-line header; delete `doc/archive/`.
 3. Fix every path in the table; leave rewrite markers where content is

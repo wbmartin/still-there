@@ -91,7 +91,7 @@ same PR.
 ## Direction (Brandon, 2026-09-21)
 
 **Hold.** "It may be hard to separate leftovers from anticipated
-scenarios." Do not claim until PS0009/PS0010 are settled; then walk the
+scenarios." Do not claim until PS0010 is settled (PS0009 is decided); then walk the
 dead-code table with Brandon item by item before deleting. The
 `security_model.go` DTOs and `user_grant_model.go` in particular may be
 placeholders for planned endpoints/tables.
