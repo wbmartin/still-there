@@ -67,45 +67,21 @@ This document outlines the steps and key points for creating a new entity type i
    - Delete checks for dependencies (e.g., users in groups).
 
 ## WEB-APP
-1. **Constants**:
-    - **Routes** (`constants/routes.ts`): Define route paths without leading `/` (e.g., `'appUserList'`).
-    - **API Endpoints** (`constants/api.ts`): Define API paths (e.g., `'/userList'`).
 
-3. **Types** (`types/entity-type.ts`, one file per entity):
-    - `Entity` interface (camelCase).
-    - `ApiEntityModel` for API responses.
-    - Example: `example-type.ts`.
+The web half is the *Scaffolding* section of `src/web-app/README.md`: the
+four files to copy from `example-*`, the constants/route/nav entries to add
+by hand, and the in-page house pattern (hook order, `HOOK LINE` banner,
+`hasFetched` ref, load by id, list state in the URL, absolute `ROUTES`).
+Keep it there; do not duplicate it here.
 
- 4. **Store** (`stores/entity-store.ts`):
-     - Zustand store with `entity[]`, `maxEntityUpdateTs`, `loading`, `error`.
-     - Functions: `createEntity`,`readEntityList`,  `updateEntity`, `deleteEntity`.
-     - API calls to `/entityList`, `/entityEdit`.
-     - Cache management: `maxEntityUpdateTs` updated only on full list fetches. Only set `maxEntityUpdateTs` in list retrieval functions. CRUD operations should update local cache without modifying the timestamp to avoid cache invalidation issues.
-     - Example: `user-store.ts`.
-
-5. **Pages**:
-   - **List**: `entity-list-page.tsx` - Table with pagination, add/edit/delete buttons.
-   - **Edit**: `entity-edit-page.tsx` - Form for create/edit, with save/cancel/delete.
-   - Use query params for IDs, `navigate` for transitions.
-   - Example: `app-user-list-page.tsx`, `app-user-edit-page.tsx`.
-
-6. **Routing** (`app.tsx`):
-    - `/entityList` → `EntityListPage`
-    - `/entityEdit?entityId=#` → `EntityEditPage` (use Query string parameters with entity-specific names like ?appUserId=, ?appUserGroupId=, etc., DO NOT USE PATH PARAMS)
-   - Update nav links.
-   - 
-
-7. **Components**:
-    - Confirm deletes with `confirmDelete(entityType, onConfirm)` from `utils/confirm-delete.tsx` (`@mantine/modals`).
-    - Notifications for success/error.
-
-8. **Quirks**:
-   - Store naming: Singular (e.g., `useUserStore`, not `useUsersStore`).
-   - Separate stores for related entities (e.g., `useUserGroupsStore`).
-   - Function comments: `//============================^FUNCTION LINE ^============================`
-   - Edit forms: Multi-select for arrays (e.g., groups), password fields for new users.
-   - Navigation: Separate pages with `navigate()` instead of conditional rendering.
-   - Grants centralized in `grants.go`, models define their own maps if needed.
+Quirks that still apply:
+- Edit pages take their id as a query string with an entity-specific name
+  (`?appUserId=`, `?appUserGroupId=`), never a path param; `=new` creates.
+- Store naming is singular (`useAppUserStore`); related entities get
+  separate stores.
+- Confirm deletes with `confirmDelete(entityType, onConfirm)`
+  (`utils/confirm-delete.tsx`, `@mantine/modals`); notify success/error.
+- Navigation is separate pages via `navigate()`, not conditional rendering.
 
 ## Cache Management Pattern
 
@@ -122,6 +98,6 @@ This enables efficient caching while detecting when full refreshes are needed.
 ## Example References
 - **SQL**: `src/api-srv/sql/migrations/0001_initial_schema.sql`, `src/api-srv/sql/fixtures/local-seed.sql`
 - **API-SRV**: `src/api-srv/internal/model/example_model.go`, `src/api-srv/internal/repository/example_repository.go`, `src/api-srv/internal/handler/example_handler.go`
-- **WEB-APP**: `types/example-type.ts`, `stores/user-store.ts`, `pages/app-user-list-page.tsx`, `pages/app-user-edit-page.tsx`
+- **WEB-APP**: `types/example-type.ts`, `stores/examples-store.ts`, `pages/example-list-page.tsx`, `pages/example-edit-page.tsx`
 
 Use this as a checklist for new entities. Update as needed for future quirks.
