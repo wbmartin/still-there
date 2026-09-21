@@ -6,14 +6,16 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 19:01 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 19:03 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (0)
+## Engineering — ready to start (2)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
+| **PS0020** | TOTP MFA has no automated coverage — non-exempt fixture user and a Playwright enrol/verify test | low | security |
+| **PS0021** | MFA loose ends — web grant 9020 has no Go grant, resetUserMFA leaves mfa_setup true, successful login never resets the lockout counters | low | security |
 
 ## Engineering — merged, awaiting validation (12)
 
@@ -54,11 +56,11 @@ picks up the next piece of work. Do not edit below the marker.
 | Domain | Open |
 |---|---|
 | api | 7 |
+| security | 4 |
 | web | 3 |
-| security | 2 |
 | docs | 2 |
 | tooling | 1 |
 
-**Next free number:** `PS0020` (engineering), `PS1001` (Ask Customer).
+**Next free number:** `PS0022` (engineering), `PS1001` (Ask Customer).
 
 <!-- END GENERATED -->
