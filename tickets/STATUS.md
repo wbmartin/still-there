@@ -6,16 +6,15 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 14:49 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 14:50 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (9)
+## Engineering — ready to start (8)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
 | **PS0003** | Sunset the shrmpl kv, log and vault clients and all their local tooling | high | tooling |
-| **PS0004** | Document the presales → post-sales deploy migration; fix bin/600 fail-fast | high | docs |
 | **PS0005** | One agent rulebook — fold doc/9xx guidance into CLAUDE.md, fix or retire opencode.json | high | docs |
 | **PS0006** | Move ProtoStack history out of doc/ into the engineering log; fix every broken path | high | docs |
 | **PS0009** | Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable | medium | api |
@@ -23,6 +22,12 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | medium | web |
 | **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | medium | tooling |
 | **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | medium | api |
+
+## Engineering — in progress (1)
+
+| Ticket | Title | Claimed |
+|---|---|---|
+| **PS0004** | Document the presales → post-sales deploy migration; fix bin/600 fail-fast | 2026-09-21 by TKT-PS0004-one-deploy-story |
 
 ## Engineering — merged, awaiting validation (1)
 

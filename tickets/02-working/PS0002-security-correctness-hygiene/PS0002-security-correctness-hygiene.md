@@ -145,6 +145,12 @@ Environment: local now → UAT on Brandon's deploy.
 - `git ls-files | grep -E 'tests/reports|vault-configs|^package'` → only the `.example`.
 - `TestRetrieveUserList_OmitsSecrets` proves `totpSeed` absent from the `/userList` body.
 
+## Waiting for
+
+A UAT deploy from `main`. Brandon, 2026-09-21: ProtoStack itself is not
+being published to UAT right now; validate on the next deploy, whenever
+that is. Local checks all green (see Acceptance).
+
 ## Deploy needs
 
 - Go binary rebuild (items 1-4).
