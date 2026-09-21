@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 
@@ -820,4 +821,21 @@ func TestRetrieveUserList(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRetrieveUserList_OmitsSecrets proves the /userList body — the
+// DataWrapper the handler marshals — never carries the encrypted TOTP seed
+// or the password hash.
+func TestRetrieveUserList_OmitsSecrets(t *testing.T) {
+	seed := "encrypted-seed"
+	users := []*model.AppUserModel{
+		{AppUserID: 1, UserName: "user1", SecurityContext: 1, PwHash: "hash", TOTPSeed: &seed},
+	}
+	body, err := json.Marshal(model.DataWrapper{Data: users})
+	assert.NoError(t, err)
+	assert.NotContains(t, string(body), "totpSeed")
+	assert.NotContains(t, string(body), seed)
+	assert.NotContains(t, string(body), "pwHash")
+	assert.NotContains(t, string(body), "hash")
+	assert.Contains(t, string(body), `"userName":"user1"`)
 }

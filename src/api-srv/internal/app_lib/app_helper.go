@@ -287,6 +287,23 @@ func (sh *AppHelper) CheckJWT() *AppHelper {
 	return sh
 }
 
+// ClientIP returns the caller's IP: the first valid entry of
+// X-Forwarded-For when a proxy set it, else the host part of RemoteAddr.
+// It keys anonymous rate limiting and login lockout, so both paths agree.
+func ClientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		ip := strings.TrimSpace(strings.Split(xff, ",")[0])
+		if net.ParseIP(ip) != nil {
+			return ip
+		}
+	}
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
+}
+
 // CheckRateLimit checks request rate limits
 func (sh *AppHelper) CheckRateLimit() *AppHelper {
 	sh.rateChecked = true
@@ -323,19 +340,7 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 		keyIdentifier = sh.claims.Subject
 	} else {
 		limit = sh.appServices.Config.MaxUnauthReqPerMin
-		// Get client IP
-		ip, _, err := net.SplitHostPort(sh.r.RemoteAddr)
-		if err != nil {
-			ip = sh.r.RemoteAddr
-		}
-		// Check X-Forwarded-For header
-		if forwardedFor := sh.r.Header.Get("X-Forwarded-For"); forwardedFor != "" {
-			parts := strings.Split(forwardedFor, ",")
-			if clientIP := strings.TrimSpace(parts[0]); clientIP != "" {
-				ip = clientIP
-			}
-		}
-		keyIdentifier = ip
+		keyIdentifier = ClientIP(sh.r)
 	}
 
 	currentMinute := time.Now().Minute()
@@ -386,7 +391,7 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 	if sh.claims != nil {
 		rateKey = fmt.Sprintf("RPM*%s*%d", sh.claims.Subject, currentMinute)
 	} else {
-		rateKey = fmt.Sprintf("RPM*%s*%d", "anon", currentMinute)
+		rateKey = fmt.Sprintf("RPM*%s*%d", ClientIP(sh.r), currentMinute)
 	}
 	commands = append(commands, "INCR "+rateKey+" 1min")
 

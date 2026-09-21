@@ -607,7 +607,7 @@ func MFAVerifyHandler(
 		}
 
 		// Check for account lockout
-		clientIP := getClientIP(r)
+		clientIP := app_lib.ClientIP(r)
 		locked, err := isAccountLocked(appServices.KV, clientIP, userName)
 		if err != nil {
 			app.WriteError(

@@ -61,12 +61,6 @@ func (h *ExampleHandler) RetrieveExample(
 		return
 	}
 
-	fmt.Printf(
-		"DEBUG: RetrieveExample: exampleID=%d, jwtClaims.SecurityContext=%d\n",
-		exampleID,
-		jwtClaims.SecurityContext,
-	)
-
 	// Read example
 	example, err := h.exampleRepo.RetrieveExample(
 		r.Context(),
