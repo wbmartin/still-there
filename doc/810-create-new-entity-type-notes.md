@@ -89,14 +89,14 @@ This document outlines the steps and key points for creating a new entity type i
    - Use query params for IDs, `navigate` for transitions.
    - Example: `app-user-list-page.tsx`, `app-user-edit-page.tsx`.
 
-6. **Routing** (`App.tsx`):
+6. **Routing** (`app.tsx`):
     - `/entityList` → `EntityListPage`
     - `/entityEdit?entityId=#` → `EntityEditPage` (use Query string parameters with entity-specific names like ?appUserId=, ?appUserGroupId=, etc., DO NOT USE PATH PARAMS)
    - Update nav links.
    - 
 
 7. **Components**:
-    - Reuse `DeleteConfirmModal` with `entityType`.
+    - Confirm deletes with `confirmDelete(entityType, onConfirm)` from `utils/confirm-delete.tsx` (`@mantine/modals`).
     - Notifications for success/error.
 
 8. **Quirks**:

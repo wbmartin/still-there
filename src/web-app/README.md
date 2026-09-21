@@ -39,7 +39,7 @@ browser.
 - `components/` — shared UI components (modals, error boundary)
 - `stores/` — Zustand state: one store per entity plus
   `create-entity-store.ts` (see below) and `auth-store.ts`
-- `schemas/` — zod form schemas
+- `schemas/` — zod form schemas (today only `loginSchema`; edit pages validate inline)
 - `hooks/` — `use-auth-guard.ts` and similar
 - `constants/` — `api.ts` (endpoint paths), `grants.ts`, `routes.ts`
 - `types/` — TypeScript model types
@@ -66,3 +66,9 @@ Entity pages (`example-list-page.tsx`, `example-edit-page.tsx`, and the
 scaffolding — a new entity is made by copying the `example-*` files.
 There is no shared list/edit factory, and that is by design; ticket
 PS0012 owns any change to that.
+
+## Dependency cadence
+
+Caret ranges. Any ticket that touches the web app runs `npm update` (in-range
+bumps) and `npx depcheck` (no unused or undeclared packages). Major versions
+(Mantine, ESLint, Vitest, Vite plugins) are their own ticket, one at a time.
