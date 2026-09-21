@@ -10,12 +10,17 @@ picks up the next piece of work. Do not edit below the marker.
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (2)
+## Engineering — ready to start (1)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
-| **PS0017** | Passkey (WebAuthn) as a second factor | low | security |
 | **PS0018** | User profile page: preferences and avatar | low | web |
+
+## Engineering — in progress (1)
+
+| Ticket | Title | Claimed |
+|---|---|---|
+| **PS0017** | Passkey (WebAuthn) as a second factor | 2026-09-21 by TKT-PS0017-passkey-second-factor |
 
 ## Engineering — merged, awaiting validation (11)
 
