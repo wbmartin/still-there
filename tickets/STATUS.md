@@ -6,16 +6,15 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 16:51 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 16:58 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (5)
+## Engineering — ready to start (4)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
 | **PS0012** | Web — fix the entity-page bugs; document that pages are deliberate scaffolding | medium | web |
-| **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | medium | web |
 | **PS0016** | Add JSONB and UUID columns to the example entity | low | api |
 | **PS0017** | Passkey (WebAuthn) as a second factor | low | security |
 | **PS0018** | User profile page: preferences and avatar | low | web |
@@ -24,9 +23,9 @@ picks up the next piece of work. Do not edit below the marker.
 
 | Ticket | Title | Claimed |
 |---|---|---|
-| **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | 2026-09-21 by TKT-PS0015-sql-and-cmd-shape |
+| **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | 2026-09-21 by TKT-PS0013-web-hygiene-deps-schemas-constants |
 
-## Engineering — merged, awaiting validation (7)
+## Engineering — merged, awaiting validation (8)
 
 | Ticket | Title | Merged | Deployed |
 |---|---|---|---|
@@ -36,6 +35,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0007** | Single rename point and a "deriving a new app" checklist | 9d74ba9 | — |
 | **PS0008** | Split internal/app_lib into packages named by role (no KV/log interfaces) | 5ce23c6 | — |
 | **PS0009** | Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable | 0985e19 | — |
+| **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | 1fa0001 | — |
 | **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | 67bb62c | — |
 
 ## Engineering — validated, awaiting archive (4)

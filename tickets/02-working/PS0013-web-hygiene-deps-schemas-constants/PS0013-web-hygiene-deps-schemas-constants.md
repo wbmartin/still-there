@@ -9,7 +9,7 @@ domain: web
 raised: 2026-09-21
 raised_by: template review 2026-09-21
 asked:
-claimed:
+claimed: 2026-09-21 by TKT-PS0013-web-hygiene-deps-schemas-constants
 merged:
 deployed:
 validated:

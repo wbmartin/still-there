@@ -10,7 +10,7 @@ raised: 2026-09-21
 raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0015-sql-and-cmd-shape
-merged:
+merged: 1fa0001
 deployed:
 validated:
 ---
