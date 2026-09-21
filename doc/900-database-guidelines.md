@@ -6,7 +6,7 @@ This section describes how I'd like an AI to think and respond for database desi
 - Table names should be singular names of the entity.
 - We will only use one database per project, don't worry about abstracting for multiple database implementations. Unless otherwise sepcified, the database will be Postgres.
 - All tables should have a "create_ts", "update_ts", and "delete_ts" of type numeric(17,7) for time and a "create_user_id", "update_user_id", "delete_user_id" of type integer.
-- Each table should also have a "security_context" field of type integer to enable multi-tenant implementations.
+- Each table should also have a "security_context_id" field of type integer to enable multi-tenant implementations.
 - Don't create foreign keys / Postgres references within the database - managed in the application layer similar to how nosql is managed.
 - Don't create triggers for updating dates within the database - managed by the application layer.
 - Schema changes are versioned SQL files applied by the project's own migrator (`src/api-srv/cmd/migrate`); see "Schema changes" below. No third-party migration framework.
@@ -17,7 +17,7 @@ This section describes how I'd like an AI to think and respond for database desi
   - Use the INSERT INTO ... SELECT ... FROM common_vars_cte, (VALUES ...) AS data(...) format for inserting the data. This allows selecting values from both the CTE and the VALUES clause containing the row data.
 - Strictly prohibit the use of database DEFAULT clauses, triggers, or SQL functions for generating or managing any application data fields like create_ts or update_ts. All such values must be calculated and set within the application code before executing the SQL INSERT or UPDATE statement.
 - The database schema should define the create_ts, update_ts, and delete_ts columns (e.g., numeric(17,7) NOT NULL), but responsibility for providing their values lies entirely with the API application handlers.
-- CRITICAL: For ALL SQL queries, you MUST use /atticus-web-snipper/doc/003-ai-postgres-schema-reference.sql as the exclusive and absolute source for all table and column names. Do NOT infer, assume, or 'hallucinate' any column names not explicitly defined in this file for the respective table.
+- CRITICAL: For ALL SQL queries, the migrations in `src/api-srv/sql/migrations/` are the exclusive and absolute source for table and column names. Do NOT infer, assume, or 'hallucinate' any column names not defined there for the respective table.
 - DO NOT add a delete_ts column to any query if it is not in the schema.
 
 # Database related code approach

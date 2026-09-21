@@ -4,10 +4,10 @@ This directory contains integration tests that validate the full HTTPS stack of 
 
 ## Prerequisites
 
-- Python 3.8+
-- The API server must be running with TLS enabled
-- All required services (KV store, logging, database) must be running
-- `TEST_BASE_URL` must be configured in `etc/loc-api-srv.env`
+- Python 3.8+ — style and library rules: `doc/904-python-guidance.md`
+- Normally run by `bin/200-run-tests py`, which starts and stops a private API
+  instance from `etc/e2e-api-srv.env`; by hand, the API server must be running
+  and `TEST_BASE_URL` set in `etc/loc-api-srv.env`
 
 ## Configuration
 

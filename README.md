@@ -87,12 +87,7 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 ### Code Style and Conventions
 | File | Description |
 |------|-------------|
-| [doc/901-naming-preferences.md](doc/901-naming-preferences.md) | Naming conventions (List suffix, verbose names, camelCase) |
-| [doc/903-roles-and-goals.md](doc/903-roles-and-goals.md) | AI assistant interaction style and goals |
 | [doc/904-python-guidance.md](doc/904-python-guidance.md) | Python script conventions (Polars, PEP8, psycopg) |
-| [doc/906-git.md](doc/906-git.md) | Git workflow preferences |
-| [doc/907-golang-guidance.md](doc/907-golang-guidance.md) | Go code style (80-char line breaks) |
-| [doc/908-typescript-guidance.md](doc/908-typescript-guidance.md) | TypeScript code style (favor line breaks) |
 
 ### Plans and Reviews
 | File | Description |
