@@ -9,6 +9,7 @@ export const API_ENDPOINTS = {
   LOGOFF: "/logoff",
   CHANGE_SECURITY_CONTEXT: "/changeSecurityContext",
   CHANGE_OWN_PASSWORD: "/changeOwnPassword",
+  ME: "/me",
 
   // MFA
   MFA_SETUP: "/mfaSetup",

@@ -16,6 +16,7 @@ import { notifications } from "@mantine/notifications";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAuthStore } from "../stores/auth-store";
 import useAuthGuard from "../hooks/use-auth-guard";
+import { useRowsPerPage } from "../hooks/use-preference";
 import { confirmDelete } from "../utils/confirm-delete";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
@@ -42,7 +43,7 @@ function AppUserGroupListPage() {
       else next.delete("page");
       return next;
     });
-  const itemsPerPage = 15;
+  const itemsPerPage = useRowsPerPage();
   const hasFetched = useRef(false);
 
   useEffect(() => {
