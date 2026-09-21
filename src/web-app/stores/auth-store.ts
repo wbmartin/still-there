@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type {
   AuthState,
-  AuthStateType,
   LoginRequest,
   LoginResponse,
   RefreshResponse,
@@ -37,7 +36,7 @@ interface AuthStore extends Omit<AuthState, "csrfToken"> {
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
-  authState: "TBD" as AuthStateType,
+  authState: "TBD",
   grantList: [],
   availableSecurityContextList: [],
   userName: "",

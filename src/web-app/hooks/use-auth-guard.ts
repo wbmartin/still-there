@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../stores/auth-store";
 import { ROUTES } from "../constants/routes";
@@ -9,12 +9,11 @@ const useAuthGuard = (requiredGrants: number[]) => {
   const { authState, grantList } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
-  const [isValidating, setIsValidating] = useState(false);
   const handleAuthStateNoSingleFireComplete = useRef(false);
+  const onLoginPage = location.pathname === ROUTES.LOGIN;
 
   useEffect(() => {
-    if (authState === "TBD" && location.pathname !== `/${ROUTES.LOGIN}`) {
-      setTimeout(() => setIsValidating(true), 0);
+    if (authState === "TBD" && !onLoginPage) {
       // Trigger refresh - only once per component mount
       void useAuthStore
         .getState()
@@ -23,15 +22,11 @@ const useAuthGuard = (requiredGrants: number[]) => {
     } else if (authState === "NO") {
       if (!handleAuthStateNoSingleFireComplete.current) {
         handleAuthStateNoSingleFireComplete.current = true;
-        setIsValidating(false);
         // Save destination and redirect to login
         const currentPath = location.pathname + location.search;
         useAuthStore.setState({ postAuthDestination: currentPath });
-        void navigate(`/${ROUTES.LOGIN}`);
+        void navigate(ROUTES.LOGIN);
       }
-    } else if (authState === "MFA") {
-      setIsValidating(false);
-      // Allow access to MFA setup
     } else if (authState === "YES") {
       // Check grants - user must have ALL required grants
       const hasAllGrants = requiredGrants.every((grantId) =>
@@ -39,7 +34,6 @@ const useAuthGuard = (requiredGrants: number[]) => {
       );
 
       if (!hasAllGrants) {
-        setIsValidating(false);
         // Show notification about insufficient privileges
         notifications.show({
           title: "Access Denied",
@@ -49,18 +43,16 @@ const useAuthGuard = (requiredGrants: number[]) => {
           autoClose: 4000,
         });
         // Redirect to dashboard
-        void navigate(`/${ROUTES.DASHBOARD}`);
-      } else {
-        setIsValidating(false);
+        void navigate(ROUTES.DASHBOARD);
       }
-    } else {
-      setIsValidating(false);
     }
+    // "MFA": allow access to MFA setup.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authState, grantList, requiredGrants]);
 
-  // Return auth state with loading indicator
-  if (isValidating) {
+  // While the token refresh is in flight the caller shows a loader; the
+  // login page never waits on it.
+  if (authState === "TBD" && !onLoginPage) {
     return "CHECKING";
   }
 

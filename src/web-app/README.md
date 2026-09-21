@@ -61,11 +61,53 @@ read — mutations never touch it. Every store registers a cache clearer so
 sign-out and security-context switches cannot leave another tenant's rows
 in memory.
 
-Entity pages (`example-list-page.tsx`, `example-edit-page.tsx`, and the
-`appUser`/`appUserGroup` equivalents) are deliberate copy-paste
-scaffolding — a new entity is made by copying the `example-*` files.
-There is no shared list/edit factory, and that is by design; ticket
-PS0012 owns any change to that.
+## Scaffolding
+
+Entity pages are deliberate copy-paste scaffolding. Each page is
+self-contained and reads top to bottom; there is no shared list/edit
+factory, route registry, route-level auth wrapper or feature folder, and
+that is by design (PS0012). A derived app copies the `example-*` files and
+edits in place. If it grows past ~6 entities and wants the factoring, that
+is the derived app's call, not the template's.
+
+To add an entity `widget`, copy and rename:
+
+| Copy | To |
+|---|---|
+| `types/example-type.ts` | `types/widget-type.ts` — the model, `defaultWidgetFormData` |
+| `stores/examples-store.ts` | `stores/widget-store.ts` — `createEntityStore` + `readWidgetById` |
+| `pages/example-list-page.tsx` | `pages/widget-list-page.tsx` |
+| `pages/example-edit-page.tsx` | `pages/widget-edit-page.tsx` |
+
+Then add, by hand, in each of:
+
+- `constants/api.ts` — `WIDGET_LIST: "/widgetList"`, `WIDGET: "/widget"`
+  (mirrors `src/api-srv/cmd/server/main.go`; no generator)
+- `constants/grants.ts` — the four `*_WIDGET` grant ids from `roles.sql`
+- `constants/routes.ts` — `WIDGET_LIST: "/widgetList"`,
+  `WIDGET_EDIT: "/widget"` (absolute paths; the edit page takes
+  `?widgetId=N` or `?widgetId=new`)
+- `app.tsx` — two entries in `createBrowserRouter` and a `NavLink`
+- `tests/e2e/` — a deep-link case like `entity-pages.spec.ts`
+
+The API half is `doc/810-create-new-entity-type-notes.md`.
+
+House pattern inside a page, in this order:
+
+- hooks first (`useSearchParams`, `useAuthGuard`, the store, `useForm`,
+  a `hasFetched` ref, the load effect), then the
+  `//====^ HOOK LINE ^====` banner, then the early returns for
+  `CHECKING` / not-`YES` / loading, then handlers and JSX. Nothing below
+  the banner may call a hook.
+- the load effect runs once (`hasFetched` ref), only when `authState`
+  is `"YES"`, and fetches by id through the store — never by searching
+  `itemList`, which is empty on a deep link.
+- `form` from `useForm` is a new object each render, so the load effect
+  carries a scoped `react-hooks/exhaustive-deps` disable with that reason.
+- list state that should survive a refresh or a shared link (page, sort)
+  lives in the URL via `useSearchParams`, not in `useState`.
+- `ROUTES` values are absolute; `navigate(ROUTES.X)`, never
+  `` `/${ROUTES.X}` ``.
 
 ## Dependency cadence
 

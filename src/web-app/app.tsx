@@ -144,7 +144,7 @@ function AppLayout() {
 
   const handleLogout = async () => {
     await logout();
-    void navigate(`/${ROUTES.LOGIN}`);
+    void navigate(ROUTES.LOGIN);
   };
 
   // Authorization checks for navigation
@@ -158,11 +158,11 @@ function AppLayout() {
           {authState === 'YES' && (
             <nav style={{ width: '200px', padding: '1rem', borderRight: '1px solid var(--mantine-color-default-border)' }}>
               <Stack gap="xs">
-                <NavLink component={Link} to={`/${ROUTES.DASHBOARD}`} label="Dashboard" />
-                <NavLink component={Link} to={`/${ROUTES.EXAMPLE_LIST}`} label="Examples" />
-                {canManageUsers && <NavLink component={Link} to={`/${ROUTES.APP_USER_LIST}`} label="User Admin" />}
-                {canManageUserGroups && <NavLink component={Link} to={`/${ROUTES.APP_USER_GROUP_LIST}`} label="User Groups" />}
-                <NavLink component={Link} to={`/${ROUTES.USER_PREFERENCES}`} label="Preferences" />
+                <NavLink component={Link} to={ROUTES.DASHBOARD} label="Dashboard" />
+                <NavLink component={Link} to={ROUTES.EXAMPLE_LIST} label="Examples" />
+                {canManageUsers && <NavLink component={Link} to={ROUTES.APP_USER_LIST} label="User Admin" />}
+                {canManageUserGroups && <NavLink component={Link} to={ROUTES.APP_USER_GROUP_LIST} label="User Groups" />}
+                <NavLink component={Link} to={ROUTES.USER_PREFERENCES} label="Preferences" />
                 <Button variant="subtle" onClick={() => void handleLogout()} fullWidth justify="flex-start">
                   Logout
                 </Button>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Container,
@@ -8,6 +8,7 @@ import {
   TextInput,
   Button,
   Group,
+  Image,
   CopyButton,
   ActionIcon,
   Tooltip,
@@ -30,12 +31,11 @@ function MFAOnboardingPage() {
   const [mfaAlreadySetup, setMfaAlreadySetup] = useState(false);
   const navigate = useNavigate();
   const { tempToken } = useAuthStore();
-  const [hasFetched, setHasFetched] = useState(false);
+  const hasFetched = useRef(false);
 
   useEffect(() => {
-    if (!tempToken || hasFetched) return;
-
-    setHasFetched(true);
+    if (!tempToken || hasFetched.current) return;
+    hasFetched.current = true;
 
     const fetchSetup = async () => {
       setLoading(true);
@@ -99,7 +99,7 @@ function MFAOnboardingPage() {
           color: "green",
         });
       }
-      void navigate(`/${ROUTES.DASHBOARD}`);
+      void navigate(ROUTES.DASHBOARD);
     } catch (err) {
       notifications.show({
         title: "Verification Failed",
@@ -139,14 +139,16 @@ function MFAOnboardingPage() {
 
         {!mfaAlreadySetup && qrCodeImage && (
           <Group justify="center" mb="md">
-            <div style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '10px', display: 'inline-block' }}>
-              <img
+            <Paper withBorder radius="md" p={10} display="inline-block">
+              <Image
                 src={qrCodeImage}
                 alt="QR Code for MFA Setup - Scan with your authenticator app"
-                style={{ width: '200px', height: '200px', objectFit: 'contain' }}
+                w={200}
+                h={200}
+                fit="contain"
                 onError={() => reportError(new Error("QR code image failed to load"), "mfa onboarding")}
               />
-            </div>
+            </Paper>
           </Group>
         )}
 

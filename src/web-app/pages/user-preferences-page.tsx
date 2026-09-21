@@ -55,7 +55,7 @@ function UserPreferencesPage() {
       // Clear all caches after successful context change
       clearAllCaches();
       // Navigate to dashboard
-      void navigate(`/${ROUTES.DASHBOARD}`);
+      void navigate(ROUTES.DASHBOARD);
     }
   };
 
@@ -158,7 +158,7 @@ function UserPreferencesPage() {
         </Title>
         <Group mb="md">
           <Button
-            onClick={() => void navigate(`/${ROUTES.APP_USER_LIST}`)}
+            onClick={() => void navigate(ROUTES.APP_USER_LIST)}
             variant="outline"
             disabled={
               !useAuthStore.getState().grantList.includes(grants.CREATE_USER)
@@ -167,7 +167,7 @@ function UserPreferencesPage() {
             User Admin
           </Button>
           <Button
-            onClick={() => void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`)}
+            onClick={() => void navigate(ROUTES.APP_USER_GROUP_LIST)}
             variant="outline"
             disabled={
               !useAuthStore
@@ -193,7 +193,7 @@ function UserPreferencesPage() {
               void useAuthStore
                 .getState()
                 .logout()
-                .then(() => navigate(`/${ROUTES.LOGIN}`));
+                .then(() => navigate(ROUTES.LOGIN));
             }}
             variant="outline"
             color="red"
