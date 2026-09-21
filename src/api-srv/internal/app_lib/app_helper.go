@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -249,7 +248,7 @@ func (sh *AppHelper) CanProceed() bool {
 }
 
 // Logger returns the logger
-func (ah *AppHelper) Logger() ThisAppLoggerInterface {
+func (ah *AppHelper) Logger() *Logger {
 	return ah.appServices.Logger
 }
 
@@ -344,33 +343,34 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 	}
 
 	currentMinute := time.Now().Minute()
-	shrmplKey := fmt.Sprintf("RPM*%s*%d", keyIdentifier, currentMinute)
+	rateKey := fmt.Sprintf("RPM*%s*%d", keyIdentifier, currentMinute)
 
-	count, err := sh.appServices.KV.Incr(shrmplKey, "1min")
+	count, err := sh.appServices.KV.Incr(rateKey, "1min")
 	if err != nil {
-		sh.appServices.Logger.Info("RATE_LIMIT_FAIL",
-			"Rate limit check encountered KV error, failing open ("+
-				shrmplKey+") "+err.Error())
-		// Fail open on shrmpl-kv errors
+		// The store is in-process: an error here is a bug (closed store,
+		// oversized key), not an outage. Fail closed.
+		sh.appServices.Logger.Error("RATE_LIMIT_FAIL",
+			"Rate limit check failed ("+rateKey+"): "+err.Error())
+		sh.failAndRespond(http.StatusInternalServerError, "Rate limit check failed")
 		return sh
 	}
 
 	if count > limit {
 		sh.appServices.Logger.Warn("RATE_LIMIT_EXCEED",
 			fmt.Sprintf("Rate limit exceeded - key: %s, count: %d, limit: %d",
-				shrmplKey, count, limit))
+				rateKey, count, limit))
 		sh.failAndRespond(http.StatusTooManyRequests, "Rate limit exceeded")
 		return sh
 	}
 
 	sh.appServices.Logger.Debug("RLP0",
 		fmt.Sprintf("Rate limit check passed - key: %s, count: %d, limit: %d",
-			shrmplKey, count, limit))
+			rateKey, count, limit))
 	return sh
 }
 
-// CheckRateLimitAndUserBlock performs rate limit and user block checks
-// in a single batch
+// CheckRateLimitAndUserBlock performs the rate limit and user block checks
+// together, marking both as done
 func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 	if sh.blocked {
 		return sh
@@ -385,44 +385,23 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 
 	currentMinute := time.Now().Minute()
 
-	// Build batch commands
-	var commands []string
 	var rateKey string
-	if sh.claims != nil {
-		rateKey = fmt.Sprintf("RPM*%s*%d", sh.claims.Subject, currentMinute)
-	} else {
-		rateKey = fmt.Sprintf("RPM*%s*%d", ClientIP(sh.r), currentMinute)
-	}
-	commands = append(commands, "INCR "+rateKey+" 1min")
-
-	var blockedKey string
-	if sh.claims != nil {
-		blockedKey = "BLOCKED*" + sh.claims.Subject
-		commands = append(commands, "GET "+blockedKey)
-	}
-
-	// Execute batch
-	results, err := sh.appServices.KV.Batch(commands)
-	if err != nil {
-		sh.appServices.Logger.Info("RATE_LIMIT_FAIL",
-			"Batch check failed, failing open: "+err.Error())
-		// Fail open on errors
-		return sh
-	}
-
-	// Parse results
-	rateCount, err := strconv.Atoi(results[0])
-	if err != nil {
-		sh.appServices.Logger.Warn("RLF0", "Invalid rate count: "+results[0])
-		return sh
-	}
-
-	// Use configurable rate limit
 	var limit int
 	if sh.claims != nil {
+		rateKey = fmt.Sprintf("RPM*%s*%d", sh.claims.Subject, currentMinute)
 		limit = sh.appServices.Config.MaxUserReqPerMin
 	} else {
+		rateKey = fmt.Sprintf("RPM*%s*%d", ClientIP(sh.r), currentMinute)
 		limit = sh.appServices.Config.MaxUnauthReqPerMin
+	}
+
+	rateCount, err := sh.appServices.KV.Incr(rateKey, "1min")
+	if err != nil {
+		// In-process store: an error is a bug, not an outage. Fail closed.
+		sh.appServices.Logger.Error("RATE_LIMIT_FAIL",
+			"Rate limit check failed ("+rateKey+"): "+err.Error())
+		sh.failAndRespond(http.StatusInternalServerError, "Rate limit check failed")
+		return sh
 	}
 	if rateCount > limit {
 		sh.appServices.Logger.Warn("RLE0",
@@ -435,10 +414,16 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 	sh.appServices.Logger.Debug("RLP0",
 		fmt.Sprintf("Rate limit check passed - key: %s, count: %d, limit: %d",
 			rateKey, rateCount, limit))
-	// Check block if applicable
-	if len(results) > 1 {
-		blockedValue := results[1]
-		if blockedValue != "" && blockedValue != "*KEY NOT FOUND*" {
+	// Block check applies to authenticated callers only
+	if sh.claims != nil {
+		blockedValue, err := sh.appServices.KV.Get("BLOCKED*" + sh.claims.Subject)
+		if err != nil {
+			sh.appServices.Logger.Error("UBK0",
+				"Blocked-status check failed: "+err.Error())
+			sh.failAndRespond(http.StatusInternalServerError, "User block check failed")
+			return sh
+		}
+		if blockedValue != "" {
 			sh.appServices.Logger.Warn(
 				"UBK0",
 				"User is blocked: "+sh.claims.Subject,
@@ -462,12 +447,13 @@ func (sh *AppHelper) CheckUserBlocked() *AppHelper {
 	blockedKey := "BLOCKED*" + sh.claims.Subject
 	blockedValue, err := sh.appServices.KV.Get(blockedKey)
 	if err != nil {
-		sh.appServices.Logger.Warn("UBK0",
-			"Failed to check blocked status: "+err.Error())
+		sh.appServices.Logger.Error("UBK0",
+			"Blocked-status check failed: "+err.Error())
+		sh.failAndRespond(http.StatusInternalServerError, "User block check failed")
 		return sh
 	}
 
-	if blockedValue != "" && blockedValue != "*KEY NOT FOUND*" {
+	if blockedValue != "" {
 		// Key exists, user is blocked
 		sh.appServices.Logger.Warn(
 			"UBK0",

@@ -8,12 +8,12 @@ import (
 	"time"
 )
 
-// newTestKV builds a MemoryKV with a manually advanced clock. Lets tests
+// newTestKV builds a KV with a manually advanced clock. Lets tests
 // exercise expiration without real sleeps.
-func newTestKV() (*MemoryKV, *time.Time) {
+func newTestKV() (*KV, *time.Time) {
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	clock := &now
-	kv := &MemoryKV{
+	kv := &KV{
 		m:    make(map[string]memStoredValue),
 		done: make(chan struct{}),
 		now:  func() time.Time { return *clock },
@@ -22,7 +22,7 @@ func newTestKV() (*MemoryKV, *time.Time) {
 	return kv, clock
 }
 
-func TestMemoryKV_GetMissingReturnsEmpty(t *testing.T) {
+func TestKV_GetMissingReturnsEmpty(t *testing.T) {
 	kv, _ := newTestKV()
 	val, err := kv.Get("nope")
 	if err != nil {
@@ -33,7 +33,7 @@ func TestMemoryKV_GetMissingReturnsEmpty(t *testing.T) {
 	}
 }
 
-func TestMemoryKV_SetGet(t *testing.T) {
+func TestKV_SetGet(t *testing.T) {
 	kv, _ := newTestKV()
 	if err := kv.Set("foo", "bar", ""); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -44,7 +44,7 @@ func TestMemoryKV_SetGet(t *testing.T) {
 	}
 }
 
-func TestMemoryKV_SetWithTTLExpires(t *testing.T) {
+func TestKV_SetWithTTLExpires(t *testing.T) {
 	kv, clock := newTestKV()
 	if err := kv.Set("foo", "bar", "10min"); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -66,7 +66,7 @@ func TestMemoryKV_SetWithTTLExpires(t *testing.T) {
 	}
 }
 
-func TestMemoryKV_IncrInitialAndIncrementPreserveTTL(t *testing.T) {
+func TestKV_IncrInitialAndIncrementPreserveTTL(t *testing.T) {
 	kv, clock := newTestKV()
 
 	// First INCR creates key with TTL.
@@ -92,7 +92,7 @@ func TestMemoryKV_IncrInitialAndIncrementPreserveTTL(t *testing.T) {
 	}
 }
 
-func TestMemoryKV_IncrOnKindStrResetsButPreservesTTL(t *testing.T) {
+func TestKV_IncrOnKindStrResetsButPreservesTTL(t *testing.T) {
 	kv, clock := newTestKV()
 
 	// Set as a non-numeric string with a TTL.
@@ -119,45 +119,8 @@ func TestMemoryKV_IncrOnKindStrResetsButPreservesTTL(t *testing.T) {
 	}
 }
 
-func TestMemoryKV_BatchTooManyCommands(t *testing.T) {
-	kv, _ := newTestKV()
-	_, err := kv.Batch([]string{"GET a", "GET b", "GET c", "GET d"})
-	if err == nil {
-		t.Fatalf("expected error for batch >3 commands, got nil")
-	}
-}
-
-func TestMemoryKV_BatchIncrAndGet(t *testing.T) {
-	kv, _ := newTestKV()
-	results, err := kv.Batch([]string{
-		"INCR ipfail 1min",
-		"INCR ipfail",
-		"GET ipfail",
-	})
-	if err != nil {
-		t.Fatalf("Batch: %v", err)
-	}
-	want := []string{"1", "2", "2"}
-	for i, w := range want {
-		if results[i] != w {
-			t.Fatalf("results[%d] = %q, want %q", i, results[i], w)
-		}
-	}
-}
-
-func TestMemoryKV_BatchGetMissingReturnsSentinel(t *testing.T) {
-	kv, _ := newTestKV()
-	results, err := kv.Batch([]string{"GET missing"})
-	if err != nil {
-		t.Fatalf("Batch: %v", err)
-	}
-	if results[0] != "*KEY NOT FOUND*" {
-		t.Fatalf("got %q, want *KEY NOT FOUND* sentinel", results[0])
-	}
-}
-
-func TestMemoryKV_ConcurrentIncrIsAtomic(t *testing.T) {
-	kv := NewMemoryKV()
+func TestKV_ConcurrentIncrIsAtomic(t *testing.T) {
+	kv := NewKV()
 	defer kv.Close()
 
 	const goroutines = 50
@@ -189,8 +152,8 @@ func TestMemoryKV_ConcurrentIncrIsAtomic(t *testing.T) {
 	}
 }
 
-func TestMemoryKV_CloseReturnsErrOnSubsequentOps(t *testing.T) {
-	kv := NewMemoryKV()
+func TestKV_CloseReturnsErrOnSubsequentOps(t *testing.T) {
+	kv := NewKV()
 	kv.Close()
 
 	if _, err := kv.Get("any"); !errors.Is(err, errKVClosed) {
@@ -202,15 +165,12 @@ func TestMemoryKV_CloseReturnsErrOnSubsequentOps(t *testing.T) {
 	if _, err := kv.Incr("a", ""); !errors.Is(err, errKVClosed) {
 		t.Fatalf("Incr after Close: err=%v, want errKVClosed", err)
 	}
-	if _, err := kv.Batch([]string{"GET a"}); !errors.Is(err, errKVClosed) {
-		t.Fatalf("Batch after Close: err=%v, want errKVClosed", err)
-	}
 
 	// Calling Close twice must not panic.
 	kv.Close()
 }
 
-func TestMemoryKV_SetDetectsIntKind(t *testing.T) {
+func TestKV_SetDetectsIntKind(t *testing.T) {
 	kv, _ := newTestKV()
 	_ = kv.Set("k", "42", "")
 	sv := kv.m["k"]
@@ -220,7 +180,7 @@ func TestMemoryKV_SetDetectsIntKind(t *testing.T) {
 	}
 }
 
-func TestMemoryKV_ParseExpirationGrammar(t *testing.T) {
+func TestKV_ParseExpirationGrammar(t *testing.T) {
 	cases := []struct {
 		in   string
 		want time.Duration
@@ -245,7 +205,7 @@ func TestMemoryKV_ParseExpirationGrammar(t *testing.T) {
 	}
 }
 
-func TestMemoryKV_KeyLengthLimit(t *testing.T) {
+func TestKV_KeyLengthLimit(t *testing.T) {
 	kv, _ := newTestKV()
 	longKey := make([]byte, memKVMaxKeyLen+1)
 	for i := range longKey {

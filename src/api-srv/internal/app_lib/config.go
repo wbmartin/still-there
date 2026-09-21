@@ -2,17 +2,10 @@ package app_lib
 
 import (
 	"bufio"
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/json"
-	"encoding/pem"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // Config holds the application configuration
@@ -22,9 +15,6 @@ type Config struct {
 	JWTSessionExpireHours            int      `json:"jwt_session_expire_hours"`
 	MaxUserReqPerMin                 int      `json:"max_user_req_per_min"`
 	MaxUnauthReqPerMin               int      `json:"max_unauth_req_per_min"`
-	LogReceiverHostPort              string   `json:"log_receiver_host_port"`
-	KVHostPort                       string   `json:"kv_host_port"`
-	KVBackend                        string   `json:"kv_backend"`
 	ServerName                       string   `json:"server_name"`
 	AppName                          string   `json:"app_name"`
 	ServerPort                       int      `json:"server_port"`
@@ -37,106 +27,6 @@ type Config struct {
 	FailedLoginAttemptWindowDuration string   `json:"failed_login_attempt_window_duration"`
 	FailedLoginLockoutDuration       string   `json:"failed_login_lockout_duration"`
 	CorsAllowedOrigins               []string `json:"cors_allowed_origins"`
-}
-
-// VaultClient represents a client for the shrmpl-vault service
-type VaultClient struct {
-	serverURL string
-	certPath  string
-	keyPath   string
-	secret    string
-	client    *http.Client
-}
-
-// NewVaultClient creates a new vault client
-func NewVaultClient(serverURL, certPath, keyPath, secret string) *VaultClient {
-	return &VaultClient{
-		serverURL: strings.TrimRight(serverURL, "/"),
-		certPath:  certPath,
-		keyPath:   keyPath,
-		secret:    secret,
-	}
-}
-
-// Connect establishes TLS connection to shrmpl-vault
-func (c *VaultClient) Connect() (bool, error) {
-	// Load client certificates
-	cert, err := tls.LoadX509KeyPair(c.certPath, c.keyPath)
-	if err != nil {
-		return false, fmt.Errorf("failed to load certificates: %v", err)
-	}
-
-	// Load vault server certificate for verification
-	serverCertPath := "/Users/brandon/Code/ProtoStack-ReactGo/etc/crt/shrmpl_vault_server_fullchain.pem"
-	serverCertPEM, err := os.ReadFile(serverCertPath)
-	if err != nil {
-		return false, fmt.Errorf("failed to load server certificate: %v", err)
-	}
-	block, _ := pem.Decode(serverCertPEM)
-	if block == nil {
-		return false, fmt.Errorf(
-			"failed to decode PEM block from server certificate",
-		)
-	}
-	serverCert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse server certificate: %v", err)
-	}
-
-	// Create cert pool with server cert as CA (assuming self-signed, will break otherwise)
-	caCertPool := x509.NewCertPool()
-	caCertPool.AddCert(serverCert)
-
-	// Create TLS config
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caCertPool,
-	}
-
-	// Create HTTP client
-	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-	}
-	c.client = &http.Client{
-		Transport: transport,
-		Timeout:   10 * time.Second,
-	}
-
-	// Connection setup successful - actual testing happens during GetConfig calls
-	return true, nil
-}
-
-// GetConfig retrieves a configuration file from shrmpl-vault
-func (c *VaultClient) GetConfig(filename string) (string, error) {
-	if c.client == nil {
-		return "", fmt.Errorf("not connected")
-	}
-
-	url := fmt.Sprintf("%s/%s?secret=%s", c.serverURL, filename, c.secret)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	switch resp.StatusCode {
-	case 200:
-		content, err := io.ReadAll(resp.Body)
-		return string(content), err
-	case 404:
-		return "", fmt.Errorf("file not found")
-	case 401:
-		return "", fmt.Errorf("unauthorized - invalid certificate or secret")
-	case 429:
-		return "", fmt.Errorf("rate limit exceeded")
-	default:
-		return "", fmt.Errorf("HTTP error: %d", resp.StatusCode)
-	}
 }
 
 // ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,
@@ -176,45 +66,6 @@ func LoadConfig(configFilePath string) (*Config, error) {
 		return nil, err
 	}
 
-	// Fetch secrets from vault if configured
-	vaultServer := env["VAULT_SERVER"]
-	vaultCert := env["VAULT_CLIENT_CERT_PATH"]
-	vaultKey := env["VAULT_CLIENT_KEY_PATH"]
-	vaultSecret := env["VAULT_SECRET_KEY"]
-	vaultFile := env["VAULT_SECRETS_FILENAME"]
-	if vaultServer != "" && vaultCert != "" && vaultKey != "" &&
-		vaultSecret != "" &&
-		vaultFile != "" {
-		vaultClient := NewVaultClient(
-			vaultServer,
-			vaultCert,
-			vaultKey,
-			vaultSecret,
-		)
-		_, err := vaultClient.Connect()
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to vault: %w", err)
-		}
-		secretsJSON, err := vaultClient.GetConfig(vaultFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get secrets from vault: %w", err)
-		}
-		var secrets map[string]string
-		if err := json.Unmarshal([]byte(secretsJSON), &secrets); err != nil {
-			return nil, fmt.Errorf("failed to parse secrets JSON: %w", err)
-		}
-		// Override env with secrets
-		if dbURL, ok := secrets["DATABASE_URL"]; ok {
-			env["DATABASE_URL"] = dbURL
-		}
-		if jwtSecret, ok := secrets["JWT_SECRET"]; ok {
-			env["JWT_SECRET"] = jwtSecret
-		}
-		if totpKey, ok := secrets["TOTP_ENCRYPTION_KEY"]; ok {
-			env["TOTP_ENCRYPTION_KEY"] = totpKey
-		}
-	}
-
 	var config Config
 
 	// Populate from parsed env map
@@ -239,12 +90,6 @@ func LoadConfig(configFilePath string) (*Config, error) {
 		}
 	}
 
-	config.LogReceiverHostPort = env["LOG_RECEIVER_HOST_PORT"]
-	config.KVHostPort = env["KV_HOST_PORT"]
-	config.KVBackend = env["KV_BACKEND"]
-	if config.KVBackend == "" {
-		config.KVBackend = "memory" // default: in-process KV (no external shrmpl-kv needed)
-	}
 	config.ServerName = env["SERVER_NAME"]
 	config.AppName = env["APP_NAME"]
 	// Optional. Empty listens on every interface, which is what every config
@@ -314,21 +159,6 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	}
 	if config.JWTSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
-	}
-	// LOG_RECEIVER_HOST_PORT is deliberately NOT required. Empty means "log to
-	// stdout only", which systemd captures into journald -- an explicit choice,
-	// not a guessed default. Requiring it forced every config file to name a
-	// shrmpl-log instance even on hosts that have none, while the logger
-	// tolerated the connection failing anyway.
-	switch config.KVBackend {
-	case "memory":
-		// in-process KV; KV_HOST_PORT not needed
-	case "shrmpl":
-		if config.KVHostPort == "" {
-			return nil, fmt.Errorf("KV_HOST_PORT is required when KV_BACKEND=shrmpl")
-		}
-	default:
-		return nil, fmt.Errorf("KV_BACKEND must be \"memory\" or \"shrmpl\", got %q", config.KVBackend)
 	}
 	if config.ServerName == "" {
 		return nil, fmt.Errorf("SERVER_NAME is required")
