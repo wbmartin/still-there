@@ -45,13 +45,22 @@ been committed. Small, independent commits are fine.
    (`app_user_group_handler.go` ~348) answers `"userGroupId": 1` for every
    delete. Return `groupID`.
 3. **Anonymous rate limit keys all unauthenticated traffic on one bucket.**
-   `internal/app_lib/app_helper.go:389` builds
-   `RPM*anon*<minute>` — every anonymous client shares the limit. The
-   sibling `CheckRateLimit` (~282-350) keys by IP correctly. Also:
-   `getClientIP` is duplicated in `handler/auth_handler.go:24-42`; the
-   `"admin"` username is hard-exempt from rate limiting (~300, 358).
-   Fix: one IP extractor in app_lib, one rate-limit path, no username
-   exemption (or make it a config key).
+   Two limiters exist. `CheckRateLimit` (`internal/app_lib/app_helper.go:288`)
+   keys anonymous callers by client IP (honours `X-Forwarded-For`); used
+   by 2 handlers. `CheckRateLimitAndUserBlock` (`:352`) keys them as the
+   literal `RPM*anon*<minute>` (`:389`); used by 27. Callers that reach
+   it with no claims: `MFASetupHandler` and `MFAVerifyHandler`
+   (`user_mfa_handler.go:298, 490` — the temp-token step between
+   password and MFA), plus refresh/change-password/logoff when the JWT
+   check already failed. With `MAX_UNAUTH_REQ_PER_MIN=20` every
+   not-yet-authenticated user shares 20 req/min on the MFA step:
+   twenty concurrent logins or one hostile client → 429 for everyone.
+   **Fix (agreed with Brandon 2026-09-21):** when claims are nil,
+   `CheckRateLimitAndUserBlock` uses the same IP key as `CheckRateLimit`,
+   via one shared `clientIP(r)` helper in app_lib that also replaces the
+   copy at `handler/auth_handler.go:24-42`. Both functions stay; no call
+   site changes. The `"admin"` exemption from rate limiting is
+   **deliberate — leave it.**
 4. **`example_handler.go:64-68` has a `fmt.Printf("DEBUG: ...")`** on a
    request path. Remove.
 
