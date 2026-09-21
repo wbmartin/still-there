@@ -1,7 +1,7 @@
 ---
 id: PS0014
 title: Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps
-status: in-review
+status: ready
 blocked_by:
 waiting_on:
 priority: medium
@@ -10,9 +10,9 @@ raised: 2026-09-21
 raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0014-test-harness-and-bin-numbering
-merged:
-deployed:
-validated:
+merged: 6c0cbe9
+deployed: none
+validated: 2026-09-21
 ---
 # PS0014 — Four-and-a-half test harnesses and two generations of bin/ scripts
 

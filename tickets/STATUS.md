@@ -6,17 +6,16 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 16:37 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 16:51 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (6)
+## Engineering — ready to start (5)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
 | **PS0012** | Web — fix the entity-page bugs; document that pages are deliberate scaffolding | medium | web |
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | medium | web |
-| **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | medium | api |
 | **PS0016** | Add JSONB and UUID columns to the example entity | low | api |
 | **PS0017** | Passkey (WebAuthn) as a second factor | low | security |
 | **PS0018** | User profile page: preferences and avatar | low | web |
@@ -25,7 +24,7 @@ picks up the next piece of work. Do not edit below the marker.
 
 | Ticket | Title | Claimed |
 |---|---|---|
-| **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | 2026-09-21 by TKT-PS0014-test-harness-and-bin-numbering |
+| **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | 2026-09-21 by TKT-PS0015-sql-and-cmd-shape |
 
 ## Engineering — merged, awaiting validation (7)
 
@@ -39,13 +38,14 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0009** | Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable | 0985e19 | — |
 | **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | 67bb62c | — |
 
-## Engineering — validated, awaiting archive (3)
+## Engineering — validated, awaiting archive (4)
 
 | Ticket | Title | Validated |
 |---|---|---|
 | **PS0001** | Backport infra, ticketing and tooling from derivative apps | 2026-09-21 |
 | **PS0005** | One agent rulebook — fold doc/9xx guidance into CLAUDE.md, fix or retire opencode.json | 2026-09-21 |
 | **PS0006** | Move ProtoStack history out of doc/ into the engineering log; fix every broken path | 2026-09-21 |
+| **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | 2026-09-21 |
 
 ## Engineering — blocked (2)
 
@@ -61,8 +61,8 @@ picks up the next piece of work. Do not edit below the marker.
 | api | 7 |
 | web | 3 |
 | security | 2 |
-| tooling | 2 |
 | docs | 2 |
+| tooling | 1 |
 
 **Next free number:** `PS0020` (engineering), `PS1001` (Ask Customer).
 
