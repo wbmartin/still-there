@@ -26,7 +26,25 @@ post-agreement upgrade adds a webhook/registry-driven deploy and a real migrator
   log/                 # nginx only; API logs to journald
 ```
 
-`<app>` is `$APP_NAME` (default `proto`); the systemd unit is `uat-${APP_NAME}-api`.
+`<app>` is `$APP_NAME`; the systemd unit is `$SERVICE`. Both — and everything else
+the two scripts need — come from **`etc/uat-deploy.env`**, committed and secret-free:
+
+| key | side | meaning |
+|---|---|---|
+| `APP_NAME` | both | `proto`; bundle name prefix, unit description |
+| `UAT_HOST` | laptop | ssh alias for the UAT host (scp target) |
+| `PG_CONTAINER` | laptop | docker container whose `pg_dump` produces `db.sql` |
+| `LOCAL_ENV_FILE` | laptop | API env with the inline `DATABASE_URL` to dump |
+| `APP_ROOT` | server | `/srv/uat-proto` |
+| `SERVICE` | server | `uat-proto-api` |
+| `SVC_USER` | server | `www-data` |
+
+`600` sources it (`PRESALES_ENV=<file>` to use another) and stops, naming the key, if
+anything is missing — there are no inline defaults. It writes the four server-side keys
+into the bundle as `deploy.env`; `610` (`deploy.sh`) sources that and then
+`$APP_ROOT/etc/deploy.env` if the host keeps one, which wins. Same rule: missing key,
+no run. This is the same "scripts carry no per-host values" model the post-sales
+`infra/<host>/` placeholders use (`infra/README.md`).
 
 ## One-time host prep
 
@@ -39,6 +57,8 @@ post-agreement upgrade adds a webhook/registry-driven deploy and a real migrator
 4. Make sure a `proto_app_svc_account`-owned Postgres instance is reachable at the
    `DATABASE_URL` in that env file — `bin/610-deploy-uat` creates the role and database
    itself on first deploy (see `000-roles.sql` in the bundle).
+5. Optional: `/srv/uat-<app>/etc/deploy.env` with any of `APP_NAME`, `APP_ROOT`,
+   `SERVICE`, `SVC_USER` to override what the bundle carries.
 
 ## The two commands
 
@@ -84,4 +104,5 @@ There is no DB rollback beyond re-running a deploy from an older bundle's `db.sq
 This presales path is intentionally disposable. Once there's a signed agreement, the
 next step up is a webhook/registry-driven deploy pipeline with a real `proto-migrate`
 apply step against a persistent UAT database, instead of restoring a fresh dump each
-time.
+time. The placeholder for it is already staged under `infra/{uat,prd}/` — see
+`infra/README.md`.

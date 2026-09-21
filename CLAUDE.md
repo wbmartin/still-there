@@ -10,7 +10,12 @@ here.
 
 - `bin/` — numbered scripts: `1xx` build, `2xx` run/test-runner, `3xx`
   tests, `4xx` certs, `5xx` db, `6xx` deploy.
-- `etc/` — environment files.
+- `etc/` — environment files. `uat-deploy.env` drives the presales
+  `bin/600`/`610` pair (no inline defaults in the scripts).
+- `infra/<host>/` — mirror of `/srv/<env>-proto/{bin,etc}` on a server.
+  Scripts deploy verbatim (no secrets, no per-host values); every value
+  comes from `etc/*.env`, whose repo copies are redacted `SERVERONLY`.
+  Placeholder until post-sales; presales uses `bin/600`/`610`.
 - `src/api-srv/sql/` — `migrations/NNNN_name.sql`, embedded in
   `cmd/migrate`. This is the **only** way a schema change reaches a
   database; never hand-run DDL. Also `roles.sql` and `fixtures/`.

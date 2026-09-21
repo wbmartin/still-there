@@ -1,0 +1,27 @@
+
+[Unit]
+Description=Proto API (Go)
+After=network-online.target postgresql.service
+Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+[Service]
+Type=simple
+User=prd-proto
+Group=proto
+ExecStart=/srv/prd-proto/libexec/proto-api /srv/prd-proto/etc/prd-proto-api.env
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/prd-proto/log
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=prd-proto-api
+
+[Install]
+WantedBy=multi-user.target

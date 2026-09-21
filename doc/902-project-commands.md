@@ -136,7 +136,11 @@ To load test the api server:
 ./bin/600-bundle-uat [--no-scp] [--no-db]   # build api + migrator + web, dump local db, scp bundle
 sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside the bundle
 ```
+- Settings come from `etc/uat-deploy.env` (`APP_NAME`, `UAT_HOST`, `PG_CONTAINER`,
+  `LOCAL_ENV_FILE`, `APP_ROOT`, `SERVICE`, `SVC_USER`); `PRESALES_ENV=<file>`
+  swaps the file. No inline defaults -- a missing key stops the run.
 - See doc/320-presales-uat-deploy.md. Run `./bin/200-run-tests` first.
+- Post-sales pipeline placeholders: `infra/{uat,prd}/` (see `infra/README.md`).
 
 To regenerate vault TLS certificates:
 ```

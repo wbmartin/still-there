@@ -1,0 +1,61 @@
+#!/bin/bash
+set -euo pipefail
+
+SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+DEPLOY_ENV="$SRV_ROOT/etc/prd-proto-deploy.env"
+[ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
+# shellcheck disable=SC1090
+source "$DEPLOY_ENV"
+for var in CONTAINER_REGISTRY_SERVER CONTAINER_REGISTRY_USER CONTAINER_REGISTRY_PASSWORD DEPLOY_TAG PROMOTE_FROM_TAG; do
+    [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $DEPLOY_ENV"; exit 1; }
+done
+API_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-api"
+WEB_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-web"
+
+SOURCE_TAG="${1:+sha-$1}"
+SOURCE_TAG="${SOURCE_TAG:-$PROMOTE_FROM_TAG}"
+TARGET_TAG="$DEPLOY_TAG"
+
+TARGET_USER="shrmpl-hook"
+if [ "$(id -un)" != "$TARGET_USER" ]; then
+    echo "[ERROR] Must run as $TARGET_USER (currently $(id -un))."
+    echo "        sudo -u $TARGET_USER -H $0 $*"
+    exit 1
+fi
+
+echo "[INFO] Logging in to $CONTAINER_REGISTRY_SERVER"
+echo "$CONTAINER_REGISTRY_PASSWORD" | oras login -u "$CONTAINER_REGISTRY_USER" --password-stdin "$CONTAINER_REGISTRY_SERVER"
+
+revision_of() { oras manifest fetch "$1:$2" | jq -r '.annotations["org.opencontainers.image.revision"] // ""'; }
+digest_of()   { oras manifest fetch --descriptor "$1:$2" | jq -r .digest; }
+
+API_REV=$(revision_of "$API_BLOB" "$SOURCE_TAG")
+WEB_REV=$(revision_of "$WEB_BLOB" "$SOURCE_TAG")
+
+[ -n "$API_REV" ] || { echo "[ERROR] $API_BLOB:$SOURCE_TAG carries no revision annotation"; exit 1; }
+
+if [ "$API_REV" != "$WEB_REV" ]; then
+    echo "[ERROR] $SOURCE_TAG is not a coherent build:"
+    echo "          api -> $API_REV"
+    echo "          web -> $WEB_REV"
+    echo "        Promote by explicit sha, or rebuild so both tags agree."
+    exit 1
+fi
+
+API_DIGEST=$(digest_of "$API_BLOB" "$SOURCE_TAG")
+WEB_DIGEST=$(digest_of "$WEB_BLOB" "$SOURCE_TAG")
+
+PREV_API=$(digest_of "$API_BLOB" "$TARGET_TAG" 2>/dev/null || echo "none")
+PREV_WEB=$(digest_of "$WEB_BLOB" "$TARGET_TAG" 2>/dev/null || echo "none")
+echo "[INFO] $TARGET_TAG currently: api=$PREV_API web=$PREV_WEB"
+
+echo "[INFO] Promoting $SOURCE_TAG ($API_REV) to $TARGET_TAG"
+# Tag by digest, not by tag name: the source tag could move between resolve and tag.
+oras tag "$API_BLOB@$API_DIGEST" "$TARGET_TAG"
+oras tag "$WEB_BLOB@$WEB_DIGEST" "$TARGET_TAG"
+
+echo "[INFO] $TARGET_TAG now: api=$API_DIGEST web=$WEB_DIGEST"
+echo "[INFO] commit: $API_REV"
+echo "[INFO] Promoted. Install with:"
+echo "         $SRV_ROOT/bin/prd-proto-install-api"
+echo "         $SRV_ROOT/bin/prd-proto-publish-web-client --pull $TARGET_TAG"

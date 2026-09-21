@@ -1,0 +1,8 @@
+
+[Unit]
+Description=Restart proto-api on request
+
+[Service]
+Type=oneshot
+ExecStart=/bin/rm -f /srv/prd-proto/stg/restart.request
+ExecStart=/bin/systemctl restart prd-proto-api

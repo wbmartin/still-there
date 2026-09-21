@@ -1,0 +1,10 @@
+
+[Unit]
+Description=Watch for a proto-api restart request
+
+[Path]
+PathExists=/srv/uat-proto/stg/restart.request
+Unit=uat-proto-restart.service
+
+[Install]
+WantedBy=multi-user.target

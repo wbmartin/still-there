@@ -9,12 +9,18 @@ Two scripts do the work; this skill is the procedure around them.
 
 | | |
 |---|---|
-| `bin/600-bundle-uat` | local: build `api-srv` (static linux/amd64) + `proto-migrate` (if `src/api-srv/cmd/migrate` exists) + `web-pub.tar.gz` + `db.sql` (pg_dump run *inside* the `$PG_CONTAINER` container) → `dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz` → scp to `$UAT_HOST:/tmp/` |
+| `bin/600-bundle-uat` | local: build `api-srv` (static linux/amd64) + `proto-migrate` (if `src/api-srv/cmd/migrate` exists) + `web-pub.tar.gz` + `db.sql` (pg_dump run *inside* the `$PG_CONTAINER` container) + `deploy.env` → `dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz` → scp to `$UAT_HOST:/tmp/` |
 | `bin/610-deploy-uat` | server, shipped in the bundle as `deploy.sh`: stop `$SERVICE` → drop/recreate the UAT DB from `db.sql` → replace `$APP_ROOT/libexec/api-srv` (+ `proto-migrate`) → replace `$APP_ROOT/web-pub` → start → poll `/health` |
 
-Defaults (override via env): `APP_NAME=proto`, `UAT_HOST=uat-unified001`,
-`PG_CONTAINER=loc-postgres`, `APP_ROOT=/srv/uat-${APP_NAME}`, `SERVICE=uat-${APP_NAME}-api`,
-`SVC_USER=www-data`.
+**All settings come from `etc/uat-deploy.env`** (committed, no secrets):
+`APP_NAME=proto`, `UAT_HOST=uat-server` (ssh alias), `PG_CONTAINER=loc-postgres`,
+`LOCAL_ENV_FILE=etc/loc-api-srv.env`, and the server-side `APP_ROOT=/srv/uat-proto`,
+`SERVICE=uat-proto-api`, `SVC_USER=www-data`. `600` sources it (`PRESALES_ENV=<file>`
+to use another) and dies naming any missing key; there are no inline defaults and no
+per-variable env overrides. `600` writes the server-side keys into the bundle as
+`deploy.env`; `610` sources that, then `$APP_ROOT/etc/deploy.env` if the host keeps one
+(which wins). Read the values from the file before running anything below — the
+`$UAT_HOST`/`$SERVICE`/`$APP_ROOT` in the commands are those values.
 
 **The operator runs the server step.** `sudo` on the UAT host needs a password, so Claude
 never runs `deploy.sh`; it hands over the exact command and verifies afterwards.
@@ -23,12 +29,12 @@ never runs `deploy.sh`; it hands over the exact command and verifies afterwards.
 
 ```bash
 cd <repo>                                      # this app's repo
-git checkout -q dev                            # UAT builds come from dev unless told otherwise
+git checkout -q main                            # UAT builds come from main unless told otherwise
 bin/600-bundle-uat 2>&1 | tail -15
 ssh -o BatchMode=yes "$UAT_HOST" 'cd /tmp && f=$(ls -t '"$APP_NAME"'_bundle_*.tar.gz | head -1) && tar xzf "$f" && cat "${f%.tar.gz}/MANIFEST"'
 ```
 
-The script prints `app=… branch=… commit=…` first — confirm it says `dev`. Untracked
+The script prints `app=… branch=… commit=…` first — confirm it says `main`. Untracked
 files do not affect the build.
 
 Flags: `--no-scp` (build only), `--no-db` (skip the dump).
@@ -77,13 +83,14 @@ to the UI (no typing passwords) — the UI eyeball is the operator's.
 
 ## Known gotchas
 
-- `main` may be far behind `dev`; a main build can roll UAT back. Always confirm the
-  printed `branch=`.
+- A build from a stale feature branch rolls UAT back. Always confirm the printed
+  `branch=` is `main` (or the branch you were told to ship).
 - Working directory resets between turns — always `cd` into the repo explicitly.
 - macOS tar adds `._*` files; the scripts set `COPYFILE_DISABLE=1 --no-xattrs` and deploy
   strips any leftovers. If `web-pub` ever shows `._index.html`, someone tarred by hand.
-- The local dev env (`etc/loc-api-srv.env`) normally pulls secrets from vault, so it has
-  no inline `DATABASE_URL` by default — the DB-dump step in `600-bundle-uat` needs one to
-  find the local DB name/password. Either add an inline `DATABASE_URL` line locally, or
-  set `LOCAL_DB=`/`DB_PASS=` overrides, or use `--no-db`.
+- The local dev env (`LOCAL_ENV_FILE`, normally `etc/loc-api-srv.env`) pulls secrets
+  from vault, so it has no inline `DATABASE_URL` by default — the DB-dump step in
+  `600-bundle-uat` needs one to find the local DB name/password. Either add an inline
+  `DATABASE_URL` line locally, point `LOCAL_ENV_FILE` at a file that has one, or use
+  `--no-db`.
 - The dump is whatever is in the local dev DB — check row counts if totals look off.

@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+
+SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+DEPLOY_ENV="$SRV_ROOT/etc/uat-proto-deploy.env"
+[ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
+# shellcheck disable=SC1090
+source "$DEPLOY_ENV"
+for var in BUILD_STG; do
+    [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $DEPLOY_ENV"; exit 1; }
+done
+
+export PROTO_TEST_ENV="$SRV_ROOT/etc/uat-proto-test.env"
+exec "$BUILD_STG/bin/200-run-tests" "$@"
