@@ -147,6 +147,14 @@ None.
 - [x] `constants/grants.ts` / `constants/api.ts` carry a header naming the Go files they mirror. (Generated header + drift test struck per Brandon.)
 - [x] `tsc`, `eslint` (0 errors), vitest 28, `bin/300-run-tests all` go=163 unit=28 e2e=3 py=63.
 
+## Worked 2026-09-21
+
+Complete on the branch (7 commits, at the sha on origin); gate green
+(go=163 unit=28 e2e=3 py=63). **Next physical action: Brandon says
+"merge"** → follow `ticket-workflow` step 4 (`git merge origin/main` on
+the branch, re-run `bin/300-run-tests all`, `--no-ff` into `main`, set
+`merged:`). Nothing else outstanding on this ticket.
+
 ## Deploy needs
 
 Web build only.
