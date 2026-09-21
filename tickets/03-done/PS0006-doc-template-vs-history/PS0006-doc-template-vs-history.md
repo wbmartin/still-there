@@ -1,7 +1,7 @@
 ---
 id: PS0006
 title: Move ProtoStack history out of doc/ into the engineering log; fix every broken path
-status: in-review
+status: ready
 blocked_by:
 waiting_on:
 priority: high
@@ -10,9 +10,9 @@ raised: 2026-09-21
 raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0006-doc-template-vs-history
-merged:
-deployed:
-validated:
+merged: 5a38afa
+deployed: none
+validated: 2026-09-21
 ---
 # PS0006 — doc/ mixes template content with ProtoStack's own history
 
