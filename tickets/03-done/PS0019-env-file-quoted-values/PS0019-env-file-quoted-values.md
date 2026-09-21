@@ -11,8 +11,8 @@ raised_by: PS0006 triage of doc/000-TODO.md
 asked:
 claimed: 2026-09-21 by TKT-PS0019-env-file-quoted-values
 merged: 67bb62c
-deployed:
-validated:
+deployed: none
+validated: 2026-09-21
 ---
 # PS0019 — Env file parser and quoted values
 

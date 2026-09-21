@@ -11,8 +11,8 @@ raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0008-api-split-app-lib
 merged: 5ce23c6
-deployed:
-validated:
+deployed: none
+validated: 2026-09-21
 ---
 # PS0008 — `app_lib` is a grab-bag named by history
 

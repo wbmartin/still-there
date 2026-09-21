@@ -11,8 +11,8 @@ raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0012-web-entity-pages-and-routing
 merged: f76f1fb
-deployed:
-validated:
+deployed: none
+validated: 2026-09-21
 ---
 # PS0012 — Entity pages: scaffolding by design, plus a few real bugs
 

@@ -11,8 +11,8 @@ raised_by: PS0017 investigation
 asked:
 claimed: 2026-09-21 by TKT-PS0020-mfa-totp-e2e-coverage
 merged: 6f426e9
-deployed:
-validated:
+deployed: none
+validated: 2026-09-21
 ---
 # PS0020 — Cover the TOTP second factor end to end
 

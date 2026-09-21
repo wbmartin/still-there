@@ -11,8 +11,8 @@ raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0013-web-hygiene-deps-schemas-constants
 merged: 6f0aff1
-deployed:
-validated:
+deployed: none
+validated: 2026-09-21
 ---
 # PS0013 — Web leftovers from earlier iterations
 

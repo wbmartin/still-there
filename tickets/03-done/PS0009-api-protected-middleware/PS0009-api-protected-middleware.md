@@ -11,8 +11,8 @@ raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0009-api-protected-middleware
 merged: 0985e19
-deployed:
-validated:
+deployed: none
+validated: 2026-09-21
 ---
 # PS0009 — The check sequence in each handler is deliberate
 

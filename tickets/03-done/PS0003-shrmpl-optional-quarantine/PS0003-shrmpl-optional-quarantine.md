@@ -11,8 +11,8 @@ raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0003-shrmpl-optional-quarantine
 merged: b514d5c
-deployed:
-validated:
+deployed: none
+validated: 2026-09-21
 ---
 # PS0003 — Sunset shrmpl kv/log; in-process KV and slog are the template
 

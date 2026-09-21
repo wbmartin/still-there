@@ -11,8 +11,8 @@ raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0002-security-correctness-hygiene
 merged: ea5f4f0
-deployed:
-validated:
+deployed: none
+validated: 2026-09-21
 ---
 # PS0002 — Security and correctness hygiene
 

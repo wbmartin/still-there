@@ -11,8 +11,8 @@ raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0007-derive-new-app-checklist
 merged: 9d74ba9
-deployed:
-validated:
+deployed: none
+validated: 2026-09-21
 ---
 # PS0007 — There is no "how to derive a new app from this" path
 
