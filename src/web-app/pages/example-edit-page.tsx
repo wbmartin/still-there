@@ -26,7 +26,7 @@ function ExampleEditPage() {
   const isNew = id === "new";
   const requiredGrant = isNew ? grants.CREATE_EXAMPLE : grants.UPDATE_EXAMPLE;
   const authState = useAuthGuard([requiredGrant]);
-  const { retrieveExampleById, createExample, updateExample, deleteExample } =
+  const { readExampleById, createItem, updateItem, deleteItem } =
     useExamplesStore();
   const navigate = useNavigate();
 
@@ -47,7 +47,7 @@ function ExampleEditPage() {
   useEffect(() => {
     if (numericId && !isNew && !hasFetched.current) {
       hasFetched.current = true;
-      void retrieveExampleById(numericId)
+      void readExampleById(numericId)
         .then((existingExample) => {
           if (existingExample) {
             form.setValues({
@@ -62,11 +62,14 @@ function ExampleEditPage() {
             });
           }
         })
+        .catch((error: unknown) => {
+          console.error("Error loading example:", error);
+        })
         .finally(() => {
           setExampleLoading(false);
         });
     }
-  }, [numericId, isNew, retrieveExampleById]);
+  }, [numericId, isNew, readExampleById]);
 
   //============================^ HOOK LINE ^====================
   if (authState === "CHECKING") {
@@ -98,7 +101,7 @@ function ExampleEditPage() {
 
     try {
       if (isNew) {
-        await createExample(data);
+        await createItem(data);
         notifications.show({
           title: "Success",
           message: "Example created successfully",
@@ -107,7 +110,7 @@ function ExampleEditPage() {
           withCloseButton: false,
         });
       } else {
-        await updateExample(Number(id), data);
+        await updateItem({ exampleId: Number(id), ...data });
         notifications.show({
           title: "Success",
           message: "Example updated successfully",
@@ -136,7 +139,7 @@ function ExampleEditPage() {
   const handleDeleteConfirm = async () => {
     if (numericId) {
       try {
-        await deleteExample(numericId);
+        await deleteItem(numericId, Number(form.values.updateTs));
         notifications.show({
           title: "Success",
           message: "Example deleted successfully",

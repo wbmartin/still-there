@@ -1,0 +1,25 @@
+#!/bin/bash
+set -euo pipefail
+export PATH=/usr/sbin:$PATH
+
+SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+DEPLOY_ENV="$SRV_ROOT/etc/uat-proto-deploy.env"
+[ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
+# shellcheck disable=SC1090
+source "$DEPLOY_ENV"
+for var in SITE_NAME CERTBOT_EMAIL CERT_HEALTHCHECK_URL; do
+    [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $DEPLOY_ENV"; exit 1; }
+done
+CRT_FOLDER_PATH="$SRV_ROOT/crt"
+
+echo "[INFO] starting cert renewal;starting certbot"
+/usr/bin/certbot --nginx certonly -d "$SITE_NAME" --email "$CERTBOT_EMAIL" --force-renewal #--quiet
+echo "[INFO] certbot completed, positioning certs"
+mkdir -p "$CRT_FOLDER_PATH/$SITE_NAME"
+
+cp "/etc/letsencrypt/live/$SITE_NAME/"{fullchain.pem,privkey.pem} "$CRT_FOLDER_PATH/$SITE_NAME/"
+chown -R www-data:www-data "$CRT_FOLDER_PATH/$SITE_NAME"
+
+echo "[INFO] completed cert renewal; starting nginx"
+systemctl reload nginx
+curl -fsS "$CERT_HEALTHCHECK_URL"

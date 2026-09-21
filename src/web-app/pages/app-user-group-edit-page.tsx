@@ -33,11 +33,14 @@ function AppUserGroupEditPage() {
     ? grantConstants.CREATE_USER_GROUP
     : grantConstants.UPDATE_USER_GROUP;
   const authState = useAuthGuard([requiredGrant]);
-  const { createAppUserGroup, updateAppUserGroup, deleteAppUserGroup } =
-    useAppUserGroupStore();
   const {
-    userList,
-    retrieveUserList,
+    createItem: createAppUserGroup,
+    updateItem: updateAppUserGroup,
+    deleteItem: deleteAppUserGroup,
+  } = useAppUserGroupStore();
+  const {
+    itemList: userList,
+    readList: readUserList,
     addUserListToGroup,
     removeUserListFromGroup,
   } = useAppUserStore();
@@ -65,7 +68,7 @@ function AppUserGroupEditPage() {
     if (!hasFetched.current && numericId) {
       hasFetched.current = true;
       // Find group from store
-      const groups = useAppUserGroupStore.getState().appUserGroupList;
+      const groups = useAppUserGroupStore.getState().itemList;
       const existingGroup = groups.find(
         (g: AppUserGroup) => g.appUserGroupId === numericId,
       );
@@ -79,9 +82,9 @@ function AppUserGroupEditPage() {
         }, 0);
       }
       // Load users for the group management
-      void retrieveUserList();
+      void readUserList().catch(console.error);
     }
-  }, [numericId, retrieveUserList]);
+  }, [numericId, readUserList]);
 
   //============================^ HOOK LINE ^====================
 
@@ -113,7 +116,10 @@ function AppUserGroupEditPage() {
           withCloseButton: false,
         });
       } else {
-        await updateAppUserGroup(Number(appUserGroupId), data);
+        await updateAppUserGroup({
+          appUserGroupId: Number(appUserGroupId),
+          ...data,
+        });
         notifications.show({
           title: "Success",
           message: "User group updated successfully",
@@ -142,7 +148,7 @@ function AppUserGroupEditPage() {
   const handleDeleteConfirm = async () => {
     if (numericId && !isNew) {
       try {
-        await deleteAppUserGroup(numericId);
+        await deleteAppUserGroup(numericId, Number(form.values.updateTs));
         notifications.show({
           title: "Success",
           message: "User group deleted successfully",

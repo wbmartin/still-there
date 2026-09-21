@@ -28,6 +28,7 @@ type Config struct {
 	ServerName                       string   `json:"server_name"`
 	AppName                          string   `json:"app_name"`
 	ServerPort                       int      `json:"server_port"`
+	ServerBindAddress                string   `json:"server_bind_address"`
 	EnableTLS                        bool     `json:"enable_tls"`
 	TLSCertPath                      string   `json:"tls_cert_path"`
 	TLSKeyPath                       string   `json:"tls_key_path"`
@@ -138,16 +139,16 @@ func (c *VaultClient) GetConfig(filename string) (string, error) {
 	}
 }
 
-// LoadConfig loads configuration from a .env file
-func LoadConfig(configFilePath string) (*Config, error) {
-	// Open the .env file
-	file, err := os.Open(configFilePath)
+// ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,
+// no quoting or interpolation -- into a map. Shared by LoadConfig and by
+// cmd/migrate, which needs only DATABASE_URL from a file of the same shape.
+func ReadEnvFile(path string) (map[string]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("unable to open configuration file: %w", err)
 	}
 	defer file.Close()
 
-	// Parse the .env file
 	env := make(map[string]string)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -164,6 +165,15 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading configuration file: %w", err)
+	}
+	return env, nil
+}
+
+// LoadConfig loads configuration from a .env file
+func LoadConfig(configFilePath string) (*Config, error) {
+	env, err := ReadEnvFile(configFilePath)
+	if err != nil {
+		return nil, err
 	}
 
 	// Fetch secrets from vault if configured
@@ -237,6 +247,10 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	}
 	config.ServerName = env["SERVER_NAME"]
 	config.AppName = env["APP_NAME"]
+	// Optional. Empty listens on every interface, which is what every config
+	// did before the key existed. 127.0.0.1 is right behind nginx and for the
+	// test harness, whose instance carries a well-known password.
+	config.ServerBindAddress = env["SERVER_BIND_ADDRESS"]
 
 	if serverPortStr := env["SERVER_PORT"]; serverPortStr != "" {
 		if val, err := strconv.Atoi(serverPortStr); err == nil {
@@ -301,9 +315,11 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	if config.JWTSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
-	if config.LogReceiverHostPort == "" {
-		return nil, fmt.Errorf("LOG_RECEIVER_HOST_PORT is required")
-	}
+	// LOG_RECEIVER_HOST_PORT is deliberately NOT required. Empty means "log to
+	// stdout only", which systemd captures into journald -- an explicit choice,
+	// not a guessed default. Requiring it forced every config file to name a
+	// shrmpl-log instance even on hosts that have none, while the logger
+	// tolerated the connection failing anyway.
 	switch config.KVBackend {
 	case "memory":
 		// in-process KV; KV_HOST_PORT not needed

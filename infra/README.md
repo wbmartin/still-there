@@ -1,0 +1,142 @@
+# infra/ — host mirrors for the post-sales deploy pipeline
+
+> **PLACEHOLDER — not used until post-sales.** Nothing in here is wired up
+> or exercised today. The presales path (`bin/600-bundle-uat` /
+> `bin/610-deploy-uat`, see `doc/320-presales-uat-deploy.md`) is the working
+> deploy. This tree is staged so that, once a customer agrees and a real
+> UAT/prod pair exists, the full-fat webhook + registry + migrator pipeline
+> can be brought up by filling in files rather than designing them.
+
+## The convention
+
+`infra/<host>/{bin,etc}` mirrors `/srv/<env>-proto/{bin,etc}` on that
+server, file for file. Two placeholder hosts are committed:
+
+| Repo dir     | Host path        | Role |
+|--------------|------------------|------|
+| `infra/uat/` | `/srv/uat-proto` | build host: webhook → tests → build → push → install |
+| `infra/prd/` | `/srv/prd-proto` | promotes UAT's digests; never builds |
+
+**The repo is the source of truth for structure; the filled file lives
+only on the host.**
+
+- `bin/` scripts are **deployed verbatim** — `cp` to the host, `chmod +x`,
+  nothing edited there. They carry no secrets and no per-host values.
+  Every script opens the same way: derive `$SRV_ROOT` from its own
+  location, `source` its `etc/*.env`, and die naming the key if any
+  required variable is unset. No `${VAR:-default}` fallbacks, ever.
+- `etc/*.env` holds everything per-host or secret. The repo copy is
+  **redacted**: every real value is spelled `SERVERONLY`, hostnames are
+  `example.com`. After a PR that touches `infra/<host>/etc/`, diff the
+  redacted copy against the host file and carry the change across by hand.
+  Never commit a real value.
+- `etc/*.service`, `*.path`, `nginx_*` are copied to the host's `etc/` and
+  symlinked into `/etc/systemd/system` / `/etc/nginx/sites-enabled`, so the
+  unit has one source of truth.
+- `shrmpl-etc/` mirrors the hook definition in `/srv/shrmpl/etc/` (the
+  `shrmpl-hook` webhook receiver); `HOOKID` in the filename stands for the
+  hook's id.
+
+| Script | Sources | Required keys |
+|---|---|---|
+| `uat-proto-build`, `-install-api`, `-publish-web-client` | `etc/uat-proto-deploy.env` | registry server + credentials, `SERVICE`, `HEALTH_URL`, `DEPLOY_TAG`, `BRANCH_TO_CHECKOUT`, `REPO_URL`, `BUILD_STG`, `SLACK_WEBHOOK` |
+| `uat-proto-run-tests` → `bin/200-run-tests` | `etc/uat-proto-deploy.env` (`BUILD_STG`), then `etc/uat-proto-test.env` via `PROTO_TEST_ENV` | CI role, scratch DB names, harness paths (same keys as `etc/loc-test.env`) |
+| `*-install-api` → `proto-migrate` | `etc/<env>-proto-migrate.env` | the DDL role's `DATABASE_URL` |
+| `*-renew-web-certs` (root cron) | `etc/<env>-proto-deploy.env` | `SITE_NAME`, `CERTBOT_EMAIL`, `CERT_HEALTHCHECK_URL` |
+| `prd-proto-promote-uat`, `-promote-uat-and-deploy`, `-install-api`, `-publish-web-client` | `etc/prd-proto-deploy.env` | registry server + credentials, `SERVICE`, `HEALTH_URL`, `DEPLOY_TAG`, `PROMOTE_FROM_TAG`, `SLACK_WEBHOOK` |
+| `prd-proto-backup-all` (root cron) | `etc/prd-proto-backup.env` (root:root 0600) | `BACKUP_ENV`, `BACKUP_ROOT`, `REMOTE_SERVER`, `DATABASE_NAME`, `HEALTHCHECK_URL` |
+
+`*-start` / `*-stop` are operator tools that call `systemctl` directly; run
+them as root. The build never uses them.
+
+## Promotion flow
+
+```
+push to BRANCH_TO_CHECKOUT
+  → GitHub webhook → shrmpl-hook on the UAT host
+  → /srv/uat-proto/bin/uat-proto-build
+       flock · git reset --hard origin/<branch> · uat-proto-run-tests (gate)
+       static go build cmd/server + cmd/migrate · vite build + tar
+       oras push  proto-api:sha-<commit> + proto-web:sha-<commit>, tag :uat
+       uat-proto-install-api    (pull · migrate verify → pending → pg_dump → up
+                                 · atomic binary swap · restart via path unit
+                                 · MainPID change · /health)
+       uat-proto-publish-web-client
+       Slack notify (success or failure)
+
+prod: /srv/prd-proto/bin/prd-proto-promote-uat-and-deploy [<commit>]
+       prd-proto-promote-uat    retags the UAT digests as :prd — NEVER rebuilds;
+                                refuses if api and web revisions disagree
+       prd-proto-install-api · prd-proto-publish-web-client --pull prd
+```
+
+The hook user (`shrmpl-hook`) has no sudo. Restarting the service is done
+by a root-owned systemd **path unit** (`<env>-proto-restart.path`) that
+watches `stg/restart.request`; `install-api` touches the file and waits
+for `MainPID` to change before polling `/health`.
+
+## Layout on the host
+
+```
+/srv/<env>-proto/
+├── bin/         copies of infra/<host>/bin/      (shrmpl-hook:shrmpl-hook)
+├── etc/         filled env files, units, nginx   (root:<group> 0640)
+├── libexec/     proto-api, proto-migrate, proto-api.revision
+├── stg/         build output, pull dirs, restart.request, test logs
+├── backup/      pre-migrate pg_dump -Fc files
+├── crt/         TLS certs placed by *-renew-web-certs
+├── log/         nginx access/error logs (the API logs to journald)
+└── web-pub/     the extracted React bundle — what nginx serves
+```
+
+## One-time host setup (pointers, not a runbook)
+
+All as root, once per host. The derived app's own deploy doc is where the
+full runbook belongs.
+
+1. **Users and dirs.** `useradd -r -s /usr/sbin/nologin -M proto`;
+   `mkdir -p /srv/<env>-proto/{bin,etc,libexec,stg,backup,web-pub,log}`;
+   `chown -R shrmpl-hook:shrmpl-hook .../{bin,libexec,stg,backup}`;
+   `chown -R www-data:www-data .../{web-pub,log}`. On UAT also the
+   checkout at `BUILD_STG`, owned by `shrmpl-hook` (anything git or go does
+   there as root leaves root-owned files that break the next hook build).
+2. **Postgres roles.** `src/api-srv/sql/roles.sql` (cluster roles
+   `db_reader`/`db_writer`), then `src/api-srv/sql/ddl-role-host-setup.sql`
+   by hand: `proto_ddl` (owns the schema; only `proto-migrate` connects as
+   it — `etc/<env>-proto-migrate.env`), `<env>_proto_user` (DML only — the
+   API, `etc/<env>-proto-api.env`), and on UAT `proto_ci` (`CREATEDB`,
+   scratch DBs only — `etc/uat-proto-test.env`). Revoke `CONNECT` on the
+   real database from `PUBLIC` so the CI role cannot reach it.
+3. **Bring the DB under the migrator.** Empty DB: `proto-migrate -config
+   <migrate.env> up`. Existing schema that already is 0001: `stamp 1`.
+   Then `status`.
+4. **Env files.** `cp infra/<host>/etc/*.env /srv/<env>-proto/etc/`, fill
+   every `SERVERONLY`, set owner/mode as the header of each file says.
+5. **Scripts and units.** `cp infra/<host>/bin/* /srv/<env>-proto/bin/ &&
+   chmod +x`; `cp` the `.service`/`.path` files to `etc/`, symlink into
+   `/etc/systemd/system`, `daemon-reload`, `enable --now
+   <env>-proto-restart.path`, `enable <env>-proto-api`. Verify the path
+   unit as the hook user: `sudo -u shrmpl-hook touch
+   /srv/<env>-proto/stg/restart.request` must disappear within seconds and
+   `systemctl show -p MainPID --value <env>-proto-api` must change.
+6. **nginx + certs.** `etc/nginx_<site>` into `sites-available`, symlink,
+   `*-renew-web-certs` from root's cron (`SITE_NAME`, `CERTBOT_EMAIL` in
+   `deploy.env`).
+7. **Webhook.** `shrmpl-etc/*.env` into `/srv/shrmpl/etc/` with the real
+   `HOOK_SECRET`; `HOOK_ALLOWED_BRANCHES` must equal `BRANCH_TO_CHECKOUT`.
+8. **fail2ban.** A real host also keeps a `/srv/fail2ban` jail (nginx
+   auth-failure and API login-failure filters) mirrored under
+   `infra/<host>/fail2ban/`. Not staged here; add it when the host exists.
+9. **Prod extras.** `prd-proto-backup-all` from root's cron with
+   `etc/prd-proto-backup.env` (root:root 0600); `REMOTE_SERVER` is an ssh
+   alias in root's `~/.ssh/config`.
+
+## Deriving an app from this
+
+Rename `infra/uat/` → `infra/<real-uat-host>/` and `infra/prd/` →
+`infra/<real-prd-host>/`, and `proto` → `<app>` throughout (`sed` over the
+tree: `uat-proto` → `uat-<app>`, `proto-api` → `<app>-api`, `proto_ddl`
+etc. stay unless the app renames its roles). Then add the
+`infra/<host>/` bullet in the app's `CLAUDE.md` Layout section and write
+the runbook. Nothing in `bin/` needs to change for a new host — only
+`etc/`.

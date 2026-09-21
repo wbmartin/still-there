@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# End-to-end tests for the React app.
+#
+# This is a thin wrapper on purpose. Playwright's config starts the Go API and
+# the Vite dev server itself, and global setup rebuilds the fixtures, so
+# `npx playwright test` from src/web-app is already self-contained -- nothing
+# here is a prerequisite the runner does not enforce for itself.
+#
+# Requires the loc-postgres container to be up (doc/060-dev-env-start.md) and
+# loc_starter_e2e_db to exist (bin/513-reset-e2e-db; global setup builds it
+# on first run when it is missing).
+#
+# Ports 8082 and 5182, chosen so a developer's stack on 8080/5173 keeps
+# running untouched through a test run.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# playwright.config.ts resolves PROTO_E2E_API_ENV relative to src/web-app when
+# it is relative; make it absolute here so the value in etc/loc-test.env
+# (relative to the project root) means the same thing from both places.
+if [ -n "${PROTO_E2E_API_ENV:-}" ]; then
+  case "$PROTO_E2E_API_ENV" in
+    /*) ;;
+    *) export PROTO_E2E_API_ENV="$PROJECT_ROOT/$PROTO_E2E_API_ENV" ;;
+  esac
+fi
+
+cd "$PROJECT_ROOT/src/web-app"
+npx playwright test "$@"

@@ -18,8 +18,13 @@ import { grants } from "../constants/grants";
 
 function ExampleListPage() {
   const authState = useAuthGuard([grants.READ_EXAMPLE]);
-  const { exampleList, loading, error, retrieveExampleList, deleteExample } =
-    useExamplesStore();
+  const {
+    itemList: exampleList,
+    loading,
+    error,
+    readList,
+    deleteItem,
+  } = useExamplesStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
@@ -35,9 +40,9 @@ function ExampleListPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void retrieveExampleList();
+      void readList({ incremental: true }).catch(console.error);
     }
-  }, [authState, retrieveExampleList]);
+  }, [authState, readList]);
 
   // Sort examples
   const sortedExampleList = useMemo(() => {
@@ -101,11 +106,12 @@ function ExampleListPage() {
   };
 
   const handleDeleteConfirm = async () => {
-    if (deleteId !== null) {
+    const example = exampleList.find((ex) => ex.exampleId === deleteId);
+    if (example) {
       try {
-        await deleteExample(deleteId);
+        await deleteItem(example.exampleId, example.updateTs);
         // List is updated locally, but refresh to ensure sync
-        await retrieveExampleList();
+        await readList({ incremental: true });
       } catch (error) {
         console.error("Error deleting example:", error);
         // Error is handled in store

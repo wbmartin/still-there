@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# Rebuild a scratch database from scratch: cluster roles, the schema THROUGH
+# THE MIGRATOR, then the seed fixtures.
+#
+#   bin/510-reset-test-db                        # loc_starter_test_db
+#   bin/510-reset-test-db loc_starter_e2e_db     # any *_test_db / *_e2e_db
+#
+# Where psql runs, and as whom, comes from the environment:
+#
+#   PG_CONTAINER   docker container running Postgres (default: loc-postgres,
+#                  per doc/060-dev-env-start.md). Used when it is running.
+#   PSQL           full psql command; overrides the container/native choice
+#                  (e.g. "psql -h 127.0.0.1 -U postgres").
+#   PGPASSWORD     password for the native psql and for the migrator's URL.
+#                  Taken from the container's POSTGRES_PASSWORD when unset
+#                  and the container is in use.
+#   PROTO_PG_URL_BASE
+#                  "postgres://user:pw@host:port" the migrator connects with;
+#                  overrides DATABASE_URL from etc/loc-api-srv.env, which in
+#                  turn overrides postgres://postgres:$PGPASSWORD@127.0.0.1:5432.
+#                  The role must be able to CREATE DATABASE and own tables.
+#
+# This database is scratch: it is DROPPED and rebuilt on every run. The
+# loc_starter_db that etc/loc-api-srv.env (via the vault) points at is never
+# touched by this script -- the name guard below refuses anything that does
+# not end in _test_db or _e2e_db.
+#
+# Users after a run: admin / admin123!  and  basic / basic123!  (fixtures).
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+ENV_FILE="$PROJECT_ROOT/etc/loc-api-srv.env"
+SQL_DIR="$PROJECT_ROOT/src/api-srv/sql"
+TEST_DB="${1:-loc_starter_test_db}"
+
+# This script DROPs its target. The suffix rule is the difference between a
+# mis-set variable being a refusal and being a wiped environment.
+case "$TEST_DB" in
+  *_test_db|*_e2e_db) ;;
+  *) echo "[ERROR] Refusing to reset '$TEST_DB': scratch databases end in _test_db or _e2e_db"; exit 1 ;;
+esac
+
+# --- where psql runs ---------------------------------------------------------
+PG_CONTAINER="${PG_CONTAINER:-loc-postgres}"
+if [ -z "${PSQL:-}" ]; then
+  if command -v docker >/dev/null 2>&1 \
+     && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$PG_CONTAINER"; then
+    PSQL="docker exec -i $PG_CONTAINER psql -U postgres"
+    if [ -z "${PGPASSWORD:-}" ]; then
+      PGPASSWORD="$(docker exec "$PG_CONTAINER" printenv POSTGRES_PASSWORD 2>/dev/null || true)"
+    fi
+    echo "[INFO] Using psql inside container $PG_CONTAINER"
+  else
+    PSQL="psql -h 127.0.0.1 -U postgres"
+    echo "[INFO] Using native psql ($PSQL)"
+  fi
+fi
+export PGPASSWORD
+
+# --- what the migrator connects with -----------------------------------------
+if [ -z "${PROTO_PG_URL_BASE:-}" ] && [ -f "$ENV_FILE" ]; then
+  ENV_DB_URL="$(grep -E '^[[:space:]]*DATABASE_URL[[:space:]]*=' "$ENV_FILE" | head -1 | sed -e 's/^[^=]*=//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  if [ -n "$ENV_DB_URL" ]; then
+    # strip "/dbname?params" -> "postgres://user:pw@host:port"
+    PROTO_PG_URL_BASE="$(printf '%s' "$ENV_DB_URL" | sed -E 's#^([a-z]+://[^/]+).*$#\1#')"
+  fi
+fi
+if [ -z "${PROTO_PG_URL_BASE:-}" ]; then
+  if [ -z "${PGPASSWORD:-}" ]; then
+    echo "[ERROR] Set PGPASSWORD (or PROTO_PG_URL_BASE) so the migrator can connect as postgres"; exit 1
+  fi
+  PROTO_PG_URL_BASE="postgres://postgres:${PGPASSWORD}@127.0.0.1:5432"
+fi
+
+echo "[INFO] Rebuilding $TEST_DB"
+# Drop fails while the API server holds a pool connection, so evict sessions
+# first. Without this the reset silently leaves the previous database in place
+# and every later assertion runs against stale fixtures.
+$PSQL -d postgres -q -c "
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+WHERE datname = '$TEST_DB' AND pid <> pg_backend_pid();" >/dev/null 2>&1 || true
+$PSQL -d postgres -q -v ON_ERROR_STOP=1 \
+  -c "DROP DATABASE IF EXISTS $TEST_DB;" \
+  -c "CREATE DATABASE $TEST_DB;"
+
+# Cluster roles (idempotent), then the schema THROUGH THE MIGRATOR -- the same
+# binary and the same embedded SQL a deploy uses, so every reset is also a
+# test of `migrate up` against an empty database. SQL is piped on stdin
+# rather than passed with -f so it works when psql runs inside a container.
+echo "[INFO] Cluster roles"
+$PSQL -d postgres -q -v ON_ERROR_STOP=1 < "$SQL_DIR/roles.sql"
+echo "[INFO] Migrating"
+(cd "$PROJECT_ROOT/src/api-srv" && go run ./cmd/migrate -url "$PROTO_PG_URL_BASE/$TEST_DB" up)
+
+echo "[INFO] Seeding fixtures"
+$PSQL -d "$TEST_DB" -q -v ON_ERROR_STOP=1 < "$SQL_DIR/fixtures/015-initialdata.sql"
+
+echo "[INFO] Done."
+$PSQL -d "$TEST_DB" -c "
+SELECT (SELECT count(*) FROM app_user_group) AS groups,
+       (SELECT count(*) FROM app_user) AS users,
+       (SELECT count(*) FROM example) AS examples;"

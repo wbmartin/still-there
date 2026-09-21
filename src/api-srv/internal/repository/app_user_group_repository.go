@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -81,27 +80,11 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupList(
 		FROM app_user_group`
 	orderBy := ` ORDER BY group_name`
 
-	var whereClause string
-	var argList []interface{}
+	// Scoping comes from buildScopedWhere; this list has no incremental fetch.
+	whereClause, argList := buildScopedWhere(
+		securityContext, 0, "app_user_group_id", idList)
 
-	if len(idList) == 0 {
-		whereClause = `WHERE security_context_id = $1 AND delete_user_id IS NULL`
-		argList = []interface{}{securityContext}
-	} else {
-		placeholderList := make([]string, len(idList))
-		argList = make([]interface{}, len(idList)+1)
-		argList[0] = securityContext
-		for i, id := range idList {
-			placeholderList[i] = fmt.Sprintf("$%d", i+2)
-			argList[i+1] = id
-		}
-
-		whereClause = fmt.Sprintf(
-			` WHERE app_user_group_id IN (%s) AND security_context_id = $1 AND delete_user_id IS NULL`,
-			strings.Join(placeholderList, ","))
-	}
-
-	query := selectClause + " " + whereClause + orderBy
+	query := selectClause + whereClause + orderBy
 
 	var groups []*model.AppUserGroupModel
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
@@ -166,6 +149,10 @@ func (r *AppUserGroupRepository) CreateAppUserGroup(
 			group.UpdateUserID).Scan(&newID)
 	})
 	if err != nil {
+		if isUniqueViolation(err) {
+			// (group_name, security_context_id) is UNIQUE.
+			return nil, ErrDuplicate
+		}
 		return nil, fmt.Errorf("failed to create user group: %w", err)
 	}
 
@@ -196,6 +183,10 @@ func (r *AppUserGroupRepository) UpdateAppUserGroup(
 		return execErr
 	})
 	if err != nil {
+		if isUniqueViolation(err) {
+			// (group_name, security_context_id) is UNIQUE.
+			return ErrDuplicate
+		}
 		return fmt.Errorf("failed to update user group: %w", err)
 	}
 

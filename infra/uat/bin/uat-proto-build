@@ -1,0 +1,138 @@
+#!/bin/bash
+
+set -euo pipefail
+
+TARGET_USER="shrmpl-hook"
+if [ "$(id -un)" != "$TARGET_USER" ]; then
+    exec sudo -u "$TARGET_USER" -H "$0" "$@"
+fi
+
+SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+DEPLOY_ENV="$SRV_ROOT/etc/uat-proto-deploy.env"
+[ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
+# shellcheck disable=SC1090
+source "$DEPLOY_ENV"
+for var in CONTAINER_REGISTRY_SERVER CONTAINER_REGISTRY_USER CONTAINER_REGISTRY_PASSWORD SERVICE DEPLOY_TAG SLACK_WEBHOOK BRANCH_TO_CHECKOUT REPO_URL BUILD_STG; do
+    [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $DEPLOY_ENV"; exit 1; }
+done
+API_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-api"
+WEB_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-web"
+SRV_BIN=$SRV_ROOT/bin
+
+LOCK_FILE=/var/lock/uat-proto-build.lock
+exec 200>"$LOCK_FILE"
+flock -n 200 || { echo "[ERROR] Another build is already running (lock: $LOCK_FILE)"; exit 1; }
+
+echo "[INFO] Starting Build Script / Setting Vars"
+
+for tool in go npm oras jq; do
+    command -v "$tool" >/dev/null 2>&1 || {
+        echo "[ERROR] $tool is not installed or not on PATH for $TARGET_USER."
+        exit 1
+    }
+done
+
+for dir in "$SRV_ROOT" "$SRV_ROOT/stg" "$SRV_ROOT/libexec"; do
+    mkdir -p "$dir" 2>/dev/null || true
+    [ -w "$dir" ] || {
+        echo "[ERROR] $dir is not writable by $TARGET_USER."
+        echo "        chown -R $TARGET_USER:$TARGET_USER $SRV_ROOT   (see infra/README.md)"
+        exit 1
+    }
+done
+
+notify_failure() {
+    local exit_code=$?
+    [ "$exit_code" -eq 0 ] && return 0
+
+    curl -fsS -X POST -H 'Content-Type: application/json' \
+      --data "$(jq -n --arg text ":x: proto UAT build FAILED on $(hostname) (exit $exit_code). Service state: $(systemctl is-active "$SERVICE" 2>/dev/null || echo unknown)" '{text: $text}')" \
+      "$SLACK_WEBHOOK" > /dev/null || true
+}
+trap notify_failure EXIT
+
+echo "[INFO] Refreshing git repo"
+pushd "$BUILD_STG" > /dev/null
+git fetch origin
+git checkout "$BRANCH_TO_CHECKOUT"
+git reset --hard "origin/$BRANCH_TO_CHECKOUT"
+
+GIT_SHA=$(git rev-parse "origin/$BRANCH_TO_CHECKOUT")
+echo "[INFO] Building from commit $GIT_SHA ($BRANCH_TO_CHECKOUT)"
+
+# Tests gate the registry push: nothing below runs on a red suite.
+"$SRV_BIN/uat-proto-run-tests"
+GO_TESTS=$(grep -c '^--- PASS' "$SRV_ROOT/stg/go-test.log" 2>/dev/null || echo "?")
+
+echo "[INFO] Building Go API"
+mkdir -p "$SRV_ROOT/stg"
+pushd "$BUILD_STG/src/api-srv" > /dev/null
+
+# Static binaries (CGO_ENABLED=0). The migrator ships with the API; install-api runs it before swapping the binary.
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$SRV_ROOT/stg/proto-api" ./cmd/server
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$SRV_ROOT/stg/proto-migrate" ./cmd/migrate
+[ -s "$SRV_ROOT/stg/proto-api" ] && [ -s "$SRV_ROOT/stg/proto-migrate" ] || { echo "[ERROR] go build produced no binaries"; exit 1; }
+popd > /dev/null
+
+printf 'commit=%s\nbranch=%s\nbuilt=%s\nhost=%s\n' \
+    "$GIT_SHA" "$BRANCH_TO_CHECKOUT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(hostname)" \
+    > "$SRV_ROOT/stg/proto-api.revision"
+
+if "$SRV_ROOT/stg/proto-api" >/dev/null 2>&1; then
+    echo "[WARN] API exited 0 with no config argument; expected the usage path."
+fi
+
+WEB_TARBALL="proto-web-client.tar.gz"
+
+echo "[INFO] Building web client"
+pushd "$BUILD_STG/src/web-app" > /dev/null
+npm ci
+npm run build
+popd > /dev/null
+
+if [ ! -d "$BUILD_STG/src/web-app/dist" ]; then
+    echo "[ERROR] src/web-app/dist not found after build"; exit 1
+fi
+if [ ! -f "$BUILD_STG/src/web-app/dist/index.html" ]; then
+    echo "[ERROR] src/web-app/dist/index.html missing -- refusing to ship an empty bundle"; exit 1
+fi
+
+(cd "$BUILD_STG/src/web-app/dist" && tar -czf "$SRV_ROOT/stg/$WEB_TARBALL" -- *)
+
+echo "[INFO] Logging in to registry"
+echo "$CONTAINER_REGISTRY_PASSWORD" | oras login -u "$CONTAINER_REGISTRY_USER" --password-stdin "$CONTAINER_REGISTRY_SERVER"
+
+pushd "$SRV_ROOT/stg" > /dev/null
+oras push "$API_BLOB:sha-$GIT_SHA" \
+    "proto-api:application/vnd.proto.deploy.layer.v1+binary" \
+    "proto-migrate:application/vnd.proto.deploy.layer.v1+binary" \
+    "proto-api.revision:text/plain" \
+    --annotation "org.opencontainers.image.description=proto-api linux/amd64" \
+    --annotation "org.opencontainers.image.revision=$GIT_SHA" \
+    --annotation "org.opencontainers.image.source=$REPO_URL"
+oras tag "$API_BLOB:sha-$GIT_SHA" "$DEPLOY_TAG"
+
+oras push "$WEB_BLOB:sha-$GIT_SHA" \
+    "$WEB_TARBALL:application/vnd.proto.deploy.layer.v1+tar" \
+    --annotation "org.opencontainers.image.title=$WEB_TARBALL" \
+    --annotation "org.opencontainers.image.description=server-deploy-package" \
+    --annotation "org.opencontainers.image.revision=$GIT_SHA" \
+    --annotation "org.opencontainers.image.source=$REPO_URL"
+oras tag "$WEB_BLOB:sha-$GIT_SHA" "$DEPLOY_TAG"
+popd > /dev/null
+
+popd > /dev/null
+
+echo "[INFO] Starting server deploy process"
+"$SRV_BIN/uat-proto-install-api"
+"$SRV_BIN/uat-proto-publish-web-client"
+
+trap - EXIT
+
+SUMMARY=":rocket: proto UAT deployed on $(hostname)"$'\n'"api: ${API_BLOB}:sha-${GIT_SHA}"$'\n'"web: ${WEB_BLOB}:sha-${GIT_SHA}"$'\n'"commit: ${GIT_SHA}"$'\n'"tests: go ${GO_TESTS} passed, playwright green"
+echo "[INFO] $SUMMARY"
+SLACK_RESPONSE=$(curl -sS -X POST -H 'Content-Type: application/json' --data "$(jq -n --arg text "$SUMMARY" '{text: $text}')" "$SLACK_WEBHOOK" 2>&1) || true
+echo "[INFO] slack: ${SLACK_RESPONSE:-no response}"
+
+echo "[INFO] Finished"
+exit 0

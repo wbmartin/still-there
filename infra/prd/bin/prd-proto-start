@@ -1,0 +1,3 @@
+#!/bin/sh
+systemctl start prd-proto-api
+systemctl status prd-proto-api --no-pager

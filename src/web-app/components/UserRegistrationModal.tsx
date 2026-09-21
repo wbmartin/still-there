@@ -36,7 +36,11 @@ export function UserRegistrationModal({
 
 
 
-  const handleSubmit = async (values: { username: string; password: string; confirmPassword: string }) => {
+  const handleSubmit = async (values: {
+    username: string;
+    password: string;
+    confirmPassword: string;
+  }) => {
     setError("");
     setLoading(true);
 
@@ -44,7 +48,10 @@ export function UserRegistrationModal({
       const response = await apiRequest(API_ENDPOINTS.USER_SELF_CREATE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: values.username, password: values.password }),
+        body: JSON.stringify({
+          username: values.username,
+          password: values.password,
+        }),
       });
 
        if (!response.ok) {

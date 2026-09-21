@@ -146,6 +146,12 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrDuplicate) {
+			app.WriteError(w, http.StatusConflict,
+				"User group name already exists in this security context",
+				"DUPLICATE_ERROR", err)
+			return
+		}
 		app.WriteError(w, http.StatusInternalServerError,
 			"Failed to create user group", "CREATE_USER_GROUP_FAIL", err)
 		return
@@ -244,6 +250,14 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 				"User group not found",
 				"NOT_FOUND_ERROR",
 				nil,
+			)
+		case errors.Is(err, repository.ErrDuplicate):
+			app.WriteError(
+				w,
+				http.StatusConflict,
+				"User group name already exists in this security context",
+				"DUPLICATE_ERROR",
+				err,
 			)
 		default:
 			app.WriteError(w, http.StatusInternalServerError,

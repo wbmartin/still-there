@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# The test run -- the same one on a laptop and on a build host.
+#
+#   bin/200-run-tests          # all: rebuild both scratch DBs, go vet + test,
+#                              #      playwright, pytest
+#   bin/200-run-tests go       # the Go suites only (seconds; run before every commit)
+#   bin/200-run-tests e2e      # Playwright only (bin/230-run-web-app-e2e)
+#   bin/200-run-tests py       # pytest HTTP suite (tests/) against a private
+#                              #   API instance this script starts and stops
+#
+# Everything environment-specific comes from ONE sourced file, so "it passed
+# for me" and "it passed on the host" mean the same thing:
+#
+#   PROTO_TEST_ENV   which file; default etc/loc-test.env (a laptop). A build
+#                    host points it at its own copy with a CI role.
+#
+# Passing here is the last gate before anything is bundled or pushed, which
+# is why the Go integration suites are not allowed to skip: on a laptop they
+# skip when Postgres is down, and a green run with the repository tests
+# missing is worse than a red one.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+MODE="${1:-all}"
+case "$MODE" in all|go|e2e|py) ;; *) echo "usage: $0 [all|go|e2e|py]"; exit 2 ;; esac
+
+TEST_ENV="${PROTO_TEST_ENV:-$PROJECT_ROOT/etc/loc-test.env}"
+[ -r "$TEST_ENV" ] || { echo "[ERROR] test env file not readable: $TEST_ENV"; exit 1; }
+# shellcheck disable=SC1090
+source "$TEST_ENV"
+for var in PROTO_PG_URL_BASE PROTO_TEST_DB PROTO_E2E_DB PROTO_TEST_DATABASE_URL PROTO_E2E_API_ENV; do
+    [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $TEST_ENV"; exit 1; }
+done
+# Paths in the env file are relative to the project root.
+case "$PROTO_E2E_API_ENV" in /*) ;; *) PROTO_E2E_API_ENV="$PROJECT_ROOT/$PROTO_E2E_API_ENV" ;; esac
+export PROTO_E2E_API_ENV
+[ -r "$PROTO_E2E_API_ENV" ] || { echo "[ERROR] e2e API env not readable: $PROTO_E2E_API_ENV"; exit 1; }
+LOG_DIR="${PROTO_TEST_LOG_DIR:-$PROJECT_ROOT/tmp/test-logs}"
+case "$LOG_DIR" in /*) ;; *) LOG_DIR="$PROJECT_ROOT/$LOG_DIR" ;; esac
+mkdir -p "$LOG_DIR"
+
+for tool in go npm; do
+    command -v "$tool" >/dev/null 2>&1 || { echo "[ERROR] $tool not on PATH"; exit 1; }
+done
+
+GO_COUNT=0; E2E_COUNT=0; PY_COUNT=0
+SUMMARY=()
+
+# ------------------------------------------------------------------------------
+if [ "$MODE" = all ] || [ "$MODE" = go ]; then
+    echo "[INFO] Rebuilding $PROTO_TEST_DB"
+    "$SCRIPT_DIR/510-reset-test-db" "$PROTO_TEST_DB" > "$LOG_DIR/reset-test-db.log" 2>&1 \
+        || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-test-db.log:"; tail -20 "$LOG_DIR/reset-test-db.log"; exit 1; }
+
+    pushd "$PROJECT_ROOT/src/api-srv" > /dev/null
+    echo "[INFO] go vet"
+    go vet ./...
+    # -v so a skip is visible in the log; the grep for connectTestDB's exact
+    # message turns it into a failure. (A plain '--- SKIP' would also catch an
+    # upstream subtest that skips on purpose.)
+    echo "[INFO] go test"
+    GO_LOG="$LOG_DIR/go-test.log"
+    PROTO_TEST_DATABASE_URL="$PROTO_TEST_DATABASE_URL" go test -v ./... > "$GO_LOG" 2>&1 || true
+    grep -E '^(ok|FAIL|--- FAIL)' "$GO_LOG" || true
+    if grep -q 'skipping integration tests' "$GO_LOG"; then
+        echo "[ERROR] Go integration suites skipped -- $PROTO_TEST_DB was not reachable:"
+        grep -m1 'skipping integration tests' "$GO_LOG"
+        exit 1
+    fi
+    if grep -q '^FAIL' "$GO_LOG"; then
+        echo "[ERROR] go test failed -- full log: $GO_LOG"
+        grep -B2 -A12 -- '--- FAIL' "$GO_LOG" | head -60
+        exit 1
+    fi
+    GO_COUNT=$(grep -c -E '^\s*--- PASS' "$GO_LOG" || true)
+    echo "[INFO] go: $GO_COUNT passed"
+    SUMMARY+=("go=$GO_COUNT")
+    popd > /dev/null
+fi
+
+# ------------------------------------------------------------------------------
+if [ "$MODE" = all ] || [ "$MODE" = e2e ]; then
+    echo "[INFO] Rebuilding $PROTO_E2E_DB"
+    "$SCRIPT_DIR/513-reset-e2e-db" > "$LOG_DIR/reset-e2e-db.log" 2>&1 \
+        || { echo "[ERROR] bin/513 failed -- $LOG_DIR/reset-e2e-db.log:"; tail -20 "$LOG_DIR/reset-e2e-db.log"; exit 1; }
+
+    pushd "$PROJECT_ROOT/src/web-app" > /dev/null
+    # The browser download is a no-op once cached. Its system libraries are a
+    # one-time root step on a host.
+    echo "[INFO] playwright"
+    npx playwright install chromium
+    E2E_LOG="$LOG_DIR/playwright.log"
+    if ! "$SCRIPT_DIR/230-run-web-app-e2e" 2>&1 | tee "$E2E_LOG"; then
+        echo "[ERROR] playwright failed -- full log: $E2E_LOG"
+        exit 1
+    fi
+    E2E_COUNT=$(grep -oE '[0-9]+ passed' "$E2E_LOG" | tail -1 | grep -oE '[0-9]+' || echo 0)
+    echo "[INFO] e2e: $E2E_COUNT passed"
+    SUMMARY+=("e2e=$E2E_COUNT")
+    popd > /dev/null
+fi
+
+# ------------------------------------------------------------------------------
+if [ "$MODE" = all ] || [ "$MODE" = py ]; then
+    # bin/320 expects a server that is already listening. Start a private one
+    # on :8082 from the e2e config -- same database and fixtures Playwright
+    # uses, rebuilt first so the suite never sees another run's leftovers --
+    # and stop it again whatever happens.
+    command -v python3 >/dev/null 2>&1 || { echo "[ERROR] python3 not on PATH"; exit 1; }
+    echo "[INFO] Rebuilding $PROTO_E2E_DB"
+    "$SCRIPT_DIR/513-reset-e2e-db" > "$LOG_DIR/reset-e2e-db.log" 2>&1 \
+        || { echo "[ERROR] bin/513 failed -- $LOG_DIR/reset-e2e-db.log:"; tail -20 "$LOG_DIR/reset-e2e-db.log"; exit 1; }
+
+    API_LOG="$LOG_DIR/py-api.log"
+    # The e2e config lifts the rate limits so Playwright's page-load bursts
+    # cannot fail the suite. The pytest suite asserts the opposite --
+    # tests/test_z_error_scenarios.py drives a non-exempt user past the limit
+    # and expects a 429 -- and is written against the developer values in
+    # etc/loc-api-srv.env. So this instance runs on a COPY of the e2e config
+    # with just those two keys taken from the developer file.
+    PY_API_ENV="$LOG_DIR/py-api-srv.env"
+    DEV_ENV="$PROJECT_ROOT/etc/loc-api-srv.env"
+    limit_from_dev() { grep -E "^$1=" "$DEV_ENV" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' '; }
+    USER_LIMIT="$(limit_from_dev MAX_USER_REQ_PER_MIN)"; USER_LIMIT="${USER_LIMIT:-200}"
+    UNAUTH_LIMIT="$(limit_from_dev MAX_UNAUTH_REQ_PER_MIN)"; UNAUTH_LIMIT="${UNAUTH_LIMIT:-20}"
+    sed -e "s#^MAX_USER_REQ_PER_MIN=.*#MAX_USER_REQ_PER_MIN=$USER_LIMIT#" \
+        -e "s#^MAX_UNAUTH_REQ_PER_MIN=.*#MAX_UNAUTH_REQ_PER_MIN=$UNAUTH_LIMIT#" \
+        "$PROTO_E2E_API_ENV" > "$PY_API_ENV"
+    API_BASE_URL="$(grep -E '^TEST_BASE_URL=' "$PY_API_ENV" | head -1 | cut -d= -f2- | tr -d ' ')"
+    [ -n "$API_BASE_URL" ] || { echo "[ERROR] TEST_BASE_URL missing from $PROTO_E2E_API_ENV"; exit 1; }
+    if curl -sf "$API_BASE_URL/health" >/dev/null 2>&1; then
+        echo "[ERROR] something is already listening at $API_BASE_URL; stop it first"; exit 1
+    fi
+
+    # Built rather than `go run`: go run nests a second `go` process around
+    # the binary, so a TERM to the pid we hold never reaches the listener and
+    # every run would leave an orphan on :8082.
+    API_BIN="$LOG_DIR/api-srv-e2e"
+    echo "[INFO] Building the Go API"
+    (cd "$PROJECT_ROOT/src/api-srv" && go build -o "$API_BIN" ./cmd/server)
+    echo "[INFO] Starting the Go API from $PY_API_ENV (limits $USER_LIMIT/$UNAUTH_LIMIT per min)"
+    "$API_BIN" "$PY_API_ENV" > "$API_LOG" 2>&1 &
+    API_PID=$!
+    stop_api() {
+        kill -TERM "$API_PID" 2>/dev/null || true
+        wait "$API_PID" 2>/dev/null || true
+    }
+    trap stop_api EXIT
+
+    for _ in $(seq 1 90); do
+        curl -sf "$API_BASE_URL/health" >/dev/null 2>&1 && break
+        kill -0 "$API_PID" 2>/dev/null || { echo "[ERROR] API died. $API_LOG:"; tail -20 "$API_LOG"; exit 1; }
+        sleep 1
+    done
+    curl -sf "$API_BASE_URL/health" >/dev/null 2>&1 || { echo "[ERROR] API never became healthy. $API_LOG:"; tail -20 "$API_LOG"; exit 1; }
+
+    PY_LOG="$LOG_DIR/pytest.log"
+    echo "[INFO] pytest (bin/320-test-web-service against $API_BASE_URL)"
+    # --skip-lint: a test run must not rewrite web-app sources.
+    if ! PROTO_API_ENV="$PY_API_ENV" "$SCRIPT_DIR/320-test-web-service" --skip-lint 2>&1 | tee "$PY_LOG"; then
+        echo "[ERROR] pytest failed -- full log: $PY_LOG, API log: $API_LOG"
+        exit 1
+    fi
+    PY_COUNT=$(grep -oE '[0-9]+ passed' "$PY_LOG" | tail -1 | grep -oE '[0-9]+' || echo 0)
+    echo "[INFO] py: $PY_COUNT passed"
+    SUMMARY+=("py=$PY_COUNT")
+    stop_api
+    trap - EXIT
+fi
+
+echo "[INFO] tests passed ($MODE): ${SUMMARY[*]}"

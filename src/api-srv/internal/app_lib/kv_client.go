@@ -16,6 +16,7 @@ import (
 type ThisAppKVInterface interface {
 	Get(key string) (string, error)
 	Set(key, value, ttl string) error
+	Del(key string) error
 	Incr(key string, ttl string) (int, error)
 	Batch(commands []string) ([]string, error)
 	Close()
@@ -128,6 +129,26 @@ func (kv *KV) Get(key string) (string, error) {
 		return "", err
 	}
 	return val, nil
+}
+
+// Del removes a key. Deleting a key that does not exist is not an error.
+func (kv *KV) Del(key string) error {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	if kv.shrmplKVClient == nil {
+		kv.tryReconnect()
+	}
+	if kv.shrmplKVClient == nil {
+		return fmt.Errorf("key-value store not available")
+	}
+
+	if err := kv.shrmplKVClient.Del(key); err != nil {
+		kv.shrmplKVClient.Close()
+		kv.shrmplKVClient = nil
+		return err
+	}
+	return nil
 }
 
 // Set stores a key-value pair with optional TTL
@@ -267,6 +288,23 @@ func (c *ShrmplKVClient) Get(key string) (string, error) {
 	}
 
 	return response, nil
+}
+
+// Del removes a key from shrmpl-kv. The server answers "*KEY NOT FOUND*" for
+// a missing key, which is success here: the key is gone either way.
+func (c *ShrmplKVClient) Del(key string) error {
+	if len(key) > 100 {
+		return fmt.Errorf("key length exceeds 100 characters")
+	}
+
+	response, err := c.sendCommand(fmt.Sprintf("DEL %s", key))
+	if err != nil {
+		return err
+	}
+	if response != "OK" && response != "*KEY NOT FOUND*" {
+		return fmt.Errorf("unexpected response: %s", response)
+	}
+	return nil
 }
 
 // Set stores a key-value pair in shrmpl-kv

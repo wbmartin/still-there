@@ -31,16 +31,16 @@ import { PasswordGenerator } from "../components/PasswordGenerator";
 function UserEditPage() {
   const [searchParams] = useSearchParams();
   const {
-    retrieveUserById,
-    createUser,
-    updateUser,
-    deleteUser,
+    readUserById,
+    createItem: createUser,
+    updateItem: updateUser,
+    deleteItem: deleteUser,
     changeOtherUserPassword,
     resetUserMFA,
   } = useAppUserStore();
   const {
-    retrieveAppUserGroupList,
-    appUserGroupList,
+    readList: readAppUserGroupList,
+    itemList: appUserGroupList,
     loading: groupsLoading,
   } = useAppUserGroupStore();
   const navigate = useNavigate();
@@ -74,10 +74,10 @@ function UserEditPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void retrieveAppUserGroupList();
+      void readAppUserGroupList().catch(console.error);
       if (numericId && !isNew) {
         // Fetch the user directly
-        void retrieveUserById(numericId).then((user) => {
+        void readUserById(numericId).then((user) => {
           if (user) {
             form.setValues({
               userName: user.userName,
@@ -93,6 +93,9 @@ function UserEditPage() {
           setTimeout(() => {
             setUserLoading(false);
           }, 0);
+        }).catch((error: unknown) => {
+          console.error("Error loading user:", error);
+          setUserLoading(false);
         });
       } else {
         setTimeout(() => {
@@ -100,7 +103,7 @@ function UserEditPage() {
         }, 0);
       }
     }
-  }, [authState, numericId, isNew, retrieveAppUserGroupList, retrieveUserById]);
+  }, [authState, numericId, isNew, readAppUserGroupList, readUserById]);
 
   //============================^ HOOK LINE ^====================
 
@@ -138,7 +141,7 @@ function UserEditPage() {
           withCloseButton: false,
         });
       } else {
-        await updateUser(Number(id), data);
+        await updateUser({ appUserId: Number(id), ...data });
         notifications.show({
           title: "Success",
           message: "User updated successfully",
@@ -167,7 +170,7 @@ function UserEditPage() {
   const handleDeleteConfirm = async () => {
     if (numericId) {
       try {
-        await deleteUser(numericId);
+        await deleteUser(numericId, Number(form.values.updateTs));
         notifications.show({
           title: "Success",
           message: "User deleted successfully",
@@ -233,7 +236,7 @@ function UserEditPage() {
       });
       // Refresh user data
       if (numericId) {
-        await retrieveUserById(numericId);
+        await readUserById(numericId);
       }
     } catch (err) {
       notifications.show({

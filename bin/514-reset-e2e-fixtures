@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# Return loc_starter_e2e_db to its seeded state, WITHOUT dropping it.
+#
+# The obvious way to reset is DROP DATABASE, which 513 does. It cannot be used
+# between test runs: the API server is already running by the time Playwright's
+# global setup executes, and dropping the database underneath it leaves every
+# connection in its pgx pool pointing at something that no longer exists. The
+# first requests afterwards fail, the web app correctly reports "Cannot reach
+# the server", and the suite fails for a reason that has nothing to do with the
+# code under test.
+#
+# TRUNCATE leaves the connections valid. Every domain table is truncated and
+# the fixture file re-run, so the groups, the two users and the two example
+# rows come back exactly as bin/510 seeded them and anything a previous run
+# created is gone. The fixture is idempotent, so re-running it is the same
+# INSERTs 510 issued.
+#
+# Falls back to the full rebuild when the database is not there yet, so a fresh
+# checkout needs no separate setup step.
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck disable=SC1091
+[ -n "${PROTO_PG_URL_BASE:-}" ] || source "$PROJECT_ROOT/etc/loc-test.env"
+E2E_DB="${PROTO_E2E_DB:-loc_starter_e2e_db}"
+FIXTURES="$PROJECT_ROOT/src/api-srv/sql/fixtures/015-initialdata.sql"
+
+# Same psql selection as bin/510: inside the container when it is up, native
+# otherwise, PSQL overriding both.
+PG_CONTAINER="${PG_CONTAINER:-loc-postgres}"
+if [ -z "${PSQL:-}" ]; then
+  if command -v docker >/dev/null 2>&1 \
+     && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$PG_CONTAINER"; then
+    PSQL="docker exec -i $PG_CONTAINER psql -U postgres"
+  else
+    PSQL="psql -h 127.0.0.1 -U postgres"
+  fi
+fi
+export PGPASSWORD
+
+if ! $PSQL -d postgres -lqt | cut -d \| -f 1 | grep -qw "$E2E_DB"; then
+  echo "[INFO] $E2E_DB does not exist yet; building it"
+  exec "$SCRIPT_DIR/513-reset-e2e-db"
+fi
+
+# RESTART IDENTITY so ids are stable run to run: the seeded rows get the same
+# ids every time, which makes a failing run far easier to reason about
+# against the database. schema_migrations is deliberately not in the list.
+$PSQL -d "$E2E_DB" -q -v ON_ERROR_STOP=1 -c "
+TRUNCATE TABLE
+  example,
+  app_user,
+  app_user_group
+RESTART IDENTITY CASCADE;"
+
+$PSQL -d "$E2E_DB" -q -v ON_ERROR_STOP=1 < "$FIXTURES"
+
+echo "[INFO] e2e fixtures reset"

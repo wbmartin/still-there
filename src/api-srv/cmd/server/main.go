@@ -199,7 +199,7 @@ func main() {
 
 	// Create server
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", config.ServerPort),
+		Addr:    fmt.Sprintf("%s:%d", config.ServerBindAddress, config.ServerPort),
 		Handler: securedMux,
 	}
 

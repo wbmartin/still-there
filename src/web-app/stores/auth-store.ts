@@ -6,8 +6,15 @@ import type {
   LoginResponse,
   RefreshResponse,
 } from "../types/auth-type";
-import { apiRequest, setCsrfToken, clearCsrfToken } from "../utils/api";
+import {
+  apiRequest,
+  setCsrfToken,
+  clearCsrfToken,
+  isApiUnreachable,
+  setSessionExpiredListener,
+} from "../utils/api";
 import { clearAllCaches } from "../utils/cache-utils";
+import { notifications } from "@mantine/notifications";
 
 interface AuthStore extends Omit<AuthState, "csrfToken"> {
   mfaRequired: boolean;
@@ -74,9 +81,16 @@ export const useAuthStore = create<AuthStore>((set) => ({
         }
       }
     } catch (err) {
+      // Deliberately still "NO" rather than "UNREACHABLE": the person is
+      // standing at the login form and the useful thing is to leave them
+      // there with an accurate message.
       set({
         authState: "NO",
-        error: err instanceof Error ? err.message : "Unknown error",
+        error: isApiUnreachable(err)
+          ? "Could not reach the server. Check your connection and try again."
+          : err instanceof Error
+            ? err.message
+            : "Unknown error",
       });
     } finally {
       set({ loading: false });
@@ -88,24 +102,44 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ authState: "CHECKING", loading: true, error: null });
     try {
       const response = await apiRequest("/refresh", {});
-      if (!response.ok) throw new Error("Refresh failed");
-      const data = (await response.json()) as RefreshResponse;
-      if (data.user) {
-        // console.log("Auth refresh successful for user:", data.user);
-        setCsrfToken(data.csrfToken);
-        set({
-          authState: "YES",
-          grantList: data.user.grantList || [],
-          availableSecurityContextList:
-            data.user.availableSecurityContextList || [],
-          userName: data.user.userName || "",
-          securityContext: data.user.securityContext || 0,
-        });
+
+      // Only an explicit refusal means signed out. A 502 from a proxy while
+      // the API restarts is an ordinary HTTP response, not a verdict on the
+      // session -- so the question is "did the server say this person is
+      // not signed in", and only 401/403 say that.
+      if (response.status === 401 || response.status === 403) {
+        set({ authState: "NO", error: null });
+        return;
       }
-    } catch (err) {
-      // console.log("Auth refresh not successful 2");
+      if (!response.ok) {
+        set({
+          authState: "UNREACHABLE",
+          error: `The server responded with ${response.status}`,
+        });
+        return;
+      }
+
+      const data = (await response.json()) as RefreshResponse;
+      if (!data.user) {
+        // A 200 with no user is a contract the server is not keeping.
+        set({ authState: "NO", error: null });
+        return;
+      }
+      setCsrfToken(data.csrfToken);
       set({
-        authState: "NO",
+        authState: "YES",
+        grantList: data.user.grantList || [],
+        availableSecurityContextList:
+          data.user.availableSecurityContextList || [],
+        userName: data.user.userName || "",
+        securityContext: data.user.securityContext || 0,
+      });
+    } catch (err) {
+      // What reaches here is a connection failure or a body that would not
+      // parse. Neither told us anything about the session, so neither may
+      // claim it has ended.
+      set({
+        authState: "UNREACHABLE",
         error: err instanceof Error ? err.message : "Refresh failed",
       });
     } finally {
@@ -186,3 +220,34 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
   },
 }));
+
+// The API layer reports an ended session here rather than importing this
+// store, which imports it -- a direct call would be a cycle.
+//
+// Deliberately NOT a call to logout(): the credential is already dead, so
+// POST /logoff would fail. The local half of logout is what matters.
+// postAuthDestination is left alone so the person lands back where they were.
+setSessionExpiredListener(() => {
+  // Several in-flight requests can each come back 401; the first one does
+  // the work.
+  if (useAuthStore.getState().authState === "NO") return;
+
+  clearCsrfToken();
+  clearAllCaches();
+  const message = "Your session has ended. Please sign in again.";
+  useAuthStore.setState({
+    authState: "NO",
+    grantList: [],
+    availableSecurityContextList: [],
+    userName: "",
+    securityContext: 0,
+    mfaRequired: false,
+    error: message,
+  });
+  notifications.show({
+    title: "Session ended",
+    message,
+    color: "orange",
+    autoClose: 6000,
+  });
+});

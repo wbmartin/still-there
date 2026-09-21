@@ -9,7 +9,7 @@ This section describes how I'd like an AI to think and respond for database desi
 - Each table should also have a "security_context" field of type integer to enable multi-tenant implementations.
 - Don't create foreign keys / Postgres references within the database - managed in the application layer similar to how nosql is managed.
 - Don't create triggers for updating dates within the database - managed by the application layer.
-- Don't plan for a database migration tool to manage schema changes - managed manually through sql files.
+- Schema changes are versioned SQL files applied by the project's own migrator (`src/api-srv/cmd/migrate`); see "Schema changes" below. No third-party migration framework.
 - Database fields should be snake_case.
 - When generating SQL in a .sql file it is okay to consolidate multiple fields into single lines, but each keyword (e.g. select, from, where)should start a new line.
 - When generating SQL seed data (data.sql) that uses common calculated values like a timestamp:
@@ -35,3 +35,32 @@ GRANT USAGE ON SCHEMA appcore TO group_global_writer;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA appcore TO group_global_writer;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA appcore TO group_global_writer;
 ```
+
+# Schema changes
+
+The schema lives in `src/api-srv/sql/migrations/NNNN_name.sql`, embedded into
+the `proto-migrate` binary (`cmd/migrate`) and applied in ascending version
+order, forward only. The migrator records each file's SHA-256 in
+`schema_migration` in the same transaction as the file itself.
+
+- A change is a NEW file: the next `NNNN`, a short snake_case name, pure SQL
+  (no `CREATE DATABASE`, no `\c`, no role creation -- roles are cluster-wide
+  and live in `sql/roles.sql`). Include the GRANTs for any new table/sequence
+  unless the host's default privileges already cover it.
+- Never edit a migration that has been applied anywhere. Its checksum is
+  stored; `migrate verify` (and `up`, which verifies first) refuses to proceed
+  on drift. A wrong migration is fixed by the next one.
+- Seed/test data is a fixture (`sql/fixtures/`), not a migration.
+- `bin/510-reset-test-db` runs `migrate up` on an empty database, so every
+  reset proves the full chain applies cleanly.
+
+```
+proto-migrate (-config <env file> | -url <url>) status     applied / pending / drifted / orphaned, per version
+proto-migrate ... pending                                  count of pending files, for scripts
+proto-migrate ... verify                                   fail if the database disagrees with the files
+proto-migrate ... up                                       apply every pending file, in order
+proto-migrate ... stamp <version>                          record up to <version> as applied WITHOUT running
+```
+
+`-config` reads only `DATABASE_URL` from a KEY=VALUE file -- the migrator's
+own file with the DDL role's credentials, never the API's.

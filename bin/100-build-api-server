@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Build the API server binary
-# Output: dist/proto-go-app
+# Build the API server and migrator binaries
+# Output: dist/proto-go-app, dist/proto-migrate
 
 set -e
 
@@ -9,16 +9,19 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BINARY_PATH="$PROJECT_ROOT/dist/proto-go-app"
+MIGRATE_PATH="$PROJECT_ROOT/dist/proto-migrate"
 
 echo "Building API server..."
 
 # Change to the API server source directory
 pushd "$PROJECT_ROOT/src/api-srv" > /dev/null
 
-# Build the binary
+# Build the binaries
 go build -o "$BINARY_PATH" ./cmd/server
+go build -o "$MIGRATE_PATH" ./cmd/migrate
 
 # Return to original directory
 popd > /dev/null
 
 echo "API server built successfully: $BINARY_PATH"
+echo "Migrator built successfully: $MIGRATE_PATH"
