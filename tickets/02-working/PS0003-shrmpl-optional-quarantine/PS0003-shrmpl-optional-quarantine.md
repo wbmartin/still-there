@@ -1,7 +1,7 @@
 ---
 id: PS0003
 title: Sunset the shrmpl kv, log and vault clients and all their local tooling
-status: ready
+status: in-review
 blocked_by:
 waiting_on:
 priority: high
@@ -67,21 +67,70 @@ it.
   goes with the vault. Secrets for every environment come from the env
   file (`SERVERONLY`-redacted in the repo, as infra/ already does).
 
-## Acceptance
+## What changed and why
 
-- Fresh clone: `bin/100`, `bin/215`, `bin/220`, `bin/200 all` run with no
-  shrmpl binary and no absolute-path edits.
-- `grep -rn 'shrmpl' src bin etc doc README.md CLAUDE.md` → only
-  `infra/` (shrmpl-hook) and PS0004's migration doc.
-- `grep -rn '/Users/' src bin etc` → nothing.
-- Log lines carry the code: pick one and find it in `bin/215` output.
-- pytest suite green (it exercises lockout and rate limiting).
+Branch `TKT-PS0003-shrmpl-optional-quarantine`, six commits. The template
+now has one in-process store and stdlib logging; nothing external to run
+locally.
+
+| Area | Change |
+|---|---|
+| KV | `kv_client.go` (TCP client + `ThisAppKVInterface`) deleted. `kv_memory.go` → `kv.go`, type `MemoryKV` → `KV`, `NewKV()`. The string-command `Batch("INCR k 1min","GET k")` emulation of the wire protocol is gone with it; the four callers (`CheckRateLimit`, `CheckRateLimitAndUserBlock`, `isAccountLocked`, `incrementFailedAttempt`) use `Incr`/`Get` directly. `AppServices.KV *KV`. |
+| Logging | `logging_client.go` deleted. `logging.go`: `Logger` over `log/slog` text handler → stderr, `AddSource` trimmed to `file.go:NN`, level DEBUG (as before). Same `Debug/Info/Warn/Error(code, msg, kv...)` and `*WithCallerSkip` surface, same skip arithmetic, so none of the ~300 call sites moved; the code is now a `code=` attribute. `AppServices.Logger *Logger`; `Close()` gone. Two tests prove `code=`, source line, and wrapper attribution. |
+| Fail open → closed | The store is in-process, so an error is a bug: rate limit, user block and lockout checks now log ERROR and answer 500 instead of letting the request through. `MFAVerifyHandler` already did. |
+| `/auth` | Rejects empty or >50-char usernames (VARCHAR(50)) with the same 401 as a bad password, before any store or DB access — an oversize name would otherwise hit the store's 100-char key cap. |
+| Config | `VaultClient`, the vault fetch in `LoadConfig`, the hard-coded `/Users/brandon/…fullchain.pem`, and the `LOG_RECEIVER_HOST_PORT` / `KV_HOST_PORT` / `KV_BACKEND` keys are gone (`config.go` 376 → 200 lines). `ReadEnvFile` unchanged. |
+| Tests | `internal/repository` and `internal/migrate` no longer fall back to `etc/loc-api-srv.env` when `PROTO_TEST_DATABASE_URL` is unset — that is the developer's live DB, and the fallback was only inert because the vault made `LoadConfig` fail. They skip, naming `bin/200-run-tests go`. |
+| `etc/` | `loc-api-srv.env` self-contained: inline `DATABASE_URL` (roles.sql default), local-only `JWT_SECRET`, 64-hex `TOTP_ENCRYPTION_KEY`, relative TLS paths, no `/Users/`, no `TLS_NAME`, no `VAULT_*`. `e2e-api-srv.env` likewise (its TOTP key was not hex and would have failed MFA setup). `uat-api-srv.env.example`, `infra/{uat,prd}/etc/*-api.env`, `infra/uat/etc/uat-proto-e2e-api.env` lose the three keys. Deleted `loc-shrmpl-{kv,log,vault}-srv.env`, `vault-configs/`. |
+| `bin/` | Deleted `010`, `210`, `410`. `211` → `216-stop-local-stack` (API + vite only). `.gitignore` drops `bin/tools/*` and the `vault-configs` lines. |
+| Docs | `README.md`, `src/api-srv/README.md`, `doc/050`, `060`, `105`, `901`, `902`, `000-TODO` updated; `doc/811`, `doc/850` → `doc/archive/` with a header note. |
+
+## Files modified
+
+- `src/api-srv/cmd/server/main.go`
+- `src/api-srv/internal/app_lib/`: `kv.go` (was `kv_memory.go`), `kv_test.go`, `logging.go` (new), `logging_test.go` (new), `config.go`, `services.go`, `rbac.go`, `app_helper.go`; deleted `kv_client.go`, `logging_client.go`
+- `src/api-srv/internal/handler/`: `auth_handler.go`, `common.go`
+- `src/api-srv/internal/repository/testdb_test.go`, `internal/migrate/migrate_test.go`
+- `src/api-srv/README.md`, `README.md`, `doc/000-TODO.md`, `doc/050-dev-env-init.md`, `doc/060-dev-env-start.md`, `doc/105-api-srv-tech-spec.md`, `doc/901-naming-preferences.md`, `doc/902-project-commands.md`, `doc/archive/811-non-entity-notes.md`, `doc/archive/850-mtls-troubleshooting.md` (moved)
+- `etc/loc-api-srv.env`, `etc/e2e-api-srv.env`, `etc/uat-api-srv.env.example`, `infra/uat/etc/uat-proto-api.env`, `infra/uat/etc/uat-proto-e2e-api.env`, `infra/prd/etc/prd-proto-api.env`
+- `bin/216-stop-local-stack` (was `211`); deleted `bin/010-download-shrmpl`, `bin/210-run-shrmpl-app-infra`, `bin/410-regenerate-vault-mtls-certs`, `etc/loc-shrmpl-*-srv.env`, `etc/vault-configs/*.example`
+- `.gitignore`
+
+## Endpoints introduced or modified
+
+No new endpoints. Behaviour changes on existing ones:
+
+| Endpoint | Auth | Change |
+|---|---|---|
+| `POST /auth` | anonymous | empty or >50-char `userName` → 401 `INVALID_CREDS` immediately |
+| every handler using `CheckRateLimit` / `CheckRateLimitAndUserBlock` / `CheckUserBlocked` | any | store error → 500 (was: request allowed through) |
+
+Environment: local → UAT on the next deploy.
+
+## Acceptance (met 2026-09-21)
+
+- [x] Fresh-clone path: `bin/100`, `bin/215`, `bin/220`, `bin/200-run-tests all` run with no shrmpl binary and no edits — `bin/200 all`: go=105 e2e=3 py=63 (pytest covers lockout, rate limit, user block).
+- [x] `grep -rn shrmpl src bin etc doc README.md CLAUDE.md` → only `doc/archive/`, `infra/` (`shrmpl-hook`) and the deploy docs' `shrmpl-hook` mentions.
+- [x] `grep -rn /Users/ src bin etc` → nothing.
+- [x] `bin/215` output carries the code: `level=INFO source=auth_handler.go:97 msg="Auth request started" service=proto-go-app code=AUTH_REQ_STRT username=preauth`.
+- [x] `go build ./... && go vet ./... && go test ./...` clean; `go test` without the runner skips the integration suites instead of touching the dev DB.
+
+## Waiting for
+
+The next UAT deploy (with PS0002, PS0004). The live UAT env file loses
+`KV_BACKEND` / `LOG_RECEIVER_HOST_PORT` (harmless if left; the loader
+ignores unknown keys).
 
 ## Deploy needs
 
-Go binary. UAT env file loses `KV_BACKEND`, `LOG_RECEIVER_HOST_PORT`
-and `VAULT_*` — update `etc/uat-api-srv.env.example`,
-`infra/*/etc/*-api.env` redacted copies, and the live UAT env at deploy.
+Go binary. UAT `etc/api-srv.env`: remove `KV_BACKEND`, `KV_HOST_PORT`,
+`LOG_RECEIVER_HOST_PORT`, any `VAULT_*` (all optional to remove). No
+migration, no web build.
+
+**Local developers:** delete `bin/tools/`, `etc/vault-configs/`,
+`etc/crt/shrmpl_vault_*.pem` if present (this session did). MFA seeds in
+`loc_starter_db` were encrypted under the old dev key and will not
+decrypt: `POST /admin/resetUserMFA` or `bin/510`.
 
 ## Related
 
