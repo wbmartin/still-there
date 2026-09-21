@@ -8,8 +8,8 @@ A production-ready Go API server starter template with comprehensive security fe
 - **Multi-Tenant**: Security context-based isolation
 - **RBAC**: Role-based access control with granular permissions
 - **CRUD Operations**: Full REST API for note entities with optimistic locking
-- **Logging**: Structured logging with shrmpl-log integration
-- **Caching**: shrmpl-kv integration for session and security data
+- **Logging**: Structured logging via `log/slog` to stderr
+- **Caching**: In-process key-value store for session and security data
 - **Database**: PostgreSQL with pgx driver
 - **Clean Architecture**: Separated concerns with handlers, repositories, and models
 
@@ -19,56 +19,17 @@ A production-ready Go API server starter template with comprehensive security fe
 
 - Go 1.21+
 - PostgreSQL
-- shrmpl-kv and shrmpl-log services
 
 ### Setup
 
-1. **Download shrmpl services**:
-   
+1. **Build the database** (from the repo root):
    ```bash
-   chmod +x bin/010-download-shrmpl.sh
-   ./bin/010-download-shrmpl.sh
+   bin/510-reset-test-db
    ```
 
-2. **Start shrmpl infrastructure**:
-   
+2. **Run the server**:
    ```bash
-   ./bin/210-run-shrmpl-app-infra
-   ```
-
-2. **Setup database**:
-   ```bash
-   createdb loc_starter_db
-   psql -d loc_starter_db -f sql/010-initialcreate.sql
-   psql -d loc_starter_db -f sql/015-data.sql
-   ```
-
-3. **Run the server**:
-   ```bash
-   go run cmd/server/main.go
-   ```
-
-2. **Start services**:
-   ```bash
-   # Or use the automated script:
-   ./bin/210-run-shrmpl-app-infra
-
-   # Manual start (if needed):
-   # ./bin/tools/skv-srv  # KV server on port 7171
-   # ./bin/tools/slog-srv # Log server on port 7379
-   # ./bin/tools/shrmpl-vault-srv  # Vault server
-   ```
-
-3. **Setup database**:
-   ```bash
-   createdb loc_starter_db
-   psql -d loc_starter_db -f sql/010-initialcreate.sql
-   psql -d loc_starter_db -f sql/data.sql
-   ```
-
-4. **Run the server**:
-   ```bash
-   go run cmd/server/main.go
+   bin/215-run-api-srv
    ```
 
 ## API Endpoints
@@ -105,10 +66,10 @@ A production-ready Go API server starter template with comprehensive security fe
 
 ### Rate Limiting
 - Per-user and unauthenticated request limits
-- shrmpl-kv backed counters with automatic expiration
+- In-process KV backed counters with automatic expiration
 
 ### User Blocking
-- Administrative user blocking via shrmpl-kv flags
+- Administrative user blocking via in-process KV flags
 - Immediate effect across all sessions
 
 ### RBAC
@@ -118,7 +79,7 @@ A production-ready Go API server starter template with comprehensive security fe
 
 ## Configuration
 
-Edit `etc/loc-api-srv.env`:
+`etc/loc-api-srv.env` is self-contained and needs no edits for local dev:
 
 ```env
 DATABASE_URL=postgres://user:pass@host:port/db
@@ -126,12 +87,11 @@ JWT_SECRET=your-secret-key
 JWT_SESSION_EXPIRE_HOURS=72
 MAX_USER_REQ_PER_MIN=200
 MAX_UNAUTH_REQ_PER_MIN=20
-LOG_RECEIVER_HOST_PORT=127.0.0.1:7379
-KV_HOST_PORT=127.0.0.1:7171
 SERVER_NAME=proto-go-app
 SERVER_PORT=8080
-TLS_CERT_PATH=/etc/ssl/certs/server.crt
-TLS_KEY_PATH=/etc/ssl/private/server.key
+ENABLE_TLS=false
+TLS_CERT_PATH=etc/crt/api-srv-fullchain.pem
+TLS_KEY_PATH=etc/crt/api-srv-privkey.pem
 ```
 
 ## Database Schema
@@ -194,8 +154,8 @@ cmd/server/
 internal/
 ├── app_lib/                # Shared application libraries
 │   ├── config.go          # Configuration loading
-│   ├── kv.go              # Key-value store interface (ThisAppKVInterface)
-│   ├── logging.go         # Logging interface (ThisAppLoggerInterface)
+│   ├── kv.go              # In-process key-value store (KV)
+│   ├── logging.go         # slog-backed logger (Logger)
 │   ├── auth.go            # JWT and password utilities
 │   ├── rbac.go            # Authorization logic
 │   └── security.go        # Security helper with checks
@@ -237,18 +197,15 @@ internal/
 - All database operations include security context validation
 - Optimistic locking prevents concurrent modification conflicts
 
-## Clean Abstractions
+## In-Process Infrastructure
 
-The application uses clean interface abstractions for external dependencies:
-
-- **`ThisAppLoggerInterface`**: Logging abstraction that hides shrmpl-log implementation
-- **`ThisAppKVInterface`**: Key-value store abstraction that hides shrmpl-kv implementation
-
-**Benefits:**
-- **Implementation Hiding**: Main application code never sees shrmpl-specific details
-- **Testability**: Interfaces can be easily mocked for unit testing
-- **Flexibility**: Can swap implementations by editing only `logging.go` and `kv.go`
-- **Clean Architecture**: Dependencies are injected as interfaces, not concrete types
+- **`Logger`** (`logging.go`): thin wrapper over `log/slog`, writing one
+  logfmt line per call to stderr with a `code=` attribute; systemd captures
+  it into journald.
+- **`KV`** (`kv.go`): in-process key-value store for rate limits, login
+  lockouts, MFA temp tokens and user blocks. Process-local -- restarting the
+  server clears it. Graduate to a shared store (Redis or similar) once the
+  app runs behind a load balancer with 2+ API processes.
 
 ## License
 

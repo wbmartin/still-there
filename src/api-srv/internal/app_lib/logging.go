@@ -2,9 +2,11 @@ package app_lib
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 )
@@ -30,6 +32,16 @@ func NewLogger(serverName string, w io.Writer) *Logger {
 	h := slog.NewTextHandler(w, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.LevelDebug,
+		// source=file.go:NN rather than the build machine's absolute path
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.SourceKey {
+				if src, ok := a.Value.Any().(*slog.Source); ok {
+					return slog.String(slog.SourceKey,
+						fmt.Sprintf("%s:%d", filepath.Base(src.File), src.Line))
+				}
+			}
+			return a
+		},
 	})
 	return &Logger{h: h.WithAttrs([]slog.Attr{slog.String("service", serverName)})}
 }
