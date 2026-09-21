@@ -25,6 +25,21 @@ const maxAuthBodyBytes = 4 << 10 // 4 KiB
 // maxUserNameLen matches app_user.user_name VARCHAR(50).
 const maxUserNameLen = 50
 
+// setAuthCookie writes the JWT as the HttpOnly, Secure, SameSite=Strict
+// "auth" cookie every authenticated request carries. maxAge 0 leaves the
+// cookie a session cookie, -1 expires it (logoff).
+func setAuthCookie(w http.ResponseWriter, jwt string, maxAge int) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth",
+		Value:    jwt,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   maxAge,
+	})
+}
+
 // isAccountLocked checks if the IP or username is currently locked out
 func isAccountLocked(
 	kv *cache.KV,
@@ -97,7 +112,6 @@ func resetFailedAttempts(
 func AuthHandler(
 	appServices *app.Services,
 	userRepo *repository.UserRepository,
-	appUserGroupRepo *repository.AppUserGroupRepository,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var csrfToken string
@@ -110,6 +124,19 @@ func AuthHandler(
 
 		// Create app helper for error handling
 		app := security.NewAppHelper(w, r, appServices, "AuthHandler")
+		// Login is the one endpoint with nothing to check before the body:
+		// there is no JWT yet, and brute force is answered by the per-IP +
+		// per-username lockout below (7 failures / 5 min), which is stricter
+		// than the per-minute limiter. Written out so the exception is read
+		// here, not inferred (PS0009).
+		app.SkipJWT()
+		app.SkipRateLimit()
+		app.SkipUserBlock()
+		app.SkipCSRF()
+		app.SkipAuthorization()
+		if !app.CheckAllChecksComplete() {
+			return
+		}
 
 		// Parse request. Nothing has checked rate limit or lockout yet, so
 		// bound what an anonymous caller can make the decoder allocate.
@@ -321,14 +348,7 @@ func AuthHandler(
 			return
 		}
 		// Set JWT cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:     "auth",
-			Value:    jwt,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
-		})
+		setAuthCookie(w, jwt, 0)
 
 		// CSRF token is last 3 characters of session ID
 		csrfToken = sessionID[len(sessionID)-3:]
@@ -363,7 +383,6 @@ func AuthHandler(
 func RefreshHandler(
 	appServices *app.Services,
 	userRepo *repository.UserRepository,
-	appUserGroupRepo *repository.AppUserGroupRepository,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
@@ -452,15 +471,7 @@ func RefreshHandler(
 		}
 
 		// Set updated JWT cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:     "auth",
-			Value:    jwt,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
-			MaxAge:   3600, // 1 hour
-		})
+		setAuthCookie(w, jwt, 3600) // 1 hour
 
 		response := model.Auth2ResponseModel{
 			AppUserID:                    user.AppUserID,
@@ -493,7 +504,6 @@ func RefreshHandler(
 func ChangeSecurityContextHandler(
 	appServices *app.Services,
 	userRepo *repository.UserRepository,
-	appUserGroupRepo *repository.AppUserGroupRepository,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create app helper for error handling
@@ -630,15 +640,7 @@ func ChangeSecurityContextHandler(
 		}
 
 		// Set new JWT cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:     "auth",
-			Value:    jwt,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
-			MaxAge:   3600, // 1 hour
-		})
+		setAuthCookie(w, jwt, 3600) // 1 hour
 
 		// CSRF token is last 3 characters of session ID
 		csrfToken := sessionID[len(sessionID)-3:]
@@ -693,15 +695,7 @@ func LogoffHandler(appServices *app.Services) http.HandlerFunc {
 		)
 
 		// Clear the auth cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:     "auth",
-			Value:    "",
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
-			MaxAge:   -1, // Expire immediately
-		})
+		setAuthCookie(w, "", -1) // expire immediately
 
 		w.WriteHeader(http.StatusOK)
 		app.Logger().Info(

@@ -164,8 +164,47 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
    - Authenticated: 200 requests/minute per user
    - Unauthenticated: 20 requests/minute per IP
 3. **User Blocking**: Check the in-process KV store for blocked users
-4. **CSRF Protection**: Compare `X-CSRF-Token` header with last 3 chars of session ID
+4. **CSRF Protection**: Compare `X-CSRF-Token` header with last 3 chars of session ID (safe methods — GET, HEAD, OPTIONS, TRACE — are exempt)
 5. **RBAC**: Verify user has required grant for target security context
+
+**Each handler runs these itself, explicitly, in this order, in its own
+body** (`internal/security/app_helper.go`). There is no middleware and no
+route wrapper, by decision (PS0009): the policy for an endpoint is read in
+the handler, not inferred from a chain. The shape every entity handler has:
+
+```go
+app := security.NewAppHelper(w, r, h.appsrv, "RetrieveExample")
+app.CheckJWT()
+app.CheckRateLimitAndUserBlock()
+app.CheckCSRF()
+app.CheckAuthorization(model.GrantExampleRead)
+if !app.CheckAllChecksComplete() {
+    return
+}
+```
+
+`CheckAllChecksComplete` is the contract: it returns false — and the
+handler returns — if any check failed *or* if any of the five was neither
+checked nor skipped. So an endpoint that needs a different set writes the
+difference where the auditor reads it, with `Skip*` calls:
+
+- `health_handler.go` — five `Skip*` calls: a public liveness probe checks
+  nothing, and says so.
+- `auth_handler.go` `AuthHandler` (login) — five `Skip*` calls: no JWT
+  exists yet, and brute force is answered by the per-IP + per-username
+  lockout (7 failures / 5 min) that runs before the password check.
+- `RefreshHandler`, `LogoffHandler` — `CheckJWT`, rate limit and block, then
+  `SkipCSRF` / `SkipAuthorization` with a one-line reason each.
+- `UserSelfCreateHandler`, `error_report_handler.go` — `SkipJWT` +
+  `CheckRateLimit` (the anonymous, IP-keyed limiter), everything else skipped.
+- `MFASetupHandler`, `MFAVerifyHandler` — rate limit and block, `SkipCSRF`,
+  `SkipAuthorization`; then either `SkipJWT` (a temp token from the
+  password step stands in) or `CheckJWT`, chosen in the handler.
+
+`example_handler_test.go` proves the sequence for the copy-me handler with
+a mocked repository: no cookie → 401, DELETE without CSRF → 403, missing
+grant → 403, blocked user → 403, and the repository is not called until
+every check has passed.
 
 ### Security Headers (All Responses)
 - **Content-Security-Policy**: Restricts resource loading to prevent XSS

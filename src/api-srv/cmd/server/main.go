@@ -81,16 +81,11 @@ func main() {
 
 	// Initialize handlers
 	healthHandler := handler.HealthHandler(appServices)
-	authHandler := handler.AuthHandler(appServices, userRepo, appUserGroupRepo)
-	refreshHandler := handler.RefreshHandler(
-		appServices,
-		userRepo,
-		appUserGroupRepo,
-	)
+	authHandler := handler.AuthHandler(appServices, userRepo)
+	refreshHandler := handler.RefreshHandler(appServices, userRepo)
 	changeSecurityContextHandler := handler.ChangeSecurityContextHandler(
 		appServices,
 		userRepo,
-		appUserGroupRepo,
 	)
 	changeOwnPasswordHandler := handler.ChangeOwnPasswordHandler(
 		appServices,

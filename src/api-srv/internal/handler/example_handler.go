@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,16 +13,50 @@ import (
 	"github.com/wbmartin/starter-api/internal/security"
 )
 
+// ExampleRepositoryInterface is what ExampleHandler needs from the
+// repository. *repository.ExampleRepository satisfies it; a mock does in
+// tests (example_handler_test.go), which is how the explicit check
+// sequence in each handler is proved without a database.
+type ExampleRepositoryInterface interface {
+	RetrieveExample(
+		ctx context.Context, exampleID int, securityContext int,
+	) (*model.ExampleModel, error)
+	CreateExample(
+		ctx context.Context, example *model.ExampleModel, securityContext int,
+	) (*model.ExampleModel, error)
+	UpdateExample(
+		ctx context.Context, example *model.ExampleModel, originalUpdateTS float64,
+	) error
+	DeleteExample(
+		ctx context.Context, exampleID int, securityContext int,
+		originalUpdateTS float64, deleteTS float64, deleteUserID int,
+	) (int, error)
+	RetrieveExampleList(
+		ctx context.Context, idList []int, securityContext int, afterUpdateTs float64,
+	) ([]*model.ExampleModel, error)
+	CreateExampleList(
+		ctx context.Context, exampleList []*model.ExampleModel, securityContext int,
+	) ([]*model.ExampleModel, error)
+	UpdateExampleList(
+		ctx context.Context, exampleList []*model.ExampleModel,
+		originalUpdateTSList []float64, securityContext int,
+	) error
+	DeleteExampleList(
+		ctx context.Context, idList []int, updateTimestampList []float64,
+		securityContext int, deleteTS float64, deleteUserID int,
+	) ([]int, error)
+}
+
 // ExampleHandler handles example CRUD operations
 type ExampleHandler struct {
 	appsrv      *app.Services
-	exampleRepo *repository.ExampleRepository
+	exampleRepo ExampleRepositoryInterface
 }
 
 // NewExampleHandler creates a new example handler
 func NewExampleHandler(
 	appServices *app.Services,
-	exampleRepo *repository.ExampleRepository,
+	exampleRepo ExampleRepositoryInterface,
 ) *ExampleHandler {
 	return &ExampleHandler{
 		appsrv:      appServices,

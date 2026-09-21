@@ -15,6 +15,21 @@ import (
 	"github.com/wbmartin/starter-api/internal/model"
 )
 
+// Every handler runs its own security checks, explicitly, in its own body:
+//
+//	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveExample")
+//	app.CheckJWT()
+//	app.CheckRateLimitAndUserBlock()
+//	app.CheckCSRF()
+//	app.CheckAuthorization(model.GrantExampleRead)
+//	if !app.CheckAllChecksComplete() { return }
+//
+// An endpoint that needs less writes the difference with Skip* calls in the
+// same place, so an auditor reads the whole policy in the handler. This is
+// deliberate and not to be replaced by middleware or a route wrapper
+// (Brandon, PS0009; doc/105 "Security checks"). CheckAllChecksComplete
+// refuses to proceed unless all five were either checked or skipped.
+
 // contextKey is a custom type for context keys to avoid collisions
 type contextKey string
 
@@ -51,7 +66,7 @@ func NewAppHelper(
 		helperLocation: helperLocation,
 		username:       "preauth",
 	}
-	ah.appServices.Logger.Info("APP_HELPER_INIT", "AppHelper instantiated", "handler", helperLocation)
+	ah.appServices.Logger.Debug("APP_HELPER_INIT", "request entered "+helperLocation, "handler", helperLocation)
 	return ah
 }
 
