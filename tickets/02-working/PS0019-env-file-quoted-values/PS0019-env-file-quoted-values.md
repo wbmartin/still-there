@@ -1,7 +1,7 @@
 ---
 id: PS0019
 title: ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes
-status: ready
+status: in-review
 blocked_by:
 waiting_on:
 priority: medium
@@ -44,12 +44,42 @@ Verified 2026-09-21.
 Recommendation: 1. The only real-world complaint is quotes, and the
 parser is 25 lines that `cmd/migrate` also uses.
 
-## Acceptance
+## What changed and why
 
-- `APP_NAME="Proto App"` → `Config.AppName == "Proto App"`; a unit test
-  covers `"…"`, `'…'`, and an unquoted value with an inner `=`.
-- TOTP issuer shows without quotes on a fresh MFA enrolment.
+Option 1 (Brandon, 2026-09-21: "start 19" on the recommendation).
+`config.ReadEnvFile` now runs each value through `unquote`: one pair of
+matching surrounding `"…"` or `'…'` is removed; an unmatched or lone
+quote is content. Nothing else changes — no `export`, no `${VAR}`
+expansion, no escapes; `doc/905`'s "simple env file format" stands.
+`cmd/migrate` shares the parser and inherits the fix.
+
+`internal/config/config_test.go` (new) covers double/single quotes, an
+unquoted value, a URL with `?`, an inner `=`, empty, `""`, an
+unterminated quote, padded whitespace, and that comments are skipped.
+
+Proven end to end: `LoadConfig("etc/loc-api-srv.env").AppName` is
+`Proto App`; `auth.GenerateTOTPURI` now yields `…&issuer=Proto+App`
+(was `%22Proto+App%22`).
+
+## Files modified
+
+- `src/api-srv/internal/config/config.go`
+- `src/api-srv/internal/config/config_test.go` (new)
+
+## Endpoints introduced or modified
+
+None. `POST /mfaSetup` returns an otpauth URI whose issuer no longer
+carries quotes; the JWT `iss` claim (`Config.AppName`, PS0007) likewise.
+
+## Acceptance (met 2026-09-21)
+
+- [x] `APP_NAME="Proto App"` → `Config.AppName == "Proto App"`; unit test covers `"…"`, `'…'`, unquoted with inner `=`.
+- [x] TOTP issuer without quotes on a fresh enrolment — URI proven above; `bin/200-run-tests all` go=106 e2e=3 py=63.
 
 ## Deploy needs
 
 Go binary. Existing enrolments keep their old issuer string; harmless.
+
+## Waiting for
+
+The next UAT deploy.
