@@ -7,19 +7,20 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/wbmartin/starter-api/internal/app_lib"
+	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/repository"
+	"github.com/wbmartin/starter-api/internal/security"
 )
 
 // AppUserGroupHandler handles user group operations
 type AppUserGroupHandler struct {
-	appsrv           *app_lib.AppServices
+	appsrv           *app.Services
 	appUserGroupRepo *repository.AppUserGroupRepository
 }
 
 // NewAppUserGroupHandler creates a new user group handler
-func NewAppUserGroupHandler(appServices *app_lib.AppServices,
+func NewAppUserGroupHandler(appServices *app.Services,
 	appUserGroupRepo *repository.AppUserGroupRepository) *AppUserGroupHandler {
 	return &AppUserGroupHandler{
 		appsrv:           appServices,
@@ -31,7 +32,7 @@ func NewAppUserGroupHandler(appServices *app_lib.AppServices,
 func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "RetrieveAppUserGroupList")
+	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveAppUserGroupList")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -90,7 +91,7 @@ func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "CreateAppUserGroup")
+	app := security.NewAppHelper(w, r, h.appsrv, "CreateAppUserGroup")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -174,7 +175,7 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "UpdateAppUserGroup")
+	app := security.NewAppHelper(w, r, h.appsrv, "UpdateAppUserGroup")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -283,7 +284,7 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "DeleteAppUserGroup")
+	app := security.NewAppHelper(w, r, h.appsrv, "DeleteAppUserGroup")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()

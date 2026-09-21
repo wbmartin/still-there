@@ -10,9 +10,13 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/wbmartin/starter-api/internal/app_lib"
+	"github.com/wbmartin/starter-api/internal/app"
+	"github.com/wbmartin/starter-api/internal/cache"
+	"github.com/wbmartin/starter-api/internal/config"
 	"github.com/wbmartin/starter-api/internal/handler"
+	"github.com/wbmartin/starter-api/internal/logging"
 	"github.com/wbmartin/starter-api/internal/repository"
+	"github.com/wbmartin/starter-api/internal/security"
 )
 
 func main() {
@@ -25,7 +29,7 @@ func main() {
 	configFile := os.Args[1]
 
 	// Load configuration
-	config, err := app_lib.LoadConfig(configFile)
+	config, err := config.LoadConfig(configFile)
 	if err != nil {
 		// Use console logging for early errors
 		fmt.Fprintf(
@@ -37,11 +41,11 @@ func main() {
 	}
 
 	// In-process key-value store (rate limits, lockouts, MFA temp tokens)
-	kv := app_lib.NewKV()
+	kv := cache.NewKV()
 	defer kv.Close()
 
 	// slog to stderr; systemd captures it into journald
-	logger := app_lib.NewLogger(config.ServerName, os.Stderr)
+	logger := logging.NewLogger(config.ServerName, os.Stderr)
 	logger.Info("SERVER_INIT", "Starting API server", "username", "app-root")
 
 	// Initialize database
@@ -69,8 +73,7 @@ func main() {
 	exampleRepo := repository.NewExampleRepository(dbPool)
 
 	// Initialize app dependencies
-	appServices := &app_lib.AppServices{
-		DBPool: dbPool,
+	appServices := &app.Services{
 		KV:     kv,
 		Config: config,
 		Logger: logger,
@@ -116,11 +119,11 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Apply security headers middleware to all routes
-	securedMux := app_lib.SecurityHeadersMiddleware(mux)
+	securedMux := security.HeadersMiddleware(mux)
 
 	// Apply CORS middleware if origins are configured
 	if len(config.CorsAllowedOrigins) > 0 {
-		securedMux = app_lib.CORSMiddleware(
+		securedMux = security.CORSMiddleware(
 			config.CorsAllowedOrigins,
 		)(
 			securedMux,

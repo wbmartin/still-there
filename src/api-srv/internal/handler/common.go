@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wbmartin/starter-api/internal/app_lib"
+	"github.com/wbmartin/starter-api/internal/logging"
 )
 
 // writeJSON writes a JSON response
 func writeJSON(w http.ResponseWriter, status int, data interface{},
-	logger *app_lib.Logger) {
+	logger *logging.Logger) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 

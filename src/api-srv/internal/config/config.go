@@ -1,4 +1,4 @@
-package app_lib
+package config
 
 import (
 	"bufio"

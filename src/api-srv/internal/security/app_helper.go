@@ -1,4 +1,4 @@
-package app_lib
+package security
 
 import (
 	"context"
@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wbmartin/starter-api/internal/app"
+	"github.com/wbmartin/starter-api/internal/auth"
+	"github.com/wbmartin/starter-api/internal/logging"
 	"github.com/wbmartin/starter-api/internal/model"
 )
 
@@ -21,8 +24,8 @@ const claimsKey contextKey = "claims"
 type AppHelper struct {
 	r              *http.Request
 	w              http.ResponseWriter
-	appServices    *AppServices
-	claims         *Claims
+	appServices    *app.Services
+	claims         *auth.Claims
 	ctx            context.Context
 	username       string
 	helperLocation string
@@ -38,7 +41,7 @@ type AppHelper struct {
 func NewAppHelper(
 	w http.ResponseWriter,
 	r *http.Request,
-	appServices *AppServices,
+	appServices *app.Services,
 	helperLocation string,
 ) *AppHelper {
 	ah := &AppHelper{
@@ -83,7 +86,7 @@ func (sh *AppHelper) SkipAuthorization() *AppHelper {
 }
 
 // GetClaims returns the validated JWT claims
-func (sh *AppHelper) GetClaims() *Claims {
+func (sh *AppHelper) GetClaims() *auth.Claims {
 	return sh.claims
 }
 
@@ -248,7 +251,7 @@ func (sh *AppHelper) CanProceed() bool {
 }
 
 // Logger returns the logger
-func (ah *AppHelper) Logger() *Logger {
+func (ah *AppHelper) Logger() *logging.Logger {
 	return ah.appServices.Logger
 }
 
@@ -266,7 +269,7 @@ func (sh *AppHelper) CheckJWT() *AppHelper {
 	}
 
 	tokenString := cookie.Value
-	claims, err := ValidateJWT(tokenString, sh.appServices.Config.JWTSecret)
+	claims, err := auth.ValidateJWT(tokenString, sh.appServices.Config.JWTSecret)
 	if err != nil {
 		sh.appServices.Logger.Warn(
 			"JWF0",
@@ -315,7 +318,7 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 		cookie, err := sh.r.Cookie("auth")
 		if err == nil {
 			tokenString := cookie.Value
-			claims, err := ValidateJWT(
+			claims, err := auth.ValidateJWT(
 				tokenString,
 				sh.appServices.Config.JWTSecret,
 			)
@@ -527,7 +530,7 @@ func (sh *AppHelper) CheckAuthorization(requiredGrantID int) *AppHelper {
 	}
 
 	if requiredGrantID > 0 {
-		rbac := NewRBACManager(sh.appServices.Logger, sh.username)
+		rbac := auth.NewRBACManager(sh.appServices.Logger, sh.username)
 		if !rbac.HasGrant(
 			sh.claims,
 			requiredGrantID,
@@ -571,7 +574,7 @@ func (sh *AppHelper) CheckTargetContextAuthorization(
 		return false
 	}
 
-	rbac := NewRBACManager(sh.appServices.Logger, sh.username)
+	rbac := auth.NewRBACManager(sh.appServices.Logger, sh.username)
 	if !rbac.HasGrant(sh.claims, requiredGrantID, targetSecurityContext) {
 		sh.appServices.Logger.Warn(
 			"TAF0",

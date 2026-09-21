@@ -24,7 +24,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/wbmartin/starter-api/internal/app_lib"
+	"github.com/wbmartin/starter-api/internal/config"
 	"github.com/wbmartin/starter-api/internal/migrate"
 	sqlfiles "github.com/wbmartin/starter-api/sql"
 )
@@ -51,7 +51,7 @@ func run(configPath, url string, args []string) error {
 		if configPath == "" {
 			return fmt.Errorf("-config or -url is required")
 		}
-		env, err := app_lib.ReadEnvFile(configPath)
+		env, err := config.ReadEnvFile(configPath)
 		if err != nil {
 			return err
 		}

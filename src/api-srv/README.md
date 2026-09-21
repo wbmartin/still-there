@@ -22,7 +22,7 @@ argument and it exits with "Configuration file path is required".
 ## Configuration
 
 `etc/loc-api-srv.env` is self-contained and needs no edits for local dev.
-Keys read by `internal/app_lib/config.go` `LoadConfig`:
+Keys read by `internal/config/config.go` `LoadConfig`:
 
 - `DATABASE_URL`, `JWT_SECRET`, `SERVER_NAME`, `APP_NAME` — required
 - `SERVER_PORT` — required, integer
@@ -83,12 +83,12 @@ All JSON is camelCase. List endpoints take `?<entity>IdList=1,2,3`
 ## Security
 
 Auth is an HS256 JWT carried in an `auth` cookie
-(`internal/app_lib/auth.go`); claims hold user ID, session ID, security
+(`internal/auth/jwt.go`); claims hold user ID, session ID, security
 context, and a grants list. Passwords are Argon2id.
 
 There is no security middleware chain — each handler calls its checks
 explicitly, in order, via the `AppHelper` in
-`internal/app_lib/app_helper.go`:
+`internal/security/app_helper.go`:
 
 1. `CheckJWT` — parse and validate the cookie
 2. `CheckRateLimitAndUserBlock` — per-user/unauthenticated rate limits and
@@ -116,10 +116,10 @@ connect as) and `sql/fixtures/` (seed data, e.g. `015-initialdata.sql`).
 No external services: `DATABASE_URL`, `JWT_SECRET`, and
 `TOTP_ENCRYPTION_KEY` are inline in the env file.
 
-- **`Logger`** (`internal/app_lib/logging.go`): thin wrapper over
+- **`Logger`** (`internal/logging/logging.go`): thin wrapper over
   `log/slog`, writing one logfmt line per call to stderr with a `code=`
   attribute.
-- **`KV`** (`internal/app_lib/kv.go`): in-process key-value store for
+- **`KV`** (`internal/cache/kv.go`): in-process key-value store for
   rate limits, login lockouts, MFA temp tokens, and user blocks.
   Process-local — restarting the server clears it. Graduate to a shared
   store (Redis or similar) once the app runs behind a load balancer with
@@ -130,7 +130,12 @@ No external services: `DATABASE_URL`, `JWT_SECRET`, and
 ```
 cmd/server/       # entry point, routing (main.go)
 cmd/migrate/       # schema migrator, embeds sql/migrations
-internal/app_lib/  # config, JWT/password, CSRF, rate limiting, KV, logging
+internal/app/      # Services: the config, store and logger every handler gets
+internal/auth/     # JWT, argon2 passwords, TOTP + seed encryption, RBAC
+internal/cache/    # in-process key-value store (rate limits, lockouts, MFA tokens)
+internal/config/   # env-file loader, Config
+internal/logging/  # slog wrapper with the code= attribute
+internal/security/ # AppHelper (explicit per-handler checks), client IP, headers/CORS
 internal/handler/  # HTTP handlers, one file per entity/concern
 internal/model/    # models, grants, DTOs
 internal/repository/  # data access
