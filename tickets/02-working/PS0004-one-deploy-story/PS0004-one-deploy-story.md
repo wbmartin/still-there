@@ -10,7 +10,7 @@ raised: 2026-09-21
 raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0004-one-deploy-story
-merged:
+merged: ef91f35
 deployed:
 validated:
 ---
