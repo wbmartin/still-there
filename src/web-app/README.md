@@ -69,6 +69,8 @@ PS0012 owns any change to that.
 
 ## Dependency cadence
 
-Caret ranges. Any ticket that touches the web app runs `npm update` (in-range
-bumps) and `npx depcheck` (no unused or undeclared packages). Major versions
+Caret ranges. Any ticket that touches the web app runs `npm update
+--legacy-peer-deps` (in-range bumps; plain `npm update` trips an arborist
+bug in npm 10 on this peer set) and `npx depcheck` (no unused or undeclared
+packages). Major versions
 (Mantine, ESLint, Vitest, Vite plugins) are their own ticket, one at a time.
