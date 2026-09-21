@@ -6,7 +6,7 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 19:05 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 19:47 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
@@ -16,13 +16,7 @@ picks up the next piece of work. Do not edit below the marker.
 |---|---|---|---|
 | **PS0021** | MFA loose ends — web grant 9020 has no Go grant, resetUserMFA leaves mfa_setup true, successful login never resets the lockout counters | low | security |
 
-## Engineering — in progress (1)
-
-| Ticket | Title | Claimed |
-|---|---|---|
-| **PS0020** | TOTP MFA has no automated coverage — non-exempt fixture user and a Playwright enrol/verify test | 2026-09-21 by TKT-PS0020-mfa-totp-e2e-coverage |
-
-## Engineering — merged, awaiting validation (12)
+## Engineering — merged, awaiting validation (13)
 
 | Ticket | Title | Merged | Deployed |
 |---|---|---|---|
@@ -38,6 +32,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | 67bb62c | — |
 | **PS0016** | Add JSONB and UUID columns to the example entity | bdb4c16 | — |
 | **PS0018** | User profile page: preferences and avatar | 8cb03c7 | — |
+| **PS0020** | TOTP MFA has no automated coverage — non-exempt fixture user and a Playwright enrol/verify test | 6f426e9 | — |
 
 ## Engineering — validated, awaiting archive (4)
 

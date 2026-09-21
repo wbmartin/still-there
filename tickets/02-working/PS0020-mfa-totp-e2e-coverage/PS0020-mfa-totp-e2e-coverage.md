@@ -10,7 +10,7 @@ raised: 2026-09-21
 raised_by: PS0017 investigation
 asked:
 claimed: 2026-09-21 by TKT-PS0020-mfa-totp-e2e-coverage
-merged:
+merged: 6f426e9
 deployed:
 validated:
 ---
