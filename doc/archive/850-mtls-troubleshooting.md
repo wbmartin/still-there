@@ -1,3 +1,5 @@
+> Archived 2026-09-21 by PS0003: the shrmpl clients / vault mTLS this describes were removed from the template. Kept as history.
+
 # mTLS Troubleshooting Guide
 
 This document provides command-line tools to verify the integrity and relationships of mTLS certificates for shrmpl-vault.

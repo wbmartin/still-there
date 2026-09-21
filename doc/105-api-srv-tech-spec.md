@@ -15,8 +15,6 @@ This document specifies the ProtoStack-ReactGo API server, a production-ready Go
   - **Infrastructure Layer**: Database repositories and external services
 - **External Dependencies**:
   - PostgreSQL database
-  - shrmpl-kv (Redis-like key-value store)
-  - shrmpl-log (TCP logging service)
 
 ### Project Structure
 
@@ -28,7 +26,7 @@ src/api-srv/
 │   │   ├── app_helper.go           # Error handling and response utilities
 │   │   ├── auth.go                 # JWT handling, password hashing
 │   │   ├── config.go               # Configuration management
-│   │   ├── kv.go                   # shrmpl-kv client
+│   │   ├── kv.go                   # In-process key-value store
 │   │   ├── logging.go              # Structured logging
 │   │   ├── rbac.go                 # RBAC logic
 │   │   └── services.go             # Application services
@@ -126,11 +124,11 @@ initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.s
    - Input: `{userName: string, password: string}`
    - Verify credentials against `app_user` table
    - If `mfa_exempt = true`: Return full JWT
-   - If `mfa_exempt = false`: Store temp token in shrmpl-kv, return temp token
+   - If `mfa_exempt = false`: Store temp token in the in-process KV store, return temp token
 
 2. **MFA Auth** (`/auth2`):
    - Input: `{tempToken: string, totpCode: string}`
-   - Verify temp token from shrmpl-kv
+   - Verify temp token from the in-process KV store
    - Verify TOTP (placeholder implementation)
    - Return full JWT with cookie
 
@@ -155,7 +153,7 @@ initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.s
 ### Authentication
 - **JWT**: RS256 signed tokens with session management
 - **Password Hashing**: Argon2id with time=3, memory=64MB, threads=4, key length=32
-- **Session Management**: Session IDs stored in JWT, validated against shrmpl-kv for blocking
+- **Session Management**: Session IDs stored in JWT, validated against the in-process KV store for blocking
 
 ### Authorization (RBAC)
 - **Grants**: Context-specific permissions in JWT (only current context's grants)
@@ -167,7 +165,7 @@ initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.s
 2. **Rate Limiting**:
    - Authenticated: 200 requests/minute per user
    - Unauthenticated: 20 requests/minute per IP
-3. **User Blocking**: Check shrmpl-kv for blocked users
+3. **User Blocking**: Check the in-process KV store for blocked users
 4. **CSRF Protection**: Compare `X-CSRF-Token` header with last 3 chars of session ID
 5. **RBAC**: Verify user has required grant for target security context
 
@@ -200,11 +198,15 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
 ## Logging
 
 ### Structured Logging
-- **Library**: slog (Go standard library)
-- **Format**: JSON with consistent field names
-- **Levels**: DEBUG, INFO, WARN, ERROR
-- **Context**: Username, user ID, request details
-- **Transport**: TCP connection to shrmpl-log service
+- **Library**: `Logger` (`internal/app_lib/logging.go`), a thin wrapper over
+  `log/slog`'s text handler
+- **Format**: logfmt, one line per call, written to stderr; systemd captures
+  it into journald. No remote receiver.
+- **Levels**: DEBUG, INFO, WARN, ERROR, via `Debug/Info/Warn/Error(code,
+  message, kv...)`
+- **Context**: Username, user ID, request details passed as key/value pairs
+- **Code**: the `code` argument is emitted as a `code=` attribute on every
+  line, e.g. `level=INFO source=example_handler.go:88 msg="..." code=EX_CR_START service=proto-go-app username=alice`
 
 ### Log Codes
 - 12-character codes for consistent categorization, uniqueness
@@ -285,14 +287,10 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
 
 ### Build Process
 - **Commands**: `go build ./...`, `go test ./...`
-- **Dependencies**: Download shrmpl binaries via `bin/010-download-shrmpl.sh`
 - **Configuration**: Environment-specific config files
 
 ### Runtime Requirements
 - **PostgreSQL**: Database server
-- **shrmpl-kv**: Key-value store service
-- **shrmpl-log**: Logging service
-- **Network**: TCP connectivity between services (localhost tcp is fine, but also distributable)
 
 ### Operational Considerations
 - **Health Checks**: `/health` endpoint for load balancers
@@ -303,11 +301,9 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
 ## Development Workflow
 
 ### Local Development
-1. Start shrmpl services: `bin/010-download-shrmpl.sh`
-2. Initialize database: `psql -f sql/010-initialcreate.sql`
-3. Seed data: `psql -f sql/015-initialdata.sql`
-4. Run server: `go run cmd/server/main.go /path/to/config.env`
-5. Run tests: `go test ./...`
+1. Build the database: `bin/510-reset-test-db`
+2. Run server: `bin/215-run-api-srv`
+3. Run tests: `go test ./...`
 
 ### Code Quality
 - **Formatting**: `go fmt`

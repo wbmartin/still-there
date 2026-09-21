@@ -29,9 +29,15 @@ errors (closed store, key > 100 chars), so each now logs at ERROR and
 responds 500. `MFAVerifyHandler` already did this. Net: a bug can no
 longer silently disable rate limiting or lockout.
 
-Key-length bound: `RPM*<subject>*<minute>` and `loginfail-user-<name>`
-must stay under 100 chars. Usernames are bounded by the model validation
-(well under that); IPv6 max 45 chars. Not a new limit.
+**Key-length bound made explicit.** Store keys are capped at 100 chars.
+`loginfail-user-<name>` / `loginlock-user-<name>` take the username
+straight from the `/auth` body, so a 200-char name would now have turned
+the store error into a 500 (it used to fail open to 401 via the DB lookup).
+`AuthHandler` now rejects empty or >50-char usernames (`user_name` is
+VARCHAR(50)) with the same 401 `INVALID_CREDS` a wrong password gets —
+before any store or DB access, so it leaks nothing and costs nothing.
+MFA temp-token keys are bounded by the token the server itself issued;
+a client-supplied oversize token already answered 401.
 
 **Process-local caveat, restated in `kv.go`:** two or more API processes
 behind a load balancer make every limit per-process. Graduation to a
@@ -88,6 +94,17 @@ in git history; rotation is on the PS0002 list.
 **Deleted locally by this session** (all gitignored, all regenerable):
 `bin/tools/*` (shrmpl binaries), `etc/vault-configs/`,
 `etc/crt/shrmpl_vault_*.pem`. `etc/crt/api-srv-*.pem` kept.
+
+**Test fallback to the developer's live DB — removed.** `internal/repository`
+and `internal/migrate` integration tests fell back to
+`etc/loc-api-srv.env` when `PROTO_TEST_DATABASE_URL` was unset. That was
+inert only because the vault made `LoadConfig` fail (→ skip). With a
+self-contained env file, a bare `go test ./...` connected to
+`loc_starter_db` and ran a suite that inserts and deletes rows (found
+during this ticket; the run left no rows behind — verified). Both suites
+now skip with a message naming `bin/200-run-tests go`, which is the only
+way they were ever meant to run; the runner still greps for the skip so it
+cannot pass silently.
 
 ## What did I miss?
 

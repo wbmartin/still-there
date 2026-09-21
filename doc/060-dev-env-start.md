@@ -1,13 +1,8 @@
 
-```bash
-cd Code/ProtoStack-ReactGo
-./bin/010-download-shrmpl.sh
-```
-
 # Database
 Start Docker
 ```bash
-cd /Users/brandon/proj/infrahub/loc-postgres
+cd path/to/infrahub/loc-postgres  # your local infrahub checkout, outside this repo
 source ./brandon_env_setup-mac1.sh
 ./515-run-postgres.sh
 docker exec -it loc-postgres /bin/bash
@@ -19,10 +14,9 @@ psql
 \c loc_starter_db
 ```
 
-# new shell for shrimpl server
+First time, or to rebuild the schema:
 ```bash
-
-./bin/210-run-shrmpl-app-infra
+bin/510-reset-test-db
 ```
 
 # new shell for the app server
@@ -35,3 +29,6 @@ psql
 
 #In a new shell 
 ~/Code/ProtoStack-ReactGo/bin/220-run-web-app
+
+# To stop
+./bin/216-stop-local-stack
