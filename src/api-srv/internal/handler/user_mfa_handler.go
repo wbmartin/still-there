@@ -607,14 +607,7 @@ func MFAVerifyHandler(
 			}
 
 			// Set JWT cookie
-			http.SetCookie(w, &http.Cookie{
-				Name:     "auth",
-				Value:    jwt,
-				Path:     "/",
-				HttpOnly: true,
-				Secure:   true,
-				SameSite: http.SameSiteStrictMode,
-			})
+			setAuthCookie(w, jwt, 0)
 
 			// CSRF token
 			csrfToken := sessionID[len(sessionID)-3:]
