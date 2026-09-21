@@ -10,9 +10,9 @@ raised: 2026-09-21
 raised_by: Brandon
 asked:
 claimed: 2026-09-21 by TKT-PS0001-backport-derivatives
-merged:
+merged: 2026-09-21 c73e026 (PR #3)
 deployed:
-validated:
+validated: 2026-09-21
 ---
 # PS0001 — Backport infra, ticketing and tooling from derivative apps
 
