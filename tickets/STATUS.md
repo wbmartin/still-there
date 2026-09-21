@@ -6,7 +6,7 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 15:51 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 16:05 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
@@ -28,15 +28,16 @@ picks up the next piece of work. Do not edit below the marker.
 
 | Ticket | Title | Claimed |
 |---|---|---|
-| **PS0007** | Single rename point and a "deriving a new app" checklist | 2026-09-21 by TKT-PS0007-derive-new-app-checklist |
+| **PS0008** | Split internal/app_lib into packages named by role (no KV/log interfaces) | 2026-09-21 by TKT-PS0008-api-split-app-lib |
 
-## Engineering — merged, awaiting validation (3)
+## Engineering — merged, awaiting validation (4)
 
 | Ticket | Title | Merged | Deployed |
 |---|---|---|---|
 | **PS0002** | Security and correctness hygiene found in the 2026-09-21 template review | ea5f4f0 | — |
 | **PS0003** | Sunset the shrmpl kv, log and vault clients and all their local tooling | b514d5c | — |
 | **PS0004** | Document the presales → post-sales deploy migration; fix bin/600 fail-fast | ef91f35 | — |
+| **PS0007** | Single rename point and a "deriving a new app" checklist | 9d74ba9 | — |
 
 ## Engineering — validated, awaiting archive (3)
 
@@ -46,11 +47,10 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0005** | One agent rulebook — fold doc/9xx guidance into CLAUDE.md, fix or retire opencode.json | 2026-09-21 |
 | **PS0006** | Move ProtoStack history out of doc/ into the engineering log; fix every broken path | 2026-09-21 |
 
-## Engineering — blocked (3)
+## Engineering — blocked (2)
 
 | Ticket | Title | Priority | Waiting on |
 |---|---|---|---|
-| **PS0008** | Split internal/app_lib into packages named by role (no KV/log interfaces) | medium | PS0003 |
 | **PS0010** | Make the example entity a lean, copyable template — error mapping, scoped queries, retry removal, doc/810 rewrite | low | Brandon |
 | **PS0011** | API dead code, duplicated helpers, table-driven config loader, lint baseline | low | Brandon |
 
