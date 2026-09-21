@@ -20,7 +20,7 @@
 -- Grant ids must match src/api-srv/internal/model (user grants). That code is
 -- the source of truth; the arrays below are its projection into SQL.
 --
--- Passwords: admin / admin123!  and  basic / basic123!  (Argon2id). Local
+-- Passwords: admin / admin123!, basic / basic123!, mfa / basic123! (Argon2id). Local
 -- scratch databases only -- change for any non-dev install.
 
 -- User groups for security context 1 (explicit ids: the users below refer
@@ -77,8 +77,10 @@ ON CONFLICT DO NOTHING;
 SELECT setval('app_user_group_app_user_group_id_seq',
     (SELECT COALESCE(MAX(app_user_group_id), 0) + 1 FROM app_user_group));
 
--- Users: admin (Admin group) and basic (Basic User group), both in context 1,
--- both MFA exempt for initial setup.
+-- Users, all in context 1: admin (Admin group) and basic (Basic User group)
+-- are MFA exempt so the test suites can sign in with a password alone; mfa
+-- (Basic User group, password basic123!) is NOT exempt and starts with no
+-- seed, so the TOTP enrol → verify path is exercised end to end (PS0020).
 WITH common_vars AS (
     SELECT EXTRACT(EPOCH FROM NOW()) AS ts, 0 AS system_id
 )
@@ -95,7 +97,7 @@ SELECT
     data.email,
     1,
     data.app_user_group_membership_list,
-    TRUE,
+    data.mfa_exempt,
     '',
     FALSE,
     common_vars.ts,
@@ -106,11 +108,15 @@ FROM common_vars,
 (VALUES
     ('admin',
      '$argon2id$v=19$m=65536,t=3,p=4$dvj9Tc0FPrJvKevg+DCOhg$TlKP/tTUBnTZ0VIR8IU4JAYQl8i1jnCcIRUrPgWCUIg',
-     'System', 'Administrator', 'admin@example.com', ARRAY[2]),
+     'System', 'Administrator', 'admin@example.com', ARRAY[2], TRUE),
     ('basic',
      '$argon2id$v=19$m=65536,t=3,p=4$kxssq7+N6Of3OSiUThJgrw$S+uHFwjOhp8daiHCYhyto7whkrDjDr2TD0+Y6Cq1kd4',
-     'Basic', 'User', 'basic@example.com', ARRAY[1])
-) AS data(user_name, pw_hash, first_name, last_name, email, app_user_group_membership_list)
+     'Basic', 'User', 'basic@example.com', ARRAY[1], TRUE),
+    ('mfa',
+     '$argon2id$v=19$m=65536,t=3,p=4$kxssq7+N6Of3OSiUThJgrw$S+uHFwjOhp8daiHCYhyto7whkrDjDr2TD0+Y6Cq1kd4',
+     'Second', 'Factor', 'mfa@example.com', ARRAY[1], FALSE)
+) AS data(user_name, pw_hash, first_name, last_name, email,
+          app_user_group_membership_list, mfa_exempt)
 ON CONFLICT (user_name) DO NOTHING;
 
 -- Example data (context 1). No unique key on example, so match on text.

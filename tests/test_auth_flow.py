@@ -107,11 +107,9 @@ class TestAuthentication:
         # In a real scenario, this would sleep for the lockout duration
         pass
 
-    def test_mfa_lockout_after_failed_attempts(self):
-        """Test that MFA failures also trigger lockout"""
-        # This would require setting up MFA and testing TOTP failures
-        # For now, placeholder
-        pass
+    # MFA enrolment, verification, temp-token replay and the MFA lockout are
+    # in tests/test_zz_mfa_totp.py (it runs last because the lockout locks
+    # the shared IP out of /auth).
 
 
 # Import TestClient for use in this module

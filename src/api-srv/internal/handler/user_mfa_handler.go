@@ -12,7 +12,6 @@ import (
 	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/auth"
 	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
 )
 
@@ -24,7 +23,7 @@ const maxMFABodyBytes = 4 << 10 // 4 KiB
 // UserSelfCreateHandler handles user self-registration (public endpoint)
 func UserSelfCreateHandler(
 	appServices *app.Services,
-	userRepo *repository.UserRepository,
+	userRepo UserRepositoryInterface,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create app helper
@@ -180,7 +179,7 @@ func UserSelfCreateHandler(
 // MFASetupHandler handles MFA setup for authenticated users
 func MFASetupHandler(
 	appServices *app.Services,
-	userRepo *repository.UserRepository,
+	userRepo UserRepositoryInterface,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
@@ -216,8 +215,13 @@ func MFASetupHandler(
 		) // Reset body for later
 		if err := json.Unmarshal(bodyBytes, &tempReq); err == nil &&
 			tempReq.TempToken != "" {
-			// Temp token path - skip JWT for temp token authentication
+			// Temp token path - skip JWT for temp token authentication.
+			// The other checks (rate limit, user block) have already run;
+			// this is where a failed one stops the request (PS0020).
 			app.SkipJWT()
+			if !app.CheckAllChecksComplete() {
+				return
+			}
 			tempToken := tempReq.TempToken
 			// Get username from temp token
 			userNameBytes, err := appServices.KV.Get(
@@ -372,7 +376,7 @@ func MFASetupHandler(
 // MFAVerifyHandler handles MFA verification
 func MFAVerifyHandler(
 	appServices *app.Services,
-	userRepo *repository.UserRepository,
+	userRepo UserRepositoryInterface,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
@@ -414,8 +418,13 @@ func MFAVerifyHandler(
 
 		var userName string
 		if req.TempToken != "" {
-			// Temp token path - skip JWT for temp token authentication
+			// Temp token path - skip JWT for temp token authentication.
+			// The other checks (rate limit, user block) have already run;
+			// this is where a failed one stops the request (PS0020).
 			app.SkipJWT()
+			if !app.CheckAllChecksComplete() {
+				return
+			}
 			userNameBytes, err := appServices.KV.Get(
 				"TEMP_AUTH_SUCCESS_" + req.TempToken,
 			)
@@ -612,12 +621,14 @@ func MFAVerifyHandler(
 			// CSRF token
 			csrfToken := sessionID[len(sessionID)-3:]
 
-			// Remove temp token
-			appServices.KV.Set(
-				"TEMP_AUTH_SUCCESS_"+req.TempToken,
-				"",
-				"0",
-			) // Expire immediately
+			// The temp token is single-use: delete it. (Set with ttl "0" was
+			// an invalid expiration whose error went unread, so the token
+			// stayed replayable for its whole 10 minutes — PS0020.)
+			if err := appServices.KV.Del(
+				"TEMP_AUTH_SUCCESS_" + req.TempToken,
+			); err != nil {
+				app.Logger().Error("MFA_TT_DEL_FAIL", "Failed to delete temp token: "+err.Error())
+			}
 
 			// Return full user data
 			response := model.Auth2ResponseModel{
@@ -662,7 +673,7 @@ func MFAVerifyHandler(
 // AdminResetUserMFAHandler handles admin reset of user MFA
 func AdminResetUserMFAHandler(
 	appServices *app.Services,
-	userRepo *repository.UserRepository,
+	userRepo UserRepositoryInterface,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks

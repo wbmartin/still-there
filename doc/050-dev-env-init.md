@@ -14,7 +14,7 @@ bin/510-reset-test-db loc_proto_e2e_db # any *_test_db / *_e2e_db name
 That runs, in order: `CREATE DATABASE`, `src/api-srv/sql/roles.sql` (cluster
 roles, idempotent), `go run ./cmd/migrate ... up` (the embedded
 `sql/migrations/`), then `sql/fixtures/local-seed.sql` (seed groups,
-`admin`/`admin123!`, `basic`/`basic123!`, two example rows). See the header of
+`admin`/`admin123!`, `basic`/`basic123!`, `mfa`/`basic123!` (not MFA-exempt), two example rows). See the header of
 that script for `PG_CONTAINER` / `PSQL` / `PGPASSWORD` / `TEST_PG_URL_BASE`.
 
 Manual path, for a database with a name of your choosing (e.g. the
