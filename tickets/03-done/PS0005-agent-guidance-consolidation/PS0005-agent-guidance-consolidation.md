@@ -1,7 +1,7 @@
 ---
 id: PS0005
 title: One agent rulebook — fold doc/9xx guidance into CLAUDE.md, fix or retire opencode.json
-status: in-review
+status: ready
 blocked_by:
 waiting_on:
 priority: high
@@ -10,9 +10,9 @@ raised: 2026-09-21
 raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0005-agent-guidance-consolidation
-merged:
-deployed:
-validated:
+merged: 3d7384c
+deployed: none
+validated: 2026-09-21
 ---
 # PS0005 — Two overlapping agent-guidance systems
 

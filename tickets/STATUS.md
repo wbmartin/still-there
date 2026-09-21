@@ -6,15 +6,14 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 15:23 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 15:27 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (6)
+## Engineering — ready to start (5)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
-| **PS0006** | Move ProtoStack history out of doc/ into the engineering log; fix every broken path | high | docs |
 | **PS0009** | Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable | medium | api |
 | **PS0012** | Web — fix the entity-page bugs; document that pages are deliberate scaffolding | medium | web |
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | medium | web |
@@ -25,7 +24,7 @@ picks up the next piece of work. Do not edit below the marker.
 
 | Ticket | Title | Claimed |
 |---|---|---|
-| **PS0005** | One agent rulebook — fold doc/9xx guidance into CLAUDE.md, fix or retire opencode.json | 2026-09-21 by TKT-PS0005-agent-guidance-consolidation |
+| **PS0006** | Move ProtoStack history out of doc/ into the engineering log; fix every broken path | 2026-09-21 by TKT-PS0006-doc-template-vs-history |
 
 ## Engineering — merged, awaiting validation (3)
 
@@ -35,11 +34,12 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0003** | Sunset the shrmpl kv, log and vault clients and all their local tooling | b514d5c | — |
 | **PS0004** | Document the presales → post-sales deploy migration; fix bin/600 fail-fast | ef91f35 | — |
 
-## Engineering — validated, awaiting archive (1)
+## Engineering — validated, awaiting archive (2)
 
 | Ticket | Title | Validated |
 |---|---|---|
 | **PS0001** | Backport infra, ticketing and tooling from derivative apps | 2026-09-21 |
+| **PS0005** | One agent rulebook — fold doc/9xx guidance into CLAUDE.md, fix or retire opencode.json | 2026-09-21 |
 
 ## Engineering — blocked (4)
 
@@ -55,7 +55,7 @@ picks up the next piece of work. Do not edit below the marker.
 | Domain | Open |
 |---|---|
 | api | 5 |
-| docs | 4 |
+| docs | 3 |
 | web | 2 |
 | tooling | 2 |
 | security | 1 |
