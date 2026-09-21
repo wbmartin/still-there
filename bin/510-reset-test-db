@@ -98,7 +98,7 @@ echo "[INFO] Migrating"
 (cd "$PROJECT_ROOT/src/api-srv" && go run ./cmd/migrate -url "$TEST_PG_URL_BASE/$TEST_DB" up)
 
 echo "[INFO] Seeding fixtures"
-$PSQL -d "$TEST_DB" -q -v ON_ERROR_STOP=1 < "$SQL_DIR/fixtures/015-initialdata.sql"
+$PSQL -d "$TEST_DB" -q -v ON_ERROR_STOP=1 < "$SQL_DIR/fixtures/local-seed.sql"
 
 echo "[INFO] Done."
 $PSQL -d "$TEST_DB" -c "

@@ -9,9 +9,9 @@ package sqlfiles
 import "embed"
 
 // Migrations holds migrations/NNNN_name.sql. Version is the leading integer;
-// files apply in ascending order, forward only. roles.sql,
-// ddl-role-host-setup.sql and fixtures/ are deliberately NOT embedded -- they
-// are host setup and test data respectively, not schema.
+// files apply in ascending order, forward only. roles.sql and fixtures/
+// are deliberately NOT embedded -- they are host setup and test data
+// respectively, not schema.
 //
 //go:embed migrations/*.sql
 var Migrations embed.FS

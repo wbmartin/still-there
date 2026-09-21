@@ -16,7 +16,7 @@ Two scripts do the work; this skill is the procedure around them.
 app's identity from `etc/app.env` (`APP_SLUG=proto`, sourced first): `APP_NAME=$APP_SLUG`,
 `UAT_HOST=uat-server` (ssh alias), `PG_CONTAINER=loc-postgres`,
 `LOCAL_ENV_FILE=etc/loc-api-srv.env`, and the server-side `APP_ROOT=/srv/uat-$APP_SLUG`,
-`SERVICE=uat-$APP_SLUG-api`, `SVC_USER=www-data`, `DB_APP_ROLE=${APP_SLUG}_app_svc_account`. `600` sources it (`PRESALES_ENV=<file>`
+`SERVICE=uat-$APP_SLUG-api`, `SVC_USER=www-data`, `DB_APP_ROLE=${APP_SLUG}_app`. `600` sources it (`PRESALES_ENV=<file>`
 to use another) and dies naming any missing key; there are no inline defaults and no
 per-variable env overrides. `600` writes the server-side keys into the bundle as
 `deploy.env`; `610` sources that, then `$APP_ROOT/etc/deploy.env` if the host keeps one
@@ -73,7 +73,7 @@ to the UI (no typing passwords) — the UI eyeball is the operator's.
   **never overwritten by deploy**), `etc/uat-${APP_NAME}-api.service` (symlinked into
   `/etc/systemd/system`), `log/` (nginx only; API logs to journald —
   `sudo journalctl -u uat-${APP_NAME}-api -f`).
-- DB role `$DB_APP_ROLE` (`proto_app_svc_account`) owns the database; `db_reader`/`db_writer`
+- DB role `$DB_APP_ROLE` (`proto_app`) owns the database; `db_reader`/`db_writer`
   grant roles. `000-roles.sql` in the bundle is the repo's `src/api-srv/sql/roles.sql`
   verbatim (idempotent); `600` refuses to bundle if it is missing or does not name
   `$DB_APP_ROLE`. Never run 600/610 against a host that has been migrated to the

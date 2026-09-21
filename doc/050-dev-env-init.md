@@ -13,7 +13,7 @@ bin/510-reset-test-db loc_proto_e2e_db # any *_test_db / *_e2e_db name
 
 That runs, in order: `CREATE DATABASE`, `src/api-srv/sql/roles.sql` (cluster
 roles, idempotent), `go run ./cmd/migrate ... up` (the embedded
-`sql/migrations/`), then `sql/fixtures/015-initialdata.sql` (seed groups,
+`sql/migrations/`), then `sql/fixtures/local-seed.sql` (seed groups,
 `admin`/`admin123!`, `basic`/`basic123!`, two example rows). See the header of
 that script for `PG_CONTAINER` / `PSQL` / `PGPASSWORD` / `TEST_PG_URL_BASE`.
 
@@ -27,7 +27,7 @@ cd src/api-srv
 go run ./cmd/migrate -url "postgres://postgres:<pw>@127.0.0.1:5432/loc_proto_db" up
 #   or, when the env file carries DATABASE_URL for a role that owns the schema:
 #   go run ./cmd/migrate -config ../../etc/loc-api-srv.env up
-psql -h 127.0.0.1 -U postgres -d loc_proto_db -v ON_ERROR_STOP=1 -f sql/fixtures/015-initialdata.sql
+psql -h 127.0.0.1 -U postgres -d loc_proto_db -v ON_ERROR_STOP=1 -f sql/fixtures/local-seed.sql
 go run ./cmd/migrate -url "postgres://postgres:<pw>@127.0.0.1:5432/loc_proto_db" status
 #   expect: 0001  initial_schema   applied <now> by postgres
 ```
@@ -37,7 +37,7 @@ already has the 0001 schema: bring it under the migrator with
 `go run ./cmd/migrate -url ... stamp 1` instead of `up`.
 
 For a deployed environment, the DDL owner role and default privileges are a
-one-time host step: `src/api-srv/sql/ddl-role-host-setup.sql`.
+one-time host step: `doc/340-db-host-setup.md`.
 
 
 # Nginx setup

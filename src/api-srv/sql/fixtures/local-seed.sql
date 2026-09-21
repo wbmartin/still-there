@@ -9,10 +9,10 @@
 -- RUN ORDER
 --   1. sql/roles.sql                     cluster roles (once per server)
 --   2. cmd/migrate up                    schema (sql/migrations/)
---   3. sql/fixtures/015-initialdata.sql  THIS FILE
+--   3. sql/fixtures/local-seed.sql  THIS FILE
 --
 -- Names no database. Run it with an explicit target:
---   psql -d <target_db> -v ON_ERROR_STOP=1 -f src/api-srv/sql/fixtures/015-initialdata.sql
+--   psql -d <target_db> -v ON_ERROR_STOP=1 -f src/api-srv/sql/fixtures/local-seed.sql
 --
 -- Idempotent: every INSERT skips rows that already exist, so re-running it
 -- against a populated database is a no-op.

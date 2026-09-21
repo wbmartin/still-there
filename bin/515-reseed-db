@@ -35,7 +35,7 @@ case "$DB" in
   *_test_db|*_e2e_db) ;;
   *) echo "[ERROR] Refusing to reseed '$DB': scratch databases end in _test_db or _e2e_db"; exit 1 ;;
 esac
-FIXTURES="$PROJECT_ROOT/src/api-srv/sql/fixtures/015-initialdata.sql"
+FIXTURES="$PROJECT_ROOT/src/api-srv/sql/fixtures/local-seed.sql"
 
 # Same psql selection as bin/510: inside the container when it is up, native
 # otherwise, PSQL overriding both.

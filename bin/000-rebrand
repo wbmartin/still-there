@@ -57,12 +57,11 @@ FILES="$(git ls-files | grep -v '^tickets/' | grep -v "^bin/000-rebrand$" \
   | while read -r f; do [ -f "$f" ] && grep -Iq . "$f" && echo "$f"; done)"
 # shellcheck disable=SC2086
 perl -pi -e "
-  s/\b${OLD}_app_svc_account\b/${NEW}_app_svc_account/g;
   s/\b${OLD}-(api|migrate|web)\b/${NEW}-\$1/g;
   s/\b(uat|prd|loc)-${OLD}\b/\$1-${NEW}/g;
   s/\b(uat|prd|loc)_${OLD}_/\$1_${NEW}_/g;
-  s/\b${OLD}_(ddl|ci)\b/${NEW}_\$1/g;
-  s/_${OLD}_(user|db)\b/_${NEW}_\$1/g;
+  s/\b${OLD}_(app|ddl|ci)\b/${NEW}_\$1/g;
+  s/_${OLD}_db\b/_${NEW}_db/g;
   s#/build-stg/${OLD}\b#/build-stg/${NEW}#g;
   s/\b(build|promote)-${OLD}_/\$1-${NEW}_/g;
   s/vnd\.${OLD}\./vnd.${NEW}./g;

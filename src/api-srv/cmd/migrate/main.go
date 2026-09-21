@@ -5,6 +5,7 @@
 //	proto-migrate -config <env file> verify          fail if the database disagrees with the files
 //	proto-migrate -config <env file> up              apply every pending migration, in order
 //	proto-migrate -config <env file> stamp <version> record up to <version> as applied without running
+//	proto-migrate new <name>                        create sql/migrations/NNNN_<name>.sql (next free NNNN); no database
 //
 // -config is a KEY=VALUE file of which only DATABASE_URL is read -- the
 // migrator's own file, with the DDL role's credentials, never the API's.
@@ -19,7 +20,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -32,11 +36,20 @@ import (
 func main() {
 	configPath := flag.String("config", "", "env file holding DATABASE_URL")
 	url := flag.String("url", "", "database URL (instead of -config)")
+	dir := flag.String("dir", "sql/migrations", "source directory `new` writes into (relative to the cwd)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: proto-migrate (-config <file> | -url <url>) status|pending|verify|up|stamp <version>\n")
+		fmt.Fprintf(os.Stderr, "       proto-migrate [-dir sql/migrations] new <name>\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	if len(flag.Args()) > 0 && flag.Arg(0) == "new" {
+		if err := newMigration(*dir, flag.Args()[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "[ERROR] %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(*configPath, *url, flag.Args()); err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] %v\n", err)
 		os.Exit(1)
@@ -45,7 +58,7 @@ func main() {
 
 func run(configPath, url string, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("a command is required: status, pending, verify, up, stamp")
+		return fmt.Errorf("a command is required: status, pending, verify, up, stamp, new")
 	}
 	if url == "" {
 		if configPath == "" {
@@ -149,4 +162,48 @@ func run(configPath, url string, args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+// newName is what a migration may be called: the part after NNNN_.
+var newName = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+// newMigration writes the next NNNN_<name>.sql into dir with the header every
+// migration carries. The number is one past the highest already there -- the
+// files on disk, not the embedded set, so it works on an uncommitted tree.
+func newMigration(dir string, args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("new needs exactly one name, e.g. new add_widgets")
+	}
+	name := args[0]
+	if !newName.MatchString(name) {
+		return fmt.Errorf("new: %q must be lower-case snake_case (a-z, 0-9, _)", name)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("new: %w (run from src/api-srv, or pass -dir)", err)
+	}
+	next := 1
+	for _, e := range entries {
+		if v, err := strconv.Atoi(strings.SplitN(e.Name(), "_", 2)[0]); err == nil && v >= next {
+			next = v + 1
+		}
+	}
+	file := filepath.Join(dir, fmt.Sprintf("%04d_%s.sql", next, name))
+	body := fmt.Sprintf(`-- Migration %04d: %s
+--
+-- Conventions (doc/900-database-guidelines.md): singular table names,
+-- <entity>_id SERIAL keys, security_context_id on every table, no foreign
+-- keys, no triggers, no DEFAULTs on application data (create_ts/update_ts/
+-- delete_ts NUMERIC(17,7) are set by the Go handlers), snake_case.
+--
+-- Applied by cmd/migrate inside one transaction. Never edit this file once
+-- it has been applied anywhere: the migrator stores its checksum and
+-- 'verify' will refuse a database whose %04d differs from this file.
+
+`, next, name, next)
+	if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+		return fmt.Errorf("new: %w", err)
+	}
+	fmt.Printf("[INFO] created %s\n", file)
+	return nil
 }

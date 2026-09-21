@@ -21,8 +21,8 @@ git commit -am "Derive acme from ProtoStack"
 ```
 
 What it changed: `etc/app.env`; `proto-api`/`proto-migrate` → `acme-*`;
-`loc_proto_*`, `uat_proto_db`, `proto_app_svc_account`, `proto_ddl`,
-`proto_ci`, `<env>_proto_user` → `acme` equivalents; `Proto App` → `Acme
+`loc_proto_*`, `uat_proto_db`, `proto_app`, `proto_ddl`,
+`proto_ci`, `proto_app` → `acme` equivalents; `Proto App` → `Acme
 Portal` (web title, login page, `APP_NAME` in every API env, systemd
 `Description`); `uat-proto`/`prd-proto` file names and contents under
 `infra/`; nginx upstream and site file names; the Go module path and every
@@ -37,8 +37,8 @@ Postgres cluster is the safe default for every derived app.
 
 | Where | What | Note |
 |---|---|---|
-| `src/api-srv/sql/roles.sql` | `reallygoodPSQLpassword` for `acme_app_svc_account` | also in `etc/e2e-api-srv.env`, `etc/loc-api-srv.env`, `etc/loc-test.env` (×3), `infra/uat/etc/uat-acme-test.env` (×3) — keep them equal |
-| `src/api-srv/sql/fixtures/015-initialdata.sql` | `admin` / `admin123!`, `basic` / `basic123!` | the pytest and Playwright suites log in with these; change the suites' fixtures with them |
+| `src/api-srv/sql/roles.sql` | `reallygoodPSQLpassword` for `acme_app` | also in `etc/e2e-api-srv.env`, `etc/loc-api-srv.env`, `etc/loc-test.env` (×3), `infra/uat/etc/uat-acme-test.env` (×3) — keep them equal |
+| `src/api-srv/sql/fixtures/local-seed.sql` | `admin` / `admin123!`, `basic` / `basic123!` | the pytest and Playwright suites log in with these; change the suites' fixtures with them |
 | `etc/loc-test.env` | docker `postgres` superuser password | must match the container |
 | `etc/loc-api-srv.env`, `etc/e2e-api-srv.env` | `JWT_SECRET`, `TOTP_ENCRYPTION_KEY` (32 bytes hex) | local-only, but make them yours |
 | `etc/uat-api-srv.env.example`, `infra/*/etc/*-api.env` | `SERVERONLY` placeholders | stay placeholders in git; real values only on the host |

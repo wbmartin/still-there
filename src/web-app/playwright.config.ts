@@ -38,7 +38,7 @@ export const E2E_API_ROOT = `http://${apiEnv.SERVER_BIND_ADDRESS || "127.0.0.1"}
 
 // One place, so a spec and the seed cannot disagree about who is signing in.
 // The defaults are the fixture user bin/510 seeds from
-// src/api-srv/sql/fixtures/015-initialdata.sql; a host whose fixtures differ
+// src/api-srv/sql/fixtures/local-seed.sql; a host whose fixtures differ
 // overrides them in the environment.
 export const E2E_USER_NAME = process.env.E2E_USER_NAME ?? "admin";
 export const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "admin123!";

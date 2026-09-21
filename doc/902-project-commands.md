@@ -115,7 +115,7 @@ another):
 ./bin/515-reseed-db [dbname]       # default loc_proto_e2e_db; TRUNCATE + re-seed without dropping
 ```
 - `510`: DROP + CREATE, `sql/roles.sql`, schema through `cmd/migrate up`,
-  then `sql/fixtures/015-initialdata.sql`. Refuses any name not ending in
+  then `sql/fixtures/local-seed.sql`. Refuses any name not ending in
   `_test_db` or `_e2e_db`. Uses psql inside the `loc-postgres` container
   when it is running (`PG_CONTAINER`), a native `psql` otherwise (`PSQL`
   overrides); the migrator connects with `TEST_PG_URL_BASE`. This also

@@ -99,6 +99,7 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 | [doc/310-api-srv-cert-renewal.md](doc/310-api-srv-cert-renewal.md) | API server TLS certificate renewal steps |
 | [doc/320-presales-uat-deploy.md](doc/320-presales-uat-deploy.md) | Presales UAT deploy (`bin/600`/`610`) |
 | [doc/330-presales-to-postsales-migration.md](doc/330-presales-to-postsales-migration.md) | Moving a host from the presales path to the `infra/` pipeline |
+| [doc/340-db-host-setup.md](doc/340-db-host-setup.md) | The three Postgres roles (app, ddl, ci) and the one-time host SQL |
 | [infra/README.md](infra/README.md) | Post-sales deploy pipeline (placeholder) |
 
 Project history — old reviews, plans, superseded notes — lives in

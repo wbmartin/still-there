@@ -1,8 +1,8 @@
 ---
 id: PS0015
 title: sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/
-status: ready
-blocked_by: 
+status: in-review
+blocked_by:
 waiting_on:
 priority: medium
 domain: api
@@ -70,17 +70,56 @@ shapes for six endpoints; `grants.go` is really an authz catalog;
 `user_grant_model.go` has no table. → `model/` = persisted rows;
 `handler/dto.go` = wire shapes; grants → `internal/auth` (PS0008/PS0010).
 
-## Acceptance
+## What changed and why
 
-- `sql/` contains only files that are SQL and are executed by something.
-- `go run ./cmd/migrate -config … new add_widgets` creates
-  `migrations/0002_add_widgets.sql`.
-- `cmd/` holds only shipped binaries.
+Branch `TKT-PS0015-sql-and-cmd-shape`, 2 commits. Items already landed
+elsewhere: `cmd/load-test` out of `cmd/` (PS0014), lock key kept on
+purpose (PS0007), `cmd/server` flag parity → PS0011, `internal/model/`
+split → PS0010 (parked). Done here:
+
+| Item | Change |
+|---|---|
+| `ddl-role-host-setup.sql` | deleted; it was a document. Now **`doc/340-db-host-setup.md`**: the three-role table (who owns, who connects, where the credential lives), the same SQL in real fenced blocks, and step 3 (bring under the migrator). `infra/README.md`, `doc/050`, `roles.sql`, the two `*-migrate.env` headers point at it. `embed.go` comment updated. |
+| One name for the app role | `proto_app_svc_account` (local/presales) and `<env>_proto_user` (post-sales) were the same job under two names. Now **`<slug>_app`** everywhere: `roles.sql`, every API env file (loc, e2e, uat example, `infra/{uat,prd}`), `uat-deploy.env` (`DB_APP_ROLE=${APP_SLUG}_app`), `doc/320`, `doc/340`, `DERIVING.md`, the presales skill, `bin/000-rebrand` (one rule: `\b<slug>_(app\|ddl\|ci)\b`; re-proven in a worktree). `<slug>_ddl` and `<slug>_ci` stay as they were. |
+| `doc/330` simplified by it | the migration no longer creates a second app role, never changes `DATABASE_URL`'s user, and has no "drop the presales role" step — `proto_app` keeps its name and password on both paths and merely stops owning the schema. |
+| `fixtures/015-initialdata.sql` → `fixtures/local-seed.sql` | the `015-` number was from the deleted `010-initialcreate.sql` era. Ten references updated (`bin/510`, `515`, docs, READMEs, playwright config comment, the file's own header). |
+| `migrate new <name>` | `go run ./cmd/migrate new add_widgets` → `sql/migrations/0002_add_widgets.sql` with the conventions header; numbers from the files on disk (so an uncommitted tree counts), validates `[a-z][a-z0-9_]*`, `-dir` for another directory, no database needed. Proven: two consecutive `new`s give 0002 and 0003; a bad name is refused. |
+
+**Local side effect:** Brandon's docker role renamed
+(`ALTER ROLE proto_app_svc_account RENAME TO proto_app`, password re-set
+to the roles.sql value); `loc_proto_db` works unchanged.
+
+## Files modified
+
+- `src/api-srv/cmd/migrate/main.go`, `src/api-srv/sql/embed.go`, `sql/roles.sql`, `sql/fixtures/local-seed.sql` (from `015-initialdata.sql`); deleted `sql/ddl-role-host-setup.sql`
+- new `doc/340-db-host-setup.md`; `doc/050`, `105`, `320`, `330`, `810`, `902`, `README.md`, `DERIVING.md`, `src/api-srv/README.md`
+- `etc/app.env`, `loc-api-srv.env`, `e2e-api-srv.env`, `uat-api-srv.env.example`, `uat-deploy.env`; `infra/README.md`, `infra/{uat,prd}/etc/*-api.env`, `*-migrate.env`
+- `bin/000-rebrand`, `bin/510-reset-test-db`, `bin/515-reseed-db`, `src/web-app/playwright.config.ts` (comment), `.claude/skills/presales-deploy/SKILL.md`
+
+## Endpoints introduced or modified
+
+None.
+
+## Acceptance (met 2026-09-21)
+
+- [x] `sql/` contains only SQL that something executes: `migrations/` (embedded, `cmd/migrate`), `roles.sql` (`bin/510`, `bin/610`), `fixtures/local-seed.sql` (`bin/510`, `515`), `embed.go`.
+- [x] `go run ./cmd/migrate new add_widgets` creates `migrations/0002_add_widgets.sql`.
+- [x] `cmd/` holds only shipped binaries: `server`, `migrate`.
+- [x] `bin/300-run-tests all` go=163 unit=28 e2e=3 py=63 after the role rename.
 
 ## Deploy needs
 
-Go binary (migrate). If `roles.sql` moves, `bin/600` and `bin/610` follow
-in the same PR.
+Go binary (migrate). **UAT: the app role is renamed.** The presales host's
+`etc/api-srv.env` `DATABASE_URL` says `proto_app_svc_account`; before or
+with the next deploy run `ALTER ROLE proto_app_svc_account RENAME TO
+proto_app` there and edit the URL (the bundled `000-roles.sql` would
+otherwise create a second, empty `proto_app`, and `610` would hand the
+restored database to it). One line in `doc/320`'s host prep covers new
+hosts.
+
+## Waiting for
+
+The next UAT deploy, with the role rename above done by hand first.
 
 ## Direction (Brandon, 2026-09-21)
 
