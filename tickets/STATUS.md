@@ -6,17 +6,16 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 16:28 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 16:37 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (7)
+## Engineering — ready to start (6)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
 | **PS0012** | Web — fix the entity-page bugs; document that pages are deliberate scaffolding | medium | web |
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | medium | web |
-| **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | medium | tooling |
 | **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | medium | api |
 | **PS0016** | Add JSONB and UUID columns to the example entity | low | api |
 | **PS0017** | Passkey (WebAuthn) as a second factor | low | security |
@@ -26,9 +25,9 @@ picks up the next piece of work. Do not edit below the marker.
 
 | Ticket | Title | Claimed |
 |---|---|---|
-| **PS0009** | Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable | 2026-09-21 by TKT-PS0009-api-protected-middleware |
+| **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | 2026-09-21 by TKT-PS0014-test-harness-and-bin-numbering |
 
-## Engineering — merged, awaiting validation (6)
+## Engineering — merged, awaiting validation (7)
 
 | Ticket | Title | Merged | Deployed |
 |---|---|---|---|
@@ -37,6 +36,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0004** | Document the presales → post-sales deploy migration; fix bin/600 fail-fast | ef91f35 | — |
 | **PS0007** | Single rename point and a "deriving a new app" checklist | 9d74ba9 | — |
 | **PS0008** | Split internal/app_lib into packages named by role (no KV/log interfaces) | 5ce23c6 | — |
+| **PS0009** | Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable | 0985e19 | — |
 | **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | 67bb62c | — |
 
 ## Engineering — validated, awaiting archive (3)
@@ -60,8 +60,8 @@ picks up the next piece of work. Do not edit below the marker.
 |---|---|
 | api | 7 |
 | web | 3 |
-| tooling | 2 |
 | security | 2 |
+| tooling | 2 |
 | docs | 2 |
 
 **Next free number:** `PS0020` (engineering), `PS1001` (Ask Customer).
