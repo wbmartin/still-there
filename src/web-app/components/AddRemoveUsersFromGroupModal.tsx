@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Modal, Button, Group, MultiSelect, Title } from "@mantine/core";
 import { useAppUserStore } from "../stores/app-user-store";
+import { reportError } from "../utils/report-error";
 
 interface AddRemoveUsersFromGroupModalProps {
   isOpen: boolean;
@@ -24,7 +25,7 @@ function AddRemoveUsersFromGroupModal({
   useEffect(() => {
     if (isOpen) {
       // Fetch all users for the security context
-      void readUserList().catch(console.error);
+      void readUserList().catch((err) => reportError(err, "group membership modal"));
     }
   }, [isOpen, readUserList]);
   // ============================^ HOOK LINE ^====================
@@ -50,7 +51,7 @@ function AddRemoveUsersFromGroupModal({
       setSelectedUsers([]);
       onClose();
     } catch (error) {
-      console.error("Error updating users:", error);
+      reportError(error, "updating users");
     } finally {
       setLoading(false);
     }

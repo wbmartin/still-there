@@ -20,6 +20,7 @@ import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { AppUserGroup } from "../types/app-user-group-type";
+import { reportError } from "../utils/report-error";
 
 function AppUserGroupListPage() {
   const authState = useAuthGuard([grants.READ_USER_GROUP]);
@@ -40,7 +41,7 @@ function AppUserGroupListPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void readAppUserGroupList().catch(console.error);
+      void readAppUserGroupList().catch((err) => reportError(err, "user group list"));
     }
   }, [authState, readAppUserGroupList]);
 
@@ -77,7 +78,7 @@ function AppUserGroupListPage() {
           color: "green",
         });
       } catch (error) {
-        console.error("Error deleting user group:", error);
+        reportError(error, "deleting user group");
         notifications.show({
           title: "Error",
           message: "Failed to delete user group",

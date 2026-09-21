@@ -8,6 +8,7 @@ import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { User } from "../types/user-type";
+import { reportError } from "../utils/report-error";
 
 function UserAdminPage() {
   const authState = useAuthGuard([grants.READ_USER]);
@@ -34,8 +35,8 @@ function UserAdminPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void readUserList().catch(console.error);
-      void readAppUserGroupList().catch(console.error);
+      void readUserList().catch((err) => reportError(err, "user list"));
+      void readAppUserGroupList().catch((err) => reportError(err, "user list"));
     }
   }, [authState, readUserList, readAppUserGroupList]);
   //============================^ HOOK LINE ^====================
@@ -97,7 +98,7 @@ function UserAdminPage() {
       try {
         await deleteUser(user.appUserId, user.updateTs);
       } catch (error) {
-        console.error("Error deleting user:", error);
+        reportError(error, "deleting user");
       }
     }
     setDeleteModalOpen(false);

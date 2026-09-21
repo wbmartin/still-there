@@ -24,6 +24,7 @@ import type { AppUserGroup } from "../types/app-user-group-type";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import AddRemoveUsersFromGroupModal from "../components/AddRemoveUsersFromGroupModal";
 import { defaultAppUserGroupFormData } from "../types/app-user-group-type";
+import { reportError } from "../utils/report-error";
 
 function AppUserGroupEditPage() {
   const [searchParams] = useSearchParams();
@@ -82,7 +83,7 @@ function AppUserGroupEditPage() {
         }, 0);
       }
       // Load users for the group management
-      void readUserList().catch(console.error);
+      void readUserList().catch((err) => reportError(err, "user group edit"));
     }
   }, [numericId, readUserList]);
 
@@ -130,7 +131,7 @@ function AppUserGroupEditPage() {
       }
       void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`);
     } catch (error) {
-      console.error("Error saving user group:", error);
+      reportError(error, "saving user group");
       notifications.show({
         title: "Error",
         message: "Failed to save user group",
@@ -158,7 +159,7 @@ function AppUserGroupEditPage() {
         });
         void navigate(`/${ROUTES.APP_USER_GROUP_LIST}`);
       } catch (error) {
-        console.error("Error deleting user group:", error);
+        reportError(error, "deleting user group");
         notifications.show({
           title: "Error",
           message: "Failed to delete user group",
@@ -194,7 +195,7 @@ function AppUserGroupEditPage() {
         withCloseButton: false,
       });
     } catch (error) {
-      console.error(`Error ${userModalMode}ing users:`, error);
+      reportError(error, `${userModalMode}ing users`);
       notifications.show({
         title: "Error",
         message: `Failed to ${userModalMode} users`,

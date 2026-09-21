@@ -19,6 +19,7 @@ import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { grants } from "../constants/grants";
 import { defaultExampleFormData } from "../types/example-type";
+import { reportError } from "../utils/report-error";
 
 function ExampleEditPage() {
   const [searchParams] = useSearchParams();
@@ -63,7 +64,7 @@ function ExampleEditPage() {
           }
         })
         .catch((error: unknown) => {
-          console.error("Error loading example:", error);
+          reportError(error, "loading example");
         })
         .finally(() => {
           setExampleLoading(false);
@@ -121,7 +122,7 @@ function ExampleEditPage() {
       }
       void navigate(`/${ROUTES.EXAMPLE_LIST}`);
     } catch (error) {
-      console.error("Error saving example:", error);
+      reportError(error, "saving example");
       notifications.show({
         title: "Error",
         message: "Failed to save example",
@@ -149,7 +150,7 @@ function ExampleEditPage() {
         });
       void navigate(`/${ROUTES.EXAMPLE_LIST}`);
       } catch (error) {
-        console.error("Error deleting example:", error);
+        reportError(error, "deleting example");
         notifications.show({
           title: "Error",
           message: "Failed to delete example",

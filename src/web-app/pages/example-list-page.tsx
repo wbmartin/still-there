@@ -15,6 +15,7 @@ import useAuthGuard from "../hooks/use-auth-guard";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
+import { reportError } from "../utils/report-error";
 
 function ExampleListPage() {
   const authState = useAuthGuard([grants.READ_EXAMPLE]);
@@ -40,7 +41,7 @@ function ExampleListPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void readList({ incremental: true }).catch(console.error);
+      void readList({ incremental: true }).catch((err) => reportError(err, "example list"));
     }
   }, [authState, readList]);
 
@@ -113,7 +114,7 @@ function ExampleListPage() {
         // List is updated locally, but refresh to ensure sync
         await readList({ incremental: true });
       } catch (error) {
-        console.error("Error deleting example:", error);
+        reportError(error, "deleting example");
         // Error is handled in store
       }
     }

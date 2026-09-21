@@ -19,6 +19,7 @@ import { API_ENDPOINTS } from "../constants/api";
 import { useAuthStore } from "../stores/auth-store";
 import { ROUTES } from "../constants/routes";
 import type { LoginResponse } from "../types/auth-type";
+import { reportError } from "../utils/report-error";
 
 function MFAOnboardingPage() {
   const [secret, setSecret] = useState("");
@@ -150,7 +151,7 @@ function MFAOnboardingPage() {
                 src={qrCodeImage}
                 alt="QR Code for MFA Setup - Scan with your authenticator app"
                 style={{ width: '200px', height: '200px', objectFit: 'contain' }}
-                onError={() => console.error('QR Code image failed to load')}
+                onError={() => reportError(new Error("QR code image failed to load"), "mfa onboarding")}
               />
             </div>
           </Group>

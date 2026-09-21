@@ -1,7 +1,8 @@
 import type { User, ApiResponse } from "../types/user-type";
 import { apiRequest, throwForFailedResponse } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
-import { createEntityStore, readErrorMessage } from "./create-entity-store";
+import { createEntityStore } from "./create-entity-store";
+import { readErrorMessage } from "../utils/api";
 
 interface AppUserExtras {
   // There is no GET /user; a single user is read through the list endpoint

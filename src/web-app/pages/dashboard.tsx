@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Title, Text, Card, Container, Loader, Alert } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
+import { reportError } from "../utils/report-error";
 
 function Dashboard() {
   const authState = useAuthGuard([]);
@@ -11,7 +12,7 @@ function Dashboard() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void readList({ incremental: true }).catch(console.error);
+      void readList({ incremental: true }).catch((err) => reportError(err, "dashboard"));
     }
   }, [authState, readList]);
 

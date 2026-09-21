@@ -9,6 +9,7 @@ import {
   Title,
   Container,
 } from '@mantine/core';
+import { reportError } from '../utils/report-error';
 
 // A thrown render error should cost one view, not the whole application.
 //
@@ -38,10 +39,9 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     // The component stack is what makes a render error diagnosable, and React
     // only hands it to this method. Logged rather than POSTed to the server:
     // an unauthenticated error endpoint is a spam target.
-    console.error(
-      `[ErrorBoundary] ${this.props.viewName ?? 'view'} failed to render`,
+    reportError(
       error,
-      errorInfo.componentStack,
+      `${this.props.viewName ?? "view"} failed to render: ${errorInfo.componentStack ?? ""}`,
     );
   }
 

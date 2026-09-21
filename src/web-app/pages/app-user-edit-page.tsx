@@ -26,6 +26,7 @@ import { ROUTES } from "../constants/routes";
 import { defaultUserFormData } from "../types/user-type";
 import { grants } from "../constants/grants";
 import { PasswordGenerator } from "../components/PasswordGenerator";
+import { reportError } from "../utils/report-error";
 
 
 function UserEditPage() {
@@ -74,7 +75,7 @@ function UserEditPage() {
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
       hasFetched.current = true;
-      void readAppUserGroupList().catch(console.error);
+      void readAppUserGroupList().catch((err) => reportError(err, "user edit"));
       if (numericId && !isNew) {
         // Fetch the user directly
         void readUserById(numericId).then((user) => {
@@ -94,7 +95,7 @@ function UserEditPage() {
             setUserLoading(false);
           }, 0);
         }).catch((error: unknown) => {
-          console.error("Error loading user:", error);
+          reportError(error, "loading user");
           setUserLoading(false);
         });
       } else {
@@ -152,7 +153,7 @@ function UserEditPage() {
       }
       void navigate(`/${ROUTES.APP_USER_LIST}`);
     } catch (error) {
-      console.error("Error saving user:", error);
+      reportError(error, "saving user");
       notifications.show({
         title: "Error",
         message: "Failed to save user",
@@ -180,7 +181,7 @@ function UserEditPage() {
         });
         void navigate(`/${ROUTES.APP_USER_LIST}`);
       } catch (error) {
-        console.error("Error deleting user:", error);
+        reportError(error, "deleting user");
         notifications.show({
           title: "Error",
           message: "Failed to delete user",
@@ -326,7 +327,6 @@ function UserEditPage() {
                    title: "Reset MFA",
                    children: (
                      <Text size="sm">
-                       {/* eslint-disable-next-line max-len */}
                        This will clear the user's MFA setup, requiring them to re-configure it on their next login. This action cannot be undone. Are you sure?
                      </Text>
                    ),

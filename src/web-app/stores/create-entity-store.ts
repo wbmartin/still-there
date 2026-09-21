@@ -1,5 +1,7 @@
 import { create, type StateCreator } from "zustand";
-import { apiRequest, throwForFailedResponse } from "../utils/api";
+import { apiRequest, throwForFailedResponse,
+  readErrorMessage,
+} from "../utils/api";
 import { registerCacheClearer } from "../utils/cache-utils";
 
 // Anything the API returns carries these. deleteTs only ever arrives on an
@@ -49,19 +51,6 @@ export type EntityStoreExtension<TEntity, TExtra> = StateCreator<
   [],
   TExtra
 >;
-
-export const readErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const body = (await response.json()) as {
-      error?: string;
-      message?: string;
-    };
-    return body.error || body.message || `Request failed (${response.status})`;
-  } catch {
-    return `Request failed (${response.status})`;
-  }
-};
-
 /**
  * Builds a Zustand store implementing the entity cache-management pattern.
  *

@@ -15,6 +15,7 @@ import {
 } from "../utils/api";
 import { clearAllCaches } from "../utils/cache-utils";
 import { notifications } from "@mantine/notifications";
+import { reportError } from "../utils/report-error";
 
 interface AuthStore extends Omit<AuthState, "csrfToken"> {
   mfaRequired: boolean;
@@ -98,7 +99,6 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
   //============================^FUNCTION LINE ^============================
   authenticateWithAuthToken: async () => {
-    // console.log("refresh async starting ");
     set({ authState: "CHECKING", loading: true, error: null });
     try {
       const response = await apiRequest("/refresh", {});
@@ -151,7 +151,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     try {
       await apiRequest("/logoff", { method: "POST" });
     } catch (err) {
-      console.error(err);
+      reportError(err, "logout");
     }
     clearCsrfToken();
 
