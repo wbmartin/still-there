@@ -9,7 +9,7 @@ domain: security
 raised: 2026-09-21
 raised_by: PS0017 investigation
 asked:
-claimed:
+claimed: 2026-09-21 by TKT-PS0020-mfa-totp-e2e-coverage
 merged:
 deployed:
 validated:
