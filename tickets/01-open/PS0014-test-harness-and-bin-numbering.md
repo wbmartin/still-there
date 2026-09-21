@@ -120,6 +120,14 @@ both gitignored.
 replaced by k6/hey invoked from `330` (PS0015 lists it too — one of the
 two tickets takes it).
 
+## From the PS0006 triage of doc/000-TODO.md (2026-09-21)
+
+- Handler tests never go through HTTP: `MockUserRepository` exists but
+  `TestRetrieveUserList` calls the mock directly, because `NewAppHelper`
+  needs live `AppServices`. Decide whether handlers get an HTTP-level unit
+  test (a test `AppServices` with the in-process KV and a buffer logger is
+  cheap after PS0003) or stay covered by pytest only.
+
 ## Acceptance
 
 - `bin/300-run-tests all` runs Go + vitest + Playwright (+ pytest if kept)

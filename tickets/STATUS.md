@@ -6,11 +6,11 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 15:27 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 15:37 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (5)
+## Engineering — ready to start (9)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
@@ -19,6 +19,10 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | medium | web |
 | **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | medium | tooling |
 | **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | medium | api |
+| **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | medium | api |
+| **PS0016** | Add JSONB and UUID columns to the example entity | low | api |
+| **PS0017** | Passkey (WebAuthn) as a second factor | low | security |
+| **PS0018** | User profile page: preferences and avatar | low | web |
 
 ## Engineering — in progress (1)
 
@@ -54,12 +58,12 @@ picks up the next piece of work. Do not edit below the marker.
 
 | Domain | Open |
 |---|---|
-| api | 5 |
+| api | 7 |
 | docs | 3 |
-| web | 2 |
+| web | 3 |
 | tooling | 2 |
-| security | 1 |
+| security | 2 |
 
-**Next free number:** `PS0016` (engineering), `PS1001` (Ask Customer).
+**Next free number:** `PS0020` (engineering), `PS1001` (Ask Customer).
 
 <!-- END GENERATED -->

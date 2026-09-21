@@ -71,6 +71,16 @@ This ticket keeps only what is a bug or would mislead the next agent.
 ErrorBoundary consolidation. If a derived app grows past ~6 entities
 and wants them, that is the derived app's call.
 
+## From the PS0006 triage of doc/000-TODO.md (2026-09-21)
+
+- The user-list page keeps `page` in `useState` although it already
+  imports `useSearchParams`; a refresh or a shared link loses the page.
+  Put the page (and any filter) in the URL. Same pattern for every list
+  page this ticket touches.
+- Six files under `pages/` and `components/` still use `style={{…}}`
+  instead of Mantine props/layout components; clean as each page is
+  revisited.
+
 ## Acceptance
 
 - Deep link to `/…?appUserGroupId=N` loads the group after refresh.
