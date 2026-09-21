@@ -9,7 +9,7 @@ domain: web
 raised: 2026-09-21
 raised_by: PS0006 triage of doc/000-TODO.md
 asked:
-claimed:
+claimed: 2026-09-21 by TKT-PS0018-user-profile-page
 merged:
 deployed:
 validated:

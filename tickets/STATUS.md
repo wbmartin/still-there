@@ -6,15 +6,20 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 18:26 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 18:27 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (1)
+## Engineering — ready to start (0)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
-| **PS0018** | User profile page: preferences and avatar | low | web |
+
+## Engineering — in progress (1)
+
+| Ticket | Title | Claimed |
+|---|---|---|
+| **PS0018** | User profile page: preferences and avatar | 2026-09-21 by TKT-PS0018-user-profile-page |
 
 ## Engineering — merged, awaiting validation (11)
 
