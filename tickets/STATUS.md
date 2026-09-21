@@ -6,15 +6,14 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 16:25 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 16:28 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (8)
+## Engineering — ready to start (7)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
-| **PS0009** | Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable | medium | api |
 | **PS0012** | Web — fix the entity-page bugs; document that pages are deliberate scaffolding | medium | web |
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | medium | web |
 | **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | medium | tooling |
@@ -27,9 +26,9 @@ picks up the next piece of work. Do not edit below the marker.
 
 | Ticket | Title | Claimed |
 |---|---|---|
-| **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | 2026-09-21 by TKT-PS0019-env-file-quoted-values |
+| **PS0009** | Explicit per-handler security checks are by design — record it; fix the exceptions' loose ends; make ExampleHandler mockable | 2026-09-21 by TKT-PS0009-api-protected-middleware |
 
-## Engineering — merged, awaiting validation (5)
+## Engineering — merged, awaiting validation (6)
 
 | Ticket | Title | Merged | Deployed |
 |---|---|---|---|
@@ -38,6 +37,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0004** | Document the presales → post-sales deploy migration; fix bin/600 fail-fast | ef91f35 | — |
 | **PS0007** | Single rename point and a "deriving a new app" checklist | 9d74ba9 | — |
 | **PS0008** | Split internal/app_lib into packages named by role (no KV/log interfaces) | 5ce23c6 | — |
+| **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | 67bb62c | — |
 
 ## Engineering — validated, awaiting archive (3)
 
