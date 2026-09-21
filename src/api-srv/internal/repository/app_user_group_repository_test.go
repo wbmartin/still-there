@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/suite"
-	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
 	"testing"
 )
@@ -21,13 +20,7 @@ type AppUserGroupRepositoryTestSuite struct {
 }
 
 func (s *AppUserGroupRepositoryTestSuite) SetupSuite() {
-	// Load configuration from the same file used by the application
-	config, err := app_lib.LoadConfig("../../../../etc/loc-api-srv.env")
-	s.Require().NoError(err)
-
-	// Connect to the database using the configured URL
-	db, err := pgxpool.New(context.Background(), config.DatabaseURL)
-	s.Require().NoError(err)
+	db := connectTestDB(s.T())
 	s.db = db
 	s.repo = NewAppUserGroupRepository(db)
 
@@ -159,7 +152,11 @@ func (s *AppUserGroupRepositoryTestSuite) TestRetrieveAppUserGroupListByIDListPa
 
 func (s *AppUserGroupRepositoryTestSuite) TestRetrieveAppUserGroupList() {
 	// Test retrieving all groups for security context 1
-	groups, err := s.repo.RetrieveAppUserGroupList(context.Background(), 1)
+	groups, err := s.repo.RetrieveAppUserGroupList(
+		context.Background(),
+		nil,
+		1,
+	)
 	s.NoError(err)
 	s.NotNil(groups)
 
@@ -180,6 +177,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestRetrieveAppUserGroupList() {
 	// Test for security context with no groups
 	emptyGroups, err := s.repo.RetrieveAppUserGroupList(
 		context.Background(),
+		nil,
 		999,
 	)
 	s.NoError(err)

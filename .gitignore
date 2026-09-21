@@ -7,3 +7,24 @@ tmp/
 src/api-srv/server
 tests/.venv/
 tests/__pycache__/
+
+# Environment / editor
+.env.local
+.idea/
+.vscode/*
+*.swp
+
+# Python
+.venv/
+__pycache__/
+
+# Logs and scratch (bin/200-run-tests writes tmp/test-logs/)
+logs/
+*.log
+
+# Playwright. Leading **/ on purpose: a pattern containing a slash is anchored
+# to this file's directory, and the suite lives in src/web-app/tests/e2e/.
+# .auth/ holds a live session cookie rebuilt on every run.
+**/playwright-report/
+**/test-results/
+**/tests/e2e/.auth/

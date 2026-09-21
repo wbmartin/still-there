@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/suite"
-	"github.com/wbmartin/starter-api/internal/app_lib"
 	"github.com/wbmartin/starter-api/internal/model"
 	"testing"
 )
@@ -22,13 +21,7 @@ type ExampleRepositoryTestSuite struct {
 }
 
 func (s *ExampleRepositoryTestSuite) SetupSuite() {
-	// Load configuration from the same file used by the application
-	config, err := app_lib.LoadConfig("../../../../etc/loc-api-srv.env")
-	s.Require().NoError(err)
-
-	// Connect to the database using the configured URL
-	db, err := pgxpool.New(context.Background(), config.DatabaseURL)
-	s.Require().NoError(err)
+	db := connectTestDB(s.T())
 	s.db = db
 	s.repo = NewExampleRepository(db)
 
