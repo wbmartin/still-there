@@ -138,16 +138,16 @@ func (c *VaultClient) GetConfig(filename string) (string, error) {
 	}
 }
 
-// LoadConfig loads configuration from a .env file
-func LoadConfig(configFilePath string) (*Config, error) {
-	// Open the .env file
-	file, err := os.Open(configFilePath)
+// ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,
+// no quoting or interpolation -- into a map. Shared by LoadConfig and by
+// cmd/migrate, which needs only DATABASE_URL from a file of the same shape.
+func ReadEnvFile(path string) (map[string]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("unable to open configuration file: %w", err)
 	}
 	defer file.Close()
 
-	// Parse the .env file
 	env := make(map[string]string)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -164,6 +164,15 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading configuration file: %w", err)
+	}
+	return env, nil
+}
+
+// LoadConfig loads configuration from a .env file
+func LoadConfig(configFilePath string) (*Config, error) {
+	env, err := ReadEnvFile(configFilePath)
+	if err != nil {
+		return nil, err
 	}
 
 	// Fetch secrets from vault if configured

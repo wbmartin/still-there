@@ -1,0 +1,79 @@
+-- ONE-TIME HOST SETUP for a deployed environment. NOT embedded, NOT run by
+-- bin/510, NOT a migration. Read it, fill in the placeholders, run it by hand
+-- as a superuser, once per database -- after roles.sql, before the first
+-- `migrate up` (or `migrate stamp`) on that database.
+--
+-- Three roles, three jobs:
+--
+--   proto_ddl              owns every table and sequence; CREATE on public.
+--                          Used by proto-migrate ONLY. Its credential lives
+--                          in the migrator's own env file, never the API's.
+--   <env>_proto_user       db_reader + db_writer -- DML only. The API.
+--                          (locally: proto_app_svc_account from roles.sql)
+--   proto_ci               CREATEDB; owns only scratch *_test_db databases.
+--                          The test harness on a build host. Optional.
+--
+-- Postgres lets only an object's owner (or a superuser) ALTER it. The API's
+-- role must therefore never own the schema -- a compromised API then cannot
+-- change it -- and the migrator's role must own all of it.
+--
+-- Locally none of this is needed: bin/510-reset-test-db runs the migrator as
+-- `postgres`, which owns what it creates.
+
+-- -----------------------------------------------------------------------------
+-- 1. The roles. As a superuser, on the cluster (any database).
+-- -----------------------------------------------------------------------------
+-- CREATE ROLE proto_ddl LOGIN PASSWORD '<generate>';
+-- CREATE ROLE proto_ci  LOGIN PASSWORD '<generate>' CREATEDB;
+-- GRANT CONNECT ON DATABASE <env>_proto_db TO proto_ddl;
+--
+-- Optional but recommended: nothing connects to the real database by
+-- accident. Grant CONNECT back only to the roles that need it.
+-- REVOKE CONNECT ON DATABASE <env>_proto_db FROM PUBLIC;
+-- GRANT  CONNECT ON DATABASE <env>_proto_db TO <env>_proto_user;
+
+-- -----------------------------------------------------------------------------
+-- 2. Ownership and default privileges. As a superuser, INSIDE the database
+--    (\c <env>_proto_db).
+--
+--    Per object, NOT `REASSIGN OWNED BY postgres TO proto_ddl`: REASSIGN also
+--    tries to move the public schema and the database itself, which Postgres
+--    refuses ("required by the database system"). Indexes follow their tables.
+--    Reversible by running the same block with the roles swapped. On a brand
+--    new database with no tables yet the loops are simply no-ops.
+-- -----------------------------------------------------------------------------
+-- DO $$
+-- DECLARE r record;
+-- BEGIN
+--   FOR r IN SELECT tablename AS name FROM pg_tables WHERE schemaname = 'public' LOOP
+--     EXECUTE format('ALTER TABLE public.%I OWNER TO proto_ddl', r.name);
+--   END LOOP;
+--   FOR r IN SELECT sequencename AS name FROM pg_sequences WHERE schemaname = 'public' LOOP
+--     EXECUTE format('ALTER SEQUENCE public.%I OWNER TO proto_ddl', r.name);
+--   END LOOP;
+-- END $$;
+--
+-- GRANT CREATE ON SCHEMA public TO proto_ddl;
+--
+-- Anything proto_ddl creates from now on is readable/writable by the app
+-- without each migration having to remember the GRANT.
+-- ALTER DEFAULT PRIVILEGES FOR ROLE proto_ddl IN SCHEMA public
+--     GRANT SELECT ON TABLES TO db_reader;
+-- ALTER DEFAULT PRIVILEGES FOR ROLE proto_ddl IN SCHEMA public
+--     GRANT ALL ON TABLES TO db_writer;
+-- ALTER DEFAULT PRIVILEGES FOR ROLE proto_ddl IN SCHEMA public
+--     GRANT ALL ON SEQUENCES TO db_writer;
+--
+-- Expect one row: proto_ddl | <table count>
+-- SELECT tableowner, count(*) FROM pg_tables WHERE schemaname = 'public' GROUP BY 1;
+
+-- -----------------------------------------------------------------------------
+-- 3. Bring the database under the migrator, as proto_ddl.
+--
+--    New, empty database:      proto-migrate -config <migrate.env> up
+--    Existing database whose schema already IS 0001 (built by hand from the
+--    old sql/010-initialcreate.sql): record it WITHOUT running it --
+--                              proto-migrate -config <migrate.env> stamp 1
+--    Either way, then:         proto-migrate -config <migrate.env> status
+--    expect: 0001  initial_schema   applied <now> by proto_ddl
+-- -----------------------------------------------------------------------------
