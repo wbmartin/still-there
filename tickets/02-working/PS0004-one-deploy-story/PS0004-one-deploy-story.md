@@ -1,7 +1,7 @@
 ---
 id: PS0004
 title: Document the presales → post-sales deploy migration; fix bin/600 fail-fast
-status: ready
+status: in-review
 blocked_by:
 waiting_on:
 priority: high
@@ -78,14 +78,47 @@ Unifying binary names, role models, unit files or env names across the
 two paths; deleting `infra/prd/`. Revisit when a derived app actually
 makes the migration and the runbook has been exercised once.
 
+## What changed and why
+
+Branch `TKT-PS0004-one-deploy-story`. Docs + two script fixes; neither
+deploy contract changes.
+
+| Deliverable | Done |
+|---|---|
+| 1. Runbook | `doc/330-presales-to-postsales-migration.md` — 8 ordered steps with state-after each (snapshot; stop unit; roles + per-object ownership to `proto_ddl` with `ALTER DEFAULT PRIVILEGES`; `stamp`/`status` under the migrator; env rename + key diff + API login switched to `<env>_proto_user`; users/dirs/shipped units + path unit; webhook/oras/first hand-run build; verify) and a rollback that works up to step 8. References `infra/README.md` one-time setup rather than repeating it. Explicitly: no `api-srv → proto-api` symlink (install-api's atomic `mv` would replace the link); never run 600/610 against a migrated host. |
+| 2. Path table | "Which path am I on?" at the top of `doc/320` and `infra/README.md`, each pointing at the other and at `doc/330`; the one-liner test is `ls libexec` → `api-srv` vs `proto-api`. |
+| 3a. `bin/600` fail-fast | New preflight block after arg parsing, before `go build`: `LOCAL_DB` from `LOCAL_ENV_FILE`, `roles.sql` present, `DB_APP_ROLE` named in it, and a real `psql -c 'select 1'` to the container/database (`pg_isready` was tried first — it ignores a missing database). Measured: 0.02–0.2 s to the error. |
+| 3b. `bin/600` roles fallback | Deleted; `cp roles.sql` unconditionally. `LOCAL_ENV_FILE` comment in `etc/uat-deploy.env` no longer mentions the password. |
+| 3c. `bin/610` role | `DB_APP_ROLE` is a new required key in `etc/uat-deploy.env` (`proto_app_svc_account`), shipped in the bundle's `deploy.env`, overridable by the host's `etc/deploy.env` like the other four. The `DO $$` ownership block gets it via `set_config`/`current_setting` because psql does not expand `:vars` inside `$$` bodies (proven against `loc-postgres`). `grep proto_app_svc_account bin/610` → 0. |
+| 4. PS0007 input | "Names that differ" table in `doc/330` — 18 rows; binary, env, role, unit, user, restart, transport, DB name. Includes `bin/100`'s third name `dist/proto-go-app`. |
+
+## Files modified
+
+- `bin/600-bundle-uat`, `bin/610-deploy-uat`, `etc/uat-deploy.env`
+- `doc/330-presales-to-postsales-migration.md` (new)
+- `doc/320-presales-uat-deploy.md`, `infra/README.md`
+
+## Endpoints introduced or modified
+
+None.
+
 ## Acceptance
 
-- The migration doc exists and `infra/README.md` + `doc/320` link it.
-- `bin/600` with a bad `LOCAL_ENV_FILE` fails in < 2 s.
-- `grep -n proto_app_svc_account bin/610` → 0 (reads a variable).
-- `bin/600 && bin/610` still works end-to-end on UAT (Brandon runs).
+- [x] `doc/330` exists; `infra/README.md` and `doc/320` link it.
+- [x] `bin/600` with a bad `LOCAL_ENV_FILE` fails in < 2 s (measured 0.2 s; missing DB 0.1 s).
+- [x] `grep -n proto_app_svc_account bin/610` → 0.
+- [ ] `bin/600 && bin/610` end-to-end on UAT — **Brandon runs; not now** (ProtoStack is not being published to UAT at present, 2026-09-21).
+
+## Waiting for
+
+The next real `bin/600`/`bin/610` run against UAT, to exercise `DB_APP_ROLE`
+through the bundle and the `set_config` ownership block on a server. Until
+then the change is proven locally only (script syntax, fail-fast timing,
+the psql pattern against `loc-postgres`).
 
 ## Deploy needs
 
 None for the docs. The `bin/610` change is exercised on the next UAT
-deploy.
+deploy: the bundle now carries `DB_APP_ROLE`; a host with its own
+`$APP_ROOT/etc/deploy.env` needs nothing added (the bundled value applies
+unless overridden).
