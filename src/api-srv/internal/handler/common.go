@@ -13,7 +13,7 @@ import (
 
 // writeJSON writes a JSON response
 func writeJSON(w http.ResponseWriter, status int, data interface{},
-	logger app_lib.ThisAppLoggerInterface) {
+	logger *app_lib.Logger) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 

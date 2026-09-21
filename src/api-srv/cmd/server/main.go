@@ -36,13 +36,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize key-value store (in-process "memory" by default; "shrmpl" for the external service)
-	kv := app_lib.NewKVFromBackend(config.KVBackend, config.KVHostPort)
+	// In-process key-value store (rate limits, lockouts, MFA temp tokens)
+	kv := app_lib.NewKV()
 	defer kv.Close()
 
-	// Create the logger (it will handle shrmpl-log internally)
-	logger := app_lib.NewLogger(config.ServerName, config.LogReceiverHostPort)
-	defer logger.Close()
+	// slog to stderr; systemd captures it into journald
+	logger := app_lib.NewLogger(config.ServerName, os.Stderr)
 	logger.Info("SERVER_INIT", "Starting API server", "username", "app-root")
 
 	// Initialize database

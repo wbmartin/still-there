@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/wbmartin/starter-api/internal/app_lib"
 	sqlfiles "github.com/wbmartin/starter-api/sql"
 )
 
@@ -75,19 +74,15 @@ func TestEmbeddedMigrationsLoad(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Integration: a database of its own, created and dropped by the test, on
 // the same server the repository suite uses. PROTO_TEST_DATABASE_URL names a
-// *_test_db on that server; without it the URL comes from
-// etc/loc-api-srv.env the way the repository suite gets it (LoadConfig, which
-// may consult the vault), and the tests skip when neither is reachable.
+// *_test_db on that server (bin/200-run-tests exports it); without it the
+// tests skip. No fallback to etc/loc-api-srv.env -- that is the developer's
+// live database.
 
 func scratchDatabase(t *testing.T) *pgx.Conn {
 	t.Helper()
 	base := os.Getenv("PROTO_TEST_DATABASE_URL")
 	if base == "" {
-		config, err := app_lib.LoadConfig("../../../../etc/loc-api-srv.env")
-		if err != nil {
-			t.Skipf("skipping integration tests: no local config (%v)", err)
-		}
-		base = config.DatabaseURL
+		t.Skip("skipping integration tests: PROTO_TEST_DATABASE_URL unset (run bin/200-run-tests go)")
 	}
 	parsed, err := url.Parse(base)
 	if err != nil {

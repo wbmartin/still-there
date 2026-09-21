@@ -7,7 +7,7 @@ A production-ready starter/scaffold application combining a Go API server with a
 - **API Server** (`src/api-srv/`): Go application using standard library + pgx, n-tier architecture (handlers, repositories, models)
 - **Web App** (`src/web-app/`): React 19 + TypeScript + Vite + Mantine UI, Zustand state management
 - **Database**: PostgreSQL with soft deletes, optimistic locking, and multi-tenant security contexts
-- **Infrastructure Services**: shrmpl-kv (key-value store), shrmpl-log (logging), shrmpl-vault (secrets)
+- **Infrastructure**: in-process key-value store and `log/slog` logging, no external services
 
 ## Project Structure
 
@@ -29,7 +29,7 @@ ProtoStack-ReactGo/
 
 ## Quick Start
 
-See [doc/050-dev-env-init.md](doc/050-dev-env-init.md) for first-time setup (certificates, database creation, shrmpl downloads).
+See [doc/050-dev-env-init.md](doc/050-dev-env-init.md) for first-time setup (database creation).
 
 See [doc/060-dev-env-start.md](doc/060-dev-env-start.md) for day-to-day startup steps.
 
@@ -37,23 +37,21 @@ See [doc/060-dev-env-start.md](doc/060-dev-env-start.md) for day-to-day startup 
 
 | Command | Purpose |
 |---------|---------|
-| `./bin/010-download-shrmpl` | Download shrmpl service binaries |
 | `./bin/100-build-api-server` | Build the Go API server |
-| `./bin/210-run-shrmpl-app-infra` | Start infrastructure services |
-| `./bin/211-stop-shrmpl-app-infra` | Stop all services |
+| `./bin/510-reset-test-db` | Rebuild the local database |
 | `./bin/215-run-api-srv` | Run the API server (supports `--daemon`/`--interactive`) |
 | `./bin/220-run-web-app` | Run the web app dev server |
+| `./bin/216-stop-local-stack` | Stop the API server and web app dev server |
 | `./bin/222-build-web-app` | Build and package web app for deployment |
 | `./bin/310-test-repo-model` | Run Go unit tests |
 | `./bin/320-test-web-service` | Run Python integration tests |
 | `./bin/330-test-load` | Run load tests |
-| `./bin/410-regenerate-vault-mtls-certs` | Regenerate mTLS certificates |
 
 Full command reference: [doc/902-project-commands.md](doc/902-project-commands.md)
 
 ## Key Features
 
-- **Authentication**: JWT (HS256) with TOTP-based MFA, session management via shrmpl-kv
+- **Authentication**: JWT (HS256) with TOTP-based MFA, session management via the in-process KV store
 - **Authorization**: RBAC with grant-based permissions scoped to security contexts
 - **Multi-tenancy**: Security context isolation on all tables and queries
 - **Security**: CSRF protection, rate limiting, user blocking, Argon2id password hashing, comprehensive security headers
@@ -70,7 +68,7 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 ### Getting Started
 | File | Description |
 |------|-------------|
-| [doc/050-dev-env-init.md](doc/050-dev-env-init.md) | First-time environment setup (DB, certs, shrmpl) |
+| [doc/050-dev-env-init.md](doc/050-dev-env-init.md) | First-time environment setup (database) |
 | [doc/060-dev-env-start.md](doc/060-dev-env-start.md) | Day-to-day startup procedure |
 | [doc/902-project-commands.md](doc/902-project-commands.md) | All build, run, and test commands |
 
@@ -84,7 +82,6 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 | File | Description |
 |------|-------------|
 | [doc/810-create-new-entity-type-notes.md](doc/810-create-new-entity-type-notes.md) | Step-by-step guide for adding a new entity (SQL, Go, React) |
-| [doc/811-non-entity-notes.md](doc/811-non-entity-notes.md) | Notes on updating non-entity code (shrmpl clients) |
 | [doc/905-config-guidance.md](doc/905-config-guidance.md) | Configuration file conventions |
 
 ### Code Style and Conventions
@@ -109,7 +106,7 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 | File | Description |
 |------|-------------|
 | [doc/310-api-srv-cert-renewal.md](doc/310-api-srv-cert-renewal.md) | API server TLS certificate renewal steps |
-| [doc/850-mtls-troubleshooting.md](doc/850-mtls-troubleshooting.md) | mTLS certificate troubleshooting and verification |
+| [doc/archive/850-mtls-troubleshooting.md](doc/archive/850-mtls-troubleshooting.md) | mTLS certificate troubleshooting (archived; describes infrastructure removed by PS0003) |
 
 ### Project Tracking
 | File | Description |

@@ -1,0 +1,10 @@
+#!/bin/bash
+# Stop the local stack: the API server (bin/215) and the vite dev server (bin/220).
+set -e
+
+KILLED=false
+if pkill -f "proto-go-app" 2>/dev/null; then echo "Killed proto-go-app"; KILLED=true; else echo "No proto-go-app running"; fi
+if pkill -f "vite" 2>/dev/null;         then echo "Killed vite";         KILLED=true; else echo "No vite running"; fi
+
+if [ "$KILLED" = true ]; then sleep 2; fi
+echo "Local stack stopped."

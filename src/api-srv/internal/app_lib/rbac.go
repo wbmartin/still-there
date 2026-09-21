@@ -8,12 +8,12 @@ import (
 
 // RBACManager handles role-based access control operations
 type RBACManager struct {
-	logger   ThisAppLoggerInterface
+	logger   *Logger
 	username string
 }
 
 // NewRBACManager creates a new RBAC manager
-func NewRBACManager(logger ThisAppLoggerInterface,
+func NewRBACManager(logger *Logger,
 	username string) *RBACManager {
 	return &RBACManager{
 		logger:   logger,

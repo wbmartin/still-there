@@ -7,7 +7,7 @@ import (
 // AppServices holds shared dependencies for handlers (excluding repositories)
 type AppServices struct {
 	DBPool *pgxpool.Pool
-	KV     ThisAppKVInterface
+	KV     *KV
 	Config *Config
-	Logger ThisAppLoggerInterface
+	Logger *Logger
 }

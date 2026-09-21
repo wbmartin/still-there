@@ -27,16 +27,11 @@ To stop the api server:
 pkill -f "proto-go-app" || kill $(cat tmp/server.pid 2>/dev/null) 2>/dev/null || true
 ```
 
-## Infrastructure Management
+## Local Stack
 
-To run the shrmpl infrastructure services (kv, log, vault):
+To stop the api server and the web app dev server:
 ```
-./bin/210-run-shrmpl-app-infra
-```
-
-To stop all shrmpl app infrastructure (services, api server, web app):
-```
-./bin/211-stop-shrmpl-app-infra
+./bin/216-stop-local-stack
 ```
 
 To run the web app (Vite on :5173, proxying /api to :8080):
@@ -81,7 +76,7 @@ The one command, on a laptop or a build host:
   `pytest.log`, `py-api.log`). Ends with a summary line, e.g.
   `[INFO] tests passed (all): go=105 e2e=3 py=63`.
 - Requires the `loc-postgres` container (doc/060-dev-env-start.md); nothing
-  else -- the e2e API config has `DATABASE_URL` inline and no `VAULT_*` keys.
+  else -- the e2e API config has `DATABASE_URL` inline.
 
 To run the Playwright end-to-end suite directly:
 ```
@@ -100,7 +95,7 @@ To test the api server (repository + model unit tests, with coverage):
 ./bin/310-test-repo-model
 ```
 - Connects via `PROTO_TEST_DATABASE_URL` when set, otherwise through
-  `etc/loc-api-srv.env` (vault). Prefer `./bin/200-run-tests go`.
+  `etc/loc-api-srv.env`. Prefer `./bin/200-run-tests go`.
 
 To test the api server (pytest HTTP suite against a server you started):
 ```
@@ -141,10 +136,3 @@ sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside
   swaps the file. No inline defaults -- a missing key stops the run.
 - See doc/320-presales-uat-deploy.md. Run `./bin/200-run-tests` first.
 - Post-sales pipeline placeholders: `infra/{uat,prd}/` (see `infra/README.md`).
-
-To regenerate vault TLS certificates:
-```
-./bin/410-regenerate-vault-certs
-```
-- Regenerates server and client certificates for shrmpl-vault
-- Requires restarting vault and services using the certificates

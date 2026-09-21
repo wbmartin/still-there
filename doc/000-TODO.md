@@ -1,5 +1,4 @@
 # General List 
-there is a new shrmpl-vault binary in the dist folder that needs to be committed and plugged into protostack.
 you need to add JSONB, UUID to the example handler.
 # React App
 
@@ -14,8 +13,6 @@ you need to add JSONB, UUID to the example handler.
 # API Server
 
 
- - The project uses a hand-rolled TCP client to send logs to a custom service (`shrmpl-log`) in a custom, fixed-width text format. This reinvents the wheel of structured logging, is likely not as performant or robust  as standard libraries, and creates a dependency on a non-standard service.
- 
  - The hand-rolled `.env` parser is fragile and doesn't handle common cases like quoted values. Using a standard library like `joho/godotenv` would be more robust.
  
  
@@ -24,8 +21,8 @@ you need to add JSONB, UUID to the example handler.
  - **Introduce Unit Testing:** Use mocking frameworks (e.g., `pgxmock` for the database interface, or define a repository interface and mock it) to test handlers and other logic in isolation.
 
 # Architectural Todos
-- **shrmpl-chk and shrmpl-mon** need to add rust web server that listens to a port (may not need to be https) and receives health information, only in the query string. reads a cronitor type schedule and makes slack calls when things go wrong. needs to get slack webhook url from the shrmpl key server
-also need to add a binary that checks website health (probably just status) and records the checkins to shrmpl-mon.
+- **Health-check and monitoring services** need to add a rust web server that listens to a port (may not need to be https) and receives health information, only in the query string. reads a cronitor type schedule and makes slack calls when things go wrong. needs to get the slack webhook url from wherever we end up keeping deployed secrets.
+also need to add a binary that checks website health (probably just status) and records the checkins to the monitoring service.
 
 - **S3 replacement**Non Sensitive file storing -There will be an nginx server running on the server and we should use it to server static non sensitive files. we need to explore what is the right way to do this.
 
@@ -42,13 +39,13 @@ Please perform a detailed code review of the API Server in the src/api-srv folde
 - Background: This is a golang server project that will serv as a starter/base scaffold project for future projects.  It is intended to be paired iwth the web-app react app in src/web-app.  The goal is to have a well structured, secure, and maintainable codebase that follows best practices for golang web servers.
 - Focus on inconsistencies, best practices, security, dead code, and note any tradeoffs made.  
 - Don't look at the documentation in the doc folder because it may  bias the review.
-- Output all of your results to /Users/brandon/Code/ProtoStack-ReactGo/doc/111-api-server-code-review-codex.md.
+- Output all of your results to doc/111-api-server-code-review-codex.md.
 
 Please perform a detailed code review of the WEB APP in the src/web-app folder.  
 - Background: This is a react project that will serv as a starter/base scaffold project for future projects. It is intended to be paired with the api-srv in the sibling folder 
 - Focus on inconsistencies, best practices, security, dead code, and note any tradeoffs made.  
 - Don't look at the documentation in the doc folder because it may  bias the review.
-- Output all of your results to /Users/brandon/Code/ProtoStack-ReactGo/doc/215-react-web-code-review.md.
+- Output all of your results to doc/215-react-web-code-review.md.
 
 
 
@@ -74,17 +71,10 @@ Thought to be complete
 
  - The `CheckPasswordHash` function should use `subtle.ConstantTimeCompare` to prevent potential timing attacks.
 
- - shrmple log client reconnection logic is not thread-safe)
-
- - shrmpl-kv client is not handling list correctly right now.
- 
  - It is currently possible for someone with user update rights to add a group ID outside their context and gain access to another context.  The groups need to be checked to make sure they are within the users security context.
 
  - Check on all repo functions, they should be receving the security context from users jwt claims.
  
   - The `.golangci.yml` file exists but is empty, defeating its purpose. A good starter project should include a recommended set of linters.
   
-- move the database connection string, JWT, and the TOTP code to a shrmple vault.
-
-
 - **Complete Repository Coverage:** Address the "test environment issues" to un-skip the tests for `AddUserListToGroup` and `RemoveUserListFromGroup  `.

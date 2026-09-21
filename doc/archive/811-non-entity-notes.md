@@ -1,3 +1,5 @@
+> Archived 2026-09-21 by PS0003: the shrmpl clients / vault mTLS this describes were removed from the template. Kept as history.
+
 # Non-Entity Application Code Notes
 
 This document contains notes about maintaining and updating non-entity related application code components.

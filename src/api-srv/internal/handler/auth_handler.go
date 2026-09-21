@@ -18,67 +18,38 @@ import (
 // decode the body before any rate-limit or JWT check runs.
 const maxAuthBodyBytes = 4 << 10 // 4 KiB
 
+// maxUserNameLen matches app_user.user_name VARCHAR(50).
+const maxUserNameLen = 50
+
 // isAccountLocked checks if the IP or username is currently locked out
 func isAccountLocked(
-	kv app_lib.ThisAppKVInterface,
+	kv *app_lib.KV,
 	ip, username string,
 ) (bool, error) {
-	ipLockKey := "loginlock-ip-" + ip
-	userLockKey := "loginlock-user-" + username
-
-	// Batch check both lockout keys
-	commands := []string{
-		"GET " + ipLockKey,
-		"GET " + userLockKey,
-	}
-
-	results, err := kv.Batch(commands)
+	ipLocked, err := kv.Get("loginlock-ip-" + ip)
 	if err != nil {
-		// fmt.Print("A %s B %s", starttime, time.Now().UnixNano())
 		return false, err
 	}
-
-	// Check if either is locked (value "1")
-	ipLocked := len(results) > 0 && results[0] == "1"
-	userLocked := len(results) > 1 && results[1] == "1"
-
-	return ipLocked || userLocked, nil
+	userLocked, err := kv.Get("loginlock-user-" + username)
+	if err != nil {
+		return false, err
+	}
+	// A lock is the value "1" with the lockout TTL; missing reads as ""
+	return ipLocked == "1" || userLocked == "1", nil
 }
 
 // incrementFailedAttempt increments the failed attempt counters and sets lockout if threshold exceeded
 func incrementFailedAttempt(
-	kv app_lib.ThisAppKVInterface,
+	kv *app_lib.KV,
 	config *app_lib.Config,
 	ip, username string,
 ) error {
-	ipCounterKey := "loginfail-ip-" + ip
-	userCounterKey := "loginfail-user-" + username
-
-	// Batch increment both counters with TTL
-	commands := []string{
-		fmt.Sprintf(
-			"INCR %s %s",
-			ipCounterKey,
-			config.FailedLoginAttemptWindowDuration,
-		),
-		fmt.Sprintf(
-			"INCR %s %s",
-			userCounterKey,
-			config.FailedLoginAttemptWindowDuration,
-		),
-	}
-
-	results, err := kv.Batch(commands)
+	// Both counters live for the attempt window; INCR only honours the TTL on create
+	ipCount, err := kv.Incr("loginfail-ip-"+ip, config.FailedLoginAttemptWindowDuration)
 	if err != nil {
 		return err
 	}
-
-	// Parse results to int
-	ipCount, err := strconv.Atoi(results[0])
-	if err != nil {
-		return err
-	}
-	userCount, err := strconv.Atoi(results[1])
+	userCount, err := kv.Incr("loginfail-user-"+username, config.FailedLoginAttemptWindowDuration)
 	if err != nil {
 		return err
 	}
@@ -105,7 +76,7 @@ func incrementFailedAttempt(
 
 // resetFailedAttempts resets the failed attempt counters for user and IP on successful login
 func resetFailedAttempts(
-	kv app_lib.ThisAppKVInterface,
+	kv *app_lib.KV,
 	ip, username string,
 ) error {
 	userCounterKey := "loginfail-user-" + username
@@ -150,6 +121,13 @@ func AuthHandler(
 			)
 			return
 		}
+		// user_name is VARCHAR(50); anything longer cannot be a user and would
+		// only overflow the lockout keys in the store. Same answer as a bad
+		// password so the check leaks nothing.
+		if req.UserName == "" || len(req.UserName) > maxUserNameLen {
+			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "INVALID_CREDS", nil)
+			return
+		}
 
 		appServices.Logger.Debug(
 			"AUTH_REQ_PRSE",
@@ -162,18 +140,16 @@ func AuthHandler(
 		clientIP := app_lib.ClientIP(r)
 		locked, err := isAccountLocked(appServices.KV, clientIP, req.UserName)
 		if err != nil {
-			// Fail open: if the KV store is unavailable, don't block login. Account lockout is a
-			// best-effort brute-force throttle (not authorization), and the write side already
-			// fails open (incrementFailedAttempt only logs on error) — so the read side should
-			// too, otherwise a KV outage hard-locks every login. Trade-off: while KV is down,
-			// failed-attempt lockout is not enforced.
-			appServices.Logger.Warn(
+			// The store is in-process, so an error is a bug, not an outage:
+			// fail closed, as MFAVerifyHandler already does.
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to check account lockout",
 				"LOCKOUT_CHECK_FAIL",
-				"Account lockout check failed; failing open: "+err.Error(),
-				"username",
-				req.UserName,
+				err,
 			)
-			locked = false
+			return
 		}
 		if locked {
 			app.WriteError(
