@@ -1,4 +1,4 @@
-> Archived 2026-09-21 by PS0003: the shrmpl clients / vault mTLS this describes were removed from the template. Kept as history.
+> Archived from `doc/archive/850-mtls-troubleshooting.md` on 2026-09-21 by PS0006; point-in-time, not maintained.
 
 # mTLS Troubleshooting Guide
 

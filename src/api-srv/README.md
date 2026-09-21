@@ -1,212 +1,142 @@
-# Starter API Server
+# API Server
 
-A production-ready Go API server starter template with comprehensive security features, multi-tenancy support, and JWT-based authentication.
-
-## Features
-
-- **Security First**: JWT authentication, CSRF protection, rate limiting, user blocking
-- **Multi-Tenant**: Security context-based isolation
-- **RBAC**: Role-based access control with granular permissions
-- **CRUD Operations**: Full REST API for note entities with optimistic locking
-- **Logging**: Structured logging via `log/slog` to stderr
-- **Caching**: In-process key-value store for session and security data
-- **Database**: PostgreSQL with pgx driver
-- **Clean Architecture**: Separated concerns with handlers, repositories, and models
+Go stdlib `net/http` + `pgx` API server. Local dev runs plain HTTP
+(`ENABLE_TLS=false`); TLS is available via `ENABLE_TLS`/`TLS_CERT_PATH`/
+`TLS_KEY_PATH` for deployed environments.
 
 ## Quick Start
 
-### Prerequisites
-
-- Go 1.21+
-- PostgreSQL
-
-### Setup
-
-1. **Build the database** (from the repo root):
+1. Build the local database (from the repo root):
    ```bash
    bin/510-reset-test-db
    ```
-
-2. **Run the server**:
+2. Run the server:
    ```bash
    bin/215-run-api-srv
    ```
 
-## API Endpoints
-
-### Authentication
-- `POST /auth` - Initial authentication (username/password)
-- `POST /auth2` - MFA authentication (temp token + TOTP)
-- `POST /logoff` - User logout
-
-### Examples (CRUD)
-- `GET /example?exampleId={id}` - Get example
-- `POST /example` - Create example
-- `PUT /example` - Update example
-- `DELETE /example?exampleId={id}&updateTs={ts}` - Delete example
-
-### Example Batch Operations
-- `GET /exampleList?ids={comma-separated}` - Get multiple examples
-- `POST /exampleList` - Create multiple examples (all-or-nothing transaction)
-- `PUT /exampleList` - Update multiple examples (all-or-nothing transaction)
-- `DELETE /exampleList?ids={comma-separated}` - Delete multiple examples (all-or-nothing transaction)
-
-### Health Check
-- `GET /health` - Service health check
-
-## Security Features
-
-### JWT Authentication
-- RS256 signed tokens with configurable expiration
-- Custom claims including user ID, session ID, security context, and grants map
-
-### CSRF Protection
-- X-CSRF-Token header validation against JWT session ID suffix
-- Automatic skipping for safe HTTP methods
-
-### Rate Limiting
-- Per-user and unauthenticated request limits
-- In-process KV backed counters with automatic expiration
-
-### User Blocking
-- Administrative user blocking via in-process KV flags
-- Immediate effect across all sessions
-
-### RBAC
-- Grant-based permissions per security context
-- Centralized grant definitions with short codes
-- Context-aware authorization checks
+The binary takes the env file path as its single argument
+(`bin/215-run-api-srv` passes `etc/loc-api-srv.env`); run it with no
+argument and it exits with "Configuration file path is required".
 
 ## Configuration
 
-`etc/loc-api-srv.env` is self-contained and needs no edits for local dev:
+`etc/loc-api-srv.env` is self-contained and needs no edits for local dev.
+Keys read by `internal/app_lib/config.go` `LoadConfig`:
 
-```env
-DATABASE_URL=postgres://user:pass@host:port/db
-JWT_SECRET=your-secret-key
-JWT_SESSION_EXPIRE_HOURS=72
-MAX_USER_REQ_PER_MIN=200
-MAX_UNAUTH_REQ_PER_MIN=20
-SERVER_NAME=proto-go-app
-SERVER_PORT=8080
-ENABLE_TLS=false
-TLS_CERT_PATH=etc/crt/api-srv-fullchain.pem
-TLS_KEY_PATH=etc/crt/api-srv-privkey.pem
-```
+- `DATABASE_URL`, `JWT_SECRET`, `SERVER_NAME`, `APP_NAME` — required
+- `SERVER_PORT` — required, integer
+- `ENABLE_TLS` — required, boolean; when true, `TLS_CERT_PATH` and
+  `TLS_KEY_PATH` are required
+- `TOTP_ENCRYPTION_KEY` — required, 32 bytes as hex (AES-256)
+- `FAILED_LOGIN_ATTEMPT_THRESHOLD` — required, integer
+- `FAILED_LOGIN_ATTEMPT_WINDOW_DURATION`, `FAILED_LOGIN_LOCKOUT_DURATION` —
+  required
+- `JWT_SESSION_EXPIRE_HOURS`, `MAX_USER_REQ_PER_MIN`,
+  `MAX_UNAUTH_REQ_PER_MIN` — optional, integer
+- `SERVER_BIND_ADDRESS` — optional; empty listens on every interface
+- `CORS_ALLOWED_ORIGINS` — optional, comma-separated; empty means no CORS
 
-## Database Schema
+`TEST_BASE_URL` is not part of `Config` — the server ignores it. It is read
+by `bin/330-test-load` and exported by the test runners for the pytest
+suite in `tests/`.
 
-### Core Tables
-- `app_user` - User accounts with MFA settings
-- `user_group` - User groups with grant assignments
-- `user_grant` - Available permissions
-- `note` - Example entity with full audit trail
+## API Endpoints
 
-### Key Design Decisions
-- Soft deletes with `delete_ts` and `delete_user_id`
-- Optimistic locking using `update_ts`
-- Security context on all tables for multi-tenancy
-- Snake_case column naming
-- Numeric(17,7) timestamps for microsecond precision
+All JSON is camelCase. List endpoints take `?<entity>IdList=1,2,3`
+(comma-separated) and `?afterUpdateTs=<ts>` for incremental reads.
 
-## Testing
+### Authentication
+- `POST /auth` — username/password login
+- `GET /refresh` — refresh session
+- `POST /changeSecurityContext`
+- `POST /changeOwnPassword`
+- `POST /logoff`
+- `POST /userSelfCreate` — public self-registration
+- `POST /mfaSetup`, `POST /mfaVerify`
+- `POST /admin/resetUserMFA`
 
-```bash
-# Health check
-curl https://localhost:8080/health
+### Example (CRUD)
+- `GET /example?exampleId={id}`
+- `POST /example`
+- `PUT /example`
+- `DELETE /example?exampleId={id}&updateTs={ts}`
+- `GET /exampleList?exampleIdList=1,2,3&afterUpdateTs=<ts>`
+- `POST /exampleList`, `PUT /exampleList` — all-or-nothing transaction
+- `DELETE /exampleList?exampleIdList=1,2&updateTs=<ts1>,<ts2>`
 
-# Authenticate (MFA exempt user)
-curl -X POST https://localhost:8080/auth \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123!"}'
+### Users
+- `GET /userList?appUserIdList=1,2,3&afterUpdateTs=<ts>`
+- `POST /user`, `PUT /user`, `DELETE /user`
+- `POST /changeOtherUserPassword`
+- `POST /addUserListToGroup`, `POST /removeUserListFromGroup`
+- `GET /grantList`
 
-# Get example (requires auth cookie)
-curl "https://localhost:8080/example?exampleId=1" \
-  -H "Cookie: auth=YOUR_JWT_TOKEN"
+### User groups
+- `GET /appUserGroupList`
+- `POST /appUserGroup`, `PUT /appUserGroup`, `DELETE /appUserGroup`
 
-# Get multiple examples
-curl "https://localhost:8080/exampleList?ids=1,2,3" \
-  -H "Cookie: auth=YOUR_JWT_TOKEN"
+### Other
+- `GET /health` — no auth
+- `POST /error-report` — no auth
 
-# Create multiple examples
-curl -X POST https://localhost:8080/exampleList \
-  -H "Content-Type: application/json" \
-  -H "Cookie: auth=YOUR_JWT_TOKEN" \
-  -d '[{"example_text":"Batch example 1"}, {"example_text":"Batch example 2"}]'
+## Security
 
-# Update multiple examples
-curl -X PUT https://localhost:8080/exampleList \
-  -H "Content-Type: application/json" \
-  -H "Cookie: auth=YOUR_JWT_TOKEN" \
-  -d '[{"example_id":1, "example_text":"Updated 1"}, {"example_id":2, "example_text":"Updated 2"}]'
+Auth is an HS256 JWT carried in an `auth` cookie
+(`internal/app_lib/auth.go`); claims hold user ID, session ID, security
+context, and a grants list. Passwords are Argon2id.
 
-# Delete multiple examples
-curl -X DELETE "https://localhost:8080/exampleList?ids=1,2" \
-  -H "Cookie: auth=YOUR_JWT_TOKEN"
-```
+There is no security middleware chain — each handler calls its checks
+explicitly, in order, via the `AppHelper` in
+`internal/app_lib/app_helper.go`:
+
+1. `CheckJWT` — parse and validate the cookie
+2. `CheckRateLimitAndUserBlock` — per-user/unauthenticated rate limits and
+   admin blocks, backed by the in-process KV
+3. `CheckCSRF` — `X-CSRF-Token` header must match the last 3 characters of
+   the session ID; skipped for GET/HEAD/OPTIONS/TRACE
+4. `CheckAuthorization(grant)` — caller must hold the named grant for
+   their current security context
+5. `CheckAllChecksComplete` — every handler calls this before doing any
+   work
+
+Entities are `example`, `appUser`, `appUserGroup`. Grants are centralized
+in `internal/model/grants.go` (e.g. `GrantExampleRead`, `GrantUserRead`,
+`GrantUserGroupRead`).
+
+## Database
+
+Go 1.25 (see `go.mod`). Schema changes are migrations only:
+`sql/migrations/NNNN_name.sql`, embedded and applied by `cmd/migrate` —
+never hand-run DDL. Also `sql/roles.sql` (the role the migrator and app
+connect as) and `sql/fixtures/` (seed data, e.g. `015-initialdata.sql`).
+
+## In-Process Infrastructure
+
+No external services: `DATABASE_URL`, `JWT_SECRET`, and
+`TOTP_ENCRYPTION_KEY` are inline in the env file.
+
+- **`Logger`** (`internal/app_lib/logging.go`): thin wrapper over
+  `log/slog`, writing one logfmt line per call to stderr with a `code=`
+  attribute.
+- **`KV`** (`internal/app_lib/kv.go`): in-process key-value store for
+  rate limits, login lockouts, MFA temp tokens, and user blocks.
+  Process-local — restarting the server clears it. Graduate to a shared
+  store (Redis or similar) once the app runs behind a load balancer with
+  2+ API processes.
 
 ## Architecture
 
 ```
-cmd/server/
-├── main.go                 # Server entry point and routing
-
-internal/
-├── app_lib/                # Shared application libraries
-│   ├── config.go          # Configuration loading
-│   ├── kv.go              # In-process key-value store (KV)
-│   ├── logging.go         # slog-backed logger (Logger)
-│   ├── auth.go            # JWT and password utilities
-│   ├── rbac.go            # Authorization logic
-│   └── security.go        # Security helper with checks
-│
-├── handler/                        # HTTP handlers
-│   ├── health_handler.go           # Health check
-│   ├── auth_handler.go             # Authentication endpoints
-│   ├── example_handler.go          # Example CRUD operations
-│   └── common.go                   # Shared handler utilities
-│
-├── model/                  # Data models and constants
-│   ├── app_user.go        # User model
-│   ├── user_grant.go      # Grant definitions
-│   ├── user_group.go      # Group model
-│   ├── example.go         # Example model
-│   └── request_response.go # API DTOs
-│
-└── repository/             # Data access layer
-    ├── user_repository.go
-    ├── user_group_repository.go
-    └── example_repository.go
+cmd/server/       # entry point, routing (main.go)
+cmd/migrate/       # schema migrator, embeds sql/migrations
+internal/app_lib/  # config, JWT/password, CSRF, rate limiting, KV, logging
+internal/handler/  # HTTP handlers, one file per entity/concern
+internal/model/    # models, grants, DTOs
+internal/repository/  # data access
+sql/migrations/    # schema, applied by cmd/migrate
+sql/roles.sql       # database roles
+sql/fixtures/       # seed data
 ```
 
-## Development
-
-### Adding New Entities
-
-1. Create model in `internal/model/`
-2. Add grant constants to `user_grant.go`
-3. Create repository in `internal/repository/`
-4. Implement handlers in `internal/handler/`
-5. Add routes in `cmd/server/main.go`
-
-### Security Considerations
-
-- All handlers use the SecurityHelper for consistent security checks
-- JWT tokens are HttpOnly and Secure in production
-- Passwords are Argon2id hashed
-- All database operations include security context validation
-- Optimistic locking prevents concurrent modification conflicts
-
-## In-Process Infrastructure
-
-- **`Logger`** (`logging.go`): thin wrapper over `log/slog`, writing one
-  logfmt line per call to stderr with a `code=` attribute; systemd captures
-  it into journald.
-- **`KV`** (`kv.go`): in-process key-value store for rate limits, login
-  lockouts, MFA temp tokens and user blocks. Process-local -- restarting the
-  server clears it. Graduate to a shared store (Redis or similar) once the
-  app runs behind a load balancer with 2+ API processes.
-
-## License
-
-This is a starter template - customize as needed for your project.
+See `doc/105-api-srv-tech-spec.md` for more depth.

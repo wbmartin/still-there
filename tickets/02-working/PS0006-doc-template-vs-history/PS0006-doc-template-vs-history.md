@@ -1,7 +1,7 @@
 ---
 id: PS0006
 title: Move ProtoStack history out of doc/ into the engineering log; fix every broken path
-status: ready
+status: in-review
 blocked_by:
 waiting_on:
 priority: high
@@ -71,11 +71,69 @@ historical framing, not a broken link.
    what is in `doc/`.
 5. Run `python3 scripts/lint-tickets.py` (it walks `04-archive/`).
 
-## Acceptance
+## What changed and why
 
-- `grep -rn 'sql/0\|download-shrmpl.sh\|regenerate-vault-certs\|doc/archive' --include=*.md .` → nothing outside `tickets/04-archive/`.
-- `doc/000-TODO.md`, `doc/archive/` gone.
-- README.md structure block matches `ls`.
+Branch `TKT-PS0006-doc-template-vs-history`, 3 commits, plus one ticket
+commit on `main`.
+
+**1. `000-TODO.md` triage (walked with Brandon 2026-09-21).** Every item
+verified against code first.
+
+| Item | Outcome |
+|---|---|
+| JSONB + UUID on `example` | **PS0016** (low) |
+| Passkey second factor (`doc/120`) | **PS0017** (low), points at the archived plan |
+| Profile page: preferences + avatar | **PS0018** (low), avatar scoped out pending storage |
+| `.env` parser and quoted values | **PS0019** (medium) — verified bug: `APP_NAME="Proto App"` reaches the TOTP issuer with literal quotes; both fixes (strip quotes / `godotenv`) recorded, Brandon decides at pickup |
+| User-list page number in URL | folded into **PS0012** |
+| HTTP-level handler unit tests | folded into **PS0014** |
+| Monitoring service, nginx file serving, https-vs-http load test | **dropped** (Brandon) |
+| "Thought to be complete" block | all nine confirmed done in code; deleted |
+| Routes / inline styles / forms library | already PS0013 / PS0012 |
+| Starting prompt, code-review prompts | preserved in this ticket's log entry |
+
+**2. History → `tickets/04-archive/engineering-log/`**, ten files, dated
+from `git log --follow`, each with the two-line "Archived from … by
+PS0006" header (replacing PS0003's note on 811/850): `110`, `215`, `120`,
+`001`, `archive/100`, `101`, `102`, `210`, `811`, `850`. `doc/archive/`
+deleted. `doc/` is now template-only (11 files).
+
+**3. Paths.** `README.md` structure block rewritten to match `ls`
+(`src/api-srv/sql/`, `infra/`, `tickets/`, `scripts/`, `.claude/`);
+doc index lists exactly `ls doc/*.md` plus `infra/README.md`, with a
+pointer to the engineering log. `doc/105` line 81 and every `doc/810`
+path fixed (`Read*` → `Retrieve*`, no `biz`/`appcore`, migrations not
+`update_*.sql`); `810` carries `<!-- rewrite: PS0010 -->`. `doc/060`
+and `doc/902` were already fixed by PS0003.
+
+**4. Package READMEs regenerated from code** (subagent, verified by diffing
+against `main.go` routes, `config.go` keys, `ls bin`, `ls src/web-app`):
+`src/api-srv/README.md` (was a different app), `src/web-app/README.md`
+(real directories, the `createEntityStore` pattern, the copy-paste
+scaffolding paragraph for PS0012), `tests/README.md` (plain http, `tests/`,
+`bin/200 py`, real fixtures and files).
+
+**Found, not fixed (→ PS0014 note):** `tests/conftest.py`
+`TestClient.authenticate()` posts to `/auth2`, which does not exist; dead
+because the fixture users are `mfa_exempt`.
+
+## Files modified
+
+- `README.md`, `src/api-srv/README.md`, `src/web-app/README.md`, `tests/README.md`
+- `doc/105-api-srv-tech-spec.md`, `doc/810-create-new-entity-type-notes.md`
+- deleted `doc/000-TODO.md`, `doc/archive/`; moved 10 files into `tickets/04-archive/engineering-log/`
+- on `main`: `tickets/01-open/PS0016`–`PS0019` (new), `PS0012`, `PS0014` (notes)
+
+## Endpoints introduced or modified
+
+None.
+
+## Acceptance (met 2026-09-21)
+
+- [x] `grep -rn 'sql/0\|download-shrmpl.sh\|regenerate-vault-certs\|doc/archive' --include=*.md .` → only `tickets/` (ticket text) and `doc/050`'s deliberate historical line.
+- [x] `doc/000-TODO.md`, `doc/archive/` gone.
+- [x] README structure block matches `ls`; doc index == `ls doc/*.md`.
+- [x] `python3 scripts/lint-tickets.py` clean (19 tickets).
 
 ## Deploy needs
 

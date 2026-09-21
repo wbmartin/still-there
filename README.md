@@ -15,16 +15,18 @@ A production-ready starter/scaffold application combining a Go API server with a
 ProtoStack-ReactGo/
 ├── src/
 │   ├── api-srv/          # Go API server (see src/api-srv/README.md)
+│   │   └── sql/          # migrations/ (embedded in cmd/migrate), roles.sql, fixtures/
 │   └── web-app/          # React frontend (see src/web-app/README.md)
-├── sql/                  # Database DDL and seed data
-│   ├── 010-initialcreate.sql   # Schema definitions
-│   └── 015-initialdata.sql     # Initial/seed data
-├── bin/                  # Build, run, and test scripts
-├── doc/                  # Project documentation
-├── etc/                  # Configuration and certificates
-├── tests/                # Integration and load tests
-├── dist/                 # Distributable binaries
-└── tmp/                  # Runtime files (logs, PID files)
+├── bin/                  # Numbered scripts: 1xx build, 2xx run, 3xx test, 5xx db, 6xx deploy
+├── etc/                  # Env files (loc-, e2e-, uat-*.example) and local certs
+├── infra/                # Post-sales host mirrors (placeholder; see infra/README.md)
+├── tests/                # pytest HTTP suite
+├── tickets/              # All engineering work and customer questions (see CLAUDE.md)
+├── scripts/              # Repo tooling (lint-tickets.py)
+├── doc/                  # Reference docs (index below)
+├── .claude/              # Agent skills
+├── dist/                 # Build output (gitignored)
+└── tmp/                  # Runtime files, test logs (gitignored)
 ```
 
 ## Quick Start
@@ -89,21 +91,17 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 |------|-------------|
 | [doc/904-python-guidance.md](doc/904-python-guidance.md) | Python script conventions (Polars, PEP8, psycopg) |
 
-### Plans and Reviews
-| File | Description |
-|------|-------------|
-| [doc/110-api-server-code-review.md](doc/110-api-server-code-review.md) | API server code review findings |
-| [doc/215-react-web-code-review.md](doc/215-react-web-code-review.md) | Web app code review findings |
-| [doc/120-passkey-plan.md](doc/120-passkey-plan.md) | WebAuthn/Passkey implementation plan |
-| [doc/001-file-storage-implementation-prompt.md](doc/001-file-storage-implementation-prompt.md) | File download handler design (Go + Nginx) |
-
 ### Operations
 | File | Description |
 |------|-------------|
 | [doc/310-api-srv-cert-renewal.md](doc/310-api-srv-cert-renewal.md) | API server TLS certificate renewal steps |
-| [doc/archive/850-mtls-troubleshooting.md](doc/archive/850-mtls-troubleshooting.md) | mTLS certificate troubleshooting (archived; describes infrastructure removed by PS0003) |
+| [doc/320-presales-uat-deploy.md](doc/320-presales-uat-deploy.md) | Presales UAT deploy (`bin/600`/`610`) |
+| [doc/330-presales-to-postsales-migration.md](doc/330-presales-to-postsales-migration.md) | Moving a host from the presales path to the `infra/` pipeline |
+| [infra/README.md](infra/README.md) | Post-sales deploy pipeline (placeholder) |
+
+Project history — old reviews, plans, superseded notes — lives in
+`tickets/04-archive/engineering-log/`, dated, not maintained.
 
 ### Project Tracking
 | File | Description |
 |------|-------------|
-| [doc/000-TODO.md](doc/000-TODO.md) | Outstanding tasks, known issues, and architectural TODOs |

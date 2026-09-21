@@ -1,3 +1,5 @@
+> Archived from `doc/110-api-server-code-review.md` on 2026-09-21 by PS0006; point-in-time, not maintained.
+
 # API Server Code Review
 
 - **Date:** 2025-12-24

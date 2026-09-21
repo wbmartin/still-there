@@ -1,3 +1,5 @@
+> Archived from `doc/215-react-web-code-review.md` on 2026-09-21 by PS0006; point-in-time, not maintained.
+
 # Code Review: `src/web-app`
 
 **Generated:** 2025-12-21

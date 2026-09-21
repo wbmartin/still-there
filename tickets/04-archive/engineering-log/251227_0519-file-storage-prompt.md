@@ -1,3 +1,5 @@
+> Archived from `doc/001-file-storage-implementation-prompt.md` on 2026-09-21 by PS0006; point-in-time, not maintained.
+
 # OpenCode CLI Prompt: File Download Handler with Dev/Prod Toggle (Go + Nginx)
 
 You are generating production-quality Go code for a **file download handler** in a service built with the standard `net/http` package (no frameworks).

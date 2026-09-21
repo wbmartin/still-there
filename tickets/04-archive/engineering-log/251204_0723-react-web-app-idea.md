@@ -1,3 +1,5 @@
+> Archived from `doc/archive/210-React-web-app-idea.md` on 2026-09-21 by PS0006; point-in-time, not maintained.
+
 I want to create a new app starting with vite's create to update all the libraries and approaches I used in a previous project to turn it into a base for future projects. First step is to draft the technical spec.
 
 
