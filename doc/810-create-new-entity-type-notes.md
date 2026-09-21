@@ -30,7 +30,7 @@ This document outlines the steps and key points for creating a new entity type i
 2. **Grants**: Add schema grants in migration SQL.
    - Everything lives in `public`; grants to `db_reader`/`db_writer` are in `src/api-srv/sql/roles.sql` and the migrations.
 
-3. **Data**: Insert initial data if needed (`src/api-srv/sql/fixtures/015-initialdata.sql`). Updates to existing data (e.g., adding new grants to user groups) are migrations too: `src/api-srv/sql/migrations/NNNN_<name>.sql`.
+3. **Data**: Insert initial data if needed (`src/api-srv/sql/fixtures/local-seed.sql`). Updates to existing data (e.g., adding new grants to user groups) are migrations too: `src/api-srv/sql/migrations/NNNN_<name>.sql`.
 
 ## API-SRV
 1. **Model** (`src/api-srv/internal/model/entity_model.go`):
@@ -120,7 +120,7 @@ All entity stores must include a `max<Entity>UpdateTs` field for conditional fet
 This enables efficient caching while detecting when full refreshes are needed.
 
 ## Example References
-- **SQL**: `src/api-srv/sql/migrations/0001_initial_schema.sql`, `src/api-srv/sql/fixtures/015-initialdata.sql`
+- **SQL**: `src/api-srv/sql/migrations/0001_initial_schema.sql`, `src/api-srv/sql/fixtures/local-seed.sql`
 - **API-SRV**: `src/api-srv/internal/model/example_model.go`, `src/api-srv/internal/repository/example_repository.go`, `src/api-srv/internal/handler/example_handler.go`
 - **WEB-APP**: `types/example-type.ts`, `stores/user-store.ts`, `pages/app-user-list-page.tsx`, `pages/app-user-edit-page.tsx`
 

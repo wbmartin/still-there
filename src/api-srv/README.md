@@ -109,7 +109,7 @@ in `internal/model/grants.go` (e.g. `GrantExampleRead`, `GrantUserRead`,
 Go 1.25 (see `go.mod`). Schema changes are migrations only:
 `sql/migrations/NNNN_name.sql`, embedded and applied by `cmd/migrate` —
 never hand-run DDL. Also `sql/roles.sql` (the role the migrator and app
-connect as) and `sql/fixtures/` (seed data, e.g. `015-initialdata.sql`).
+connect as) and `sql/fixtures/` (seed data, e.g. `local-seed.sql`).
 
 ## In-Process Infrastructure
 

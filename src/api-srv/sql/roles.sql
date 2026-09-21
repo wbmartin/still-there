@@ -10,7 +10,7 @@
 -- The service account below is the local default and is NOT what any
 -- deployed environment connects as; it exists so a fresh local database has
 -- a DML role to hand. The DDL owner role (proto_ddl) and the CI role
--- (proto_ci) are host setup, not a local default: see ddl-role-host-setup.sql.
+-- (proto_ci) are host setup, not a local default: see doc/340-db-host-setup.md.
 
 -- Roles are CLUSTER-WIDE in Postgres, not per-database. On a shared local
 -- server db_reader/db_writer may already exist from another app, so create
@@ -26,17 +26,18 @@ BEGIN
 END
 $$;
 
--- app svc account must be unique to each app, change for non-local installs
+-- The app role: DML only. Its name derives from APP_SLUG; bin/000-rebrand
+-- rewrites it. Change the password on any non-local install (DERIVING.md).
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM pg_roles WHERE rolname = 'proto_app_svc_account'
+        SELECT 1 FROM pg_roles WHERE rolname = 'proto_app'
     ) THEN
-        CREATE USER proto_app_svc_account
+        CREATE USER proto_app
             WITH PASSWORD 'reallygoodPSQLpassword';
     END IF;
 END
 $$;
 
-GRANT db_reader TO proto_app_svc_account;
-GRANT db_writer TO proto_app_svc_account;
+GRANT db_reader TO proto_app;
+GRANT db_writer TO proto_app;
