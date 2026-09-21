@@ -10,7 +10,7 @@ raised: 2026-09-21
 raised_by: template review 2026-09-21
 asked:
 claimed: 2026-09-21 by TKT-PS0008-api-split-app-lib
-merged:
+merged: 5ce23c6
 deployed:
 validated:
 ---

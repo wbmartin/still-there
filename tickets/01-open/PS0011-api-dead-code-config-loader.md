@@ -14,6 +14,8 @@ merged:
 deployed:
 validated:
 ---
+
+> Paths: PS0008 (2026-09-21) split `internal/app_lib/` into `internal/{app,auth,cache,config,logging,security}/`; `AppServices` is now `app.Services`. Line numbers below predate it.
 # PS0011 — API leftovers from earlier iterations
 
 **Source:** template review 2026-09-21. Baseline: `go vet`, `go build`,

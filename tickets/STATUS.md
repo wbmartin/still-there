@@ -6,7 +6,7 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 16:05 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 16:25 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
@@ -24,13 +24,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0017** | Passkey (WebAuthn) as a second factor | low | security |
 | **PS0018** | User profile page: preferences and avatar | low | web |
 
-## Engineering — in progress (1)
-
-| Ticket | Title | Claimed |
-|---|---|---|
-| **PS0008** | Split internal/app_lib into packages named by role (no KV/log interfaces) | 2026-09-21 by TKT-PS0008-api-split-app-lib |
-
-## Engineering — merged, awaiting validation (4)
+## Engineering — merged, awaiting validation (5)
 
 | Ticket | Title | Merged | Deployed |
 |---|---|---|---|
@@ -38,6 +32,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0003** | Sunset the shrmpl kv, log and vault clients and all their local tooling | b514d5c | — |
 | **PS0004** | Document the presales → post-sales deploy migration; fix bin/600 fail-fast | ef91f35 | — |
 | **PS0007** | Single rename point and a "deriving a new app" checklist | 9d74ba9 | — |
+| **PS0008** | Split internal/app_lib into packages named by role (no KV/log interfaces) | 5ce23c6 | — |
 
 ## Engineering — validated, awaiting archive (3)
 
