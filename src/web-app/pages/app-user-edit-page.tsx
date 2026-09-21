@@ -20,12 +20,12 @@ import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { useAuthStore } from "../stores/auth-store";
-import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
-import { ChangePasswordModal } from "../components/ChangePasswordModal";
+import { DeleteConfirmModal } from "../components/delete-confirm-modal";
+import { ChangePasswordModal } from "../components/change-password-modal";
 import { ROUTES } from "../constants/routes";
 import { defaultUserFormData } from "../types/user-type";
 import { grants } from "../constants/grants";
-import { PasswordGenerator } from "../components/PasswordGenerator";
+import { PasswordGenerator } from "../components/password-generator";
 import { reportError } from "../utils/report-error";
 
 

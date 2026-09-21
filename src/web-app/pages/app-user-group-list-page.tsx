@@ -16,7 +16,7 @@ import { notifications } from "@mantine/notifications";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAuthStore } from "../stores/auth-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { DeleteConfirmModal } from "../components/delete-confirm-modal";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { AppUserGroup } from "../types/app-user-group-type";

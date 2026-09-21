@@ -12,7 +12,7 @@ import {
 } from "@mantine/core";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { DeleteConfirmModal } from "../components/delete-confirm-modal";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import { reportError } from "../utils/report-error";

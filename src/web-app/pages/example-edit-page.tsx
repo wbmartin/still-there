@@ -16,7 +16,7 @@ import { notifications } from "@mantine/notifications";
 import { ROUTES } from "../constants/routes";
 import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { DeleteConfirmModal } from "../components/delete-confirm-modal";
 import { grants } from "../constants/grants";
 import { defaultExampleFormData } from "../types/example-type";
 import { reportError } from "../utils/report-error";

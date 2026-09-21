@@ -4,7 +4,7 @@ import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { apiJson, jsonBody } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
-import { PasswordGenerator } from "./PasswordGenerator";
+import { PasswordGenerator } from "./password-generator";
 
 interface UserRegistrationModalProps {
   opened: boolean;

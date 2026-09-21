@@ -7,7 +7,7 @@ import { clearAllCaches } from "../utils/cache-utils";
 import { ROUTES } from "../constants/routes";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { grants } from "../constants/grants";
-import { ChangePasswordModal } from "../components/ChangePasswordModal";
+import { ChangePasswordModal } from "../components/change-password-modal";
 
 function UserPreferencesPage() {
   const authState = useAuthGuard([grants.LOGON]);

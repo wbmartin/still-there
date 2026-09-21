@@ -1,6 +1,6 @@
 import { Modal, PasswordInput, Button, Group, Alert } from "@mantine/core";
 import { useState } from "react";
-import { PasswordGenerator } from "./PasswordGenerator";
+import { PasswordGenerator } from "./password-generator";
 
 interface ChangePasswordModalProps {
   isOpen: boolean;

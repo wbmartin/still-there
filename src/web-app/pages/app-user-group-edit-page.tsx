@@ -21,8 +21,8 @@ import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import { useAppUserStore } from "../stores/app-user-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import type { AppUserGroup } from "../types/app-user-group-type";
-import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
-import AddRemoveUsersFromGroupModal from "../components/AddRemoveUsersFromGroupModal";
+import { DeleteConfirmModal } from "../components/delete-confirm-modal";
+import AddRemoveUsersFromGroupModal from "../components/add-remove-users-from-group-modal";
 import { defaultAppUserGroupFormData } from "../types/app-user-group-type";
 import { reportError } from "../utils/report-error";
 

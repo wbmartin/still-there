@@ -4,7 +4,7 @@ import { Table, Button, Title, Group, Pagination, Container, Loader, Alert } fro
 import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
-import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { DeleteConfirmModal } from "../components/delete-confirm-modal";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { User } from "../types/user-type";
