@@ -1,4 +1,4 @@
-package app_lib
+package security
 
 import (
 	"net/http"
@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// SecurityHeadersMiddleware adds essential security headers to all responses
-func SecurityHeadersMiddleware(next http.Handler) http.Handler {
+// HeadersMiddleware adds essential security headers to all responses
+func HeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Content Security Policy - restrict resource loading
 		w.Header().Set("Content-Security-Policy",

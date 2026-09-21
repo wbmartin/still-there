@@ -8,9 +8,13 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/wbmartin/starter-api/internal/app_lib"
+	"github.com/wbmartin/starter-api/internal/app"
+	"github.com/wbmartin/starter-api/internal/auth"
+	"github.com/wbmartin/starter-api/internal/cache"
+	"github.com/wbmartin/starter-api/internal/config"
 	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/repository"
+	"github.com/wbmartin/starter-api/internal/security"
 )
 
 // maxAuthBodyBytes caps the pre-auth body reads in AuthHandler (a username
@@ -23,7 +27,7 @@ const maxUserNameLen = 50
 
 // isAccountLocked checks if the IP or username is currently locked out
 func isAccountLocked(
-	kv *app_lib.KV,
+	kv *cache.KV,
 	ip, username string,
 ) (bool, error) {
 	ipLocked, err := kv.Get("loginlock-ip-" + ip)
@@ -40,8 +44,8 @@ func isAccountLocked(
 
 // incrementFailedAttempt increments the failed attempt counters and sets lockout if threshold exceeded
 func incrementFailedAttempt(
-	kv *app_lib.KV,
-	config *app_lib.Config,
+	kv *cache.KV,
+	config *config.Config,
 	ip, username string,
 ) error {
 	// Both counters live for the attempt window; INCR only honours the TTL on create
@@ -76,7 +80,7 @@ func incrementFailedAttempt(
 
 // resetFailedAttempts resets the failed attempt counters for user and IP on successful login
 func resetFailedAttempts(
-	kv *app_lib.KV,
+	kv *cache.KV,
 	ip, username string,
 ) error {
 	userCounterKey := "loginfail-user-" + username
@@ -91,7 +95,7 @@ func resetFailedAttempts(
 
 // AuthHandler handles initial authentication (username/password)
 func AuthHandler(
-	appServices *app_lib.AppServices,
+	appServices *app.Services,
 	userRepo *repository.UserRepository,
 	appUserGroupRepo *repository.AppUserGroupRepository,
 ) http.HandlerFunc {
@@ -105,7 +109,7 @@ func AuthHandler(
 		)
 
 		// Create app helper for error handling
-		app := app_lib.NewAppHelper(w, r, appServices, "AuthHandler")
+		app := security.NewAppHelper(w, r, appServices, "AuthHandler")
 
 		// Parse request. Nothing has checked rate limit or lockout yet, so
 		// bound what an anonymous caller can make the decoder allocate.
@@ -137,7 +141,7 @@ func AuthHandler(
 		)
 
 		// Check for account lockout
-		clientIP := app_lib.ClientIP(r)
+		clientIP := security.ClientIP(r)
 		locked, err := isAccountLocked(appServices.KV, clientIP, req.UserName)
 		if err != nil {
 			// The store is in-process, so an error is a bug, not an outage:
@@ -182,7 +186,7 @@ func AuthHandler(
 		}
 
 		// Verify password
-		if !app_lib.CheckPasswordHash(req.Password, user.PwHash) {
+		if !auth.CheckPasswordHash(req.Password, user.PwHash) {
 			appServices.Logger.Warn("PWD_VFY_FAIL",
 				"Password verification failed for user: "+req.UserName)
 			// Increment failed attempt counters
@@ -357,13 +361,13 @@ func AuthHandler(
 
 // RefreshHandler handles session refresh
 func RefreshHandler(
-	appServices *app_lib.AppServices,
+	appServices *app.Services,
 	userRepo *repository.UserRepository,
 	appUserGroupRepo *repository.AppUserGroupRepository,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := app_lib.NewAppHelper(w, r, appServices, "RefreshHandler")
+		app := security.NewAppHelper(w, r, appServices, "RefreshHandler")
 		app.CheckJWT()
 		app.CheckRateLimitAndUserBlock()
 		app.SkipCSRF()          // CSRF not required for read-only refresh
@@ -487,13 +491,13 @@ func RefreshHandler(
 
 // ChangeSecurityContextHandler handles changing the user's security context
 func ChangeSecurityContextHandler(
-	appServices *app_lib.AppServices,
+	appServices *app.Services,
 	userRepo *repository.UserRepository,
 	appUserGroupRepo *repository.AppUserGroupRepository,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create app helper for error handling
-		app := app_lib.NewAppHelper(w, r, appServices, "ChangeSecurityContextHandler")
+		app := security.NewAppHelper(w, r, appServices, "ChangeSecurityContextHandler")
 
 		// Parse request first to get security context. This precedes the JWT
 		// and rate-limit checks, so bound it.
@@ -668,10 +672,10 @@ func ChangeSecurityContextHandler(
 }
 
 // LogoffHandler handles user logoff
-func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
+func LogoffHandler(appServices *app.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Use AppHelper to extract username from JWT (skip other validations)
-		app := app_lib.NewAppHelper(w, r, appServices, "LogoffHandler")
+		app := security.NewAppHelper(w, r, appServices, "LogoffHandler")
 		app.CheckJWT()                   // Extract username from JWT
 		app.CheckRateLimitAndUserBlock() // No rate limiting for logoff
 		app.SkipCSRF()                   // No CSRF needed for logoff
@@ -711,12 +715,12 @@ func LogoffHandler(appServices *app_lib.AppServices) http.HandlerFunc {
 
 // ChangeOwnPasswordHandler handles changing the current user's password
 func ChangeOwnPasswordHandler(
-	appServices *app_lib.AppServices,
+	appServices *app.Services,
 	userRepo *repository.UserRepository,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := app_lib.NewAppHelper(w, r, appServices, "ChangeOwnPasswordHandler")
+		app := security.NewAppHelper(w, r, appServices, "ChangeOwnPasswordHandler")
 		app.CheckJWT()
 		app.CheckRateLimitAndUserBlock()
 		app.CheckCSRF()
@@ -801,7 +805,7 @@ func ChangeOwnPasswordHandler(
 		}
 
 		// Verify old password
-		if !app_lib.CheckPasswordHash(req.OldPassword, user.PwHash) {
+		if !auth.CheckPasswordHash(req.OldPassword, user.PwHash) {
 			appServices.Logger.Warn(
 				"PWD_VFY_FAIL",
 				"Old password verification failed for user: "+jwtClaims.Subject,
@@ -817,7 +821,7 @@ func ChangeOwnPasswordHandler(
 		}
 
 		// Hash new password
-		hashedPassword, err := app_lib.HashPassword(req.NewPassword)
+		hashedPassword, err := auth.HashPassword(req.NewPassword)
 		if err != nil {
 			app.WriteError(
 				w,
@@ -874,7 +878,7 @@ func ChangeOwnPasswordHandler(
 func createJWTForUser(
 	user *model.AppUserModel,
 	grantList []int,
-	appServices *app_lib.AppServices,
+	appServices *app.Services,
 ) (string, string, error) {
 	// Generate session ID
 	sessionIDBytes := make([]byte, 16)
@@ -884,7 +888,7 @@ func createJWTForUser(
 	sessionID := hex.EncodeToString(sessionIDBytes)
 
 	// Create JWT
-	jwt, err := app_lib.GenerateJWT(
+	jwt, err := auth.GenerateJWT(
 		appServices.Config.AppName,
 		user.UserName,
 		user.AppUserID,

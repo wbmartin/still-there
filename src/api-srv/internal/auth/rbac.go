@@ -1,19 +1,20 @@
-package app_lib
+package auth
 
 import (
 	"fmt"
 
+	"github.com/wbmartin/starter-api/internal/logging"
 	"github.com/wbmartin/starter-api/internal/model"
 )
 
 // RBACManager handles role-based access control operations
 type RBACManager struct {
-	logger   *Logger
+	logger   *logging.Logger
 	username string
 }
 
 // NewRBACManager creates a new RBAC manager
-func NewRBACManager(logger *Logger,
+func NewRBACManager(logger *logging.Logger,
 	username string) *RBACManager {
 	return &RBACManager{
 		logger:   logger,

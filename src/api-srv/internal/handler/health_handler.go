@@ -3,14 +3,15 @@ package handler
 import (
 	"net/http"
 
-	"github.com/wbmartin/starter-api/internal/app_lib"
+	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/model"
+	"github.com/wbmartin/starter-api/internal/security"
 )
 
 // HealthHandler handles health check requests
-func HealthHandler(deps *app_lib.AppServices) http.HandlerFunc {
+func HealthHandler(deps *app.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		app := app_lib.NewAppHelper(w, r, deps, "HealthHandler")
+		app := security.NewAppHelper(w, r, deps, "HealthHandler")
 		app.SkipJWT()
 		app.SkipRateLimit()
 		app.SkipUserBlock()

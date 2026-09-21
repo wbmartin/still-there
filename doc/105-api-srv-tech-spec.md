@@ -22,14 +22,12 @@ This document specifies the ProtoStack-ReactGo API server, a production-ready Go
 src/api-srv/
 ├── cmd/server/main.go              # Application entry point
 ├── internal/
-│   ├── app_lib/                    # Shared application libraries
-│   │   ├── app_helper.go           # Error handling and response utilities
-│   │   ├── auth.go                 # JWT handling, password hashing
-│   │   ├── config.go               # Configuration management
-│   │   ├── kv.go                   # In-process key-value store
-│   │   ├── logging.go              # Structured logging
-│   │   ├── rbac.go                 # RBAC logic
-│   │   └── services.go             # Application services
+│   ├── app/services.go             # Services: config, store, logger for every handler
+│   ├── auth/                       # jwt.go, password.go (argon2), totp.go, rbac.go
+│   ├── cache/kv.go                 # In-process key-value store
+│   ├── config/config.go            # Env-file loader, Config
+│   ├── logging/logging.go          # slog wrapper, code= attribute
+│   ├── security/                   # app_helper.go (per-handler checks), security_headers.go
 │   ├── handler/                    # HTTP handlers
 │   │   ├── auth_handler.go         # Authentication endpoints
 │   │   ├── common.go               # Shared handler utilities
@@ -198,7 +196,7 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
 ## Logging
 
 ### Structured Logging
-- **Library**: `Logger` (`internal/app_lib/logging.go`), a thin wrapper over
+- **Library**: `Logger` (`internal/logging/logging.go`), a thin wrapper over
   `log/slog`'s text handler
 - **Format**: logfmt, one line per call, written to stderr; systemd captures
   it into journald. No remote receiver.
@@ -252,7 +250,7 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
 ### Structure
 - **Imports**: Grouped (standard library, third-party, internal)
 - **Error Handling**: Early returns, wrapped errors
-- **DRY Principle**: Shared utilities in `common.go`, `app_lib/`
+- **DRY Principle**: Shared utilities in `common.go` and the `internal/{app,auth,cache,config,logging,security}` packages
 - **Single Responsibility**: Focused functions and files
 
 ### Database Queries

@@ -1,4 +1,4 @@
-package app_lib
+package cache
 
 // In-process key-value store: rate-limit counters, login lockouts, MFA temp
 // tokens and user blocks. PROCESS-LOCAL — restarting the API server clears
@@ -88,7 +88,7 @@ func memParseExpiration(s string) (time.Duration, bool) {
 	}
 }
 
-// KV is the in-process store. One per server, held by AppServices.
+// KV is the in-process store. One per server, held by app.Services.
 type KV struct {
 	mu     sync.RWMutex
 	m      map[string]memStoredValue

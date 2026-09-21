@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/wbmartin/starter-api/internal/app_lib"
+	"github.com/wbmartin/starter-api/internal/app"
+	"github.com/wbmartin/starter-api/internal/auth"
 	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/repository"
+	"github.com/wbmartin/starter-api/internal/security"
 )
 
 // UserRepositoryInterface defines the methods needed by UserHandler
@@ -109,14 +111,14 @@ type AppUserGroupRepositoryInterface interface {
 
 // UserHandler handles user management operations
 type UserHandler struct {
-	appsrv           *app_lib.AppServices
+	appsrv           *app.Services
 	userRepo         UserRepositoryInterface
 	appUserGroupRepo AppUserGroupRepositoryInterface
 }
 
 // NewUserHandler creates a new user handler
 func NewUserHandler(
-	appServices *app_lib.AppServices,
+	appServices *app.Services,
 	userRepo UserRepositoryInterface,
 	appUserGroupRepo AppUserGroupRepositoryInterface,
 ) *UserHandler {
@@ -217,7 +219,7 @@ func (h *UserHandler) validateUsersSecurityContext(
 // RetrieveUserList handles GET /userList
 func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "RetrieveUserList")
+	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveUserList")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -297,7 +299,7 @@ func (h *UserHandler) RetrieveGrantList(
 	r *http.Request,
 ) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "RetrieveGrantList")
+	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveGrantList")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -331,7 +333,7 @@ func (h *UserHandler) RetrieveGrantList(
 // CreateUser handles POST /user
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "CreateUser")
+	app := security.NewAppHelper(w, r, h.appsrv, "CreateUser")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -424,7 +426,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Hash password
-	hashed, err := app_lib.HashPassword(req.PwRaw)
+	hashed, err := auth.HashPassword(req.PwRaw)
 	if err != nil {
 		app.WriteError(
 			w,
@@ -494,7 +496,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 // UpdateUser handles PUT /user
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "UpdateUser")
+	app := security.NewAppHelper(w, r, h.appsrv, "UpdateUser")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -635,7 +637,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 // DeleteUser handles DELETE /user
 func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "DeleteUser")
+	app := security.NewAppHelper(w, r, h.appsrv, "DeleteUser")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -728,7 +730,7 @@ func (h *UserHandler) AddUserListToGroupHandler(
 	r *http.Request,
 ) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "AddUserListToGroupHandler")
+	app := security.NewAppHelper(w, r, h.appsrv, "AddUserListToGroupHandler")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -849,7 +851,7 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 	r *http.Request,
 ) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "RemoveUserListFromGroupHandler")
+	app := security.NewAppHelper(w, r, h.appsrv, "RemoveUserListFromGroupHandler")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -958,7 +960,7 @@ func (h *UserHandler) ChangeOtherUserPassword(
 	r *http.Request,
 ) {
 	// Security checks
-	app := app_lib.NewAppHelper(w, r, h.appsrv, "ChangeOtherUserPassword")
+	app := security.NewAppHelper(w, r, h.appsrv, "ChangeOtherUserPassword")
 	app.CheckJWT()
 	app.CheckRateLimitAndUserBlock()
 	app.CheckCSRF()
@@ -1036,7 +1038,7 @@ func (h *UserHandler) ChangeOtherUserPassword(
 	user := users[0]
 
 	// Hash new password
-	hashedPassword, err := app_lib.HashPassword(req.NewPassword)
+	hashedPassword, err := auth.HashPassword(req.NewPassword)
 	if err != nil {
 		app.WriteError(
 			w,

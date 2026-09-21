@@ -2,26 +2,18 @@ package handler
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"encoding/base32"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"regexp"
 	"strings"
 
-	"github.com/pquerna/otp/totp"
 	"github.com/skip2/go-qrcode"
-	"github.com/wbmartin/starter-api/internal/app_lib"
+	"github.com/wbmartin/starter-api/internal/app"
+	"github.com/wbmartin/starter-api/internal/auth"
 	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/repository"
+	"github.com/wbmartin/starter-api/internal/security"
 )
 
 // maxMFABodyBytes caps the pre-auth body reads in MFASetupHandler and
@@ -29,116 +21,14 @@ import (
 // is orders of magnitude more than either needs.
 const maxMFABodyBytes = 4 << 10 // 4 KiB
 
-// generateTOTPSecret generates a valid Base32 TOTP secret (no padding, uppercase)
-func generateTOTPSecret() (string, error) {
-	secretBytes := make([]byte, 32)
-	if _, err := rand.Read(secretBytes); err != nil {
-		return "", err
-	}
-
-	// Encode to Base32, strip padding, ensure uppercase
-	secret := base32.StdEncoding.EncodeToString(secretBytes)
-	secret = strings.TrimRight(secret, "=")
-	secret = strings.ToUpper(secret)
-
-	return secret, nil
-}
-
-// validateTOTPSecret validates Base32 secret format (no padding allowed)
-func validateTOTPSecret(secret string) bool {
-	if len(secret) == 0 {
-		return false
-	}
-
-	// Check for valid Base32 characters only (A-Z, 2-7, no padding)
-	for _, r := range secret {
-		if !((r >= 'A' && r <= 'Z') || (r >= '2' && r <= '7')) {
-			return false
-		}
-	}
-
-	return true
-}
-
-// formatTOTPLabel creates a properly formatted TOTP label
-func formatTOTPLabel(issuer, account string) string {
-	// Clean issuer for label (allow alphanumeric, underscore, dash)
-	cleanIssuer := regexp.MustCompile(`[^a-zA-Z0-9_-]`).
-		ReplaceAllString(issuer, "")
-	return cleanIssuer + ":" + account
-}
-
-// generateTOTPUri generates a fully compliant otpauth:// URI
-func generateTOTPUri(issuer, account, secret string) (string, error) {
-	label := formatTOTPLabel(issuer, account)
-
-	// Build URI with minimal required parameters (SHA1, 6 digits, 30s period are defaults)
-	uri := fmt.Sprintf("otpauth://totp/%s?secret=%s&issuer=%s",
-		url.PathEscape(label), secret, url.QueryEscape(issuer))
-
-	return uri, nil
-}
-
-// encryptTOTPSeed encrypts a TOTP seed using AES-GCM
-func encryptTOTPSeed(plainSeed, keyHex string) (string, error) {
-	key, err := hex.DecodeString(keyHex)
-	if err != nil {
-		return "", err
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", err
-	}
-	ciphertext := gcm.Seal(nonce, nonce, []byte(plainSeed), nil)
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
-}
-
-// decryptTOTPSeed decrypts a TOTP seed using AES-GCM
-func decryptTOTPSeed(encryptedSeed, keyHex string) (string, error) {
-	key, err := hex.DecodeString(keyHex)
-	if err != nil {
-		return "", err
-	}
-	ciphertext, err := base64.StdEncoding.DecodeString(encryptedSeed)
-	if err != nil {
-		return "", err
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-	nonceSize := gcm.NonceSize()
-	if len(ciphertext) < nonceSize {
-		return "", errors.New("ciphertext too short")
-	}
-	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return "", err
-	}
-	return string(plaintext), nil
-}
-
 // UserSelfCreateHandler handles user self-registration (public endpoint)
 func UserSelfCreateHandler(
-	appServices *app_lib.AppServices,
+	appServices *app.Services,
 	userRepo *repository.UserRepository,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create app helper
-		app := app_lib.NewAppHelper(w, r, appServices, "UserSelfCreateHandler")
+		app := security.NewAppHelper(w, r, appServices, "UserSelfCreateHandler")
 
 		// No auth required for self-create
 		app.Logger().Info(
@@ -221,7 +111,7 @@ func UserSelfCreateHandler(
 		}
 
 		// Hash password
-		hashedPassword, err := app_lib.HashPassword(req.Password)
+		hashedPassword, err := auth.HashPassword(req.Password)
 		if err != nil {
 			app.WriteError(
 				w,
@@ -289,12 +179,12 @@ func UserSelfCreateHandler(
 
 // MFASetupHandler handles MFA setup for authenticated users
 func MFASetupHandler(
-	appServices *app_lib.AppServices,
+	appServices *app.Services,
 	userRepo *repository.UserRepository,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := app_lib.NewAppHelper(w, r, appServices, "MFASetupHandler")
+		app := security.NewAppHelper(w, r, appServices, "MFASetupHandler")
 		app.CheckRateLimitAndUserBlock()
 		app.SkipCSRF()
 		app.SkipAuthorization() // MFA setup is user-specific
@@ -387,7 +277,7 @@ func MFASetupHandler(
 		var secret string
 		if user.TOTPSeed != nil && *user.TOTPSeed != "" {
 			// Decrypt existing seed
-			decrypted, err := decryptTOTPSeed(
+			decrypted, err := auth.DecryptTOTPSeed(
 				*user.TOTPSeed,
 				appServices.Config.TOTPEncryptionKey,
 			)
@@ -407,20 +297,20 @@ func MFASetupHandler(
 		} else {
 			// Generate new TOTP secret
 			var err error
-			secret, err = generateTOTPSecret()
+			secret, err = auth.GenerateTOTPSecret()
 			if err != nil {
 				app.WriteError(w, http.StatusInternalServerError, "Failed to generate secret", "SGF0", err)
 				return
 			}
 
 			// Validate generated secret
-			if !validateTOTPSecret(secret) {
+			if !auth.ValidateTOTPSecret(secret) {
 				app.WriteError(w, http.StatusInternalServerError, "Generated invalid TOTP secret", "TOTP_INVALID_SECRET", nil)
 				return
 			}
 
 			// Encrypt and save
-			encrypted, err := encryptTOTPSeed(secret, appServices.Config.TOTPEncryptionKey)
+			encrypted, err := auth.EncryptTOTPSeed(secret, appServices.Config.TOTPEncryptionKey)
 			if err != nil {
 				app.WriteError(w, http.StatusInternalServerError, "Failed to encrypt TOTP secret", "TSE0", err)
 				return
@@ -433,7 +323,7 @@ func MFASetupHandler(
 		}
 
 		// Generate QR code URL
-		qrCodeUrl, err := generateTOTPUri(
+		qrCodeUrl, err := auth.GenerateTOTPURI(
 			appServices.Config.AppName,
 			userName,
 			secret,
@@ -481,12 +371,12 @@ func MFASetupHandler(
 
 // MFAVerifyHandler handles MFA verification
 func MFAVerifyHandler(
-	appServices *app_lib.AppServices,
+	appServices *app.Services,
 	userRepo *repository.UserRepository,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := app_lib.NewAppHelper(w, r, appServices, "MFAVerifyHandler")
+		app := security.NewAppHelper(w, r, appServices, "MFAVerifyHandler")
 		app.CheckRateLimitAndUserBlock()
 		app.SkipCSRF()
 		app.SkipAuthorization()
@@ -591,7 +481,7 @@ func MFAVerifyHandler(
 			)
 			return
 		}
-		decryptedSecret, err := decryptTOTPSeed(
+		decryptedSecret, err := auth.DecryptTOTPSeed(
 			*user.TOTPSeed,
 			appServices.Config.TOTPEncryptionKey,
 		)
@@ -607,7 +497,7 @@ func MFAVerifyHandler(
 		}
 
 		// Check for account lockout
-		clientIP := app_lib.ClientIP(r)
+		clientIP := security.ClientIP(r)
 		locked, err := isAccountLocked(appServices.KV, clientIP, userName)
 		if err != nil {
 			app.WriteError(
@@ -631,7 +521,7 @@ func MFAVerifyHandler(
 		}
 
 		// Validate TOTP code
-		valid := totp.Validate(req.TOTPCode, decryptedSecret)
+		valid := auth.ValidateTOTPCode(req.TOTPCode, decryptedSecret)
 		if !valid {
 			// Increment failed attempt counters
 			err := incrementFailedAttempt(
@@ -778,12 +668,12 @@ func MFAVerifyHandler(
 
 // AdminResetUserMFAHandler handles admin reset of user MFA
 func AdminResetUserMFAHandler(
-	appServices *app_lib.AppServices,
+	appServices *app.Services,
 	userRepo *repository.UserRepository,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := app_lib.NewAppHelper(w, r, appServices, "AdminResetUserMFAHandler")
+		app := security.NewAppHelper(w, r, appServices, "AdminResetUserMFAHandler")
 		app.CheckJWT()
 		app.CheckRateLimitAndUserBlock()
 		app.CheckCSRF()

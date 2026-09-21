@@ -4,7 +4,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/wbmartin/starter-api/internal/app_lib"
+	"github.com/wbmartin/starter-api/internal/app"
+	"github.com/wbmartin/starter-api/internal/security"
 )
 
 // maxErrorReportBodyBytes caps what an unauthenticated caller can make the
@@ -14,12 +15,12 @@ const maxErrorReportBodyBytes = 8 << 10 // 8 KiB
 
 // ErrorReportHandler handles client-side error reporting
 type ErrorReportHandler struct {
-	appServices *app_lib.AppServices
+	appServices *app.Services
 }
 
 // NewErrorReportHandler creates a new error report handler
 func NewErrorReportHandler(
-	appServices *app_lib.AppServices,
+	appServices *app.Services,
 ) *ErrorReportHandler {
 	return &ErrorReportHandler{
 		appServices: appServices,
@@ -32,7 +33,7 @@ func (h *ErrorReportHandler) HandleErrorReport(
 	r *http.Request,
 ) {
 	// Security checks - rate limiting only, skip others for error reports
-	app := app_lib.NewAppHelper(w, r, h.appServices, "HandleErrorReport")
+	app := security.NewAppHelper(w, r, h.appServices, "HandleErrorReport")
 	app.SkipJWT()           // No auth required for error reports
 	app.SkipCSRF()          // Error reports aren't form submissions
 	app.SkipAuthorization() // No grants needed

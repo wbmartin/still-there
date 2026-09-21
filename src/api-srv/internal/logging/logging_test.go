@@ -1,4 +1,4 @@
-package app_lib
+package logging
 
 import (
 	"bytes"
