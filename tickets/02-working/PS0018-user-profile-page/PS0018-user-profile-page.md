@@ -10,7 +10,7 @@ raised: 2026-09-21
 raised_by: PS0006 triage of doc/000-TODO.md
 asked:
 claimed: 2026-09-21 by TKT-PS0018-user-profile-page
-merged:
+merged: 8cb03c7
 deployed:
 validated:
 ---

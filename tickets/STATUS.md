@@ -6,7 +6,7 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 18:27 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 19:01 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
@@ -15,13 +15,7 @@ picks up the next piece of work. Do not edit below the marker.
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
 
-## Engineering — in progress (1)
-
-| Ticket | Title | Claimed |
-|---|---|---|
-| **PS0018** | User profile page: preferences and avatar | 2026-09-21 by TKT-PS0018-user-profile-page |
-
-## Engineering — merged, awaiting validation (11)
+## Engineering — merged, awaiting validation (12)
 
 | Ticket | Title | Merged | Deployed |
 |---|---|---|---|
@@ -36,6 +30,7 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | 1fa0001 | — |
 | **PS0019** | ReadEnvFile keeps surrounding quotes; APP_NAME reaches the TOTP issuer with quotes | 67bb62c | — |
 | **PS0016** | Add JSONB and UUID columns to the example entity | bdb4c16 | — |
+| **PS0018** | User profile page: preferences and avatar | 8cb03c7 | — |
 
 ## Engineering — validated, awaiting archive (4)
 
