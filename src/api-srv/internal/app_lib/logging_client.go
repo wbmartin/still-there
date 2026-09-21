@@ -34,6 +34,16 @@ type Logger struct {
 
 // NewLogger creates a logger that uses shrmpl-log
 func NewLogger(serverName, logReceiverHostPort string) *Logger {
+	// No receiver configured: log to stdout only. Returning early keeps an
+	// intentionally-unset value from dialing "" and printing a connection
+	// failure on every start, which reads like a fault rather than a choice.
+	if logReceiverHostPort == "" {
+		return &Logger{
+			shrmplLogClient: nil,
+			service:         serverName,
+		}
+	}
+
 	fmt.Fprintf(os.Stderr, "DEBUG: Creating shrmpl-log client for %s\n",
 		logReceiverHostPort)
 	// Create shrmpl-log client internally

@@ -7,6 +7,11 @@ import (
 	"github.com/wbmartin/starter-api/internal/app_lib"
 )
 
+// maxErrorReportBodyBytes caps what an unauthenticated caller can make the
+// server allocate. Generous against the 2000 characters actually kept, so a
+// real stack trace still arrives intact, but bounded.
+const maxErrorReportBodyBytes = 8 << 10 // 8 KiB
+
 // ErrorReportHandler handles client-side error reporting
 type ErrorReportHandler struct {
 	appServices *app_lib.AppServices
@@ -37,6 +42,13 @@ func (h *ErrorReportHandler) HandleErrorReport(
 	if !app.CheckAllChecksComplete() {
 		return
 	}
+
+	// Bounded before it is read, not after. The truncation below runs on a
+	// string that is already in memory, so without this an unauthenticated
+	// caller allocates the whole body first and the 2000-char cap protects
+	// only the log line. MaxBytesReader makes ReadAll fail instead, which the
+	// existing error path already turns into a 400.
+	r.Body = http.MaxBytesReader(w, r.Body, maxErrorReportBodyBytes)
 
 	// Read the request body
 	body, err := io.ReadAll(r.Body)

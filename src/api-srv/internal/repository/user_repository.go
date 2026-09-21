@@ -169,6 +169,10 @@ func (r *UserRepository) CreateUser(
 	})
 
 	if err != nil {
+		if isUniqueViolation(err) {
+			// app_user.user_name is UNIQUE.
+			return nil, ErrDuplicate
+		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -387,6 +391,10 @@ func (r *UserRepository) UpdateUser(
 		return execErr
 	})
 	if err != nil {
+		if isUniqueViolation(err) {
+			// app_user.user_name is UNIQUE.
+			return ErrDuplicate
+		}
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 

@@ -160,3 +160,18 @@ func GetOptionalFloatFromQuery(r *http.Request, key string) (float64, error) {
 func CurrentTimestamp() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
+
+// GetOptionalIntFromQuery reads an integer query parameter, returning 0 when it
+// is absent. Used for optional narrowing filters where 0 means "no filter"
+// rather than "invalid".
+func GetOptionalIntFromQuery(r *http.Request, key string) (int, error) {
+	value := r.URL.Query().Get(key)
+	if value == "" {
+		return 0, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	return parsed, nil
+}

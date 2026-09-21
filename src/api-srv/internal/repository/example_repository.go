@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -245,33 +244,11 @@ func (r *ExampleRepository) RetrieveExampleList(
 		FROM example`
 	orderBy := ` ORDER BY example_id`
 
-	var whereClause string
-	var argList []interface{}
+	// Scoping and the incremental-fetch rule come from buildScopedWhere.
+	whereClause, argList := buildScopedWhere(
+		securityContext, afterUpdateTs, "example_id", idList)
 
-	if len(idList) == 0 {
-		// Get all or after update_ts
-		whereClause = `WHERE security_context_id = $1 AND delete_user_id IS NULL`
-		argList = []interface{}{securityContext}
-		if afterUpdateTs > 0 {
-			whereClause += ` AND update_ts > $2`
-			argList = append(argList, afterUpdateTs)
-		}
-	} else {
-		// Build IN clause
-		placeholderList := make([]string, len(idList))
-		argList = make([]interface{}, len(idList)+1)
-		argList[0] = securityContext
-		for i, id := range idList {
-			placeholderList[i] = fmt.Sprintf("$%d", i+2) // $1 is securityContext
-			argList[i+1] = id
-		}
-
-		whereClause = fmt.Sprintf(
-			` WHERE example_id IN (%s) AND security_context_id = $1 AND delete_user_id IS NULL`,
-			strings.Join(placeholderList, ","))
-	}
-
-	query := selectClause + " " + whereClause + orderBy //+ " Limit 1000"
+	query := selectClause + whereClause + orderBy //+ " Limit 1000"
 
 	var rowList pgx.Rows
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {

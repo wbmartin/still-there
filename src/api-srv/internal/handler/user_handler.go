@@ -458,6 +458,16 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
+		if errors.Is(err, repository.ErrDuplicate) {
+			app.WriteError(
+				w,
+				http.StatusConflict,
+				fmt.Sprintf("Username already exists: username=%s", req.UserName),
+				"DUPLICATE_ERROR",
+				err,
+			)
+			return
+		}
 		app.WriteError(
 			w,
 			http.StatusInternalServerError,
@@ -584,6 +594,14 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 				http.StatusNotFound,
 				fmt.Sprintf("User not found: app_user_id=%d", user.AppUserID),
 				"NOT_FOUND_ERROR",
+				err,
+			)
+		case errors.Is(err, repository.ErrDuplicate):
+			app.WriteError(
+				w,
+				http.StatusConflict,
+				fmt.Sprintf("Username already exists: username=%s", user.UserName),
+				"DUPLICATE_ERROR",
 				err,
 			)
 		default:

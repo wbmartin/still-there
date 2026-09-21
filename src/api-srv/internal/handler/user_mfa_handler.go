@@ -24,6 +24,11 @@ import (
 	"github.com/wbmartin/starter-api/internal/repository"
 )
 
+// maxMFABodyBytes caps the pre-auth body reads in MFASetupHandler and
+// MFAVerifyHandler. Both bodies are a temp token and a six-digit code, so this
+// is orders of magnitude more than either needs.
+const maxMFABodyBytes = 4 << 10 // 4 KiB
+
 // generateTOTPSecret generates a valid Base32 TOTP secret (no padding, uppercase)
 func generateTOTPSecret() (string, error) {
 	secretBytes := make([]byte, 32)
@@ -299,6 +304,12 @@ func MFASetupHandler(
 		var tempReq struct {
 			TempToken string `json:"tempToken"`
 		}
+		// The body has to be read here because it decides which auth path runs
+		// below -- temp token or JWT -- so the read necessarily precedes
+		// CheckAllChecksComplete(). That makes bounding it the only protection
+		// available: an unauthenticated caller reaches this line, and a
+		// rate-limited one does too, because nothing checks blocked first.
+		r.Body = http.MaxBytesReader(w, r.Body, maxMFABodyBytes)
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
 			app.WriteError(
@@ -485,6 +496,9 @@ func MFAVerifyHandler(
 			TempToken string `json:"tempToken"`
 			TOTPCode  string `json:"totpCode"`
 		}
+		// Same reasoning as MFASetupHandler: read before the auth gate, so
+		// bound it.
+		r.Body = http.MaxBytesReader(w, r.Body, maxMFABodyBytes)
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
 			app.WriteError(

@@ -507,9 +507,13 @@ func (sh *AppHelper) CheckCSRF() *AppHelper {
 
 	expectedToken := sh.claims.SessionID[len(sh.claims.SessionID)-3:]
 	if csrfToken != expectedToken {
+		// The expected value is deliberately NOT logged. It is a slice of the
+		// session ID, so logging it hands anyone with read access to the logs
+		// both the answer to this check and a piece of the session itself.
+		// The received value is enough to tell a stale tab from an attack.
 		sh.appServices.Logger.Warn(
 			"CSM0",
-			"CSRF token mismatch - received: "+csrfToken+", expected: "+expectedToken,
+			"CSRF token mismatch - received: "+csrfToken,
 		)
 		sh.failAndRespond(http.StatusForbidden, "CSRF validation failed")
 		return sh

@@ -15,6 +15,11 @@ import (
 	"github.com/wbmartin/starter-api/internal/repository"
 )
 
+// maxAuthBodyBytes caps the pre-auth body reads in AuthHandler (a username
+// and password) and ChangeSecurityContextHandler (one integer), both of which
+// decode the body before any rate-limit or JWT check runs.
+const maxAuthBodyBytes = 4 << 10 // 4 KiB
+
 // getClientIP extracts the client IP address from the request, checking X-Forwarded-For header first
 func getClientIP(r *http.Request) string {
 	// Check X-Forwarded-For header (for proxies)
@@ -154,7 +159,9 @@ func AuthHandler(
 		// Create app helper for error handling
 		app := app_lib.NewAppHelper(w, r, appServices, "AuthHandler")
 
-		// Parse request
+		// Parse request. Nothing has checked rate limit or lockout yet, so
+		// bound what an anonymous caller can make the decoder allocate.
+		r.Body = http.MaxBytesReader(w, r.Body, maxAuthBodyBytes)
 		var req model.AuthRequestModel
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			app.WriteError(
@@ -535,7 +542,9 @@ func ChangeSecurityContextHandler(
 		// Create app helper for error handling
 		app := app_lib.NewAppHelper(w, r, appServices, "ChangeSecurityContextHandler")
 
-		// Parse request first to get security context
+		// Parse request first to get security context. This precedes the JWT
+		// and rate-limit checks, so bound it.
+		r.Body = http.MaxBytesReader(w, r.Body, maxAuthBodyBytes)
 		var req model.ChangeSecurityContextRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			app.WriteError(

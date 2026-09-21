@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	memKVMaxKeyLen   = 100
-	memKVMaxValueLen = 100
-	memKVMaxBatchOps = 3
+	memKVMaxKeyLen    = 100
+	memKVMaxValueLen  = 100
+	memKVMaxBatchOps  = 3
 	memKVCleanupEvery = 60 * time.Second
 )
 
