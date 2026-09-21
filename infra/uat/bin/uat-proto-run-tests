@@ -10,5 +10,5 @@ for var in BUILD_STG; do
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $DEPLOY_ENV"; exit 1; }
 done
 
-export PROTO_TEST_ENV="$SRV_ROOT/etc/uat-proto-test.env"
+export TEST_ENV="$SRV_ROOT/etc/uat-proto-test.env"
 exec "$BUILD_STG/bin/200-run-tests" "$@"

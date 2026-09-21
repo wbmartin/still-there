@@ -885,6 +885,7 @@ func createJWTForUser(
 
 	// Create JWT
 	jwt, err := app_lib.GenerateJWT(
+		appServices.Config.AppName,
 		user.UserName,
 		user.AppUserID,
 		sessionID,

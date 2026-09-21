@@ -24,7 +24,7 @@ tail -f tmp/server.log
 
 To stop the api server:
 ```
-pkill -f "proto-go-app" || kill $(cat tmp/server.pid 2>/dev/null) 2>/dev/null || true
+pkill -f "dist/proto-api" || kill $(cat tmp/server.pid 2>/dev/null) 2>/dev/null || true
 ```
 
 ## Local Stack
@@ -57,18 +57,18 @@ The one command, on a laptop or a build host:
 ./bin/200-run-tests e2e      # Playwright only
 ./bin/200-run-tests py       # pytest HTTP suite against a private API instance
 ```
-- Sources `etc/loc-test.env` (override the file with `PROTO_TEST_ENV=...`):
-  scratch database names, `PROTO_PG_URL_BASE` for the migrator,
-  `PROTO_TEST_DATABASE_URL` for the Go repository suite, `PROTO_E2E_API_ENV`
-  for the API instance the e2e/py suites start, `PROTO_TEST_LOG_DIR`.
-- `go`: rebuilds `loc_starter_test_db` via `bin/510`, runs `go vet ./...` and
-  `go test -v ./...` with `PROTO_TEST_DATABASE_URL` exported. A repository
+- Sources `etc/loc-test.env` (override the file with `TEST_ENV=...`):
+  scratch database names, `TEST_PG_URL_BASE` for the migrator,
+  `TEST_DATABASE_URL` for the Go repository suite, `E2E_API_ENV`
+  for the API instance the e2e/py suites start, `TEST_LOG_DIR`.
+- `go`: rebuilds `loc_proto_test_db` via `bin/510`, runs `go vet ./...` and
+  `go test -v ./...` with `TEST_DATABASE_URL` exported. A repository
   suite that cannot reach the database SKIPS (see
   `internal/repository/testdb_test.go`); the runner greps for that skip and
   fails the run, so a green run always includes the integration suites.
-- `e2e`: rebuilds `loc_starter_e2e_db` via `bin/513`, installs Chromium if
+- `e2e`: rebuilds `loc_proto_e2e_db` via `bin/513`, installs Chromium if
   needed, runs `bin/230-run-web-app-e2e`.
-- `py`: rebuilds `loc_starter_e2e_db`, builds the API and starts it on
+- `py`: rebuilds `loc_proto_e2e_db`, builds the API and starts it on
   `127.0.0.1:8082` from a copy of `etc/e2e-api-srv.env` with the developer
   rate limits (the pytest suite asserts a 429), runs
   `bin/320-test-web-service --skip-lint`, stops the API.
@@ -94,13 +94,13 @@ To test the api server (repository + model unit tests, with coverage):
 ```
 ./bin/310-test-repo-model
 ```
-- Connects via `PROTO_TEST_DATABASE_URL` when set, otherwise through
+- Connects via `TEST_DATABASE_URL` when set, otherwise through
   `etc/loc-api-srv.env`. Prefer `./bin/200-run-tests go`.
 
 To test the api server (pytest HTTP suite against a server you started):
 ```
 ./bin/320-test-web-service                                   # server from etc/loc-api-srv.env
-PROTO_API_ENV=etc/e2e-api-srv.env ./bin/320-test-web-service # another server's config
+TEST_API_ENV=etc/e2e-api-srv.env ./bin/320-test-web-service # another server's config
 ```
 
 To load test the api server:
@@ -111,16 +111,16 @@ To load test the api server:
 ## Scratch Databases
 
 ```
-./bin/510-reset-test-db [dbname]   # default loc_starter_test_db
-./bin/513-reset-e2e-db             # loc_starter_e2e_db (thin wrapper on 510)
+./bin/510-reset-test-db [dbname]   # default loc_proto_test_db
+./bin/513-reset-e2e-db             # loc_proto_e2e_db (thin wrapper on 510)
 ./bin/514-reset-e2e-fixtures       # TRUNCATE + re-seed e2e db without dropping it
 ```
 - `510`: DROP + CREATE, `sql/roles.sql`, schema through `cmd/migrate up`,
   then `sql/fixtures/015-initialdata.sql`. Refuses any name not ending in
   `_test_db` or `_e2e_db`. Uses psql inside the `loc-postgres` container
   when it is running (`PG_CONTAINER`), a native `psql` otherwise (`PSQL`
-  overrides); the migrator connects with `PROTO_PG_URL_BASE`.
-- `513`/`514` source `etc/loc-test.env` when `PROTO_PG_URL_BASE` is unset.
+  overrides); the migrator connects with `TEST_PG_URL_BASE`.
+- `513`/`514` source `etc/loc-test.env` when `TEST_PG_URL_BASE` is unset.
 - `514` is what Playwright's global setup calls: dropping the database under
   a running API leaves its pool pointing at nothing.
 - Users after a reset: `admin` / `admin123!` and `basic` / `basic123!`.

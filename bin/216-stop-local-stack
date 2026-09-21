@@ -1,9 +1,13 @@
 #!/bin/bash
 # Stop the local stack: the API server (bin/215) and the vite dev server (bin/220).
 set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
 
 KILLED=false
-if pkill -f "proto-go-app" 2>/dev/null; then echo "Killed proto-go-app"; KILLED=true; else echo "No proto-go-app running"; fi
+if pkill -f "dist/$APP_SLUG-api" 2>/dev/null; then echo "Killed $APP_SLUG-api"; KILLED=true; else echo "No $APP_SLUG-api running"; fi
 if pkill -f "vite" 2>/dev/null;         then echo "Killed vite";         KILLED=true; else echo "No vite running"; fi
 
 if [ "$KILLED" = true ]; then sleep 2; fi

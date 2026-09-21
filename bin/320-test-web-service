@@ -5,7 +5,7 @@
 # Reads the actual port from the config file
 #
 # Usage: ./bin/320-test-web-service [--skip-lint]
-#   PROTO_API_ENV=etc/e2e-api-srv.env ./bin/320-test-web-service   # other server
+#   TEST_API_ENV=etc/e2e-api-srv.env ./bin/320-test-web-service   # other server
 
 set -e
 
@@ -29,10 +29,10 @@ if [ "$SKIP_LINT" = false ]; then
     cd "$PROJECT_ROOT"  # Ensure we're back in project root
 fi
 
-# Read the server port from config file. PROTO_API_ENV overrides the file so
+# Read the server port from config file. TEST_API_ENV overrides the file so
 # bin/200-run-tests can point this suite at the e2e instance it starts on
 # :8082 from etc/e2e-api-srv.env instead of a developer's 8080 server.
-CONFIG_FILE="${PROTO_API_ENV:-$PROJECT_ROOT/etc/loc-api-srv.env}"
+CONFIG_FILE="${TEST_API_ENV:-$PROJECT_ROOT/etc/loc-api-srv.env}"
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "❌ ERROR: Config file not found: $CONFIG_FILE"
     exit 1

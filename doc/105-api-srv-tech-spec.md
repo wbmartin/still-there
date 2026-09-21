@@ -135,7 +135,7 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
 3. **JWT Structure**:
    ```json
    {
-     "iss": "proto-go-app",
+     "iss": "Proto App",
      "sub": "username",
      "exp": 1678886400,
      "nbf": 1678882800,
@@ -206,7 +206,7 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
   message, kv...)`
 - **Context**: Username, user ID, request details passed as key/value pairs
 - **Code**: the `code` argument is emitted as a `code=` attribute on every
-  line, e.g. `level=INFO source=example_handler.go:88 msg="..." code=EX_CR_START service=proto-go-app username=alice`
+  line, e.g. `level=INFO source=example_handler.go:88 msg="..." code=EX_CR_START service=proto-api username=alice`
 
 ### Log Codes
 - 12-character codes for consistent categorization, uniqueness

@@ -53,10 +53,10 @@ export default defineConfig({
   webServer: [
     {
       // The API's config file. A developer's copy points at the Docker
-      // database; a build host supplies its own via PROTO_E2E_API_ENV
+      // database; a build host supplies its own via E2E_API_ENV
       // (bin/211 makes a project-relative value absolute first).
       command: `go run ./cmd/server ${
-        process.env.PROTO_E2E_API_ENV ?? "../../etc/e2e-api-srv.env"
+        process.env.E2E_API_ENV ?? "../../etc/e2e-api-srv.env"
       }`,
       cwd: "../api-srv",
       url: `${E2E_API_ROOT}/health`,

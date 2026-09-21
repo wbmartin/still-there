@@ -1,8 +1,8 @@
 ---
 id: PS0007
 title: Single rename point and a "deriving a new app" checklist
-status: blocked
-blocked_by: [PS0003, PS0004]
+status: in-review
+blocked_by:
 waiting_on:
 priority: high
 domain: docs
@@ -80,16 +80,64 @@ Plus, in code and config that a sed will not reach cleanly:
 4. `web-app/constants/app.ts` with `APP_NAME`, `APP_TITLE`; delete
    `App.css`, `public/vite.svg`.
 
-## Acceptance
+## What changed and why
 
-- Following the doc on a fresh clone yields an app with no `proto`,
-  `starter`, `wbmartin`, `Proto App` string outside `doc/history/`.
-- `grep -rn 'proto' bin etc src --include=* -il | wc -l` after the
-  rebrand is 0 (or only the migrate lock key, if kept on purpose).
+Branch `TKT-PS0007-derive-new-app-checklist`, 5 commits. All four items
+in "What to do", with one practical reading (below).
+
+| Item | Done |
+|---|---|
+| 1. Single rename point | **`etc/app.env`** (`APP_SLUG`, `APP_DISPLAY_NAME`). Sourced by `bin/100`, `215`, `216`, `200`, `510`, `513`, `514`, `600`; `etc/loc-test.env` and `etc/uat-deploy.env` are written in terms of `$APP_SLUG`. Derived names: `dist/<slug>-api`, `<slug>-migrate` (local *and* the presales bundle — `610` installs `$APP_NAME-migrate`), `loc_<slug>_{test,e2e}_db`, `uat-<slug>-api`, `/srv/uat-<slug>`, `<slug>_app_svc_account`. JWT issuer is now `Config.AppName` (`GenerateJWT` takes it). `scripts/lint-tickets.py` has one `ID_PREFIX`. |
+| — `PROTO_*` env prefix | The ticket asked for `${APP_SLUG^^}_*`; Go tests read these names literally, so a slug-derived prefix is not practical. Renamed once to neutral harness names instead — `TEST_ENV`, `TEST_DB`, `E2E_DB`, `TEST_PG_URL_BASE`, `TEST_DATABASE_URL`, `E2E_API_ENV`, `TEST_LOG_DIR`, `TEST_API_ENV` — across bin, etc, Go tests, playwright config, infra, docs. A derived app never touches them. |
+| 2. Checklist | **`DERIVING.md`** at the root: clone + rebrand, secrets/passwords table (every file each one lives in), hosts (both deploy paths), the example entity, tickets/CLAUDE.md/README reset, local DB + first run, the final grep. |
+| 3. `bin/000-rebrand` | Built — there were ~20 sed-able tokens, well over the "~5" threshold. `bin/000-rebrand <slug> "<Name>" [--module] [--ticket-prefix]`: refuses on a dirty tree, reads the current identity from `app.env`, ordered perl substitutions over every tracked text file (specific tokens first, bare `\bproto\b` last; `ProtoStack`, `protocol`, `X-Forwarded-Proto` untouched), `go mod edit` + import rewrite, `git mv` of every `infra/` file carrying the slug (incl. nginx sites), rewrites `app.env`, then `go build` + `tsc` + lint, and prints the human steps. Idempotent. |
+| 4. Web | `constants/app.ts` (`APP_NAME`, `APP_TITLE`); `login.tsx` uses it; `index.html` title; `package.json` name `proto-web-app`; `App.css` and `public/vite.svg` deleted. |
+| Kept on purpose | Migrator advisory-lock key `"PROTO"` — one migrator per cluster is the safe default; documented in `migrate.go` and `DERIVING.md`. |
+
+**Proven** in a throwaway worktree: `bin/000-rebrand acme "Acme Portal"
+--ticket-prefix AC` → 85 files changed, 30 renamed, `go build` + `tsc`
+clean, module `acme-api`, prefix `AC` in skills/CLAUDE.md/linter, and the
+acceptance grep over `bin etc src infra scripts .claude doc README
+CLAUDE.md` finds only the lock key. Second run: "nothing to do".
+
+**Side effects on this laptop:** local databases renamed to the slug
+(`loc_starter_db` → `loc_proto_db` via `ALTER DATABASE`; the old scratch
+`_test_db`/`_e2e_db` dropped, `bin/200` rebuilds them). `SERVER_NAME` in
+the local/e2e env files is `proto-api`/`proto-api-e2e`.
+
+## Files modified
+
+- new: `etc/app.env`, `bin/000-rebrand`, `DERIVING.md`, `src/web-app/constants/app.ts`
+- `bin/100`, `200`, `215`, `216`, `230`, `310`, `320`, `510`, `513`, `514`, `600`, `610`
+- `etc/loc-test.env`, `loc-api-srv.env`, `e2e-api-srv.env`, `uat-api-srv.env.example`, `uat-deploy.env`
+- `src/api-srv/internal/app_lib/auth.go`, `internal/handler/auth_handler.go`, `internal/migrate/migrate.go`, `migrate_test.go`, `internal/repository/testdb_test.go`
+- `src/web-app/index.html`, `package.json`, `package-lock.json`, `pages/login.tsx`, `playwright.config.ts`; deleted `App.css`, `public/vite.svg`
+- `infra/README.md`, `infra/uat/etc/uat-proto-test.env`, `infra/uat/bin/uat-proto-run-tests`
+- `scripts/lint-tickets.py`, `CLAUDE.md`, `README.md`, `.claude/skills/presales-deploy/SKILL.md`, `doc/050`, `060`, `105`, `320`, `330`, `902`, `tests/README.md`
+
+## Endpoints introduced or modified
+
+None. JWT `iss` claim is now `APP_NAME` (`"Proto App"`) instead of the
+literal `proto-go-app`; nothing validates the issuer, so existing sessions
+keep working.
+
+## Acceptance (met 2026-09-21)
+
+- [x] Following `DERIVING.md` on a fresh clone yields no `proto`, `starter`,
+  `wbmartin`, `Proto App` outside `tickets/` — proven with `acme` in a
+  worktree; only the deliberate lock key remains.
+- [x] `bin/200-run-tests all` on the template after the renames: go=105
+  e2e=3 py=63. `bin/215` builds and runs `dist/proto-api`; `bin/216` stops it.
 
 ## Deploy needs
 
-None for the doc. Renames touch UAT if the binary/env names change (PS0004).
+Go binary (JWT issuer). The presales bundle now ships the migrator as
+`proto-migrate` still (slug is `proto`), so UAT is unchanged; `deploy.env`
+carries the same keys. Next UAT deploy with PS0002/03/04.
+
+## Waiting for
+
+The next UAT deploy.
 
 ## Direction (Brandon, 2026-09-21)
 

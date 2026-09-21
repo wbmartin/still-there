@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { APP_NAME } from "../constants/app";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "@mantine/form";
 import { zodResolver } from "mantine-form-zod-resolver";
@@ -67,7 +68,7 @@ function Login() {
       <Container size="sm">
         <Paper shadow="md" p="xl">
           <Title order={2} mb="md" ta="center">
-            Login to Proto
+            Login to {APP_NAME}
           </Title>
           <form onSubmit={handleSubmit}>
             <TextInput

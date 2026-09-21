@@ -11,7 +11,7 @@ su - postgres
 # inside postgres shell
 psql
 # inside postgres
-\c loc_starter_db
+\c loc_proto_db
 ```
 
 First time, or to rebuild the schema:

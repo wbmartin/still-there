@@ -61,7 +61,7 @@ only on the host.**
 | Script | Sources | Required keys |
 |---|---|---|
 | `uat-proto-build`, `-install-api`, `-publish-web-client` | `etc/uat-proto-deploy.env` | registry server + credentials, `SERVICE`, `HEALTH_URL`, `DEPLOY_TAG`, `BRANCH_TO_CHECKOUT`, `REPO_URL`, `BUILD_STG`, `SLACK_WEBHOOK` |
-| `uat-proto-run-tests` → `bin/200-run-tests` | `etc/uat-proto-deploy.env` (`BUILD_STG`), then `etc/uat-proto-test.env` via `PROTO_TEST_ENV` | CI role, scratch DB names, harness paths (same keys as `etc/loc-test.env`) |
+| `uat-proto-run-tests` → `bin/200-run-tests` | `etc/uat-proto-deploy.env` (`BUILD_STG`), then `etc/uat-proto-test.env` via `TEST_ENV` | CI role, scratch DB names, harness paths (same keys as `etc/loc-test.env`) |
 | `*-install-api` → `proto-migrate` | `etc/<env>-proto-migrate.env` | the DDL role's `DATABASE_URL` |
 | `*-renew-web-certs` (root cron) | `etc/<env>-proto-deploy.env` | `SITE_NAME`, `CERTBOT_EMAIL`, `CERT_HEALTHCHECK_URL` |
 | `prd-proto-promote-uat`, `-promote-uat-and-deploy`, `-install-api`, `-publish-web-client` | `etc/prd-proto-deploy.env` | registry server + credentials, `SERVICE`, `HEALTH_URL`, `DEPLOY_TAG`, `PROMOTE_FROM_TAG`, `SLACK_WEBHOOK` |
@@ -154,10 +154,10 @@ full runbook belongs.
 
 ## Deriving an app from this
 
-Rename `infra/uat/` → `infra/<real-uat-host>/` and `infra/prd/` →
-`infra/<real-prd-host>/`, and `proto` → `<app>` throughout (`sed` over the
-tree: `uat-proto` → `uat-<app>`, `proto-api` → `<app>-api`, `proto_ddl`
-etc. stay unless the app renames its roles). Then add the
-`infra/<host>/` bullet in the app's `CLAUDE.md` Layout section and write
-the runbook. Nothing in `bin/` needs to change for a new host — only
+The whole-repo procedure is `DERIVING.md`; `bin/000-rebrand <slug>` does
+the `proto` → `<app>` rename here too (file names, contents, roles, nginx
+upstream). What is left for a human on this tree: rename `infra/uat/` →
+`infra/<real-uat-host>/` and `infra/prd/` → `infra/<real-prd-host>/`, add
+the `infra/<host>/` bullet to the app's `CLAUDE.md` Layout section, and
+write the runbook. Nothing in `bin/` needs to change for a new host — only
 `etc/`.

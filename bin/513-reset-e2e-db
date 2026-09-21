@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Rebuild loc_starter_e2e_db from scratch: roles, schema through the
+# Rebuild loc_<slug>_e2e_db from scratch: roles, schema through the
 # migrator, and the seed fixtures (groups for two security contexts, the
 # admin and basic users, two example rows).
 #
-# A SEPARATE database from loc_starter_test_db, which the Go repository suite
+# A SEPARATE database from loc_<slug>_test_db, which the Go repository suite
 # owns. Sharing one would let a Playwright run and a `go test ./...` run
 # destroy each other's fixtures, and the resulting failure would point at
 # whichever suite happened to read second rather than at the collision.
@@ -16,5 +16,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
-[ -n "${PROTO_PG_URL_BASE:-}" ] || source "$SCRIPT_DIR/../etc/loc-test.env"
-exec "$SCRIPT_DIR/510-reset-test-db" "${PROTO_E2E_DB:-loc_starter_e2e_db}"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../etc/app.env"
+[ -n "${TEST_PG_URL_BASE:-}" ] || source "$SCRIPT_DIR/../etc/loc-test.env"
+exec "$SCRIPT_DIR/510-reset-test-db" "${E2E_DB:-loc_${APP_SLUG}_e2e_db}"

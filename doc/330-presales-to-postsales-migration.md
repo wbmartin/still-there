@@ -36,7 +36,7 @@ below breaks.
 
 | Thing | Presales (`bin/600`, `bin/610`, `etc/uat-deploy.env`, `doc/320`) | Post-sales (`infra/<host>/`, `sql/ddl-role-host-setup.sql`) | Also |
 |---|---|---|---|
-| API binary | `api-srv` | `proto-api` | `bin/100-build-api-server` emits a third: `dist/proto-go-app` |
+| API binary | `api-srv` | `proto-api` | locally `bin/100` builds `dist/<slug>-api` (etc/app.env) |
 | Migrator binary | `proto-migrate` | `proto-migrate` | same |
 | API env on host | `etc/api-srv.env` (from `etc/uat-api-srv.env.example`) | `etc/uat-proto-api.env` | key sets differ — see step 5 |
 | Migrator env | — | `etc/uat-proto-migrate.env` | |
@@ -287,7 +287,7 @@ sudo -u postgres psql -d "$DB" -c "select usename from pg_stat_activity where da
 ```
 
 Log in through the web app; on UAT run the suite against it
-(`PROTO_TEST_ENV=... bin/200-run-tests py` from the laptop, or
+(`TEST_ENV=... bin/200-run-tests py` from the laptop, or
 `${ENV}-proto-run-tests` on the host). Then push a trivial commit to
 `BRANCH_TO_CHECKOUT` and watch the webhook do steps 7's build unattended.
 

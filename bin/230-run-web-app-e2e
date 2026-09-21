@@ -9,7 +9,7 @@ set -euo pipefail
 # here is a prerequisite the runner does not enforce for itself.
 #
 # Requires the loc-postgres container to be up (doc/060-dev-env-start.md) and
-# loc_starter_e2e_db to exist (bin/513-reset-e2e-db; global setup builds it
+# loc_<slug>_e2e_db to exist (bin/513-reset-e2e-db; global setup builds it
 # on first run when it is missing).
 #
 # Ports 8082 and 5182, chosen so a developer's stack on 8080/5173 keeps
@@ -18,13 +18,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# playwright.config.ts resolves PROTO_E2E_API_ENV relative to src/web-app when
+# playwright.config.ts resolves E2E_API_ENV relative to src/web-app when
 # it is relative; make it absolute here so the value in etc/loc-test.env
 # (relative to the project root) means the same thing from both places.
-if [ -n "${PROTO_E2E_API_ENV:-}" ]; then
-  case "$PROTO_E2E_API_ENV" in
+if [ -n "${E2E_API_ENV:-}" ]; then
+  case "$E2E_API_ENV" in
     /*) ;;
-    *) export PROTO_E2E_API_ENV="$PROJECT_ROOT/$PROTO_E2E_API_ENV" ;;
+    *) export E2E_API_ENV="$PROJECT_ROOT/$E2E_API_ENV" ;;
   esac
 fi
 

@@ -3,8 +3,8 @@
 # Rebuild a scratch database from scratch: cluster roles, the schema THROUGH
 # THE MIGRATOR, then the seed fixtures.
 #
-#   bin/510-reset-test-db                        # loc_starter_test_db
-#   bin/510-reset-test-db loc_starter_e2e_db     # any *_test_db / *_e2e_db
+#   bin/510-reset-test-db                        # loc_<slug>_test_db
+#   bin/510-reset-test-db loc_<slug>_e2e_db      # any *_test_db / *_e2e_db
 #
 # Where psql runs, and as whom, comes from the environment:
 #
@@ -15,14 +15,14 @@
 #   PGPASSWORD     password for the native psql and for the migrator's URL.
 #                  Taken from the container's POSTGRES_PASSWORD when unset
 #                  and the container is in use.
-#   PROTO_PG_URL_BASE
+#   TEST_PG_URL_BASE
 #                  "postgres://user:pw@host:port" the migrator connects with;
 #                  overrides DATABASE_URL from etc/loc-api-srv.env, which in
 #                  turn overrides postgres://postgres:$PGPASSWORD@127.0.0.1:5432.
 #                  The role must be able to CREATE DATABASE and own tables.
 #
 # This database is scratch: it is DROPPED and rebuilt on every run. The
-# loc_starter_db that etc/loc-api-srv.env (via the vault) points at is never
+# loc_<slug>_db that etc/loc-api-srv.env points at is never
 # touched by this script -- the name guard below refuses anything that does
 # not end in _test_db or _e2e_db.
 #
@@ -32,9 +32,11 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
 ENV_FILE="$PROJECT_ROOT/etc/loc-api-srv.env"
 SQL_DIR="$PROJECT_ROOT/src/api-srv/sql"
-TEST_DB="${1:-loc_starter_test_db}"
+TEST_DB="${1:-loc_${APP_SLUG}_test_db}"
 
 # This script DROPs its target. The suffix rule is the difference between a
 # mis-set variable being a refusal and being a wiped environment.
@@ -61,18 +63,18 @@ fi
 export PGPASSWORD
 
 # --- what the migrator connects with -----------------------------------------
-if [ -z "${PROTO_PG_URL_BASE:-}" ] && [ -f "$ENV_FILE" ]; then
+if [ -z "${TEST_PG_URL_BASE:-}" ] && [ -f "$ENV_FILE" ]; then
   ENV_DB_URL="$(grep -E '^[[:space:]]*DATABASE_URL[[:space:]]*=' "$ENV_FILE" | head -1 | sed -e 's/^[^=]*=//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
   if [ -n "$ENV_DB_URL" ]; then
     # strip "/dbname?params" -> "postgres://user:pw@host:port"
-    PROTO_PG_URL_BASE="$(printf '%s' "$ENV_DB_URL" | sed -E 's#^([a-z]+://[^/]+).*$#\1#')"
+    TEST_PG_URL_BASE="$(printf '%s' "$ENV_DB_URL" | sed -E 's#^([a-z]+://[^/]+).*$#\1#')"
   fi
 fi
-if [ -z "${PROTO_PG_URL_BASE:-}" ]; then
+if [ -z "${TEST_PG_URL_BASE:-}" ]; then
   if [ -z "${PGPASSWORD:-}" ]; then
-    echo "[ERROR] Set PGPASSWORD (or PROTO_PG_URL_BASE) so the migrator can connect as postgres"; exit 1
+    echo "[ERROR] Set PGPASSWORD (or TEST_PG_URL_BASE) so the migrator can connect as postgres"; exit 1
   fi
-  PROTO_PG_URL_BASE="postgres://postgres:${PGPASSWORD}@127.0.0.1:5432"
+  TEST_PG_URL_BASE="postgres://postgres:${PGPASSWORD}@127.0.0.1:5432"
 fi
 
 echo "[INFO] Rebuilding $TEST_DB"
@@ -93,7 +95,7 @@ $PSQL -d postgres -q -v ON_ERROR_STOP=1 \
 echo "[INFO] Cluster roles"
 $PSQL -d postgres -q -v ON_ERROR_STOP=1 < "$SQL_DIR/roles.sql"
 echo "[INFO] Migrating"
-(cd "$PROJECT_ROOT/src/api-srv" && go run ./cmd/migrate -url "$PROTO_PG_URL_BASE/$TEST_DB" up)
+(cd "$PROJECT_ROOT/src/api-srv" && go run ./cmd/migrate -url "$TEST_PG_URL_BASE/$TEST_DB" up)
 
 echo "[INFO] Seeding fixtures"
 $PSQL -d "$TEST_DB" -q -v ON_ERROR_STOP=1 < "$SQL_DIR/fixtures/015-initialdata.sql"

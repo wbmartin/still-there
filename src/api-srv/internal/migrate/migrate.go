@@ -32,6 +32,9 @@ import (
 
 // lockKey is arbitrary but fixed: every migrator run on a database contends
 // for the same advisory lock.
+// lockKey is the same for every ProtoStack-derived app on purpose: one
+// migrator at a time per cluster is the safe default, and the key is not
+// part of the app's identity (PS0007).
 const lockKey int64 = 0x50524f544f // "PROTO"
 
 var filePattern = regexp.MustCompile(`^(\d+)_([A-Za-z0-9_-]+)\.sql$`)

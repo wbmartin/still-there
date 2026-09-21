@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build + bundle + ship a presales UAT deploy for this app.
 #   1. Go API server, linux/amd64 static       -> api-srv
-#   2. Go migrator, linux/amd64 static          -> proto-migrate (if cmd/migrate exists)
+#   2. Go migrator, linux/amd64 static          -> <slug>-migrate (if cmd/migrate exists)
 #   3. Web app (vite production build)          -> web-pub.tar.gz
 #   4. Local Postgres dump (plain SQL)          -> db.sql
 #   5. src/api-srv/sql/roles.sql + server-side deploy script
@@ -22,6 +22,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
 PRESALES_ENV="${PRESALES_ENV:-$PROJECT_ROOT/etc/uat-deploy.env}"
 [ -r "$PRESALES_ENV" ] || { echo "[ERROR] $PRESALES_ENV missing or unreadable"; exit 1; }
 # shellcheck disable=SC1090
@@ -67,13 +69,13 @@ echo "[1/5] go build api-srv (linux/amd64)"
 file "$STAGE/api-srv" | sed 's/^/      /'
 
 # --- 2. Migrator (static linux/amd64), if present ---------------------------
-echo "[2/5] go build proto-migrate (linux/amd64)"
+echo "[2/5] go build $APP_SLUG-migrate (linux/amd64)"
 if [ -d src/api-srv/cmd/migrate ]; then
   ( cd src/api-srv && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-      go build -trimpath -ldflags="-s -w" -o "$STAGE/proto-migrate" ./cmd/migrate )
-  file "$STAGE/proto-migrate" | sed 's/^/      /'
+      go build -trimpath -ldflags="-s -w" -o "$STAGE/$APP_SLUG-migrate" ./cmd/migrate )
+  file "$STAGE/$APP_SLUG-migrate" | sed 's/^/      /'
 else
-  echo "      WARNING: src/api-srv/cmd/migrate not found — skipping proto-migrate (migrator not added yet)"
+  echo "      WARNING: src/api-srv/cmd/migrate not found — skipping $APP_SLUG-migrate (migrator not added yet)"
 fi
 
 # --- 3. Web app --------------------------------------------------------------
@@ -111,7 +113,7 @@ printf 'APP_NAME=%s\nAPP_ROOT=%s\nSERVICE=%s\nSVC_USER=%s\nDB_APP_ROLE=%s\n' \
   echo "git=$(git rev-parse --short HEAD 2>/dev/null || echo n/a) $(git diff --quiet 2>/dev/null || echo '(dirty)')"
   echo "go=$(go version | awk '{print $3}')  node=$(node --version)"
   echo "db=${LOCAL_DB:-skipped}"
-  [ -f "$STAGE/proto-migrate" ] && echo "migrate=included" || echo "migrate=not-built"
+  [ -f "$STAGE/$APP_SLUG-migrate" ] && echo "migrate=included" || echo "migrate=not-built"
 } > "$STAGE/MANIFEST"
 COPYFILE_DISABLE=1 tar --no-xattrs -C "$PROJECT_ROOT/dist" -czf "$TARBALL" "$NAME"
 rm -rf "$STAGE"

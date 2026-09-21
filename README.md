@@ -1,6 +1,6 @@
 # ProtoStack-ReactGo
 
-A production-ready starter/scaffold application combining a Go API server with a React frontend. Designed as a foundation for building secure, multi-tenant CRUD applications with JWT authentication, RBAC, and MFA support.
+A production-ready scaffold application combining a Go API server with a React frontend. Designed as a foundation for building secure, multi-tenant CRUD applications with JWT authentication, RBAC, and MFA support.
 
 ## Architecture Overview
 
@@ -31,6 +31,8 @@ ProtoStack-ReactGo/
 
 ## Quick Start
 
+Starting a new app from this template? `DERIVING.md` is the checklist; `bin/000-rebrand` does the renaming.
+
 See [doc/050-dev-env-init.md](doc/050-dev-env-init.md) for first-time setup (database creation).
 
 See [doc/060-dev-env-start.md](doc/060-dev-env-start.md) for day-to-day startup steps.
@@ -39,6 +41,7 @@ See [doc/060-dev-env-start.md](doc/060-dev-env-start.md) for day-to-day startup 
 
 | Command | Purpose |
 |---------|---------|
+| `./bin/000-rebrand <slug> "<Name>"` | Rename the app when deriving from this template (see `DERIVING.md`) |
 | `./bin/100-build-api-server` | Build the Go API server |
 | `./bin/510-reset-test-db` | Rebuild the local database |
 | `./bin/215-run-api-srv` | Run the API server (supports `--daemon`/`--interactive`) |

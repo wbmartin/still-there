@@ -44,19 +44,22 @@ post-agreement upgrade adds a webhook/registry-driven deploy and a real migrator
   log/                 # nginx only; API logs to journald
 ```
 
-`<app>` is `$APP_NAME`; the systemd unit is `$SERVICE`. Both — and everything else
-the two scripts need — come from **`etc/uat-deploy.env`**, committed and secret-free:
+`<app>` is `$APP_NAME`, which is `$APP_SLUG` from **`etc/app.env`** (the one place
+the app's identity lives — `DERIVING.md`); the systemd unit is `$SERVICE`. Both — and
+everything else the two scripts need — come from **`etc/uat-deploy.env`**, committed
+and secret-free, which `600` sources after `app.env` so the values below can be
+written in terms of `$APP_SLUG`:
 
 | key | side | meaning |
 |---|---|---|
-| `APP_NAME` | both | `proto`; bundle name prefix, unit description |
+| `APP_NAME` | both | `$APP_SLUG` (`proto`); bundle name prefix, unit description |
 | `UAT_HOST` | laptop | ssh alias for the UAT host (scp target) |
 | `PG_CONTAINER` | laptop | docker container whose `pg_dump` produces `db.sql` |
 | `LOCAL_ENV_FILE` | laptop | API env with the inline `DATABASE_URL` to dump |
-| `APP_ROOT` | server | `/srv/uat-proto` |
-| `SERVICE` | server | `uat-proto-api` |
+| `APP_ROOT` | server | `/srv/uat-$APP_SLUG` |
+| `SERVICE` | server | `uat-$APP_SLUG-api` |
 | `SVC_USER` | server | `www-data` |
-| `DB_APP_ROLE` | server | `proto_app_svc_account`; owns the restored DB and is the API's login. Must be a role `src/api-srv/sql/roles.sql` creates (`600` checks) |
+| `DB_APP_ROLE` | server | `${APP_SLUG}_app_svc_account`; owns the restored DB and is the API's login. Must be a role `src/api-srv/sql/roles.sql` creates (`600` checks) |
 
 `600` sources it (`PRESALES_ENV=<file>` to use another) and stops, naming the key, if
 anything is missing — there are no inline defaults — and checks the local database,

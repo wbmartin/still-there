@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Return loc_starter_e2e_db to its seeded state, WITHOUT dropping it.
+# Return loc_<slug>_e2e_db to its seeded state, WITHOUT dropping it.
 #
 # The obvious way to reset is DROP DATABASE, which 513 does. It cannot be used
 # between test runs: the API server is already running by the time Playwright's
@@ -24,8 +24,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # shellcheck disable=SC1091
-[ -n "${PROTO_PG_URL_BASE:-}" ] || source "$PROJECT_ROOT/etc/loc-test.env"
-E2E_DB="${PROTO_E2E_DB:-loc_starter_e2e_db}"
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
+[ -n "${TEST_PG_URL_BASE:-}" ] || source "$PROJECT_ROOT/etc/loc-test.env"
+E2E_DB="${E2E_DB:-loc_${APP_SLUG}_e2e_db}"
 FIXTURES="$PROJECT_ROOT/src/api-srv/sql/fixtures/015-initialdata.sql"
 
 # Same psql selection as bin/510: inside the container when it is up, native
