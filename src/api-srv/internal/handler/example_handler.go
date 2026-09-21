@@ -188,6 +188,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	// Set security context and creation metadata
 	now := CurrentTimestamp()
 	example.SecurityContext = jwtClaims.SecurityContext
+	example.ExampleUUID = model.NewUUID() // server-assigned; a client value is ignored
 	example.CreateTS = now
 	example.CreateUserID = jwtClaims.UserID
 	example.UpdateTS = now
@@ -647,6 +648,7 @@ func (h *ExampleHandler) CreateExampleList(
 	// Set metadata for all
 	for i := range exampleList {
 		exampleList[i].SecurityContext = jwtClaims.SecurityContext
+		exampleList[i].ExampleUUID = model.NewUUID()
 		exampleList[i].CreateTS = createTS
 		exampleList[i].CreateUserID = jwtClaims.UserID
 		exampleList[i].UpdateTS = updateTS

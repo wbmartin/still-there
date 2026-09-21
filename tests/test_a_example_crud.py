@@ -88,6 +88,68 @@ class TestExampleCRUD:
         assert data["exampleInt"] == 43
         assert data["exampleIntArray"] == [1, 2, 3, 4]
 
+    def test_jsonb_and_uuid(self):
+        """example_uuid is server-set and immutable; example_jsonb round-trips
+        any JSON value and clears to absent"""
+        create_data = {
+            "exampleText": "Integration Test JSONB",
+            "exampleUuid": "00000000-0000-4000-8000-000000000000",
+            "exampleJsonb": {"colour": "teal", "count": 3, "tagList": ["a", "b"]},
+            "securityContext": 1,
+        }
+        response = self.client.make_request("POST", "/example", json=create_data)
+        assert response.status_code == 201
+        created = response.json()["data"]
+
+        # The client's uuid was ignored; the server's is canonical v4.
+        uuid = created["exampleUuid"]
+        assert uuid != create_data["exampleUuid"]
+        assert len(uuid) == 36 and uuid[14] == "4"
+        assert created["exampleJsonb"] == create_data["exampleJsonb"]
+
+        response = self.client.make_request(
+            "GET", "/example", params={"exampleId": created["exampleId"]}
+        )
+        assert response.status_code == 200
+        read = response.json()["data"]
+        assert read["exampleUuid"] == uuid
+        assert read["exampleJsonb"] == create_data["exampleJsonb"]
+
+        # Update: uuid stays, jsonb is replaced by a non-object value.
+        update_data = {
+            "exampleId": created["exampleId"],
+            "exampleText": "Integration Test JSONB",
+            "exampleUuid": "11111111-1111-4111-8111-111111111111",
+            "exampleJsonb": [1, "two", None],
+            "updateTs": read["updateTs"],
+            "securityContext": 1,
+        }
+        response = self.client.make_request("PUT", "/example", json=update_data)
+        assert response.status_code == 200
+        updated = response.json()["data"]
+        assert updated["exampleUuid"] == uuid
+        assert updated["exampleJsonb"] == [1, "two", None]
+
+        # Update without jsonb clears it (absent, not null).
+        response = self.client.make_request(
+            "GET", "/example", params={"exampleId": created["exampleId"]}
+        )
+        cleared_data = {
+            "exampleId": created["exampleId"],
+            "exampleText": "Integration Test JSONB",
+            "updateTs": response.json()["data"]["updateTs"],
+            "securityContext": 1,
+        }
+        response = self.client.make_request("PUT", "/example", json=cleared_data)
+        assert response.status_code == 200
+        response = self.client.make_request(
+            "GET", "/example", params={"exampleId": created["exampleId"]}
+        )
+        final = response.json()["data"]
+        assert "exampleJsonb" not in final
+        assert final["exampleUuid"] == uuid
+        self.client.track_example(final["exampleId"], final["updateTs"])
+
     def test_delete_example(self):
         """Test deleting the example"""
         assert self.example_id is not None, "Example must be created first"

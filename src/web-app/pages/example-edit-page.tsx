@@ -21,6 +21,16 @@ import { grants } from "../constants/grants";
 import { defaultExampleFormData } from "../types/example-type";
 import { reportError } from "../utils/report-error";
 
+const isJsonOrEmpty = (text: string) => {
+  if (!text.trim()) return true;
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 function ExampleEditPage() {
   const [searchParams] = useSearchParams();
   const id = searchParams.get("exampleId") || "";
@@ -37,8 +47,10 @@ function ExampleEditPage() {
     initialValues: defaultExampleFormData,
     validate: {
       exampleText: (value) => (value.length < 1 ? 'Example text is required' : null),
+      exampleJsonb: (value) => (isJsonOrEmpty(value) ? null : 'Must be valid JSON (or empty)'),
     },
   });
+  const [exampleUuid, setExampleUuid] = useState("");
   const [exampleLoading, setExampleLoading] = useState(
     !isNew && numericId !== null,
   );
@@ -58,8 +70,13 @@ function ExampleEditPage() {
                 existingExample.exampleIntArray?.join(", ") || "",
               exampleFloatArray:
                 existingExample.exampleFloatArray?.join(", ") || "",
+              exampleJsonb:
+                existingExample.exampleJsonb === undefined
+                  ? ""
+                  : JSON.stringify(existingExample.exampleJsonb, null, 2),
               updateTs: existingExample.updateTs.toString(),
             });
+            setExampleUuid(existingExample.exampleUuid ?? "");
           }
         })
         .catch((error: unknown) => {
@@ -97,6 +114,10 @@ function ExampleEditPage() {
         : undefined,
       exampleFloatArray: values.exampleFloatArray
         ? values.exampleFloatArray.split(",").map(Number)
+        : undefined,
+      // Validated as JSON by the form; empty means no value.
+      exampleJsonb: values.exampleJsonb.trim()
+        ? (JSON.parse(values.exampleJsonb) as unknown)
         : undefined,
       updateTs: !isNew ? Number(values.updateTs) : undefined,
     };
@@ -194,6 +215,25 @@ function ExampleEditPage() {
           {...form.getInputProps('exampleFloatArray')}
           mb="md"
         />
+        <Textarea
+          label="JSON"
+          description="Any JSON value; leave empty for none"
+          autosize
+          minRows={3}
+          ff="monospace"
+          {...form.getInputProps('exampleJsonb')}
+          mb="md"
+        />
+        {!isNew && (
+          <TextInput
+            label="UUID"
+            description="Assigned by the server on create; read-only"
+            value={exampleUuid}
+            readOnly
+            ff="monospace"
+            mb="md"
+          />
+        )}
         <Group>
           <Button type="submit">Save</Button>
           {!isNew && (

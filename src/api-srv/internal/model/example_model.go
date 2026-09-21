@@ -1,5 +1,7 @@
 package model
 
+import "encoding/json"
+
 // ExampleModel represents an example entity
 type ExampleModel struct {
 	ExampleID         int       `json:"exampleId"                   db:"example_id"`
@@ -8,11 +10,15 @@ type ExampleModel struct {
 	ExampleFloat      *float64  `json:"exampleFloat,omitempty"      db:"example_float"`
 	ExampleIntArray   []int     `json:"exampleIntArray,omitempty"   db:"example_int_array"`
 	ExampleFloatArray []float64 `json:"exampleFloatArray,omitempty" db:"example_float_array"`
-	SecurityContext   int       `json:"securityContext"             db:"security_context_id"`
-	CreateTS          float64   `json:"createTs"                    db:"create_ts"`
-	CreateUserID      int       `json:"createUserId"                db:"create_user_id"`
-	UpdateTS          float64   `json:"updateTs"                    db:"update_ts"`
-	UpdateUserID      int       `json:"updateUserId"                db:"update_user_id"`
-	DeleteTS          *float64  `json:"deleteTs,omitempty"          db:"delete_ts"`
-	DeleteUserID      *int      `json:"deleteUserId,omitempty"      db:"delete_user_id"`
+	// Set by the server on create, never changed. Clients may not choose it.
+	ExampleUUID string `json:"exampleUuid" db:"example_uuid"`
+	// Any JSON value or absent. Stored verbatim; pgx maps jsonb <-> []byte.
+	ExampleJSONB    json.RawMessage `json:"exampleJsonb,omitempty" db:"example_jsonb"`
+	SecurityContext int             `json:"securityContext"             db:"security_context_id"`
+	CreateTS        float64         `json:"createTs"                    db:"create_ts"`
+	CreateUserID    int             `json:"createUserId"                db:"create_user_id"`
+	UpdateTS        float64         `json:"updateTs"                    db:"update_ts"`
+	UpdateUserID    int             `json:"updateUserId"                db:"update_user_id"`
+	DeleteTS        *float64        `json:"deleteTs,omitempty"          db:"delete_ts"`
+	DeleteUserID    *int            `json:"deleteUserId,omitempty"      db:"delete_user_id"`
 }

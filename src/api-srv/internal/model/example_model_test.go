@@ -22,6 +22,8 @@ func (s *ExampleModelTestSuite) TestExampleModelJSONMarshal() {
 		ExampleFloat:      &[]float64{3.14}[0],
 		ExampleIntArray:   []int{1, 2, 3},
 		ExampleFloatArray: []float64{1.1, 2.2, 3.3},
+		ExampleUUID:       "123e4567-e89b-42d3-a456-426614174000",
+		ExampleJSONB:      json.RawMessage(`{"k":[1,2]}`),
 		SecurityContext:   1,
 		CreateTS:          1234567890.123,
 		CreateUserID:      1,
@@ -32,6 +34,9 @@ func (s *ExampleModelTestSuite) TestExampleModelJSONMarshal() {
 	data, err := json.Marshal(example)
 	s.NoError(err)
 	s.NotEmpty(data)
+	// The jsonb value is emitted inline, not as an escaped string.
+	s.Contains(string(data), `"exampleUuid":"123e4567-e89b-42d3-a456-426614174000"`)
+	s.Contains(string(data), `"exampleJsonb":{"k":[1,2]}`)
 
 	// Verify key fields are present
 	jsonStr := string(data)
@@ -132,4 +137,25 @@ func (s *ExampleModelTestSuite) TestExampleModelWithDeleteFields() {
 	jsonStr := string(data)
 	s.Contains(jsonStr, `"deleteTs":1234567891.789`)
 	s.Contains(jsonStr, `"deleteUserId":2`)
+}
+
+func (s *ExampleModelTestSuite) TestExampleModelJSONBAbsentAndUUIDShape() {
+	// No jsonb: the key is omitted, not emitted as null.
+	data, err := json.Marshal(ExampleModel{ExampleText: "x"})
+	s.NoError(err)
+	s.NotContains(string(data), "exampleJsonb")
+
+	// A client body's jsonb arrives verbatim as raw bytes.
+	var decoded ExampleModel
+	s.NoError(json.Unmarshal([]byte(`{"exampleText":"x","exampleJsonb":[true,null]}`), &decoded))
+	s.JSONEq(`[true,null]`, string(decoded.ExampleJSONB))
+
+	// NewUUID is canonical v4: 36 chars, version nibble 4, variant 8-b.
+	seen := map[string]bool{}
+	for i := 0; i < 100; i++ {
+		u := NewUUID()
+		s.Regexp(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`, u)
+		s.False(seen[u], "duplicate uuid")
+		seen[u] = true
+	}
 }

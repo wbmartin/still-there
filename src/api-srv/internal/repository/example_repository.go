@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -12,6 +13,15 @@ import (
 )
 
 // ExampleRepository handles database operations for examples
+// jsonbParam passes a jsonb column value to pgx: an absent value is SQL NULL,
+// not the JSON literal null, and the bytes are stored verbatim otherwise.
+func jsonbParam(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return []byte(raw)
+}
+
 type ExampleRepository struct {
 	db *pgxpool.Pool
 }
@@ -54,7 +64,8 @@ func (r *ExampleRepository) RetrieveExample(
 	// Record exists and is not deleted, retrieve full data
 	query := `
 		SELECT example_id, example_text, example_int, example_float,
-		       example_int_array, example_float_array, security_context_id,
+		       example_int_array, example_float_array, example_uuid,
+		       example_jsonb, security_context_id,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM example
@@ -64,7 +75,8 @@ func (r *ExampleRepository) RetrieveExample(
 	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		return r.db.QueryRow(ctx, query, exampleID, securityContext).Scan(
 			&example.ExampleID, &example.ExampleText, &example.ExampleInt, &example.ExampleFloat,
-			&example.ExampleIntArray, &example.ExampleFloatArray, &example.SecurityContext,
+			&example.ExampleIntArray, &example.ExampleFloatArray, &example.ExampleUUID,
+			&example.ExampleJSONB, &example.SecurityContext,
 			&example.CreateTS, &example.CreateUserID, &example.UpdateTS, &example.UpdateUserID,
 			&example.DeleteTS, &example.DeleteUserID,
 		)
@@ -92,16 +104,18 @@ func (r *ExampleRepository) CreateExample(
 	query := `
 		INSERT INTO example (
 			example_text, example_int, example_float, example_int_array,
-			example_float_array, security_context_id, create_ts, create_user_id,
+			example_float_array, example_uuid, example_jsonb,
+			security_context_id, create_ts, create_user_id,
 			update_ts, update_user_id
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING example_id`
 
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		return r.db.QueryRow(ctx, query,
 			example.ExampleText, example.ExampleInt, example.ExampleFloat,
 			example.ExampleIntArray, example.ExampleFloatArray,
+			example.ExampleUUID, jsonbParam(example.ExampleJSONB),
 			example.SecurityContext, example.CreateTS, example.CreateUserID,
 			example.UpdateTS, example.UpdateUserID,
 		).Scan(&example.ExampleID)
@@ -124,27 +138,28 @@ func (r *ExampleRepository) UpdateExample(
 		UPDATE example
 		SET example_text = $1, example_int = $2, example_float = $3,
 		    example_int_array = $4, example_float_array = $5,
-		    update_ts = $6, update_user_id = $7
-		WHERE example_id = $8 AND security_context_id = $9 AND update_ts = $10
-		      AND delete_user_id IS NULL`
+		    example_jsonb = $6, update_ts = $7, update_user_id = $8
+		WHERE example_id = $9 AND security_context_id = $10 AND update_ts = $11
+		      AND delete_user_id IS NULL
+		RETURNING example_uuid`
 
-	var result pgconn.CommandTag
+	// example_uuid is not in the SET list: it is fixed at create. RETURNING
+	// it fills in the caller's copy so the response carries it.
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
+		return r.db.QueryRow(ctx, query,
 			example.ExampleText, example.ExampleInt, example.ExampleFloat,
 			example.ExampleIntArray, example.ExampleFloatArray,
+			jsonbParam(example.ExampleJSONB),
 			example.UpdateTS, example.UpdateUserID,
 			example.ExampleID, example.SecurityContext, originalUpdateTS,
-		)
-		return execErr
+		).Scan(&example.ExampleUUID)
 	})
 
-	if err != nil {
+	if err != nil && err != pgx.ErrNoRows {
 		return fmt.Errorf("failed to update example: %w", err)
 	}
 
-	if result.RowsAffected() == 0 {
+	if err == pgx.ErrNoRows {
 		// Assess the state of the example
 		var deleteUserID *int
 		checkQuery := `SELECT delete_user_id FROM example
@@ -238,7 +253,8 @@ func (r *ExampleRepository) RetrieveExampleList(
 ) ([]*model.ExampleModel, error) {
 	selectClause := `
 		SELECT example_id, example_text, example_int, example_float,
-		       example_int_array, example_float_array, security_context_id,
+		       example_int_array, example_float_array, example_uuid,
+		       example_jsonb, security_context_id,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM example`
@@ -271,6 +287,8 @@ func (r *ExampleRepository) RetrieveExampleList(
 			&example.ExampleFloat,
 			&example.ExampleIntArray,
 			&example.ExampleFloatArray,
+			&example.ExampleUUID,
+			&example.ExampleJSONB,
 			&example.SecurityContext,
 			&example.CreateTS,
 			&example.CreateUserID,
@@ -320,16 +338,18 @@ func (r *ExampleRepository) CreateExampleList(
 	query := `
 		INSERT INTO example (
 			example_text, example_int, example_float, example_int_array,
-			example_float_array, security_context_id, create_ts, create_user_id,
+			example_float_array, example_uuid, example_jsonb,
+			security_context_id, create_ts, create_user_id,
 			update_ts, update_user_id
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING example_id`
 
 	for i, example := range exampleList {
 		err := tx.QueryRow(ctx, query,
 			example.ExampleText, example.ExampleInt, example.ExampleFloat,
 			example.ExampleIntArray, example.ExampleFloatArray,
+			example.ExampleUUID, jsonbParam(example.ExampleJSONB),
 			example.SecurityContext, example.CreateTS, example.CreateUserID,
 			example.UpdateTS, example.UpdateUserID,
 		).Scan(&exampleList[i].ExampleID)
@@ -368,8 +388,8 @@ func (r *ExampleRepository) UpdateExampleList(
 	query := `
 		UPDATE example
 		SET example_text = $1, example_int = $2, example_float = $3, example_int_array = $4, example_float_array = $5,
-		    update_ts = $6, update_user_id = $7
-		WHERE example_id = $8 AND security_context_id = $9 AND update_ts = $10 AND delete_user_id IS NULL`
+		    example_jsonb = $6, update_ts = $7, update_user_id = $8
+		WHERE example_id = $9 AND security_context_id = $10 AND update_ts = $11 AND delete_user_id IS NULL`
 
 	for i, example := range exampleList {
 		result, err := tx.Exec(
@@ -380,6 +400,7 @@ func (r *ExampleRepository) UpdateExampleList(
 			example.ExampleFloat,
 			example.ExampleIntArray,
 			example.ExampleFloatArray,
+			jsonbParam(example.ExampleJSONB),
 			example.UpdateTS,
 			example.UpdateUserID,
 			example.ExampleID,

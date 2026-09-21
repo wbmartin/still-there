@@ -6,6 +6,10 @@ export interface Example {
   exampleFloat?: number;
   exampleIntArray?: number[];
   exampleFloatArray?: number[];
+  // Set by the server on create; never changes. Absent on a create body.
+  exampleUuid?: string;
+  // Any JSON value, or absent.
+  exampleJsonb?: unknown;
   securityContext: number;
   createTs: number;
   createUserId: number;
@@ -24,6 +28,8 @@ export interface ExampleFormData {
   exampleFloat: string;
   exampleIntArray: string;
   exampleFloatArray: string;
+  // JSON text as typed; parsed on submit. Empty means absent.
+  exampleJsonb: string;
   updateTs: string;
 }
 
@@ -33,5 +39,6 @@ export const defaultExampleFormData: ExampleFormData = {
   exampleFloat: "",
   exampleIntArray: "",
   exampleFloatArray: "",
+  exampleJsonb: "",
   updateTs: "",
 };
