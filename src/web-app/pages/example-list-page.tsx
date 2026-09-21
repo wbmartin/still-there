@@ -177,6 +177,7 @@ function ExampleListPage() {
               {sortColumn === "exampleFloat" &&
                 (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
+            <Table.Th>UUID</Table.Th>
             <Table.Th>Actions</Table.Th>
           </Table.Tr>
         </Table.Thead>
@@ -187,6 +188,9 @@ function ExampleListPage() {
               <Table.Td>{example.exampleText}</Table.Td>
               <Table.Td>{example.exampleInt || ""}</Table.Td>
               <Table.Td>{example.exampleFloat || ""}</Table.Td>
+              <Table.Td ff="monospace" fz="xs">
+                {example.exampleUuid}
+              </Table.Td>
               <Table.Td>
                 <Button
                   size="xs"
