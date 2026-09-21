@@ -94,3 +94,34 @@ grep -rn -i 'pr[o]to\|wbmartin' bin etc src infra scripts .claude CLAUDE.md READ
 Nothing. If something prints, it is either a new file that hard-coded a
 name (put it in `etc/app.env` or `constants/app.ts` instead) or a pattern
 `bin/000-rebrand` missed — add it there so the next derivation gets it.
+
+## 8. Pulling template changes into a derived app, later
+
+ProtoStack keeps moving after you derive. Every change it makes is a
+ticket, and every closed ticket is one file in `tickets/04-archive/` —
+what changed, the rules that survived, the endpoints it touched. That
+archive, not `git log`, is what a derived app reads to decide what to
+pull in.
+
+The template tags `main` at each sync point: `template-YYYY-MM-DD`.
+
+```bash
+# in the derived app
+git remote add template <protostack-remote>            # once
+git fetch template --tags
+git log --oneline template/template-<last-sync>..template/main -- tickets/04-archive
+                                                       # the tickets closed since you last synced
+git diff template/template-<last-sync>..template/main -- src/api-srv/internal src/web-app bin doc
+                                                       # the code behind them
+```
+
+For each new archive file: read *What changed* and *Rules that survived*;
+decide pull / adapt / skip; where you pull, cherry-pick or re-apply the
+change under a ticket of your own (the archive file's id goes in your
+ticket's `raised_by:`). Names differ (`bin/000-rebrand` rewrote them), so
+a cherry-pick of anything touching `etc/`, `infra/`, SQL role names or
+the Go module path needs a rebrand pass by hand. Skip anything the archive
+marks as template-only (ticketing, `DERIVING.md`, `bin/000-rebrand`).
+
+When you are done, record the template tag you synced to in your own
+`CLAUDE.md` or a ticket, so the next sync starts from there.
