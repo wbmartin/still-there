@@ -125,7 +125,7 @@ another):
   falls back to `510` if the database doesn't exist yet.
 - `515` is what Playwright's global setup calls: dropping the database
   under a running API leaves its pool pointing at nothing.
-- Users after a reset: `admin` / `admin123!` and `basic` / `basic123!`.
+- Users after a reset: `admin` / `admin123!`, `basic` / `basic123!`, and `mfa` / `basic123!` (the only one that is not MFA-exempt; it enrols a TOTP on first sign-in).
 
 ## Presales UAT Deploy
 
