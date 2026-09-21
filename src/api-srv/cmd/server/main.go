@@ -103,6 +103,7 @@ func main() {
 		appUserGroupRepo,
 	)
 	errorReportHandler := handler.NewErrorReportHandler(appServices)
+	profileHandler := handler.NewProfileHandler(appServices, userRepo)
 	userSelfCreateHandler := handler.UserSelfCreateHandler(
 		appServices,
 		userRepo,
@@ -133,6 +134,8 @@ func main() {
 	mux.HandleFunc("GET /refresh", refreshHandler)
 	mux.HandleFunc("POST /changeSecurityContext", changeSecurityContextHandler)
 	mux.HandleFunc("POST /changeOwnPassword", changeOwnPasswordHandler)
+	mux.HandleFunc("GET /me", profileHandler.RetrieveOwnProfile)
+	mux.HandleFunc("PUT /me", profileHandler.UpdateOwnProfile)
 	mux.HandleFunc("POST /logoff", logoffHandler)
 
 	// Example CRUD
