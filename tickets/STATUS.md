@@ -6,7 +6,7 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 17:52 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 18:26 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
@@ -15,12 +15,6 @@ picks up the next piece of work. Do not edit below the marker.
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
 | **PS0018** | User profile page: preferences and avatar | low | web |
-
-## Engineering — in progress (1)
-
-| Ticket | Title | Claimed |
-|---|---|---|
-| **PS0017** | Passkey (WebAuthn) as a second factor | 2026-09-21 by TKT-PS0017-passkey-second-factor |
 
 ## Engineering — merged, awaiting validation (11)
 
@@ -47,12 +41,13 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0006** | Move ProtoStack history out of doc/ into the engineering log; fix every broken path | 2026-09-21 |
 | **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | 2026-09-21 |
 
-## Engineering — blocked (2)
+## Engineering — blocked (3)
 
 | Ticket | Title | Priority | Waiting on |
 |---|---|---|---|
 | **PS0010** | Make the example entity a lean, copyable template — error mapping, scoped queries, retry removal, doc/810 rewrite | low | Brandon |
 | **PS0011** | API dead code, duplicated helpers, table-driven config loader, lint baseline | low | Brandon |
+| **PS0017** | DEFERRED — Passkey (WebAuthn) as an additional second factor | low | a customer request, then TOTP e2e coverage |
 
 ## Open tickets by domain
 
