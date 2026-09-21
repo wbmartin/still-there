@@ -1,3 +1,5 @@
+> Archived from `doc/archive/101-appserverquestions.md` on 2026-09-21 by PS0006; point-in-time, not maintained.
+
 # 101 - App Server Questions
 
 Based on my analysis of the specs in `doc/100-Golang-app-server.md`, the existing `examples/go-app-srv` code, and the `examples/auth/auth.sql` schema, I have several questions that need clarification before proceeding with building the starter app in `src/api-srv`.

@@ -78,7 +78,7 @@ src/api-srv/
 - **Defaults/Triggers**: Prohibited; all logic in application code
 
 ## Database
-initial/examples in sql/010-inititial-create.sql (DDL) and sql/015-initialdata.sql (DML)
+initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and src/api-srv/sql/fixtures/015-initialdata.sql (DML)
 
 ## API Design
 

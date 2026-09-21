@@ -1,3 +1,4 @@
+<!-- rewrite: PS0010 — paths fixed by PS0006 (2026-09-21); the procedure itself is out of date (Read* → Retrieve*, no biz/appcore schemas, no update_*.sql files) -->
 # Creating a New Entity Type
 
 This document outlines the steps and key points for creating a new entity type in the ProtoStack application. It covers SQL schema, API server (Go), and web app (TypeScript/React) changes. Reference the `example` entity for working implementations.
@@ -14,7 +15,7 @@ This document outlines the steps and key points for creating a new entity type i
 - **UI Feedback**: Add success and error toast notifications for all CRUD operations in the respective page components (not in stores). Use the app's notification system (e.g., Mantine notifications) to provide user feedback for create, update, and delete operations.
 
 ## Naming Conventions
-- **Methods**: Use "Read" for list retrieval (e.g., `ReadUserList`) and single-entity retrieval (e.g., `ReadUser`). Use Create/Update/Delete for mutations.
+- **Methods**: Use "Retrieve" for list retrieval (e.g., `RetrieveUserList`) and single-entity retrieval (e.g., `RetrieveUser`). Use Create/Update/Delete for mutations.
 - **Stores**: Singular naming (e.g., `useUserStore`, not `useUsersStore`).
 - **Pages**: Descriptive names (e.g., `app-user-list-page.tsx`, `user-group-edit-page.tsx`).
 - **Routes**: `/entityList` for lists, `/entityEdit` for single operations.
@@ -24,41 +25,38 @@ This document outlines the steps and key points for creating a new entity type i
 1. **Create Table**: Use singular table name (e.g., `example`).
    - Standard fields: `entity_id` (primary key), `security_context`, `create_ts`, `create_user_id`, `update_ts`, `update_user_id`, `delete_ts`, `delete_user_id`.
    - Entity-specific fields in snake_case.
-   - Example: See `sql/010-initialcreate.sql` for `example` table.
+   - Example: See `src/api-srv/sql/migrations/0001_initial_schema.sql` for the `example` table; a new entity is a new `src/api-srv/sql/migrations/NNNN_<name>.sql`.
 
 2. **Grants**: Add schema grants in migration SQL.
-   - `GRANT USAGE ON SCHEMA biz TO group_global_writer;`
-   - `GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA biz TO group_global_writer;`
-   - `GRANT ALL ON ALL SEQUENCES IN SCHEMA biz TO group_global_writer;`
-   - Repeat for `appcore` schema.
+   - Everything lives in `public`; grants to `db_reader`/`db_writer` are in `src/api-srv/sql/roles.sql` and the migrations.
 
-3. **Data**: Insert initial data if needed (e.g., `sql/015-initialdata.sql`). For updates to existing data (e.g., adding new grants to user groups), create update SQL files in `sql/` (e.g., `sql/update_admin_grants.sql`).
+3. **Data**: Insert initial data if needed (`src/api-srv/sql/fixtures/015-initialdata.sql`). Updates to existing data (e.g., adding new grants to user groups) are migrations too: `src/api-srv/sql/migrations/NNNN_<name>.sql`.
 
 ## API-SRV
-1. **Model** (`internal/model/entity_model.go`):
+1. **Model** (`src/api-srv/internal/model/entity_model.go`):
    - Struct with JSON and DB tags (camelCase JSON, snake_case DB).
    - Example: `ExampleModel` in `example_model.go`.
 
 2. **Repository** (`internal/repository/entity_repository.go`):
-   - Methods: `ReadEntityList`, `CreateEntity`, `UpdateEntity`, `DeleteEntity`.
+   - Methods: `RetrieveEntityList`, `CreateEntity`, `UpdateEntity`, `DeleteEntity`.
    - Use `ExecuteWithRetry` for queries.
    - Optimistic locking: Check `update_ts` on update/delete.
    - Example: `ExampleRepository` in `example_repository.go`.
 
 3. **Handler** (`internal/handler/entity_handler.go`):
    - Struct with `appsrv`, `entityRepo`.
-   - Methods: `ReadEntityList`, `CreateEntity`, `UpdateEntity`, `DeleteEntity`.
+   - Methods: `RetrieveEntityList`, `CreateEntity`, `UpdateEntity`, `DeleteEntity`.
    - Security: JWT, rate limit, CSRF, grants.
    - JSON encoding/decoding.
    - Example: `ExampleHandler` in `example_handler.go`.
 
-4. **Grants** (`internal/model/grants.go`):
+4. **Grants** (`src/api-srv/internal/model/grants.go`):
    - Add constants: `GrantEntityRead = 1xx0`, `GrantEntityCreate = 1xx1`, `GrantEntityUpdate = 1xx2`, `GrantEntityDelete = 1xx3`.
    - Update `AllKnownGrants` and `GrantIDToShortCodeMap`.
    - Use in handlers.
 
 5. **Routes** (`cmd/server/main.go`):
-   - `GET /entityList` → `ReadEntityList`
+   - `GET /entityList` → `RetrieveEntityList`
    - `POST /entity` → `CreateEntity`
    - `PUT /entity` → `UpdateEntity`
    - `DELETE /entity` → `DeleteEntity`
@@ -122,8 +120,8 @@ All entity stores must include a `max<Entity>UpdateTs` field for conditional fet
 This enables efficient caching while detecting when full refreshes are needed.
 
 ## Example References
-- **SQL**: `sql/010-initialcreate.sql`, `sql/015-initialdata.sql`
-- **API-SRV**: `internal/model/example_model.go`, `internal/repository/example_repository.go`, `internal/handler/example_handler.go`
+- **SQL**: `src/api-srv/sql/migrations/0001_initial_schema.sql`, `src/api-srv/sql/fixtures/015-initialdata.sql`
+- **API-SRV**: `src/api-srv/internal/model/example_model.go`, `src/api-srv/internal/repository/example_repository.go`, `src/api-srv/internal/handler/example_handler.go`
 - **WEB-APP**: `types/example-type.ts`, `stores/user-store.ts`, `pages/app-user-list-page.tsx`, `pages/app-user-edit-page.tsx`
 
 Use this as a checklist for new entities. Update as needed for future quirks.

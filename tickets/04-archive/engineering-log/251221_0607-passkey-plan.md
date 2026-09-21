@@ -1,3 +1,5 @@
+> Archived from `doc/120-passkey-plan.md` on 2026-09-21 by PS0006; point-in-time, not maintained.
+
 # Passkey Implementation Plan
 
 ## Overview

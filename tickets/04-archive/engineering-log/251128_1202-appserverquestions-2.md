@@ -1,3 +1,5 @@
+> Archived from `doc/archive/102-appserverquestions.md` on 2026-09-21 by PS0006; point-in-time, not maintained.
+
 # 102 - Remaining App Server Questions
 
 After reviewing your answers to the 101 questions, I have a few remaining clarifications:
