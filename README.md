@@ -47,10 +47,9 @@ See [doc/060-dev-env-start.md](doc/060-dev-env-start.md) for day-to-day startup 
 | `./bin/215-run-api-srv` | Run the API server (supports `--daemon`/`--interactive`) |
 | `./bin/220-run-web-app` | Run the web app dev server |
 | `./bin/216-stop-local-stack` | Stop the API server and web app dev server |
-| `./bin/222-build-web-app` | Build and package web app for deployment |
-| `./bin/310-test-repo-model` | Run Go unit tests |
-| `./bin/320-test-web-service` | Run Python integration tests |
-| `./bin/330-test-load` | Run load tests |
+| `./bin/110-build-web-app` | Build and package web app for deployment |
+| `./bin/300-run-tests [all\|go\|unit\|e2e\|py\|load]` | The one test gate (go, vitest, Playwright, pytest, load) |
+| `./bin/330-test-load` | Load test a running API (not part of `all`) |
 
 Full command reference: [doc/902-project-commands.md](doc/902-project-commands.md)
 

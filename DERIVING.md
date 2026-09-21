@@ -79,7 +79,7 @@ initial migration.
 ```bash
 docker exec loc-postgres psql -U postgres -c "CREATE DATABASE loc_acme_db"   # dev DB, once (doc/050)
 bin/510-reset-test-db                                                      # loc_acme_test_db
-bin/200-run-tests all                                                      # go + playwright + pytest, all green
+bin/300-run-tests all                                                      # go + playwright + pytest, all green
 bin/215-run-api-srv && bin/220-run-web-app                                 # http://localhost:5173
 ```
 

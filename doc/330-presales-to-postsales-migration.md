@@ -287,7 +287,7 @@ sudo -u postgres psql -d "$DB" -c "select usename from pg_stat_activity where da
 ```
 
 Log in through the web app; on UAT run the suite against it
-(`TEST_ENV=... bin/200-run-tests py` from the laptop, or
+(`TEST_ENV=... bin/300-run-tests py` from the laptop, or
 `${ENV}-proto-run-tests` on the host). Then push a trivial commit to
 `BRANCH_TO_CHECKOUT` and watch the webhook do steps 7's build unattended.
 
