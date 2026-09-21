@@ -6,15 +6,14 @@ picks up the next piece of work. Do not edit below the marker.
 
 <!-- BEGIN GENERATED -- scripts/lint-tickets.py --update-status -->
 
-*Generated 2026-09-21 14:25 EDT by `scripts/lint-tickets.py --update-status`.*
+*Generated 2026-09-21 14:32 EDT by `scripts/lint-tickets.py --update-status`.*
 
 ## Questions for the customer — 0 open
 
-## Engineering — ready to start (10)
+## Engineering — ready to start (9)
 
 | Ticket | Title | Priority | Domain |
 |---|---|---|---|
-| **PS0002** | Security and correctness hygiene found in the 2026-09-21 template review | high | security |
 | **PS0003** | Sunset the shrmpl kv, log and vault clients and all their local tooling | high | tooling |
 | **PS0004** | Document the presales → post-sales deploy migration; fix bin/600 fail-fast | high | docs |
 | **PS0005** | One agent rulebook — fold doc/9xx guidance into CLAUDE.md, fix or retire opencode.json | high | docs |
@@ -24,6 +23,12 @@ picks up the next piece of work. Do not edit below the marker.
 | **PS0013** | Web hygiene — unused deps, dead schemas/types, console noise, generated grants/endpoints, naming, modal API | medium | web |
 | **PS0014** | Test harnesses, bin/ numbering and env-file contract, tmp/ conventions, coverage gaps | medium | tooling |
 | **PS0015** | sql/ and cmd/ shape — role files, fixture naming, migrate `new`, load-test out of cmd/ | medium | api |
+
+## Engineering — in progress (1)
+
+| Ticket | Title | Claimed |
+|---|---|---|
+| **PS0002** | Security and correctness hygiene found in the 2026-09-21 template review | 2026-09-21 by TKT-PS0002-security-correctness-hygiene |
 
 ## Engineering — validated, awaiting archive (1)
 
