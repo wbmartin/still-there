@@ -54,9 +54,22 @@ only on the host.**
 - `etc/*.service`, `*.path`, `nginx_*` are copied to the host's `etc/` and
   symlinked into `/etc/systemd/system` / `/etc/nginx/sites-enabled`, so the
   unit has one source of truth.
-- `shrmpl-etc/` mirrors the hook definition in `/srv/shrmpl/etc/` (the
-  `shrmpl-hook` webhook receiver); `HOOKID` in the filename stands for the
-  hook's id.
+- `shrmpl-etc/` mirrors `/srv/shrmpl/etc/` — the shrmpl agents' config,
+  which sits outside the app root, hence the separate directory. Same
+  redaction rule as `etc/`, and the host copy must match what is committed.
+
+  | Repo dir | Agent | One file per |
+  |---|---|---|
+  | `shrmpl-etc/hooks/` | `shrmpl-hook`: checks the signature against `HOOK_SECRET` and runs `HOOK_SCRIPT` when the push was to a branch in `HOOK_ALLOWED_BRANCHES` | webhook receiver, its id in the filename (`HOOKID`) |
+  | `shrmpl-etc/nack-monitors/` | nackmon, a dead-man's switch: the job curls `https://<nackmon-host>/checkin?code=<nackid>` on success and nackmon alerts when nothing arrives within `NACK_GRACE_MIN` of `NACK_CRON` | watched cron job, its check-in code in the filename (`NACKID`) |
+  | `shrmpl-etc/pulsecheck-endpoints/` | pulsecheck: polls every `PULSE_INTERVAL_SEC`, alerts on down/up transitions, warns on TLS certs inside 10 days | monitored URL |
+
+  The check-in URL is never hard-coded here: the job reads it from its own
+  env file (`HEALTHCHECK_URL` in `etc/prd-proto-backup.env`,
+  `CERT_HEALTHCHECK_URL` in `etc/<env>-proto-deploy.env`), so the code
+  appears only in a filename. `NACK_CRON` must match the crontab entry that
+  runs the job; the grace, escalation and interval values committed here are
+  starting points, not measurements.
 
 | Script | Sources | Required keys |
 |---|---|---|
@@ -143,8 +156,13 @@ full runbook belongs.
 6. **nginx + certs.** `etc/nginx_<site>` into `sites-available`, symlink,
    `*-renew-web-certs` from root's cron (`SITE_NAME`, `CERTBOT_EMAIL` in
    `deploy.env`).
-7. **Webhook.** `shrmpl-etc/*.env` into `/srv/shrmpl/etc/` with the real
-   `HOOK_SECRET`; `HOOK_ALLOWED_BRANCHES` must equal `BRANCH_TO_CHECKOUT`.
+7. **Webhook and monitoring.** Each `shrmpl-etc/` subdirectory into the
+   matching one under `/srv/shrmpl/etc/`. Hooks: the real `HOOK_SECRET`, and
+   `HOOK_ALLOWED_BRANCHES` must equal `BRANCH_TO_CHECKOUT`. Monitors: rename
+   each `NACKID` to the check-in code the monitor is registered under and put
+   the matching `https://<nackmon-host>/checkin?code=<nackid>` in
+   `HEALTHCHECK_URL` / `CERT_HEALTHCHECK_URL`. Pulsecheck: `PULSE_URL` takes
+   the real `SITE_NAME`.
 8. **fail2ban.** A real host also keeps a `/srv/fail2ban` jail (nginx
    auth-failure and API login-failure filters) mirrored under
    `infra/<host>/fail2ban/`. Not staged here; add it when the host exists.
