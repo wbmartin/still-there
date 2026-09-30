@@ -71,6 +71,18 @@ only on the host.**
   runs the job; the grace, escalation and interval values committed here are
   starting points, not measurements.
 
+- `fail2ban/` mirrors `/srv/fail2ban/{bin,etc}` — also outside the app root,
+  because fail2ban runs once per server and `etc/jail.local` is the single
+  file listing every jail on it. `bin/migrate-to-srv-config` is the one-time
+  root script that moved the live config out of `/etc/fail2ban/` and left
+  symlinks behind, which is what makes `/srv/fail2ban` the copy of record and
+  this mirror possible. The convention is **one jail per app**, named after
+  the app's `/srv/<app>` directory and watching that app's own nginx access
+  log — this repo owns `[<env>-proto]`. On a host shared with other apps the
+  live `jail.local` is the union of the jails each app's repo owns; carry a
+  change in either direction so the two stay equal. Only `ignoreip` is
+  redacted. `maxretry` is deliberately stricter on prd (10) than uat (20).
+
 | Script | Sources | Required keys |
 |---|---|---|
 | `uat-proto-build`, `-install-api`, `-publish-web-client` | `etc/uat-proto-deploy.env` | registry server + credentials, `SERVICE`, `HEALTH_URL`, `DEPLOY_TAG`, `BRANCH_TO_CHECKOUT`, `REPO_URL`, `BUILD_STG`, `SLACK_WEBHOOK` |
@@ -163,9 +175,13 @@ full runbook belongs.
    the matching `https://<nackmon-host>/checkin?code=<nackid>` in
    `HEALTHCHECK_URL` / `CERT_HEALTHCHECK_URL`. Pulsecheck: `PULSE_URL` takes
    the real `SITE_NAME`.
-8. **fail2ban.** A real host also keeps a `/srv/fail2ban` jail (nginx
-   auth-failure and API login-failure filters) mirrored under
-   `infra/<host>/fail2ban/`. Not staged here; add it when the host exists.
+8. **fail2ban.** If `/etc/fail2ban/jail.local` is still a real file rather
+   than a symlink, run `fail2ban/bin/migrate-to-srv-config` as root once.
+   Then copy `fail2ban/etc/*` to `/srv/fail2ban/etc/`, fill `ignoreip`, and
+   `fail2ban-client reload && fail2ban-client status <env>-proto`. On a host
+   that already carries other apps, merge this repo's `[<env>-proto]` jail
+   into the live file instead of overwriting it, and bring the merged result
+   back here.
 9. **Prod extras.** `prd-proto-backup-all` from root's cron with
    `etc/prd-proto-backup.env` (root:root 0600); `REMOTE_SERVER` is an ssh
    alias in root's `~/.ssh/config`.
