@@ -20,6 +20,11 @@
 -- Grant ids must match src/api-srv/internal/model (user grants). That code is
 -- the source of truth; the arrays below are its projection into SQL.
 --
+-- TENANTS (security_context_id): 1 is the first real tenant, 2 is the test
+-- tenant and is reserved -- see CLAUDE.md and doc/900. Automated tests are
+-- being moved into tenant 2 (PS0022); the users below still sit in 1 until
+-- that lands.
+--
 -- Passwords: admin / admin123!, basic / basic123!, mfa / basic123! (Argon2id). Local
 -- scratch databases only -- change for any non-dev install.
 

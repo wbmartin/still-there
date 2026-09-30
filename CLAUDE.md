@@ -35,6 +35,12 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
 - Schema: no foreign keys, no triggers, no `DEFAULT`s for application data
   (`create_ts`/`update_ts`/`delete_ts` are set in Go); every table carries
   `security_context_id`; primary key is `<table>_id`; snake_case.
+- **`security_context_id` is the tenant. `1` is the first real tenant; `2` is
+  the test tenant and is reserved — every automated test runs there and no
+  real tenant is ever numbered 2.** A caller's tenant comes from the JWT, not
+  from the request body (handlers overwrite what a client sends), so a test
+  chooses its tenant by which seeded user it signs in as. Fixtures, tests and
+  derived apps keep this numbering.
 - Security checks are called explicitly in each handler (JWT → rate limit →
   CSRF → authorization → `CheckAllChecksComplete`); exceptions are written in
   the handler, not hidden in middleware. Non-negotiable.

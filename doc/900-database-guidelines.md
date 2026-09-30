@@ -7,6 +7,13 @@ This section describes how I'd like an AI to think and respond for database desi
 - We will only use one database per project, don't worry about abstracting for multiple database implementations. Unless otherwise sepcified, the database will be Postgres.
 - All tables should have a "create_ts", "update_ts", and "delete_ts" of type numeric(17,7) for time and a "create_user_id", "update_user_id", "delete_user_id" of type integer.
 - Each table should also have a "security_context_id" field of type integer to enable multi-tenant implementations.
+- Tenant numbering is fixed: **1 is the first real tenant, 2 is the test tenant.**
+  2 is reserved — every automated suite (Go integration, pytest, Playwright)
+  runs in it, and no real tenant is ever assigned it. A row's tenant is taken
+  from the authenticated caller's JWT claim, never from a client-supplied
+  field; handlers overwrite `security_context_id` on the way in. Tests
+  therefore select their tenant by the seeded user they authenticate as, and a
+  test that must prove isolation uses 1 and 2 as the two sides.
 - Don't create foreign keys / Postgres references within the database - managed in the application layer similar to how nosql is managed.
 - Don't create triggers for updating dates within the database - managed by the application layer.
 - Schema changes are versioned SQL files applied by the project's own migrator (`src/api-srv/cmd/migrate`); see "Schema changes" below. No third-party migration framework.
