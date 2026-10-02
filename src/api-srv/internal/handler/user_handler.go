@@ -577,8 +577,23 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	user.UpdateTS = now
 	user.UpdateUserID = jwtClaims.UserID
 
+	// The name the login's tokens carry, before an update that may rename it.
+	priorUserName, err := userNameOf(
+		r, h.userRepo, jwtClaims.SecurityContext, user.AppUserID,
+	)
+	if err != nil {
+		app.WriteError(
+			w,
+			http.StatusInternalServerError,
+			fmt.Sprintf("Failed to read user: app_user_id=%d", user.AppUserID),
+			"USR_UPD_FAIL",
+			err,
+		)
+		return
+	}
+
 	// Update user with optimistic locking
-	err := h.userRepo.UpdateUser(
+	err = h.userRepo.UpdateUser(
 		r.Context(),
 		&user,
 		clientUpdateTS,
@@ -629,6 +644,12 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.Debug("UUD0", "User updated")
+	// Name, groups and MFA exemption are in the login's tokens.
+	if !revokeUserSessionList(
+		app, w, h.appsrv, priorUserName, user.UserName,
+	) {
+		return
+	}
 	wrapper := model.DataWrapper{Data: user}
 	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info(
@@ -676,6 +697,20 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	deletedUserName, err := userNameOf(
+		r, h.userRepo, jwtClaims.SecurityContext, userID,
+	)
+	if err != nil {
+		app.WriteError(
+			w,
+			http.StatusInternalServerError,
+			fmt.Sprintf("Failed to read user: app_user_id=%d", userID),
+			"UDF0",
+			err,
+		)
+		return
+	}
+
 	// Delete user with optimistic locking
 	now := CurrentTimestamp()
 	deletedID, err := h.userRepo.DeleteUser(
@@ -719,6 +754,9 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !revokeUserSessionList(app, w, h.appsrv, deletedUserName) {
+		return
+	}
 	data := map[string]interface{}{
 		"message":   "User deleted successfully",
 		"appUserId": deletedID,
@@ -848,6 +886,12 @@ func (h *UserHandler) AddUserListToGroupHandler(
 	}
 
 	app.Info("ADD_USR_GRP_D", "Users added to group successfully")
+	// Group membership is in every token's grants.
+	if !revokeUserSessionList(
+		app, w, h.appsrv, userNameListOf(updatedUsers)...,
+	) {
+		return
+	}
 	wrapper := model.DataWrapper{Data: updatedUsers}
 	app.WriteJSON(w, http.StatusOK, wrapper)
 }
@@ -957,6 +1001,12 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 	}
 
 	app.Info("REM_USR_GRP_D", "Users removed from group successfully")
+	// Group membership is in every token's grants.
+	if !revokeUserSessionList(
+		app, w, h.appsrv, userNameListOf(updatedUsers)...,
+	) {
+		return
+	}
 	wrapper := model.DataWrapper{Data: updatedUsers}
 	app.WriteJSON(w, http.StatusOK, wrapper)
 }
@@ -1078,6 +1128,9 @@ func (h *UserHandler) ChangeOtherUserPassword(
 	}
 
 	app.Debug("PW_CHANGED", "Password updated for user: "+user.UserName)
+	if !revokeUserSessionList(app, w, h.appsrv, user.UserName) {
+		return
+	}
 
 	wrapper := model.DataWrapper{
 		Data: map[string]string{"message": "Password changed successfully"},

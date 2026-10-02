@@ -53,6 +53,8 @@ authenticates in one step. Fixtures:
 - `test_error_reporting.py` — client-side error reporting endpoint
 - `test_security_context_isolation.py` — security contexts isolate data
   and permissions
+- `test_session_revocation.py` — sign-out, an admin password change and a
+  group grant edit end live sessions (old cookie gets 401)
 - `test_user_management.py` — user management operations (admin only)
 - `test_z_error_scenarios.py` — error conditions and status codes
 

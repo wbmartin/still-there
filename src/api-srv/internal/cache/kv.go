@@ -1,8 +1,9 @@
 package cache
 
 // In-process key-value store: rate-limit counters, login lockouts, MFA temp
-// tokens and user blocks. PROCESS-LOCAL — restarting the API server clears
-// it, which is acceptable for one app server.
+// tokens, user blocks and session revocations. PROCESS-LOCAL — restarting
+// the API server clears it, which is acceptable for one app server (a
+// revoked token is good again until it expires; doc/105).
 //
 // Graduation trigger: the day this app runs behind a load balancer with two
 // or more API server processes, this needs a shared store (Redis or the

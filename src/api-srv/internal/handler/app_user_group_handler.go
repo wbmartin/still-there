@@ -268,6 +268,23 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 	}
 
 	app.Debug("UGRP_UPDATED", "User group updated")
+	// The group's grants are in every member's tokens: their sessions end.
+	memberUserNameList, err := h.appUserGroupRepo.RetrieveMemberUserNameList(
+		r.Context(), group.AppUserGroupID, jwtClaims.SecurityContext,
+	)
+	if err != nil {
+		app.WriteError(
+			w,
+			http.StatusInternalServerError,
+			"Saved; reading the group's members failed",
+			"SES_REVOKE",
+			err,
+		)
+		return
+	}
+	if !revokeUserSessionList(app, w, h.appsrv, memberUserNameList...) {
+		return
+	}
 	wrapper := model.DataWrapper{Data: group}
 	app.WriteJSON(w, http.StatusOK, wrapper)
 	app.Info(

@@ -151,20 +151,49 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
      "exp": 1678886400,
      "nbf": 1678882800,
      "iat": 1678882800,
-     "jti": "unique-session-id",
+     "jti": "1678882800123456789",
      "uid": 123,
      "ses": "session-id",
      "sctx": 1,
      "grants": [1001, 1002, 1003, 8001, 9001]
    }
    ```
+   `jti` is the issue time in Unix ns (`iat` is whole seconds, too coarse
+   to order a token against a revocation). `ses` is the session id: minted
+   at sign-in and on a context switch, kept by `/refresh`, and its last 3
+   characters are the CSRF token.
 
 ## Security
 
 ### Authentication
 - **JWT**: RS256 signed tokens with session management
 - **Password Hashing**: Argon2id with time=3, memory=64MB, threads=4, key length=32
-- **Session Management**: Session IDs stored in JWT, validated against the in-process KV store for blocking
+- **Session Management**: Session IDs stored in JWT; `CheckJWT` refuses a revoked session (see Session Revocation)
+
+### Session Revocation
+A JWT is otherwise good until it expires, so `CheckJWT` also reads two
+in-process KV keys on every request (`internal/security/session_revocation.go`):
+
+- `SESSION_REVOKED*<session id>` — one session ended. Written by `/logoff`,
+  and by `/changeSecurityContext` for the session it replaces.
+- `REVOKED_BEFORE*<user name>` = `<unix ns>|<kept session id>` — every token
+  of that login issued earlier is refused, except the kept session. Written
+  by `/changeOwnPassword` (keeps the caller's session: the person who changed
+  the password stays signed in), and with nothing kept by
+  `/changeOtherUserPassword`, `/admin/resetUserMFA`, `PUT /user` (name,
+  groups, MFA exemption; the prior name), `DELETE /user`,
+  `/addUserListToGroup`, `/removeUserListFromGroup`, and `PUT /appUserGroup`
+  (every member of the group, any tenant).
+
+A revoked token gets 401; a KV read error gets 500 (fail closed). A failed
+revocation after a committed write is answered 500 `SES_REVOKE`, never
+hidden. Entries live `JWT_SESSION_EXPIRE_HOURS`, the longest a token can.
+
+**Limit: a restart forgets revocations.** The KV is process memory and
+revocations have no durable row, so after an API restart a token revoked
+before it is good again until it expires. Accepted for one app server; a
+second server or a need to survive restarts means a shared store (see
+`internal/cache/kv.go`).
 
 ### Authorization (RBAC)
 - **Grants**: Context-specific permissions in JWT (only current context's grants)
@@ -177,6 +206,7 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
    - Authenticated: 200 requests/minute per user
    - Unauthenticated: 20 requests/minute per IP
 3. **User Blocking**: Check the in-process KV store for blocked users
+   (session revocation is part of step 1, JWT validation)
 4. **CSRF Protection**: Compare `X-CSRF-Token` header with last 3 chars of session ID (safe methods — GET, HEAD, OPTIONS, TRACE — are exempt)
 5. **RBAC**: Verify user has required grant for target security context
 

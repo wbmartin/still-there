@@ -211,6 +211,47 @@ func (r *AppUserGroupRepository) UpdateAppUserGroup(
 	return nil
 }
 
+// RetrieveMemberUserNameList returns the user_name of every live login that
+// holds groupID, a group of securityContext. A login of any tenant can hold
+// it (GetGrantsForGroups keys grants by the group's tenant), so the tenant
+// filter is on the group, not on app_user.
+func (r *AppUserGroupRepository) RetrieveMemberUserNameList(
+	ctx context.Context,
+	groupID int,
+	securityContext int,
+) ([]string, error) {
+	query := `
+		SELECT u.user_name
+		FROM app_user u
+		WHERE $1 = ANY(u.app_user_group_membership_list)
+		  AND u.delete_user_id IS NULL
+		  AND EXISTS (SELECT 1 FROM app_user_group g
+		              WHERE g.app_user_group_id = $1
+		                AND g.security_context_id = $2)`
+
+	var userNameList []string
+	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
+		userNameList = nil
+		rowList, err := r.db.Query(ctx, query, groupID, securityContext)
+		if err != nil {
+			return fmt.Errorf("failed to read group members: %w", err)
+		}
+		defer rowList.Close()
+		for rowList.Next() {
+			var userName string
+			if err := rowList.Scan(&userName); err != nil {
+				return fmt.Errorf("failed to scan group member: %w", err)
+			}
+			userNameList = append(userNameList, userName)
+		}
+		return rowList.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return userNameList, nil
+}
+
 // DeleteAppUserGroup soft deletes a user group if no users are assigned
 func (r *AppUserGroupRepository) DeleteAppUserGroup(
 	ctx context.Context,

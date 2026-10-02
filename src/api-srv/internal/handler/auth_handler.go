@@ -13,7 +13,6 @@ import (
 	"github.com/wbmartin/starter-api/internal/cache"
 	"github.com/wbmartin/starter-api/internal/config"
 	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
 )
 
@@ -383,7 +382,7 @@ func AuthHandler(
 // RefreshHandler handles session refresh
 func RefreshHandler(
 	appServices *app.Services,
-	userRepo *repository.UserRepository,
+	userRepo UserRepositoryInterface,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
@@ -451,11 +450,13 @@ func RefreshHandler(
 		}
 		user.SecurityContext = jwtClaims.SecurityContext
 
-		// Issue updated JWT
-		jwt, sessionID, err := createJWTForUser(
+		// Re-sign on the same session id: one login is one session, so
+		// sign-out (RevokeSession) ends every token it was refreshed into.
+		jwt, sessionID, err := reissueJWTForUser(
 			user,
 			grantsMap[user.SecurityContext],
 			appServices,
+			jwtClaims.SessionID,
 		)
 		if err != nil {
 			app.WriteError(
@@ -504,7 +505,7 @@ func RefreshHandler(
 // ChangeSecurityContextHandler handles changing the user's security context
 func ChangeSecurityContextHandler(
 	appServices *app.Services,
-	userRepo *repository.UserRepository,
+	userRepo UserRepositoryInterface,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create app helper for error handling
@@ -619,6 +620,20 @@ func ChangeSecurityContextHandler(
 		updatedUser := *dbUser
 		updatedUser.SecurityContext = req.SecurityContext
 
+		// The new context gets a new session id; the old one ends, so a
+		// sign-out still ends every token of this login.
+		err = security.RevokeSession(appServices, app.GetClaims().SessionID)
+		if err != nil {
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to end the previous session",
+				"SES_REVOKE",
+				err,
+			)
+			return
+		}
+
 		// Issue new JWT with updated context
 		jwt, sessionID, err := createJWTForUser(
 			&updatedUser,
@@ -695,6 +710,20 @@ func LogoffHandler(appServices *app.Services) http.HandlerFunc {
 			app.GetUsername(),
 		)
 
+		// End the session server-side: expiring the cookie only asks the
+		// browser to forget the token; a copy of it would stay valid.
+		err := security.RevokeSession(appServices, app.GetClaims().SessionID)
+		if err != nil {
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to end the session",
+				"LOGOFF_REVOKE",
+				err,
+			)
+			return
+		}
+
 		// Clear the auth cookie
 		setAuthCookie(w, "", -1) // expire immediately
 
@@ -711,7 +740,7 @@ func LogoffHandler(appServices *app.Services) http.HandlerFunc {
 // ChangeOwnPasswordHandler handles changing the current user's password
 func ChangeOwnPasswordHandler(
 	appServices *app.Services,
-	userRepo *repository.UserRepository,
+	userRepo UserRepositoryInterface,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
@@ -855,6 +884,22 @@ func ChangeOwnPasswordHandler(
 			return
 		}
 
+		// Every other session of this login ends; the one that changed the
+		// password stays signed in.
+		err = security.RevokeUserSessions(
+			appServices, jwtClaims.Subject, jwtClaims.SessionID,
+		)
+		if err != nil {
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Password changed; ending the other sessions failed",
+				"SES_REVOKE",
+				err,
+			)
+			return
+		}
+
 		appServices.Logger.Info(
 			"CHANGE_PW_SUCCESS",
 			"Password changed successfully for user: "+jwtClaims.Subject,
@@ -869,18 +914,31 @@ func ChangeOwnPasswordHandler(
 	}
 }
 
-// createJWTForUser creates a JWT token for the authenticated user
+// createJWTForUser creates a JWT on a new session id (sign-in, context
+// switch).
 func createJWTForUser(
 	user *model.AppUserModel,
 	grantList []int,
 	appServices *app.Services,
 ) (string, string, error) {
-	// Generate session ID
-	sessionIDBytes := make([]byte, 16)
-	if _, err := rand.Read(sessionIDBytes); err != nil {
-		return "", "", err
+	return reissueJWTForUser(user, grantList, appServices, "")
+}
+
+// reissueJWTForUser signs a JWT with a fresh expiry on sessionID; an id too
+// short to hold a CSRF tail ("" included) is replaced by a new one.
+func reissueJWTForUser(
+	user *model.AppUserModel,
+	grantList []int,
+	appServices *app.Services,
+	sessionID string,
+) (string, string, error) {
+	if len(sessionID) < 3 {
+		sessionIDBytes := make([]byte, 16)
+		if _, err := rand.Read(sessionIDBytes); err != nil {
+			return "", "", err
+		}
+		sessionID = hex.EncodeToString(sessionIDBytes)
 	}
-	sessionID := hex.EncodeToString(sessionIDBytes)
 
 	// Create JWT
 	jwt, err := auth.GenerateJWT(

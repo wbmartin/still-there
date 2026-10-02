@@ -8,7 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/logging"
+	"github.com/wbmartin/starter-api/internal/model"
+	"github.com/wbmartin/starter-api/internal/security"
 )
 
 // writeJSON writes a JSON response
@@ -174,4 +177,59 @@ func GetOptionalIntFromQuery(r *http.Request, key string) (int, error) {
 		return 0, fmt.Errorf("invalid %s: %w", key, err)
 	}
 	return parsed, nil
+}
+
+// revokeUserSessionList ends every session of the named logins: their tokens
+// carry the identity and grants a write just changed. The write has
+// committed; a failed revocation is answered 500, never hidden.
+func revokeUserSessionList(
+	appHelper *security.AppHelper,
+	w http.ResponseWriter,
+	appServices *app.Services,
+	userNameList ...string,
+) bool {
+	for _, userName := range userNameList {
+		if userName == "" {
+			continue
+		}
+		err := security.RevokeUserSessions(appServices, userName, "")
+		if err != nil {
+			appHelper.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Saved; ending the login's open sessions failed",
+				"SES_REVOKE",
+				err,
+			)
+			return false
+		}
+	}
+	return true
+}
+
+// userNameListOf returns the user_name of each login in userList.
+func userNameListOf(userList []*model.AppUserModel) []string {
+	userNameList := make([]string, 0, len(userList))
+	for _, user := range userList {
+		userNameList = append(userNameList, user.UserName)
+	}
+	return userNameList
+}
+
+// userNameOf returns the current user_name of one login of securityContext,
+// "" when there is none: the name its tokens carry, read before a write that
+// may rename or delete it.
+func userNameOf(
+	r *http.Request,
+	userRepo UserRepositoryInterface,
+	securityContext int,
+	userID int,
+) (string, error) {
+	userList, err := userRepo.RetrieveUserList(
+		r.Context(), securityContext, []int{userID}, 0,
+	)
+	if err != nil || len(userList) == 0 {
+		return "", err
+	}
+	return userList[0].UserName, nil
 }

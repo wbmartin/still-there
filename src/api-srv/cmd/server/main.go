@@ -40,7 +40,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// In-process key-value store (rate limits, lockouts, MFA temp tokens)
+	// In-process key-value store (rate limits, lockouts, MFA temp tokens,
+	// session revocations)
 	kv := cache.NewKV()
 	defer kv.Close()
 

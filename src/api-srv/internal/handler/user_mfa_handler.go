@@ -765,6 +765,9 @@ func AdminResetUserMFAHandler(
 			return
 		}
 
+		if !revokeUserSessionList(app, w, appServices, targetUser.UserName) {
+			return
+		}
 		wrapper := model.DataWrapper{
 			Data: map[string]interface{}{
 				"message":  "MFA reset successfully",

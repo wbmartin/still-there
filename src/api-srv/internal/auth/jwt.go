@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -15,6 +16,16 @@ type Claims struct {
 	SecurityContext int    `json:"sctx"`
 	Grants          []int  `json:"grants"`
 	// []grant_id for current security context
+}
+
+// IssuedAtNano returns the issue time in Unix ns that GenerateJWT writes
+// to jti; false when jti does not hold one.
+func (c *Claims) IssuedAtNano() (int64, bool) {
+	issuedNano, err := strconv.ParseInt(c.ID, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return issuedNano, true
 }
 
 // Argon2id parameters (OWASP recommended)
@@ -47,7 +58,9 @@ func GenerateJWT(
 				time.Duration(expireHours))),
 			NotBefore: jwt.NewNumericDate(now),
 			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        fmt.Sprintf("%d", now.UnixNano()),
+			// The issue time in ns: iat is whole seconds, too coarse to
+			// order a token against a revocation (IssuedAtNano).
+			ID: fmt.Sprintf("%d", now.UnixNano()),
 		},
 		UserID:          userID,
 		SessionID:       sessionID,

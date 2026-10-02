@@ -93,19 +93,6 @@ removed it and the "Create one here" link; admins create or invite (B035).
 capped (B011), generic answer.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ X\] skip
 
-### B003 — Server-side session revocation
-
-- **Priority:** P1  **Area:** go-api, tests
-- **GRC:** `src/internal/security/session_revocation.go:1-86`; `security/app_helper.go:297-311`; `handler/auth_handler.go:837-846,1016-1021`; `handler/common.go:291-312,314-328`; `user_handler.go:641-646,725-730,865-871,992-998,1139-1142`; `user_mfa_handler.go:719-721`; `user_block_handler.go:142-146`; `security/session_revocation_test.go:16-65`; `handler/session_revocation_test.go:14-37`   **PROTO:** new `src/api-srv/internal/security/session_revocation.go`; `security/app_helper.go:274-305`; `handler/auth_handler.go:677-708,711-870`; `user_handler.go:504-643,645-733,735-963,965-1087`; `user_mfa_handler.go:674-768`; `auth/jwt.go:47`
-- **Ticket:** RG0043 item 41 / `720f5e1`
-- **What:** PROTO JWTs live to expiry after logoff, password/MFA reset, delete,
-group change. GRC checks `SESSION_REVOKED*<sid>` and `REVOKED_BEFORE*<user>`
-in `CheckJWT`; KV error 500, revoked 401.
-- **Port notes:** Drop-in; restart forgets revocations. Fix GRC's gap: group
-grant edit (`app_user_group_handler.go:176-262`) must revoke. Add HTTP tests.
-Pairs B004, B034.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
 ### B004 — Refresh keeps its session id; web re-syncs CSRF once
 
 - **Priority:** P1  **Area:** go-api, web-app
@@ -8829,4 +8816,17 @@ asserts it (:103). GRC: `/auth` returns `mfaEnrolled`, login routes to
 - **Port notes:** One change: Go, web, pytest, e2e (enrolled re-login never
 calls `/mfaSetup`). Test 409 by status, not GRC's regex (:56); drop `/grc`
 (:103). Harness B019; docs B051.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+### B003 — COMPLETED — Server-side session revocation
+- **Completed:** 2026-10-02. New `security/session_revocation.go`: `CheckJWT` refuses a revoked session id (`SESSION_REVOKED*`) or a token issued before a per-login cutoff (`REVOKED_BEFORE*`) with 401, and a KV read error with 500; entries live `JWT_SESSION_EXPIRE_HOURS`. Revoked by `/logoff`, own password change (the changing session survives, as in GRC), `/changeOtherUserPassword`, `/admin/resetUserMFA`, `PUT`/`DELETE /user`, add/remove group members, and `PUT /appUserGroup` (every member, via new `RetrieveMemberUserNameList`; GRC's gap). Deviations: the cutoff compares nanoseconds (jti already holds issue ns, `Claims.IssuedAtNano`) so a token issued in the second of a revocation is not let through as in GRC; B004's minimal piece landed here (`/refresh` re-signs on the same session id via `reissueJWTForUser`) and `/changeSecurityContext` revokes the id it replaces, so one login stays one live id. Restart-forgets-revocations documented in doc/105 Session Revocation; Refresh, ChangeSecurityContext and ChangeOwnPassword handlers now take `UserRepositoryInterface` for tests. Tests: all green, go=211 unit=31 e2e=8 py=70
+- **Priority:** P1  **Area:** go-api, tests
+- **GRC:** `src/internal/security/session_revocation.go:1-86`; `security/app_helper.go:297-311`; `handler/auth_handler.go:837-846,1016-1021`; `handler/common.go:291-312,314-328`; `user_handler.go:641-646,725-730,865-871,992-998,1139-1142`; `user_mfa_handler.go:719-721`; `user_block_handler.go:142-146`; `security/session_revocation_test.go:16-65`; `handler/session_revocation_test.go:14-37`   **PROTO:** new `src/api-srv/internal/security/session_revocation.go`; `security/app_helper.go:274-305`; `handler/auth_handler.go:677-708,711-870`; `user_handler.go:504-643,645-733,735-963,965-1087`; `user_mfa_handler.go:674-768`; `auth/jwt.go:47`
+- **Ticket:** RG0043 item 41 / `720f5e1`
+- **What:** PROTO JWTs live to expiry after logoff, password/MFA reset, delete,
+group change. GRC checks `SESSION_REVOKED*<sid>` and `REVOKED_BEFORE*<user>`
+in `CheckJWT`; KV error 500, revoked 401.
+- **Port notes:** Drop-in; restart forgets revocations. Fix GRC's gap: group
+grant edit (`app_user_group_handler.go:176-262`) must revoke. Add HTTP tests.
+Pairs B004, B034.
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip

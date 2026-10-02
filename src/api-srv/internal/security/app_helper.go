@@ -297,6 +297,33 @@ func (sh *AppHelper) CheckJWT() *AppHelper {
 		return sh
 	}
 
+	// A valid signature is not enough: the session may have been ended or
+	// the login's tokens revoked (session_revocation.go). An unreadable KV
+	// fails closed.
+	revoked, err := sessionRevoked(sh.appServices, claims)
+	if err != nil {
+		sh.appServices.Logger.Error(
+			"JWR0",
+			"Session revocation check failed, failing closed: "+err.Error(),
+		)
+		sh.failAndRespond(
+			http.StatusInternalServerError,
+			"Session check failed",
+		)
+		return sh
+	}
+	if revoked {
+		sh.appServices.Logger.Warn(
+			"JWR1",
+			"Revoked session refused: "+claims.Subject,
+		)
+		sh.failAndRespond(
+			http.StatusUnauthorized,
+			"Session has ended; sign in again",
+		)
+		return sh
+	}
+
 	sh.claims = claims
 	sh.ctx = context.WithValue(sh.r.Context(), claimsKey, claims)
 	sh.username = claims.Subject

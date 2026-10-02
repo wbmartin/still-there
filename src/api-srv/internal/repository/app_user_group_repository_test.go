@@ -304,3 +304,16 @@ func (s *AppUserGroupRepositoryTestSuite) TestDeleteAppUserGroup() {
 	s.T().
 		Skip("Skipping due to test environment issues - functionality tested in integration tests")
 }
+
+func (s *AppUserGroupRepositoryTestSuite) TestRetrieveMemberUserNameList() {
+	ctx := context.Background()
+	// Seed: admin holds group 2 (Admin) of context 1.
+	memberList, err := s.repo.RetrieveMemberUserNameList(ctx, 2, 1)
+	s.NoError(err)
+	s.Contains(memberList, "admin")
+
+	// The tenant filter is on the group: group 2 is not context 2's.
+	memberList, err = s.repo.RetrieveMemberUserNameList(ctx, 2, 2)
+	s.NoError(err)
+	s.Empty(memberList)
+}
