@@ -22,7 +22,7 @@
 --
 -- TENANTS (security_context_id): 1 is the first real tenant, 2 is the test
 -- tenant and is reserved -- see CLAUDE.md and doc/900. Automated tests are
--- being moved into tenant 2 (PS0022); the users below still sit in 1 until
+-- being moved into tenant 2; the users below still sit in 1 until
 -- that lands.
 --
 -- Passwords: admin / admin123!, basic / basic123!, mfa / basic123! (Argon2id). Local
@@ -85,7 +85,7 @@ SELECT setval('app_user_group_app_user_group_id_seq',
 -- Users, all in context 1: admin (Admin group) and basic (Basic User group)
 -- are MFA exempt so the test suites can sign in with a password alone; mfa
 -- (Basic User group, password basic123!) is NOT exempt and starts with no
--- seed, so the TOTP enrol → verify path is exercised end to end (PS0020).
+-- seed, so the TOTP enrol → verify path is exercised end to end.
 WITH common_vars AS (
     SELECT EXTRACT(EPOCH FROM NOW()) AS ts, 0 AS system_id
 )

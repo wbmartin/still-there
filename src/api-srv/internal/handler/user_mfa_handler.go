@@ -217,7 +217,7 @@ func MFASetupHandler(
 			tempReq.TempToken != "" {
 			// Temp token path - skip JWT for temp token authentication.
 			// The other checks (rate limit, user block) have already run;
-			// this is where a failed one stops the request (PS0020).
+			// this is where a failed one stops the request.
 			app.SkipJWT()
 			if !app.CheckAllChecksComplete() {
 				return
@@ -420,7 +420,7 @@ func MFAVerifyHandler(
 		if req.TempToken != "" {
 			// Temp token path - skip JWT for temp token authentication.
 			// The other checks (rate limit, user block) have already run;
-			// this is where a failed one stops the request (PS0020).
+			// this is where a failed one stops the request.
 			app.SkipJWT()
 			if !app.CheckAllChecksComplete() {
 				return
@@ -623,7 +623,7 @@ func MFAVerifyHandler(
 
 			// The temp token is single-use: delete it. (Set with ttl "0" was
 			// an invalid expiration whose error went unread, so the token
-			// stayed replayable for its whole 10 minutes — PS0020.)
+			// stayed replayable for its whole 10 minutes.)
 			if err := appServices.KV.Del(
 				"TEMP_AUTH_SUCCESS_" + req.TempToken,
 			); err != nil {

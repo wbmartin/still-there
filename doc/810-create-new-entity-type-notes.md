@@ -1,4 +1,4 @@
-<!-- rewrite: PS0010 — paths fixed by PS0006 (2026-09-21); the procedure itself is out of date (Read* → Retrieve*, no biz/appcore schemas, no update_*.sql files) -->
+<!-- rewrite pending — paths fixed 2026-09-21; the procedure itself is out of date (Read* → Retrieve*, no biz/appcore schemas, no update_*.sql files) -->
 # Creating a New Entity Type
 
 This document outlines the steps and key points for creating a new entity type in the ProtoStack application. It covers SQL schema, API server (Go), and web app (TypeScript/React) changes. Reference the `example` entity for working implementations.
@@ -26,8 +26,8 @@ This document outlines the steps and key points for creating a new entity type i
    - Standard fields: `entity_id` (primary key), `security_context`, `create_ts`, `create_user_id`, `update_ts`, `update_user_id`, `delete_ts`, `delete_user_id`.
    - Entity-specific fields in snake_case.
    - Example: See `src/api-srv/sql/migrations/0001_initial_schema.sql` for the `example` table; a new entity is a new `src/api-srv/sql/migrations/NNNN_<name>.sql`.
-   - **Column types with a worked example** on `example` (PS0016,
-     `migrations/0002_example_jsonb_uuid.sql`):
+   - **Column types with a worked example** on `example`
+     (`migrations/0002_example_jsonb_uuid.sql`):
      - `uuid` — `example_uuid UUID NOT NULL` + unique index. The server
        assigns it (`model.NewUUID()`, crypto/rand v4, no library) in the
        create handler; it is never in an UPDATE's SET list and

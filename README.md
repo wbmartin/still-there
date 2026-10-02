@@ -21,8 +21,6 @@ ProtoStack-ReactGo/
 ├── etc/                  # Env files (loc-, e2e-, uat-*.example) and local certs
 ├── infra/                # Post-sales host mirrors (placeholder; see infra/README.md)
 ├── tests/                # pytest HTTP suite
-├── tickets/              # All engineering work and customer questions (see CLAUDE.md)
-├── scripts/              # Repo tooling (lint-tickets.py)
 ├── doc/                  # Reference docs (index below)
 ├── .claude/              # Agent skills
 ├── dist/                 # Build output (gitignored)
@@ -102,9 +100,4 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 | [doc/340-db-host-setup.md](doc/340-db-host-setup.md) | The three Postgres roles (app, ddl, ci) and the one-time host SQL |
 | [infra/README.md](infra/README.md) | Post-sales deploy pipeline (placeholder) |
 
-Project history — old reviews, plans, superseded notes — lives in
-`tickets/04-archive/engineering-log/`, dated, not maintained.
-
-### Project Tracking
-| File | Description |
-|------|-------------|
+Project history lives in `git log`.

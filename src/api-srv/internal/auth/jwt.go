@@ -27,7 +27,7 @@ const (
 )
 
 // GenerateJWT creates a new JWT token. issuer is Config.AppName so a
-// derived app's tokens name it (PS0007).
+// derived app's tokens name it.
 func GenerateJWT(
 	issuer string,
 	username string,

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// The profile page edits the caller's own row and preferences (PS0018).
+// The profile page edits the caller's own row and preferences.
 // The saved colour scheme must apply on the next load without the page
 // being visited, and rows-per-page must drive the list pages.
 

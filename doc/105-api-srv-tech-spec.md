@@ -171,7 +171,7 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
 
 **Each handler runs these itself, explicitly, in this order, in its own
 body** (`internal/security/app_helper.go`). There is no middleware and no
-route wrapper, by decision (PS0009): the policy for an endpoint is read in
+route wrapper, by decision: the policy for an endpoint is read in
 the handler, not inferred from a chain. The shape every entity handler has:
 
 ```go

@@ -23,8 +23,6 @@ here.
   `cmd/migrate`. This is the **only** way a schema change reaches a
   database; never hand-run DDL. Also `roles.sql` and `fixtures/`.
 - `doc/` — reference docs.
-- `tickets/` — every piece of engineering work and every open question for
-  the customer, one file per item. See below.
 
 ## Conventions
 
@@ -53,36 +51,9 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
   variable lookups.
 - Git: summarize a PR from `git diff`, not memory, in markdown with headings.
 
-## Tickets
-
-Every piece of work is a ticket in `tickets/`. Ids are `PS` plus four
-digits: `PS0000`–`PS0999` is engineering work, `PS1000`+ is a question for
-the customer/stakeholder (`PS1001-ASK-CUSTOMER-slug.md`). The folder is the
-state: `01-open/` → `02-working/PS0023-slug/` → `03-done/` → `04-archive/`.
-
-**The `ticket-workflow` skill is the only copy of the procedure** — taking a
-number, claiming, branching as `TKT-PS0023-slug`, the checks, asking
-Brandon before the merge, validating on UAT. Load it when you pick a
-ticket up. `ticket-triage` health-checks the set; `compact-tickets` folds
-`03-done/` (and any legacy `doc/PS*/` folders) into `04-archive/`; `handoff`
-closes a session.
-
-```bash
-python3 scripts/lint-tickets.py                   # before every commit touching tickets/
-python3 scripts/lint-tickets.py --report          # next free number
-python3 scripts/lint-tickets.py --update-status   # regenerate tickets/STATUS.md
-```
-
 ## Branches
 
-`main` is the default branch. Feature branches are `TKT-PS####-slug`;
+`main` is the default branch. Feature branches are `feature/<slug>`;
 pull requests target `main`, and only Brandon advances `main` — agents
-never merge their own branch into it without his approval, and never
-touch any branch but `main` and their own.
-
-**Ticket papers live in the ticket folder, never in `doc/PS*/`.** The
-global `pr-ticket-docs` skill's Description *is* the ticket body
-(`tickets/02-working/PS0023-slug/PS0023-slug.md`), and the global
-`security-considerations` skill writes `PS0023-Security_Considerations.md`
-beside it. Both are required before asking for the merge, and
-`security-considerations` must be complete before pushing to `main`.
+never merge into it without his approval, and touch only `main` and
+their own branch.

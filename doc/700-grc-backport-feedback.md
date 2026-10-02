@@ -8719,26 +8719,6 @@ is an idempotent, superuser-run host setup creating ddl/app/ci roles
 
 None.
 
-### B091 — Remove the ticket system from ProtoStack (Brandon, 2026-10-02)
-- **Priority:** P1  **Area:** tickets, skills, docs, scripts
-- **GRC:** n/a   **PROTO:** `tickets/` (whole tree: `01-open/`, `04-archive/`, `engineering-log/`, `README.md`, `STATUS.md`); `scripts/lint-tickets.py`; `.claude/skills/ticket-workflow/`, `.claude/skills/ticket-triage/`, `.claude/skills/compact-tickets/`, `.claude/skills/handoff/` (ticket-bound: records to the ticket and `tasks/todo.md`; remove or rewrite, flagged for veto); `CLAUDE.md` "Tickets" section and the ticket lines in "Layout" and "Branches"; `DERIVING.md` §8 template-lineage via `tickets/04-archive/` and `template-` tags; `README.md` ticket references; `doc/902-project-commands.md` lint-tickets lines; the `pr-ticket-docs` / `security-considerations` wording in `CLAUDE.md` that points them at the ticket folder.
-- **Ticket:** Brandon's directive 2026-10-02: "rip out the whole ticket scheme from protostack ... the skills, everything related to tickets"
-- **What:** The template carries a full ticket workflow (PS numbering, folder
-  states, linter, four skills, lineage tags) that a derived app inherits
-  whether or not it wants one. Brandon is removing it from the template.
-  Derived apps keep whatever tracker they choose.
-- **Port notes:** Trumps every other item that mentions tickets: B057 and
-  B079 skip; B055, B080, B081 lose their ticket parts; B084 skips. Items
-  whose Port notes say "new PS ticket" simply become work. Open PS tickets
-  in `tickets/01-open/` (PS0010, PS0011, PS0017, PS0021, PS0022) are
-  covered by B028, B060, B010, B018 or are dropped (PS0017 passkey);
-  record that in the removal commit. Branch naming `TKT-PS####-slug` goes
-  with it; pick a plain `feature/<slug>` convention in `CLAUDE.md`. The
-  global `pr-ticket-docs` and `security-considerations` skills are
-  Brandon's own and stay; only the lines binding them to `tickets/` go.
-  The `backport-grc` work itself is tracked by this doc, not a ticket.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (Brandon, 2026-10-02)
-
 # SKIP / Brandon-veto list (tick to override)
 
 **Recommendations against porting**
@@ -8827,3 +8807,26 @@ Counts by tier and primary area (first area listed on each item).
 Primary area undercounts cross-cutting work: as a secondary area, docs
 appears on 26 more items, tests 18, web-app 14, bin 7, tickets/etc/skills 6
 each. The SKIP list holds 21 grouped veto lines; the appendix 16 items.
+
+# Completed
+
+### B091 — COMPLETED — Remove the ticket system from ProtoStack (Brandon, 2026-10-02)
+- **Completed:** 2026-10-02. Deleted `tickets/`, `scripts/lint-tickets.py` and the `ticket-workflow`, `ticket-triage` and `compact-tickets` skills; kept `handoff` (Brandon) and rewrote its ticket parts to record outstanding work in `tasks/todo.md` only. `CLAUDE.md` loses the Tickets section and ticket lines (branches are now `feature/<slug>`), `DERIVING.md` §8 becomes a commit-based review from `template-YYYY-MM-DD` tags, and `bin/000-rebrand` drops `--ticket-prefix` (re-verified on a scratch copy: exit 0, no lowercase slug left). PS ids and ticket wording were stripped from docs, env comments, Go/TS/py comments and the seed; the two migrations that name PS ids were left alone (checksums). Tests: all green, go=189 unit=28 e2e=8 py=67
+- **Priority:** P1  **Area:** tickets, skills, docs, scripts
+- **GRC:** n/a   **PROTO:** `tickets/` (whole tree: `01-open/`, `04-archive/`, `engineering-log/`, `README.md`, `STATUS.md`); `scripts/lint-tickets.py`; `.claude/skills/ticket-workflow/`, `.claude/skills/ticket-triage/`, `.claude/skills/compact-tickets/`, `.claude/skills/handoff/` (ticket-bound: records to the ticket and `tasks/todo.md`; remove or rewrite, flagged for veto); `CLAUDE.md` "Tickets" section and the ticket lines in "Layout" and "Branches"; `DERIVING.md` §8 template-lineage via `tickets/04-archive/` and `template-` tags; `README.md` ticket references; `doc/902-project-commands.md` lint-tickets lines; the `pr-ticket-docs` / `security-considerations` wording in `CLAUDE.md` that points them at the ticket folder.
+- **Ticket:** Brandon's directive 2026-10-02: "rip out the whole ticket scheme from protostack ... the skills, everything related to tickets"
+- **What:** The template carries a full ticket workflow (PS numbering, folder
+  states, linter, four skills, lineage tags) that a derived app inherits
+  whether or not it wants one. Brandon is removing it from the template.
+  Derived apps keep whatever tracker they choose.
+- **Port notes:** Trumps every other item that mentions tickets: B057 and
+  B079 skip; B055, B080, B081 lose their ticket parts; B084 skips. Items
+  whose Port notes say "new PS ticket" simply become work. Open PS tickets
+  in `tickets/01-open/` (PS0010, PS0011, PS0017, PS0021, PS0022) are
+  covered by B028, B060, B010, B018 or are dropped (PS0017 passkey);
+  record that in the removal commit. Branch naming `TKT-PS####-slug` goes
+  with it; pick a plain `feature/<slug>` convention in `CLAUDE.md`. The
+  global `pr-ticket-docs` and `security-considerations` skills are
+  Brandon's own and stay; only the lines binding them to `tickets/` go.
+  The `backport-grc` work itself is tracked by this doc, not a ticket.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (Brandon, 2026-10-02)

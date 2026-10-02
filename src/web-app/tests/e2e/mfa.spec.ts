@@ -3,7 +3,7 @@ import { expectDashboard, loginThroughForm, session } from "./fixtures/auth";
 import { api } from "./fixtures/api-client";
 import { totpCode } from "./fixtures/totp";
 
-// The TOTP second factor through the real screens (PS0020): password →
+// The TOTP second factor through the real screens: password →
 // /mfa-setup shows the secret → a wrong code is refused → the right code
 // signs in → a second sign-in verifies against the same secret. The
 // fixture user `mfa` is not exempt and starts un-enrolled; the admin API

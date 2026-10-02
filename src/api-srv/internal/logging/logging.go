@@ -15,7 +15,7 @@ import (
 // codebase has always used — Debug/Info/Warn/Error(code, message, kv...) —
 // and turns the code into a searchable `code=` attribute. Output is one
 // logfmt line per call on stderr; systemd captures it into journald. There
-// is deliberately no remote receiver and no pluggable backend (PS0003).
+// is deliberately no remote receiver and no pluggable backend.
 //
 // The WithCallerSkip variants exist so that AppHelper's wrappers report the
 // handler line, not the wrapper's.

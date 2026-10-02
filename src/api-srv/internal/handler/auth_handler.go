@@ -128,7 +128,7 @@ func AuthHandler(
 		// there is no JWT yet, and brute force is answered by the per-IP +
 		// per-username lockout below (7 failures / 5 min), which is stricter
 		// than the per-minute limiter. Written out so the exception is read
-		// here, not inferred (PS0009).
+		// here, not inferred.
 		app.SkipJWT()
 		app.SkipRateLimit()
 		app.SkipUserBlock()

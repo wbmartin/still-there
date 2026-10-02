@@ -66,7 +66,7 @@ in memory.
 Entity pages are deliberate copy-paste scaffolding. Each page is
 self-contained and reads top to bottom; there is no shared list/edit
 factory, route registry, route-level auth wrapper or feature folder, and
-that is by design (PS0012). A derived app copies the `example-*` files and
+that is by design. A derived app copies the `example-*` files and
 edits in place. If it grows past ~6 entities and wants the factoring, that
 is the derived app's call, not the template's.
 
@@ -111,8 +111,8 @@ House pattern inside a page, in this order:
 
 ## Dependency cadence
 
-Caret ranges. Any ticket that touches the web app runs `npm update
+Caret ranges. Any change that touches the web app runs `npm update
 --legacy-peer-deps` (in-range bumps; plain `npm update` trips an arborist
 bug in npm 10 on this peer set) and `npx depcheck` (no unused or undeclared
 packages). Major versions
-(Mantine, ESLint, Vitest, Vite plugins) are their own ticket, one at a time.
+(Mantine, ESLint, Vitest, Vite plugins) are their own change, one at a time.

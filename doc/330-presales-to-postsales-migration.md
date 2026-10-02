@@ -4,8 +4,8 @@ The runbook for a host that was stood up with `bin/600-bundle-uat` /
 `bin/610-deploy-uat` (presales) and is moving onto the `infra/<host>/`
 webhook + registry + migrator pipeline (post-sales). **It is a migration,
 not a switch:** the two paths use different binary names, role models, env
-files and systemd units, and the database changes owner. Decision recorded
-in PS0004 (Brandon, 2026-09-21): both paths stay as they are; nothing is
+files and systemd units, and the database changes owner. Decision
+(Brandon, 2026-09-21): both paths stay as they are; nothing is
 unified in code.
 
 Read `doc/320-presales-uat-deploy.md` (where you are coming from) and
@@ -28,7 +28,7 @@ setup** list, which this doc references rather than repeats).
 | How the DB changes | wholesale restore of the laptop dump | `proto-migrate verify → pending → pg_dump → up` |
 | `/srv/<env>-proto/bin/` | absent | the `infra/<host>/bin/` scripts |
 
-## Names that differ (input to the derivation checklist, PS0007)
+## Names that differ (input to the derivation checklist)
 
 Every name below exists in **both** forms in this repo. A derived app that
 renames `proto` → `<app>` must rename it in both places or the migration
@@ -186,7 +186,7 @@ cd "$APP_ROOT/etc"
 sudo mv api-srv.env "${ENV}-proto-api.env"
 ```
 
-Then diff the keys against the repo's redacted copy. As of PS0004 the only
+Then diff the keys against the repo's redacted copy. As of 2026-09-21 the only
 differences are that the post-sales file **adds `SERVER_BIND_ADDRESS`**
 (`127.0.0.1` — without it the API binds every interface) and comments out
 `LOG_RECEIVER_HOST_PORT`; the rest is the same key set in a different

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // The example entity is the template every derived entity copies, so its
-// pages must show the jsonb and uuid columns working end to end (PS0016).
+// pages must show the jsonb and uuid columns working end to end.
 
 test.describe("example pages", () => {
   test("create with JSON, see the server uuid, edit the JSON", async ({

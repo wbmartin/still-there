@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 // The entity pages are copy-paste scaffolding; these prove the two things a
 // copy most easily breaks: a deep link into an edit page must load its row
-// after a fresh page load (PS0012), and the list page keeps its place in the
+// after a fresh page load, and the list page keeps its place in the
 // URL.
 
 test.describe("entity pages", () => {

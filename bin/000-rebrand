@@ -1,17 +1,15 @@
 #!/bin/bash
 # Rename this app: the mechanical half of DERIVING.md.
 #
-#   bin/000-rebrand <slug> "<Display Name>" [--module <go module path>] [--ticket-prefix <XX>]
+#   bin/000-rebrand <slug> "<Display Name>" [--module <go module path>]
 #
 #   slug      [a-z][a-z0-9]*  binaries, databases, roles, service names, hostnames
 #   name      what people see: web title, login page, TOTP issuer, unit description
 #   --module  Go module path (default: <slug>-api). Rewrites go.mod and every import.
-#   --ticket-prefix
-#             replaces the PS in PS0023 everywhere (ids, branches, skills, linter).
 #
 # Reads the CURRENT identity from etc/app.env, rewrites every tracked text
 # file, renames the infra/ files that carry the slug, then writes etc/app.env
-# and prints the steps that need a human (secrets, tickets/, CLAUDE.md).
+# and prints the steps that need a human (secrets, CLAUDE.md).
 # Refuses on a dirty tree so the result is one reviewable diff. Idempotent:
 # run it again with a new slug to rename again.
 set -euo pipefail
@@ -20,40 +18,36 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
-usage() { sed -n '2,15p' "$0"; exit 2; }
+usage() { sed -n '2,13p' "$0"; exit 2; }
 [ $# -ge 2 ] || usage
 NEW="$1"; NEW_NAME="$2"; shift 2
-NEW_MODULE=""; NEW_PREFIX=""
+NEW_MODULE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --module) NEW_MODULE="$2"; shift 2 ;;
-    --ticket-prefix) NEW_PREFIX="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
 [[ "$NEW" =~ ^[a-z][a-z0-9]*$ ]] || { echo "[ERROR] slug must match [a-z][a-z0-9]*: $NEW"; exit 1; }
 [ -n "$NEW_NAME" ] || { echo "[ERROR] display name is empty"; exit 1; }
-[ -n "$NEW_PREFIX" ] && { [[ "$NEW_PREFIX" =~ ^[A-Z]{2,4}$ ]] || { echo "[ERROR] ticket prefix must be 2-4 capitals: $NEW_PREFIX"; exit 1; }; }
 git diff --quiet && git diff --cached --quiet || { echo "[ERROR] working tree is dirty; commit or stash first so the rename is one diff"; exit 1; }
 
 # shellcheck disable=SC1091
 source etc/app.env
 OLD="$APP_SLUG"; OLD_NAME="$APP_DISPLAY_NAME"
-[ "$OLD" != "$NEW" ] || [ "$OLD_NAME" != "$NEW_NAME" ] || [ -n "$NEW_MODULE" ] || [ -n "$NEW_PREFIX" ] \
+[ "$OLD" != "$NEW" ] || [ "$OLD_NAME" != "$NEW_NAME" ] || [ -n "$NEW_MODULE" ] \
   || { echo "nothing to do: already $OLD / \"$OLD_NAME\""; exit 0; }
 OLD_MODULE="$(cd src/api-srv && go list -m)"
 [ -n "$NEW_MODULE" ] || NEW_MODULE="$NEW-api"
-OLD_PREFIX="$(sed -nE 's/^ID_PREFIX = "([A-Z]+)"$/\1/p' scripts/lint-tickets.py)"
 echo "slug    $OLD -> $NEW"
 echo "name    \"$OLD_NAME\" -> \"$NEW_NAME\""
 echo "module  $OLD_MODULE -> $NEW_MODULE"
-[ -n "$NEW_PREFIX" ] && echo "tickets $OLD_PREFIX -> $NEW_PREFIX"
 
 # --- 1. text substitutions over every tracked text file ----------------------
 # Order matters: specific tokens first, the bare slug last. Word boundaries
 # keep "ProtoStack" (the template's own name), "protocol" and
-# "X-Forwarded-Proto" untouched. tickets/ is history and is left alone.
-FILES="$(git ls-files | grep -v '^tickets/' | grep -v "^bin/000-rebrand$" \
+# "X-Forwarded-Proto" untouched.
+FILES="$(git ls-files | grep -v "^bin/000-rebrand$" \
   | while read -r f; do [ -f "$f" ] && grep -Iq . "$f" && echo "$f"; done)"
 # shellcheck disable=SC2086
 perl -pi -e "
@@ -78,35 +72,23 @@ if [ "$OLD_MODULE" != "$NEW_MODULE" ]; then
   perl -pi -e "s#\Q${OLD_MODULE}\E#${NEW_MODULE}#g" $(git ls-files 'src/api-srv/*.go' 'src/api-srv/**/*.go')
 fi
 
-# --- 3. ticket id prefix -----------------------------------------------------
-if [ -n "$NEW_PREFIX" ] && [ "$NEW_PREFIX" != "$OLD_PREFIX" ]; then
-  # shellcheck disable=SC2086
-  perl -pi -e "s/\b${OLD_PREFIX}(?=\d{4}\b)/${NEW_PREFIX}/g; s/^ID_PREFIX = \"${OLD_PREFIX}\"/ID_PREFIX = \"${NEW_PREFIX}\"/" $FILES
-fi
-
-# --- 4. files and directories that carry the slug in their name --------------
+# --- 3. files and directories that carry the slug in their name --------------
 git ls-files infra | grep -E "(^|[_-])${OLD}[_.-]" | sort -r | while read -r old; do
   new="$(printf '%s' "$old" | perl -pe "s/(^|[_-])${OLD}([_.-])/\$1${NEW}\$2/g")"
   mkdir -p "$(dirname "$new")"; git mv "$old" "$new"
 done
 
-# --- 5. the identity file ----------------------------------------------------
+# --- 4. the identity file ----------------------------------------------------
 perl -pi -e "s/^APP_SLUG=.*/APP_SLUG=${NEW}/; s/^APP_DISPLAY_NAME=.*/APP_DISPLAY_NAME=\"${NEW_NAME}\"/" etc/app.env
 
-# --- 6. prove it compiles ------------------------------------------------------
+# --- 5. prove it compiles ------------------------------------------------------
 ( cd src/api-srv && go build ./... ) && echo "[ok] go build"
 ( cd src/web-app && npx tsc --noEmit -p tsconfig.app.json ) && echo "[ok] tsc"
-if [ -n "$NEW_PREFIX" ] && [ "$NEW_PREFIX" != "$OLD_PREFIX" ]; then
-  echo "[--] lint-tickets skipped: tickets/ still carries ${OLD_PREFIX} ids until you reset it"
-else
-  python3 scripts/lint-tickets.py >/dev/null && echo "[ok] lint-tickets"
-fi
 
 echo
 echo "Renamed. Review with: git status && git diff --stat"
 echo "Left for a human — see DERIVING.md:"
 echo "  - rotate the local passwords and secrets (roles.sql, fixtures, etc/*.env)"
 echo "  - rename infra/uat, infra/prd to the real host names"
-echo "  - reset tickets/ (history belongs to ProtoStack, not to $NEW)"
 echo "  - CLAUDE.md: first paragraph and Layout describe ProtoStack; make them describe $NEW"
 echo "  - local Postgres: databases are now loc_${NEW}_*; bin/510 rebuilds the scratch ones"

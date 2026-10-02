@@ -1,4 +1,4 @@
-"""The TOTP second factor, end to end (PS0020).
+"""The TOTP second factor, end to end.
 
 Runs last (zz): the lockout case spends the shared IP's failed-attempt
 allowance, which would lock every later test out of /auth.

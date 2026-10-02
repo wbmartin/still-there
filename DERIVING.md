@@ -1,7 +1,7 @@
 # Deriving a new app from ProtoStack
 
 ProtoStack is a template. A new app starts as a copy of it, gets its own
-name, its own secrets and an empty ticket queue, and from then on has no
+name and its own secrets, and from then on has no
 reason to say "proto" anywhere. This is the ordered list; `bin/000-rebrand`
 does the mechanical half.
 
@@ -15,7 +15,7 @@ web app, `infra/` — are rewritten by the rebrand script.
 ```bash
 git clone <protostack-remote> acme && cd acme
 git remote set-url origin <the new app's remote>
-bin/000-rebrand acme "Acme Portal" --ticket-prefix AC       # --module github.com/you/acme-api to set the Go module path
+bin/000-rebrand acme "Acme Portal"                          # --module github.com/you/acme-api to set the Go module path
 git status && git diff --stat                               # review; it is one commit
 git commit -am "Derive acme from ProtoStack"
 ```
@@ -26,7 +26,7 @@ What it changed: `etc/app.env`; `proto-api`/`proto-migrate` → `acme-*`;
 Portal` (web title, login page, `APP_NAME` in every API env, systemd
 `Description`); `uat-proto`/`prd-proto` file names and contents under
 `infra/`; nginx upstream and site file names; the Go module path and every
-import; `PS0023` → `AC0023` in skills, `CLAUDE.md` and the ticket linter.
+import.
 "ProtoStack" itself is left alone — it is where the app came from.
 
 What it did not change, on purpose: the migrator's advisory-lock key
@@ -55,21 +55,18 @@ Postgres cluster is the safe default for every derived app.
 
 ## 4. The example entity
 
-`example` is the worked entity the others are copied from (`doc/810`,
-PS0010). Keep it until the first real entity exists, then delete
+`example` is the worked entity the others are copied from (`doc/810`).
+Keep it until the first real entity exists, then delete
 `src/api-srv/internal/{model,repository,handler}/example_*`, its routes in
 `cmd/server/main.go`, `src/web-app/pages/example-*`, its store, schema,
 routes and e2e spec, and drop the table in a migration. Do not edit the
 initial migration.
 
-## 5. Tickets and agent guidance
+## 5. Agent guidance
 
-- `tickets/`: ProtoStack's history stays with ProtoStack. Empty
-  `01-open/`, `02-working/`, `03-done/`, `04-archive/` (keep the
-  folders), then `python3 scripts/lint-tickets.py --update-status`.
 - `CLAUDE.md`: the first paragraph and the Layout list describe
-  ProtoStack; make them describe this app. The Conventions, Tickets and
-  Branches sections carry over as they are.
+  ProtoStack; make them describe this app. The Conventions and Branches
+  sections carry over as they are.
 - `README.md`: title, first paragraph, and drop this file's mention if you
   do not want derivation instructions in the derived app. `DERIVING.md`
   itself can go.
@@ -87,7 +84,7 @@ bin/215-run-api-srv && bin/220-run-web-app                                 # htt
 
 ```bash
 # pr[o]to: spelled so bin/000-rebrand leaves this line alone
-grep -rn -i 'pr[o]to\|wbmartin' bin etc src infra scripts .claude CLAUDE.md README.md doc \
+grep -rn -i 'pr[o]to\|wbmartin' bin etc src infra .claude CLAUDE.md README.md doc \
   | grep -v 'ProtoStack\|protocol\|X-Forwarded-Proto\|lockKey'
 ```
 
@@ -97,31 +94,23 @@ name (put it in `etc/app.env` or `constants/app.ts` instead) or a pattern
 
 ## 8. Pulling template changes into a derived app, later
 
-ProtoStack keeps moving after you derive. Every change it makes is a
-ticket, and every closed ticket is one file in `tickets/04-archive/` —
-what changed, the rules that survived, the endpoints it touched. That
-archive, not `git log`, is what a derived app reads to decide what to
-pull in.
-
-The template tags `main` at each sync point: `template-YYYY-MM-DD`.
+ProtoStack keeps moving after you derive. The template tags `main` at each
+sync point: `template-YYYY-MM-DD`. A derived app reviews the commits since
+the last tag it synced to:
 
 ```bash
 # in the derived app
 git remote add template <protostack-remote>            # once
 git fetch template --tags
-git log --oneline template/template-<last-sync>..template/main -- tickets/04-archive
-                                                       # the tickets closed since you last synced
-git diff template/template-<last-sync>..template/main -- src/api-srv/internal src/web-app bin doc
-                                                       # the code behind them
+git log --oneline template-<last-sync>..template/main  # what changed since
+git show <sha>                                         # one change in full
 ```
 
-For each new archive file: read *What changed* and *Rules that survived*;
-decide pull / adapt / skip; where you pull, cherry-pick or re-apply the
-change under a ticket of your own (the archive file's id goes in your
-ticket's `raised_by:`). Names differ (`bin/000-rebrand` rewrote them), so
-a cherry-pick of anything touching `etc/`, `infra/`, SQL role names or
-the Go module path needs a rebrand pass by hand. Skip anything the archive
-marks as template-only (ticketing, `DERIVING.md`, `bin/000-rebrand`).
+For each commit decide pull / adapt / skip; where you pull, cherry-pick or
+re-apply it. Names differ (`bin/000-rebrand` rewrote them), so a
+cherry-pick of anything touching `etc/`, `infra/`, SQL role names or the
+Go module path needs a rebrand pass by hand. Skip template-only changes
+(`DERIVING.md`, `bin/000-rebrand`).
 
 When you are done, record the template tag you synced to in your own
-`CLAUDE.md` or a ticket, so the next sync starts from there.
+`CLAUDE.md`, so the next sync starts from there.

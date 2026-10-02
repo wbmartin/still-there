@@ -9,7 +9,7 @@ package cache
 // like). Otherwise rate limits and lockouts become per-process and an
 // attacker can spread attempts to evade them; MFA temp tokens issued by one
 // server won't validate on another. Until then there is deliberately no
-// pluggable backend (PS0003).
+// pluggable backend.
 //
 // TTL grammar is Ns, Nmin, Nh. INCR honours the ttl argument only when it
 // creates the key, so repeated INCRs cannot extend a key's lifetime.
