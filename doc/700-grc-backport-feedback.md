@@ -106,142 +106,6 @@ doc/105:199: "no row written" is no reason to skip.
 - **Decision:** \[ \] pull / \[ \] adapt / \[X \] skip
 - BRANDON: I said skip because it's a not changing SERVER side data so seems fine to skip CSRF
 
-### B009 — TOTP code replay inside the ±1-step window
-
-- **Priority:** P1  **Area:** go-api, tests
-- **GRC:** `src/internal/auth/totp.go:136-170`; `handler/user_mfa_handler.go:419-431,460-468,736-754`; `tests/conftest.py:23-40`; `tests/test_zz_mfa_totp.py:266-292`; `user_mfa_handler.go:419-468`   **PROTO:** `src/api-srv/internal/auth/totp.go:125-128`; `handler/user_mfa_handler.go:530-560`; `tests/test_zz_mfa_totp.py:70,94,106`; `user_mfa_handler.go:626`
-- **Ticket:** RG0043 item 44 / `720f5e1`; pytest `dd8b4c3`
-- **What:** PROTO accepts one code repeatedly for \~90 s. GRC stores the last
-accepted step per login (`TOTP_LAST_STEP*<user>`, 2 min); a step at or below
-it is a wrong code; KV error fails closed.
-- **Port notes:** Keep `GenerateTOTPURI`. Port `fresh_code()` with it
-(`TOTP.now()` would flake). Harness B019.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-All PROTO Go paths are under `src/api-srv/internal/`. A login with MFA is
-two calls. `/auth` checks the password and returns a temp token. Then
-`/mfaVerify` takes that temp token plus a six-digit TOTP code and issues
-the session cookie. The code check is one library call:
-
-```go
-// auth/totp.go:126-127
-func ValidateTOTPCode(code, secret string) bool {
-	return totp.Validate(code, secret)
-```
-
-`totp.Validate` (`github.com/pquerna/otp` v1.5.0, `totp/totp.go:37-44`)
-uses a 30 s period and `Skew: 1`. It accepts the code for the current
-30 s step and for the step on either side. The handler calls it at
-`handler/user_mfa_handler.go:533` and does nothing else with the result:
-
-```go
-// handler/user_mfa_handler.go:533-534
-valid := auth.ValidateTOTPCode(req.TOTPCode, decryptedSecret)
-if !valid {
-```
-
-Nothing records that a code was spent. The temp token is single-use
-(deleted at `:627-631`, PS0020), but the TOTP code is not. Any number of
-fresh temp tokens can each be paired with the same code while its step
-is in the window.
-
-Consequence. An attacker who already has the password, and who sees one
-code (shoulder-surfing, a phishing relay page, a screen share, a proxy or
-log that records request bodies), can open their own session with that
-code. RFC 6238 section 5.2 says a verifier must not accept the same code
-a second time after a success; PROTO does. This is a security hole in the
-second factor, moderate in size because the password is still required.
-
-Correction to the doc entry: "accepts one code repeatedly for ~90 s"
-describes the acceptance window (three steps). A code is shown on the
-phone only during its own step, so after the user types it, it stays
-replayable for 30 to 60 s, not 90 s.
-
-#### What GRC changed
-
-GRC commit `720f5e1` (RG0043 item 44, was 2.20) made a code good for one
-use per login.
-
-1. `src/internal/auth/totp.go:152-169` adds `ValidateTOTPCodeAt`, which
-   walks the same three steps by hand and returns the step that matched,
-   with a constant-time compare:
-   ```go
-   for _, step := range []int64{current - 1, current, current + 1} {
-       expected, err := totp.GenerateCodeCustom(secret, ...
-           subtle.ConstantTimeCompare([]byte(expected), []byte(code)) == 1 {
-           return step, true
-   ```
-   `ValidateTOTPCode` (`:140-143`) becomes a wrapper over it.
-2. `src/internal/handler/user_mfa_handler.go:425-434`: a valid code whose
-   step is at or below the last accepted step for that user is treated as
-   a wrong code. It counts toward the lockout and answers 401 "Invalid
-   TOTP code" (`ITCC`), the same as a typo. A KV read error answers 500
-   `TOTP_REPLAY_CHECK` (fail closed).
-3. `:463-468`: after a good code, `KV.Set("TOTP_LAST_STEP*"+userName,
-   step, "2min")`. A write error answers 500 `TOTP_STEP_STORE`, so a code
-   is never accepted without being recorded. Helpers sit at `:736-754`.
-
-Tests. pytest only: `tests/test_zz_mfa_totp.py:266-292`
-(`test_totp_code_replay_is_refused`) signs in, then reuses the same code
-on a second temp token and expects 401. It ends with a good login so the
-counted failure does not push the next test over the lockout. Commit
-`dd8b4c3` added `fresh_code()` (`tests/conftest.py:23-40`), which hands
-out the oldest unused step and sleeps to the next boundary only when all
-three are spent. `pyotp.TOTP(secret).now()` flakes once replay is refused,
-because two calls in one 30 s step return the same, now-spent, code. GRC
-added no Go test for `ValidateTOTPCodeAt` or the replay branch.
-
-#### Proposed fix for PROTO
-
-1. **`auth/totp.go:125-128`**: add `ValidateTOTPCodeAt(code, secret,
-   now) (int64, bool)` as GRC wrote it, and make `ValidateTOTPCode` call
-   it. Trap: PROTO's URI helper is `GenerateTOTPURI` (`:63`); GRC renamed
-   it `GenerateTOTPUri`. Keep PROTO's name; copy only the two functions,
-   the `totpPeriodSeconds` const and their imports.
-2. **`handler/user_mfa_handler.go:532-560`**: call `ValidateTOTPCodeAt`,
-   then the replay check, then the existing wrong-code branch. After the
-   branch, `Set` the step and fail closed on error. Add the three helpers
-   at the bottom of the file. Key length is safe: `user_name` is
-   `VARCHAR(50)` (`handler/auth_handler.go:25-26`), so the key stays under
-   the KV's 100-char cap (`cache/kv.go:27`).
-3. **Admin reset** (`AdminResetUserMFAHandler`, `:674`): also `Del` the
-   `TOTP_LAST_STEP*` key. GRC does not. Without it, a user re-enrolling a
-   new secret within 2 min can have a fresh code refused once. Add the
-   new key family to the list at `cache/kv.go:3-5`.
-4. Do with **B008**: the wrong-code branch at `:536-551` still logs and
-   continues on a counter write error; make it 500 in the same edit.
-   **B010** clears counters after a completed login, which the GRC replay
-   test relies on. **B019** supplies the per-test `X-Forwarded-For`
-   harness (`fwd(IP_REPLAY)`) the pytest uses.
-5. **pytest**: port `fresh_code()` into `tests/test_zz_mfa_totp.py` (PROTO's
-   `conftest.py` never mints codes; its users are `mfa_exempt`, `:42-50`).
-   Replace `pyotp.TOTP(secret).now()` at `:70`, `:94` and `:106`; `:106`
-   would fail outright, since it reuses `:70`'s step within the same 30 s.
-
-Tests to add:
-- Go `auth/totp_test.go` (new): codes at s-1, s, s+1 return that step;
-  s-2, s+2, 5-digit and non-digit codes fail.
-- Go `handler/user_mfa_handler_test.go`: same code on two temp tokens,
-  second is 401 `ITCC` and counts one failure; a closed KV gives 500.
-- pytest `test_totp_code_replay_is_refused`, ported with `fresh_code`.
-
-Residual, also in GRC: the replay read and the step write are not atomic,
-so two requests racing with one code can both pass. A compare-and-set in
-`cache/kv.go` would close it; the window is milliseconds.
-
-#### Open question for Brandon
-
-Should a replayed code count toward the lockout like a typo (GRC's
-choice), or be refused without counting so a user who double-submits is
-not penalised? Recommendation: count it, as GRC does; a legitimate double
-submit is one count out of seven and the answer stays indistinguishable
-from a wrong code.
-Brandon: yes
-
 ### B010 — PS0021: reset-MFA grant 9020; completed login clears counters
 
 - **Priority:** P1  **Area:** go-api, tests, docs, tickets
@@ -8847,3 +8711,140 @@ answers 500 "Login is temporarily unavailable".
 - **Port notes:** Trivial. `/mfaVerify` fails open in both (GRC
 `user_mfa_handler.go:440-452`, RG0043 2.7); fix PROTO :540-552 too.
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+### B009 — COMPLETED — TOTP code replay inside the ±1-step window
+- **Completed:** 2026-10-02. `auth.ValidateTOTPCodeAt` (totp.go) returns the matched 30 s step (skew ±1, constant-time compare); `/mfaVerify` (the only place a code is accepted: temp-token login, enrolment and session paths) records it with a new atomic `KV.SetIfGreater` on `TOTP_LAST_STEP*<user>` (3 min), so a replayed or older step is a counted 401 "Invalid TOTP code" and a store error is 500 `TOTP_STEP_STORE`. Deviation: compare-and-set under the KV lock instead of GRC's read-then-write, closing the race; `/admin/resetUserMFA` deletes the key (500 `TOTP_STEP_CLEAR` before the seed write if it cannot). Go tests (totp_test.go, kv_test.go, user_mfa_handler_test.go), pytest `fresh_code` + `test_totp_code_replay_is_refused`, Playwright `freshTotpCode`; doc/105. Tests: all green, go=252 unit=41 e2e=9 py=73
+
+- **Priority:** P1  **Area:** go-api, tests
+- **GRC:** `src/internal/auth/totp.go:136-170`; `handler/user_mfa_handler.go:419-431,460-468,736-754`; `tests/conftest.py:23-40`; `tests/test_zz_mfa_totp.py:266-292`; `user_mfa_handler.go:419-468`   **PROTO:** `src/api-srv/internal/auth/totp.go:125-128`; `handler/user_mfa_handler.go:530-560`; `tests/test_zz_mfa_totp.py:70,94,106`; `user_mfa_handler.go:626`
+- **Ticket:** RG0043 item 44 / `720f5e1`; pytest `dd8b4c3`
+- **What:** PROTO accepts one code repeatedly for \~90 s. GRC stores the last
+accepted step per login (`TOTP_LAST_STEP*<user>`, 2 min); a step at or below
+it is a wrong code; KV error fails closed.
+- **Port notes:** Keep `GenerateTOTPURI`. Port `fresh_code()` with it
+(`TOTP.now()` would flake). Harness B019.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+All PROTO Go paths are under `src/api-srv/internal/`. A login with MFA is
+two calls. `/auth` checks the password and returns a temp token. Then
+`/mfaVerify` takes that temp token plus a six-digit TOTP code and issues
+the session cookie. The code check is one library call:
+
+```go
+// auth/totp.go:126-127
+func ValidateTOTPCode(code, secret string) bool {
+	return totp.Validate(code, secret)
+```
+
+`totp.Validate` (`github.com/pquerna/otp` v1.5.0, `totp/totp.go:37-44`)
+uses a 30 s period and `Skew: 1`. It accepts the code for the current
+30 s step and for the step on either side. The handler calls it at
+`handler/user_mfa_handler.go:533` and does nothing else with the result:
+
+```go
+// handler/user_mfa_handler.go:533-534
+valid := auth.ValidateTOTPCode(req.TOTPCode, decryptedSecret)
+if !valid {
+```
+
+Nothing records that a code was spent. The temp token is single-use
+(deleted at `:627-631`, PS0020), but the TOTP code is not. Any number of
+fresh temp tokens can each be paired with the same code while its step
+is in the window.
+
+Consequence. An attacker who already has the password, and who sees one
+code (shoulder-surfing, a phishing relay page, a screen share, a proxy or
+log that records request bodies), can open their own session with that
+code. RFC 6238 section 5.2 says a verifier must not accept the same code
+a second time after a success; PROTO does. This is a security hole in the
+second factor, moderate in size because the password is still required.
+
+Correction to the doc entry: "accepts one code repeatedly for ~90 s"
+describes the acceptance window (three steps). A code is shown on the
+phone only during its own step, so after the user types it, it stays
+replayable for 30 to 60 s, not 90 s.
+
+#### What GRC changed
+
+GRC commit `720f5e1` (RG0043 item 44, was 2.20) made a code good for one
+use per login.
+
+1. `src/internal/auth/totp.go:152-169` adds `ValidateTOTPCodeAt`, which
+   walks the same three steps by hand and returns the step that matched,
+   with a constant-time compare:
+   ```go
+   for _, step := range []int64{current - 1, current, current + 1} {
+       expected, err := totp.GenerateCodeCustom(secret, ...
+           subtle.ConstantTimeCompare([]byte(expected), []byte(code)) == 1 {
+           return step, true
+   ```
+   `ValidateTOTPCode` (`:140-143`) becomes a wrapper over it.
+2. `src/internal/handler/user_mfa_handler.go:425-434`: a valid code whose
+   step is at or below the last accepted step for that user is treated as
+   a wrong code. It counts toward the lockout and answers 401 "Invalid
+   TOTP code" (`ITCC`), the same as a typo. A KV read error answers 500
+   `TOTP_REPLAY_CHECK` (fail closed).
+3. `:463-468`: after a good code, `KV.Set("TOTP_LAST_STEP*"+userName,
+   step, "2min")`. A write error answers 500 `TOTP_STEP_STORE`, so a code
+   is never accepted without being recorded. Helpers sit at `:736-754`.
+
+Tests. pytest only: `tests/test_zz_mfa_totp.py:266-292`
+(`test_totp_code_replay_is_refused`) signs in, then reuses the same code
+on a second temp token and expects 401. It ends with a good login so the
+counted failure does not push the next test over the lockout. Commit
+`dd8b4c3` added `fresh_code()` (`tests/conftest.py:23-40`), which hands
+out the oldest unused step and sleeps to the next boundary only when all
+three are spent. `pyotp.TOTP(secret).now()` flakes once replay is refused,
+because two calls in one 30 s step return the same, now-spent, code. GRC
+added no Go test for `ValidateTOTPCodeAt` or the replay branch.
+
+#### Proposed fix for PROTO
+
+1. **`auth/totp.go:125-128`**: add `ValidateTOTPCodeAt(code, secret,
+   now) (int64, bool)` as GRC wrote it, and make `ValidateTOTPCode` call
+   it. Trap: PROTO's URI helper is `GenerateTOTPURI` (`:63`); GRC renamed
+   it `GenerateTOTPUri`. Keep PROTO's name; copy only the two functions,
+   the `totpPeriodSeconds` const and their imports.
+2. **`handler/user_mfa_handler.go:532-560`**: call `ValidateTOTPCodeAt`,
+   then the replay check, then the existing wrong-code branch. After the
+   branch, `Set` the step and fail closed on error. Add the three helpers
+   at the bottom of the file. Key length is safe: `user_name` is
+   `VARCHAR(50)` (`handler/auth_handler.go:25-26`), so the key stays under
+   the KV's 100-char cap (`cache/kv.go:27`).
+3. **Admin reset** (`AdminResetUserMFAHandler`, `:674`): also `Del` the
+   `TOTP_LAST_STEP*` key. GRC does not. Without it, a user re-enrolling a
+   new secret within 2 min can have a fresh code refused once. Add the
+   new key family to the list at `cache/kv.go:3-5`.
+4. Do with **B008**: the wrong-code branch at `:536-551` still logs and
+   continues on a counter write error; make it 500 in the same edit.
+   **B010** clears counters after a completed login, which the GRC replay
+   test relies on. **B019** supplies the per-test `X-Forwarded-For`
+   harness (`fwd(IP_REPLAY)`) the pytest uses.
+5. **pytest**: port `fresh_code()` into `tests/test_zz_mfa_totp.py` (PROTO's
+   `conftest.py` never mints codes; its users are `mfa_exempt`, `:42-50`).
+   Replace `pyotp.TOTP(secret).now()` at `:70`, `:94` and `:106`; `:106`
+   would fail outright, since it reuses `:70`'s step within the same 30 s.
+
+Tests to add:
+- Go `auth/totp_test.go` (new): codes at s-1, s, s+1 return that step;
+  s-2, s+2, 5-digit and non-digit codes fail.
+- Go `handler/user_mfa_handler_test.go`: same code on two temp tokens,
+  second is 401 `ITCC` and counts one failure; a closed KV gives 500.
+- pytest `test_totp_code_replay_is_refused`, ported with `fresh_code`.
+
+Residual, also in GRC: the replay read and the step write are not atomic,
+so two requests racing with one code can both pass. A compare-and-set in
+`cache/kv.go` would close it; the window is milliseconds.
+
+#### Open question for Brandon
+
+Should a replayed code count toward the lockout like a typo (GRC's
+choice), or be refused without counting so a user who double-submits is
+not penalised? Recommendation: count it, as GRC does; a legitimate double
+submit is one count out of seven and the answer stays indistinguishable
+from a wrong code.
+Brandon: yes

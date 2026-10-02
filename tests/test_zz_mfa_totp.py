@@ -10,6 +10,7 @@ at the end is taken BEFORE the lockout, because the lockout also locks the
 IP out of /auth (resetUserMFA itself needs only a session + CSRF).
 """
 import os
+import time
 
 import pyotp
 import pytest
@@ -19,6 +20,28 @@ from conftest import TestClient
 
 MFA_USER = "mfa"
 MFA_PASSWORD = "basic123!"
+
+
+# The API accepts a code once: a step at or below the last one it accepted
+# for the user is a replay. It accepts the step before now's, now's and the
+# next, so fresh_code hands out the oldest step newer than the last one used
+# for the secret, and sleeps to the next 30 s boundary only when all three are
+# spent. The step before now's is skipped near a boundary, where it would fall
+# out of the window before the request lands.
+_last_step_by_secret: dict = {}
+
+
+def fresh_code(secret: str) -> str:
+    while True:
+        now = time.time()
+        current = int(now) // 30
+        for step in (current - 1, current, current + 1):
+            if step == current - 1 and now % 30 > 27:
+                continue
+            if step > _last_step_by_secret.get(secret, -1):
+                _last_step_by_secret[secret] = step
+                return pyotp.TOTP(secret).at(step * 30)
+        time.sleep(30 - now % 30 + 0.5)
 
 
 def _base_url() -> str:
@@ -70,7 +93,7 @@ class TestMFATOTP:
         )
         assert response.status_code == 401
 
-        code = pyotp.TOTP(secret).now()
+        code = fresh_code(secret)
         response = session.post(
             f"{_base_url()}/mfaVerify", json={"tempToken": temp_token, "totpCode": code}
         )
@@ -94,7 +117,7 @@ class TestMFATOTP:
         # The temp token is single-use: replaying it with a fresh code fails.
         response = requests.post(
             f"{_base_url()}/mfaVerify",
-            json={"tempToken": temp_token, "totpCode": pyotp.TOTP(secret).now()},
+            json={"tempToken": temp_token, "totpCode": fresh_code(secret)},
         )
         assert response.status_code == 401
 
@@ -109,7 +132,7 @@ class TestMFATOTP:
         assert "qrCodeImage" not in response.text
         response = session2.post(
             f"{_base_url()}/mfaVerify",
-            json={"tempToken": temp_token2, "totpCode": pyotp.TOTP(secret).now()},
+            json={"tempToken": temp_token2, "totpCode": fresh_code(secret)},
         )
         assert response.status_code == 200, response.text
 
@@ -120,6 +143,39 @@ class TestMFATOTP:
         response = session3.post(f"{_base_url()}/mfaSetup", json={"tempToken": temp_token3})
         assert response.status_code == 200
         assert response.json()["data"]["secret"] != secret
+
+    def test_totp_code_replay_is_refused(self):
+        """A code that signed in once cannot sign in again.
+
+        Two temp tokens, one code: the second /mfaVerify gets the wrong-code
+        answer because its step was already accepted.
+        """
+        admin = TestClient(_base_url())
+        admin.authenticate()
+
+        session = requests.Session()
+        temp_token = _password_step(session, enrolled=False)
+        response = session.post(f"{_base_url()}/mfaSetup", json={"tempToken": temp_token})
+        assert response.status_code == 200, response.text
+        secret = response.json()["data"]["secret"]
+        code = fresh_code(secret)
+        response = session.post(
+            f"{_base_url()}/mfaVerify", json={"tempToken": temp_token, "totpCode": code}
+        )
+        assert response.status_code == 200, response.text
+        app_user_id = response.json()["user"]["appUserId"]
+
+        session2 = requests.Session()
+        temp_token2 = _password_step(session2, enrolled=True)
+        response = session2.post(
+            f"{_base_url()}/mfaVerify", json={"tempToken": temp_token2, "totpCode": code}
+        )
+        assert response.status_code == 401, response.text
+        assert response.json()["error"] == "Invalid TOTP code"
+        assert "auth" not in session2.cookies
+
+        # Un-enrol, which also forgets the spent step, for the next test.
+        _reset_mfa(admin, app_user_id)
 
     def test_mfa_lockout_after_failed_attempts(self):
         """MFA failures count towards the login lockout and lock the user."""

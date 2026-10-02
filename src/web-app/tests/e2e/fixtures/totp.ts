@@ -35,3 +35,26 @@ export const totpCode = (secret: string, now = Date.now()): string => {
     digest[offset + 3];
   return String(code % 1_000_000).padStart(6, "0");
 };
+
+// The API accepts a code once: a step at or below the last one it accepted
+// for the user is a replay. freshTotpCode hands out the oldest step in the
+// window (now's, one either side) newer than the last one used for the
+// secret, skipping the step before now's near a boundary, and waits for the
+// next step only when all three are spent.
+const lastStepBySecret = new Map<string, number>();
+
+export const freshTotpCode = async (secret: string): Promise<string> => {
+  for (;;) {
+    const nowSeconds = Date.now() / 1000;
+    const current = Math.floor(nowSeconds / 30);
+    for (const step of [current - 1, current, current + 1]) {
+      if (step === current - 1 && nowSeconds % 30 > 27) continue;
+      if (step > (lastStepBySecret.get(secret) ?? -1)) {
+        lastStepBySecret.set(secret, step);
+        return totpCode(secret, step * 30 * 1000);
+      }
+    }
+    const waitMs = (30 - (nowSeconds % 30) + 0.5) * 1000;
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+};

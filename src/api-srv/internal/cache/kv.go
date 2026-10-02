@@ -1,7 +1,8 @@
 package cache
 
 // In-process key-value store: rate-limit counters, login lockouts, MFA temp
-// tokens, user blocks and session revocations. PROCESS-LOCAL — restarting
+// tokens, the last TOTP step accepted per user, user blocks and session
+// revocations. PROCESS-LOCAL — restarting
 // the API server clears it, which is acceptable for one app server (a
 // revoked token is good again until it expires; doc/105).
 //
@@ -256,6 +257,45 @@ func (kv *KV) Incr(key string, ttl string) (int, error) {
 		expiresAt: expiresAt,
 	}
 	return int(newVal), nil
+}
+
+// SetIfGreater stores value at key, with ttl, only when the key is missing,
+// expired, or holds an integer below value; it reports whether it stored.
+// The compare and the write happen under one lock, so of two callers racing
+// with the same value exactly one wins. A string at key is an error.
+func (kv *KV) SetIfGreater(key string, value int64, ttl string) (bool, error) {
+	if len(key) > memKVMaxKeyLen {
+		return false, fmt.Errorf(
+			"key length exceeds %d characters", memKVMaxKeyLen,
+		)
+	}
+	d, ok := memParseExpiration(ttl)
+	if !ok {
+		return false, fmt.Errorf("invalid expiration: %s", ttl)
+	}
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	if kv.closed {
+		return false, errKVClosed
+	}
+	now := kv.now()
+	cur, exists := kv.m[key]
+	if exists && !cur.expired(now) {
+		if cur.kind != memKindInt {
+			return false, fmt.Errorf("value at %s is not an integer", key)
+		}
+		if cur.intVal >= value {
+			return false, nil
+		}
+	}
+	var expiresAt time.Time
+	if d > 0 {
+		expiresAt = now.Add(d)
+	}
+	kv.m[key] = memStoredValue{
+		kind: memKindInt, intVal: value, expiresAt: expiresAt,
+	}
+	return true, nil
 }
 
 // Close stops the cleanup goroutine. Subsequent operations return errKVClosed.

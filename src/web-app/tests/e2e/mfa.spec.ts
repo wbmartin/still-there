@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { expectDashboard, loginThroughForm, session } from "./fixtures/auth";
 import { api } from "./fixtures/api-client";
-import { totpCode } from "./fixtures/totp";
+import { freshTotpCode } from "./fixtures/totp";
 
 // The TOTP second factor through the real screens: password →
 // /mfa-setup shows the secret → a wrong code is refused → the right code
@@ -26,7 +26,7 @@ test.describe("mfa", () => {
     await page.getByRole("button", { name: "Verify Code" }).click();
     await expect(page).toHaveURL(/\/mfa-setup/);
 
-    await page.getByLabel("Enter TOTP Code").fill(totpCode(secret));
+    await page.getByLabel("Enter TOTP Code").fill(await freshTotpCode(secret));
     await page.getByRole("button", { name: "Verify Code" }).click();
     await expectDashboard(page);
 
@@ -46,7 +46,7 @@ test.describe("mfa", () => {
       .toBeVisible();
     await expect(page.getByAltText(/QR Code/)).toHaveCount(0);
     await expect(page.getByText(/^Secret Key: /)).toHaveCount(0);
-    await page.getByLabel("Enter TOTP Code").fill(totpCode(secret));
+    await page.getByLabel("Enter TOTP Code").fill(await freshTotpCode(secret));
     await page.getByRole("button", { name: "Verify Code" }).click();
     await expectDashboard(page);
     expect(mfaSetupRequestList).toEqual([]);

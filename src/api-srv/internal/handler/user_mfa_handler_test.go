@@ -3,7 +3,9 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -250,4 +252,145 @@ func TestMFASetupHandler_TempTokenPath(t *testing.T) {
 		assert.Contains(t, w.Body.String(), `"secret"`)
 		repo.AssertExpectations(t)
 	})
+}
+
+// TestMFAVerifyHandler_TOTPReplay: a code is good once. Its 30 s step must
+// be above the last step accepted for the user; a replay is answered and
+// counted exactly like a wrong code (B009).
+func TestMFAVerifyHandler_TOTPReplay(t *testing.T) {
+	newServices := func(t *testing.T) *app.Services {
+		s := testServices(t)
+		s.Config.TOTPEncryptionKey = testTOTPKey
+		s.Config.AppName = "Test"
+		s.Config.FailedLoginAttemptThreshold = 7
+		return s
+	}
+	newRepo := func(user *model.AppUserModel) *MockUserRepository {
+		repo := new(MockUserRepository)
+		repo.On("RetrieveUserByUserName", mock.Anything, "mfa").Return(user, nil)
+		repo.On("GetGrantsForGroups", mock.Anything, []int{1}).
+			Return(map[int][]int{1: {model.GrantLogon}}, nil)
+		return repo
+	}
+	// Steps now and now+1 only: both stay in the window if the test
+	// crosses a step boundary, where now-1 would fall out.
+	codeAt := func(t *testing.T, secret string, offset int64) string {
+		t.Helper()
+		step := time.Now().Unix()/30 + offset
+		code, err := totp.GenerateCode(secret, time.Unix(step*30, 0))
+		require.NoError(t, err)
+		return code
+	}
+	verify := func(
+		s *app.Services, repo *MockUserRepository, token, code string,
+	) *httptest.ResponseRecorder {
+		require.NoError(t, s.KV.Set("TEMP_AUTH_SUCCESS_"+token, "mfa", "10min"))
+		w := httptest.NewRecorder()
+		MFAVerifyHandler(s, repo)(w, mfaVerifyRequest(
+			`{"tempToken":"`+token+`","totpCode":"`+code+`"}`))
+		return w
+	}
+
+	t.Run("same code on two temp tokens → second 401, counted", func(t *testing.T) {
+		s := newServices(t)
+		user, secret := mfaUser(t, true)
+		repo := newRepo(user)
+		code := codeAt(t, secret, 0)
+		first := verify(s, repo, "tok1", code)
+		require.Equal(t, http.StatusOK, first.Code, first.Body.String())
+		second := verify(s, repo, "tok2", code)
+		assert.Equal(t, http.StatusUnauthorized, second.Code)
+		assert.Contains(t, second.Body.String(), "Invalid TOTP code")
+		assert.Empty(t, second.Result().Cookies())
+		count, err := s.KV.Get("loginfail-user-mfa")
+		require.NoError(t, err)
+		assert.Equal(t, "1", count, "a replay counts like a wrong code")
+	})
+
+	t.Run("later step accepted, earlier step refused", func(t *testing.T) {
+		s := newServices(t)
+		user, secret := mfaUser(t, true)
+		repo := newRepo(user)
+		w := verify(s, repo, "tok1", codeAt(t, secret, 0))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		w = verify(s, repo, "tok2", codeAt(t, secret, 1))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+		s = newServices(t)
+		w = verify(s, repo, "tok1", codeAt(t, secret, 1))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		w = verify(s, repo, "tok2", codeAt(t, secret, 0))
+		assert.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+	})
+
+	t.Run("concurrent requests with one code → exactly one session", func(t *testing.T) {
+		s := newServices(t)
+		user, secret := mfaUser(t, true)
+		repo := newRepo(user)
+		code := codeAt(t, secret, 0)
+		const requestCount = 20
+		// Every loser is a counted failure; keep them short of a lockout.
+		s.Config.FailedLoginAttemptThreshold = requestCount + 1
+		statusList := make([]int, requestCount)
+		var wg sync.WaitGroup
+		for i := 0; i < requestCount; i++ {
+			token := "tok" + strconv.Itoa(i)
+			require.NoError(t, s.KV.Set("TEMP_AUTH_SUCCESS_"+token, "mfa", "10min"))
+			wg.Add(1)
+			go func(i int, token string) {
+				defer wg.Done()
+				w := httptest.NewRecorder()
+				MFAVerifyHandler(s, repo)(w, mfaVerifyRequest(
+					`{"tempToken":"`+token+`","totpCode":"`+code+`"}`))
+				statusList[i] = w.Code
+			}(i, token)
+		}
+		wg.Wait()
+		okCount := 0
+		for _, status := range statusList {
+			if status == http.StatusOK {
+				okCount++
+			} else {
+				assert.Equal(t, http.StatusUnauthorized, status)
+			}
+		}
+		assert.Equal(t, 1, okCount, statusList)
+	})
+
+	t.Run("step store error → 500, no session", func(t *testing.T) {
+		s := newServices(t)
+		// A string at the key makes the store refuse the compare-and-set.
+		require.NoError(t, s.KV.Set("TOTP_LAST_STEP*mfa", "x", "3min"))
+		user, secret := mfaUser(t, true)
+		repo := newRepo(user)
+		w := verify(s, repo, "tok", codeAt(t, secret, 0))
+		assert.Equal(t, http.StatusInternalServerError, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), "Login is temporarily unavailable")
+		assert.Empty(t, w.Result().Cookies())
+		repo.AssertNotCalled(t, "GetGrantsForGroups", mock.Anything, mock.Anything)
+	})
+}
+
+// Admin MFA reset forgets the last accepted step, so the first code of the
+// re-enrolled secret is not refused as a replay.
+func TestAdminResetUserMFA_ClearsTheLastTOTPStep(t *testing.T) {
+	s := testServices(t)
+	require.NoError(t, s.KV.Set("TOTP_LAST_STEP*mfa", "99999999", "3min"))
+	repo := new(MockUserRepository)
+	repo.On("RetrieveUserList", mock.Anything, 1, []int{7}, float64(0)).
+		Return([]*model.AppUserModel{
+			{AppUserID: 7, UserName: "mfa", UpdateTS: 1.5},
+		}, nil)
+	repo.On("UpdateUserTOTPSeed", mock.Anything, 7, "", 1.5, 1).
+		Return(2.5, nil)
+	admin := sessionToken(t, s, "alice", 1, "session-admin",
+		[]int{model.GrantUserUpdate})
+	w := httptest.NewRecorder()
+	AdminResetUserMFAHandler(s, repo)(w, sessionRequest(
+		http.MethodPost, "/admin/resetUserMFA", `{"userId":7}`,
+		admin, "session-admin"))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	lastStep, err := s.KV.Get("TOTP_LAST_STEP*mfa")
+	require.NoError(t, err)
+	assert.Empty(t, lastStep)
 }

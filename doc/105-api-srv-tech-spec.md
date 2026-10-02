@@ -149,6 +149,14 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
 3. **MFA verify** (`/mfaVerify`):
    - Input: `{tempToken: string, totpCode: string}`
    - Verify temp token from the in-process KV store, then the TOTP code
+     (30 s step, one step of skew either side)
+   - A code is good once (RFC 6238 section 5.2): the step it matched must be
+     above `TOTP_LAST_STEP*<user name>`, which is compared and raised in one
+     atomic KV call (`SetIfGreater`) and lives 3 min, longer than the 90 s
+     window. A replayed or older step gets the wrong-code answer (401
+     "Invalid TOTP code") and counts toward the lockout. A store error is
+     500 `TOTP_STEP_STORE` (fail closed). `/admin/resetUserMFA` deletes the
+     key so a re-enrolled secret starts clean
    - Return full JWT with cookie; the temp token is single use
 
 4. **JWT Structure**:

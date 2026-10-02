@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/skip2/go-qrcode"
 	"github.com/wbmartin/starter-api/internal/app"
@@ -543,8 +544,29 @@ func MFAVerifyHandler(
 			return
 		}
 
-		// Validate TOTP code
-		valid := auth.ValidateTOTPCode(req.TOTPCode, decryptedSecret)
+		// A code is good once: its step must be above the last step accepted
+		// for this user, recorded in the same atomic step. A replay is
+		// answered and counted exactly like a wrong code.
+		step, valid := auth.ValidateTOTPCodeAt(
+			req.TOTPCode, decryptedSecret, time.Now(),
+		)
+		if valid {
+			stored, err := appServices.KV.SetIfGreater(
+				totpLastStepKey(userName), step, totpLastStepTTL,
+			)
+			if err != nil {
+				// Fail closed: a code accepted unrecorded is replayable.
+				app.WriteError(
+					w,
+					http.StatusInternalServerError,
+					"Login is temporarily unavailable",
+					"TOTP_STEP_STORE",
+					err,
+				)
+				return
+			}
+			valid = stored
+		}
 		if !valid {
 			// Increment failed attempt counters
 			err := incrementFailedAttempt(
@@ -750,6 +772,21 @@ func AdminResetUserMFAHandler(
 
 		targetUser := users[0]
 
+		// A new secret starts with no spent step; a stale one could refuse
+		// the first code of a re-enrolment.
+		if err := appServices.KV.Del(
+			totpLastStepKey(targetUser.UserName),
+		); err != nil {
+			app.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to reset MFA",
+				"TOTP_STEP_CLEAR",
+				err,
+			)
+			return
+		}
+
 		// Reset MFA seed only
 		newUpdateTS, err := userRepo.UpdateUserTOTPSeed(
 			r.Context(),
@@ -784,4 +821,12 @@ func AdminResetUserMFAHandler(
 			"Admin reset MFA completed for user: "+targetUser.UserName,
 		)
 	}
+}
+
+// totpLastStepTTL outlives the window a code is accepted in (90 s: the step
+// either side of now), so a replay inside it is still refused.
+const totpLastStepTTL = "3min"
+
+func totpLastStepKey(userName string) string {
+	return "TOTP_LAST_STEP*" + userName
 }

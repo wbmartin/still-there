@@ -218,3 +218,79 @@ func TestKV_KeyLengthLimit(t *testing.T) {
 		t.Fatalf("expected key-length error on Set, got nil")
 	}
 }
+
+func TestKV_SetIfGreater(t *testing.T) {
+	kv, clock := newTestKV()
+	set := func(value int64) bool {
+		t.Helper()
+		stored, err := kv.SetIfGreater("step", value, "3min")
+		if err != nil {
+			t.Fatalf("SetIfGreater(%d): %v", value, err)
+		}
+		return stored
+	}
+	if !set(10) {
+		t.Fatal("missing key: want stored")
+	}
+	if set(10) {
+		t.Fatal("equal value: want refused")
+	}
+	if set(9) {
+		t.Fatal("lower value: want refused")
+	}
+	if !set(11) {
+		t.Fatal("higher value: want stored")
+	}
+	if val, _ := kv.Get("step"); val != "11" {
+		t.Fatalf("Get = %q, want 11", val)
+	}
+	*clock = clock.Add(4 * time.Minute)
+	if !set(5) {
+		t.Fatal("expired key: want stored")
+	}
+}
+
+func TestKV_SetIfGreaterErrors(t *testing.T) {
+	kv, _ := newTestKV()
+	if err := kv.Set("word", "abc", ""); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if _, err := kv.SetIfGreater("word", 1, "3min"); err == nil {
+		t.Fatal("string at key: want error")
+	}
+	if _, err := kv.SetIfGreater("k", 1, "never"); err == nil {
+		t.Fatal("bad ttl: want error")
+	}
+	kv.Close()
+	if _, err := kv.SetIfGreater("k", 1, "3min"); !errors.Is(err, errKVClosed) {
+		t.Fatalf("closed: got %v, want errKVClosed", err)
+	}
+}
+
+// Of many callers racing with one value, exactly one stores it.
+func TestKV_SetIfGreaterConcurrent(t *testing.T) {
+	kv, _ := newTestKV()
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	storedCount := 0
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			stored, err := kv.SetIfGreater("step", 42, "3min")
+			if err != nil {
+				t.Errorf("SetIfGreater: %v", err)
+				return
+			}
+			if stored {
+				mu.Lock()
+				storedCount++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if storedCount != 1 {
+		t.Fatalf("stored %d times, want exactly 1", storedCount)
+	}
+}

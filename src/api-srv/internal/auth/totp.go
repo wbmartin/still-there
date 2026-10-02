@@ -7,6 +7,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/hex"
@@ -16,7 +17,9 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -124,5 +127,36 @@ func DecryptTOTPSeed(encryptedSeed, keyHex string) (string, error) {
 
 // ValidateTOTPCode checks a six-digit code against the plaintext secret
 func ValidateTOTPCode(code, secret string) bool {
-	return totp.Validate(code, secret)
+	_, valid := ValidateTOTPCodeAt(code, secret, time.Now())
+	return valid
+}
+
+// totpPeriodSeconds is the period GenerateTOTPURI implies (the default).
+const totpPeriodSeconds = 30
+
+// ValidateTOTPCodeAt reports whether code is valid for secret at now and
+// which time step (Unix seconds / 30) it matched: now's or one either side,
+// the window totp.Validate allows. Knowing the step lets a caller refuse a
+// code whose step it has already accepted (a replay).
+func ValidateTOTPCodeAt(code, secret string, now time.Time) (int64, bool) {
+	if len(code) != 6 {
+		return 0, false
+	}
+	current := now.Unix() / totpPeriodSeconds
+	for _, step := range []int64{current - 1, current, current + 1} {
+		expected, err := totp.GenerateCodeCustom(
+			secret,
+			time.Unix(step*totpPeriodSeconds, 0).UTC(),
+			totp.ValidateOpts{
+				Period:    totpPeriodSeconds,
+				Digits:    otp.DigitsSix,
+				Algorithm: otp.AlgorithmSHA1,
+			},
+		)
+		if err == nil &&
+			subtle.ConstantTimeCompare([]byte(expected), []byte(code)) == 1 {
+			return step, true
+		}
+	}
+	return 0, false
 }
