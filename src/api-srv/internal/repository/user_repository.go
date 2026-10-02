@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -58,8 +59,8 @@ func (r *UserRepository) RetrieveUserByUserName(
 	})
 
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("user not found")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("user not found: %w", ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}

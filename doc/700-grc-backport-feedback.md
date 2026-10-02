@@ -106,176 +106,6 @@ doc/105:199: "no row written" is no reason to skip.
 - **Decision:** \[ \] pull / \[ \] adapt / \[X \] skip
 - BRANDON: I said skip because it's a not changing SERVER side data so seems fine to skip CSRF
 
-### B007 — `/auth` username oracle: unknown login fast and uncounted
-
-- **Priority:** P1  **Area:** go-api, tests
-- **GRC:** `src/internal/handler/auth_handler.go:304-366`; `src/internal/auth/auth.go:58-81`; `auth_handler_test.go:529-546`   **PROTO:** `src/api-srv/internal/handler/auth_handler.go:196-243`; `auth/password.go:37-90`; `repository/user_repository.go:62`
-- **Ticket:** RG0043 item 42 / `720f5e1`
-- **What:** An unknown login 401s at once (no argon2, no count) and `/auth`
-skips the minute limit: timing reveals logins, spraying never locks. GRC
-hashes a once-made dummy, counts both lockouts, same 401, DB error 500.
-- **Port notes:** Needs `ErrNotFound` (B028). Omit `AccountStatus` (:329) unless
-B034/B035. Add a pytest (GRC has none).
-- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
-
-**Expanded for the adapt decision (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-All PROTO paths are under `src/api-srv/internal/`. `/auth` takes a username
-and password. It checks a lockout, looks the user up, then runs argon2id.
-
-**(1) Timing oracle.** A name with no row returns before any hashing:
-
-```go
-// handler/auth_handler.go:197-198, 205-207
-user, err := userRepo.RetrieveUserByUserName(r.Context(), req.UserName)
-if err != nil {
-    app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", ...
-```
-
-A real name with a wrong password reaches `auth.CheckPasswordHash` at
-`handler/auth_handler.go:216`, which runs argon2id at `auth/password.go:89`.
-The cost comes from `auth/jwt.go:22-24`: `t=3`, `m=64 MiB`, `p=4`. That
-measured about 36 ms per hash on an Apple-silicon laptop, and a small VM is
-slower (roughly 50-150 ms). The unknown-name path costs one indexed query,
-about 1 ms. The bodies match (both "Invalid credentials"), but the gap is
-tens of times larger than normal network jitter. A few requests per name
-tell an attacker, over the internet, which usernames exist.
-
-**(2) Unknown names are never counted.** The counter lives only in the
-wrong-password branch (`handler/auth_handler.go:220-225`) and keys on both
-IP and username:
-
-```go
-// handler/auth_handler.go:67, 71
-ipCount, err := kv.Incr("loginfail-ip-"+ip, ...WindowDuration)
-userCount, err := kv.Incr("loginfail-user-"+username, ...
-```
-
-`etc/loc-api-srv.env:15-17` sets 7 failures in 5 min, lock for 5 min. The
-unknown-name branch (`:198-213`) returns without incrementing either key.
-`/auth` also opts out of the per-minute limit (`MAX_UNAUTH_REQ_PER_MIN=20`,
-`etc/loc-api-srv.env:20`) on purpose:
-
-```go
-// handler/auth_handler.go:132-137
-app.SkipJWT()
-app.SkipRateLimit()
-...
-if !app.CheckAllChecksComplete() {
-```
-
-The comment at `:127-131` justifies the skip by saying the lockout handles
-brute force. That holds only for names that exist. Probing unknown names
-has no cost, no counter and no rate cap, so the attacker enumerates at
-full speed. They then spend the counted attempts only on confirmed names.
-Guessing passwords against real names still trips the IP lock after 7, so
-"spraying never locks" overstates it. The real gap is free enumeration.
-
-**DB error looks like bad credentials.** `repository/user_repository.go:62`
-returns a plain string error, `fmt.Errorf("user not found")`, with no
-sentinel. The handler treats every error the same way. So a dead database
-also answers 401 "Invalid credentials", which hides an outage from callers
-and monitoring.
-
-#### What GRC changed
-
-GRC commit `720f5e1` (RG0043 item 42, "2.14 /auth: dummy argon2 + counted
-unknown logins") changed four things.
-
-1. A dummy hash is built once, lazily, from 32 random bytes. An empty hash
-   is checked against it, so the unknown-name path pays full argon2 cost
-   (`src/internal/auth/auth.go:62,75-78`):
-   ```go
-   var dummyPasswordHash = sync.OnceValue(func() string {
-   if encodedHash == "" {
-       _ = CheckPasswordHash(password, dummyPasswordHash())
-       return false
-   ```
-2. Not-found is distinguished from failure, and a real DB error is a 500
-   (`src/internal/handler/auth_handler.go:307-313`):
-   ```go
-   if err != nil && !errors.Is(err, repository.ErrNotFound) {
-       appHelper.WriteError(w, http.StatusInternalServerError,
-           "Login is temporarily unavailable", ...
-   ```
-3. Unknown name, inactive account and wrong password share one branch
-   (`:328-330`). That branch calls `incrementFailedAttempt` (`:334-339`),
-   so both the `loginfail-user-` and `loginfail-ip-` keys count.
-4. Every failure gets the same 401 "Invalid credentials" (`:358-364`).
-
-GRC kept `SkipRateLimit` (`:213`) for the same reason PROTO gives. The Go
-test `TestAuthHandlerUnknownLoginIsCountedLikeABadPassword`
-(`src/internal/handler/auth_handler_test.go:529-546`) sends 7 unknown-name
-attempts and expects the same 401 body. The eighth must be a 429. No test
-checks timing, and GRC has no pytest for this. One detail not to copy:
-`auth.go:59` left the `CheckPasswordHash` doc line sitting above the dummy
-hash, so `CheckPasswordHash` at `:83` lost its doc comment.
-
-#### Adapted fix for PROTO
-
-1. **`repository/user_repository.go:61-62`**: return
-   `fmt.Errorf("user not found: %w", ErrNotFound)`. `ErrNotFound` already
-   exists in `repository/errors.go`. B028 (PS0010) is the larger cleanup:
-   one sentinel set, one `mapRepoError` mapper and no string matching.
-   This item does not need to wait for it. Wrapping keeps the "user not
-   found" text, so the `strings.Contains` at `handler/user_mfa_handler.go:94`
-   and the asserts at `repository/user_repository_test.go:100,264` still
-   pass. B028 can drop that text later.
-2. **`auth/password.go`**: add `dummyPasswordHash` (`sync.OnceValue`) and
-   `CheckPasswordHashOrDummy` below `CheckPasswordHash`, with the doc comment
-   kept in place. Build the dummy with `HashPassword` so it always uses the
-   current `jwt.go` parameters.
-3. **`handler/auth_handler.go:196-243`**: on `errors.Is(err,
-   repository.ErrNotFound)`, keep `user` nil. On any other error, return 500
-   "Login is temporarily unavailable" (`USR_LKUP_FAIL`). Then always call
-   `CheckPasswordHashOrDummy` and fold `user == nil || !verified` into the
-   existing branch. That branch already counts both keys and sends the
-   standard 401. Keep the `SkipRateLimit` comment at `:127-131`, which is
-   now true. B008 (pull) makes the counter fail closed at `:233` in the
-   same branch, so do the two together.
-4. **No `AccountStatus`.** GRC's check at `:329` reads a column PROTO
-   lacks. It belongs to B034 (user block) and B035 (invite onboarding,
-   whose `0004_user_lifecycle` migration adds the column). Skip it here.
-   B034 adds it to the same condition later.
-5. **Go test**: change `AuthHandler` to take `UserRepositoryInterface`
-   (`handler/user_handler.go:19`, which the MFA handlers already use), then
-   port GRC's test with a mock that returns `repository.ErrNotFound`. Add a
-   case where a generic error produces a 500.
-6. **pytest in `tests/test_auth_flow.py`**: send each case from its own
-   `X-Forwarded-For` address (as in B019), so the loopback IP never locks.
-   (a) Timing: send 5 requests with a random unknown name and 5 with a real
-   name and a wrong password. Assert the unknown-name median is at least
-   half the wrong-password median. Keep each IP under the threshold.
-   (b) Lockout: send `FAILED_LOGIN_ATTEMPT_THRESHOLD` (default 7, the same
-   read as `tests/test_zz_mfa_totp.py:122`) unknown-name attempts. Expect
-   401 each time, then 429.
-
-#### Open question for Brandon
-
-The IP key is spoofable. `security/app_helper.go:310-315` (`ClientIP`)
-trusts the first `X-Forwarded-For` entry, so a client can rotate that
-header and avoid the IP lock completely. After this fix, the username lock
-holds, but probing many names from rotating forged IPs is still capped
-only by argon2's cost. Should B007 wait for the XFF fix (doc/700
-appendix), or ship first and leave that gap to the XFF item?
-
-**Answered (Brandon, 2026-10-02): fix both in the same batch.** B007
-carries the `X-Forwarded-For` fix with it. `ClientIP`
-(`security/app_helper.go:310-324`) must stop trusting the first entry.
-Shape for the port: a `TRUSTED_PROXY_COUNT` config key (0 for local dev,
-1 behind the host's nginx); take the entry that many hops from the right
-of `X-Forwarded-For`, and with 0 trust only `RemoteAddr`. Because nginx
-appends the real client address last, the right-hand side is the only
-part the client cannot forge. Both the lockout keys and the per-minute
-rate keys use `ClientIP`, so one change covers both. Add a Go unit test
-for the header shapes (absent, one entry, forged leading entries) and
-confirm the infra nginx confs set `X-Forwarded-For` with
-`$proxy_add_x_forwarded_for`. The appendix line for XFF is closed by
-this item.
-
-
 ### B008 — Fail closed when the failed-attempt counter cannot be written
 
 - **Priority:** P1  **Area:** go-api
@@ -8846,3 +8676,173 @@ established session signs the user out. A 403 stays a plain error with the
 server's message. Order holds: land after B004 and after the one-line
 `changeSecurityContext` CSRF-token fix.
 - Brandon: Need you to explain more about how you'd fix
+
+### B007 — COMPLETED — `/auth` username oracle: unknown login fast and uncounted
+- **Completed:** 2026-10-02. `/auth` maps `repository.ErrNotFound` (now wrapped by `RetrieveUserByUserName`, text kept) to a nil user and any other lookup error to 500 "Login is temporarily unavailable"; it always runs `auth.CheckPasswordHashOrDummy` (lazy `sync.OnceValue` dummy built with `HashPassword`) and folds `user == nil || !verified` into the counted wrong-password branch, so unknown names cost argon2, hit both lockout keys and get the identical 401; no `AccountStatus`, B008's fail-open counter branch left as is. XFF: `security.ClientIP(r, trustedProxyCount)` takes the entry `TRUSTED_PROXY_COUNT` hops from the right (all `X-Forwarded-For` lines joined), `RemoteAddr` at 0 or when the header is short or the hop is not an address, ports stripped; new optional config key (default 0, non-negative) set to 0 in `etc/loc-api-srv.env`, `etc/e2e-api-srv.env`, `infra/uat/etc/uat-proto-e2e-api.env` and 1 in `etc/uat-api-srv.env.example`, `infra/uat/etc/uat-proto-api.env`, `infra/prd/etc/prd-proto-api.env`; `bin/300-run-tests` writes `TRUSTED_PROXY_COUNT=1` into the pytest API copy (loopback-bound) so pytest cases send their own `X-Forwarded-For`. Rate limit and both lockout handlers (`/auth`, `/mfaVerify`) all key on `ClientIP`; both nginx confs already set `$proxy_add_x_forwarded_for`. Docs: doc/105 (/auth failures, ClientIP), `src/api-srv/README.md` (key). Tests: all green, go=239 unit=41 e2e=9 py=72
+
+- **Priority:** P1  **Area:** go-api, tests
+- **GRC:** `src/internal/handler/auth_handler.go:304-366`; `src/internal/auth/auth.go:58-81`; `auth_handler_test.go:529-546`   **PROTO:** `src/api-srv/internal/handler/auth_handler.go:196-243`; `auth/password.go:37-90`; `repository/user_repository.go:62`
+- **Ticket:** RG0043 item 42 / `720f5e1`
+- **What:** An unknown login 401s at once (no argon2, no count) and `/auth`
+skips the minute limit: timing reveals logins, spraying never locks. GRC
+hashes a once-made dummy, counts both lockouts, same 401, DB error 500.
+- **Port notes:** Needs `ErrNotFound` (B028). Omit `AccountStatus` (:329) unless
+B034/B035. Add a pytest (GRC has none).
+- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
+
+**Expanded for the adapt decision (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+All PROTO paths are under `src/api-srv/internal/`. `/auth` takes a username
+and password. It checks a lockout, looks the user up, then runs argon2id.
+
+**(1) Timing oracle.** A name with no row returns before any hashing:
+
+```go
+// handler/auth_handler.go:197-198, 205-207
+user, err := userRepo.RetrieveUserByUserName(r.Context(), req.UserName)
+if err != nil {
+    app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", ...
+```
+
+A real name with a wrong password reaches `auth.CheckPasswordHash` at
+`handler/auth_handler.go:216`, which runs argon2id at `auth/password.go:89`.
+The cost comes from `auth/jwt.go:22-24`: `t=3`, `m=64 MiB`, `p=4`. That
+measured about 36 ms per hash on an Apple-silicon laptop, and a small VM is
+slower (roughly 50-150 ms). The unknown-name path costs one indexed query,
+about 1 ms. The bodies match (both "Invalid credentials"), but the gap is
+tens of times larger than normal network jitter. A few requests per name
+tell an attacker, over the internet, which usernames exist.
+
+**(2) Unknown names are never counted.** The counter lives only in the
+wrong-password branch (`handler/auth_handler.go:220-225`) and keys on both
+IP and username:
+
+```go
+// handler/auth_handler.go:67, 71
+ipCount, err := kv.Incr("loginfail-ip-"+ip, ...WindowDuration)
+userCount, err := kv.Incr("loginfail-user-"+username, ...
+```
+
+`etc/loc-api-srv.env:15-17` sets 7 failures in 5 min, lock for 5 min. The
+unknown-name branch (`:198-213`) returns without incrementing either key.
+`/auth` also opts out of the per-minute limit (`MAX_UNAUTH_REQ_PER_MIN=20`,
+`etc/loc-api-srv.env:20`) on purpose:
+
+```go
+// handler/auth_handler.go:132-137
+app.SkipJWT()
+app.SkipRateLimit()
+...
+if !app.CheckAllChecksComplete() {
+```
+
+The comment at `:127-131` justifies the skip by saying the lockout handles
+brute force. That holds only for names that exist. Probing unknown names
+has no cost, no counter and no rate cap, so the attacker enumerates at
+full speed. They then spend the counted attempts only on confirmed names.
+Guessing passwords against real names still trips the IP lock after 7, so
+"spraying never locks" overstates it. The real gap is free enumeration.
+
+**DB error looks like bad credentials.** `repository/user_repository.go:62`
+returns a plain string error, `fmt.Errorf("user not found")`, with no
+sentinel. The handler treats every error the same way. So a dead database
+also answers 401 "Invalid credentials", which hides an outage from callers
+and monitoring.
+
+#### What GRC changed
+
+GRC commit `720f5e1` (RG0043 item 42, "2.14 /auth: dummy argon2 + counted
+unknown logins") changed four things.
+
+1. A dummy hash is built once, lazily, from 32 random bytes. An empty hash
+   is checked against it, so the unknown-name path pays full argon2 cost
+   (`src/internal/auth/auth.go:62,75-78`):
+   ```go
+   var dummyPasswordHash = sync.OnceValue(func() string {
+   if encodedHash == "" {
+       _ = CheckPasswordHash(password, dummyPasswordHash())
+       return false
+   ```
+2. Not-found is distinguished from failure, and a real DB error is a 500
+   (`src/internal/handler/auth_handler.go:307-313`):
+   ```go
+   if err != nil && !errors.Is(err, repository.ErrNotFound) {
+       appHelper.WriteError(w, http.StatusInternalServerError,
+           "Login is temporarily unavailable", ...
+   ```
+3. Unknown name, inactive account and wrong password share one branch
+   (`:328-330`). That branch calls `incrementFailedAttempt` (`:334-339`),
+   so both the `loginfail-user-` and `loginfail-ip-` keys count.
+4. Every failure gets the same 401 "Invalid credentials" (`:358-364`).
+
+GRC kept `SkipRateLimit` (`:213`) for the same reason PROTO gives. The Go
+test `TestAuthHandlerUnknownLoginIsCountedLikeABadPassword`
+(`src/internal/handler/auth_handler_test.go:529-546`) sends 7 unknown-name
+attempts and expects the same 401 body. The eighth must be a 429. No test
+checks timing, and GRC has no pytest for this. One detail not to copy:
+`auth.go:59` left the `CheckPasswordHash` doc line sitting above the dummy
+hash, so `CheckPasswordHash` at `:83` lost its doc comment.
+
+#### Adapted fix for PROTO
+
+1. **`repository/user_repository.go:61-62`**: return
+   `fmt.Errorf("user not found: %w", ErrNotFound)`. `ErrNotFound` already
+   exists in `repository/errors.go`. B028 (PS0010) is the larger cleanup:
+   one sentinel set, one `mapRepoError` mapper and no string matching.
+   This item does not need to wait for it. Wrapping keeps the "user not
+   found" text, so the `strings.Contains` at `handler/user_mfa_handler.go:94`
+   and the asserts at `repository/user_repository_test.go:100,264` still
+   pass. B028 can drop that text later.
+2. **`auth/password.go`**: add `dummyPasswordHash` (`sync.OnceValue`) and
+   `CheckPasswordHashOrDummy` below `CheckPasswordHash`, with the doc comment
+   kept in place. Build the dummy with `HashPassword` so it always uses the
+   current `jwt.go` parameters.
+3. **`handler/auth_handler.go:196-243`**: on `errors.Is(err,
+   repository.ErrNotFound)`, keep `user` nil. On any other error, return 500
+   "Login is temporarily unavailable" (`USR_LKUP_FAIL`). Then always call
+   `CheckPasswordHashOrDummy` and fold `user == nil || !verified` into the
+   existing branch. That branch already counts both keys and sends the
+   standard 401. Keep the `SkipRateLimit` comment at `:127-131`, which is
+   now true. B008 (pull) makes the counter fail closed at `:233` in the
+   same branch, so do the two together.
+4. **No `AccountStatus`.** GRC's check at `:329` reads a column PROTO
+   lacks. It belongs to B034 (user block) and B035 (invite onboarding,
+   whose `0004_user_lifecycle` migration adds the column). Skip it here.
+   B034 adds it to the same condition later.
+5. **Go test**: change `AuthHandler` to take `UserRepositoryInterface`
+   (`handler/user_handler.go:19`, which the MFA handlers already use), then
+   port GRC's test with a mock that returns `repository.ErrNotFound`. Add a
+   case where a generic error produces a 500.
+6. **pytest in `tests/test_auth_flow.py`**: send each case from its own
+   `X-Forwarded-For` address (as in B019), so the loopback IP never locks.
+   (a) Timing: send 5 requests with a random unknown name and 5 with a real
+   name and a wrong password. Assert the unknown-name median is at least
+   half the wrong-password median. Keep each IP under the threshold.
+   (b) Lockout: send `FAILED_LOGIN_ATTEMPT_THRESHOLD` (default 7, the same
+   read as `tests/test_zz_mfa_totp.py:122`) unknown-name attempts. Expect
+   401 each time, then 429.
+
+#### Open question for Brandon
+
+The IP key is spoofable. `security/app_helper.go:310-315` (`ClientIP`)
+trusts the first `X-Forwarded-For` entry, so a client can rotate that
+header and avoid the IP lock completely. After this fix, the username lock
+holds, but probing many names from rotating forged IPs is still capped
+only by argon2's cost. Should B007 wait for the XFF fix (doc/700
+appendix), or ship first and leave that gap to the XFF item?
+
+**Answered (Brandon, 2026-10-02): fix both in the same batch.** B007
+carries the `X-Forwarded-For` fix with it. `ClientIP`
+(`security/app_helper.go:310-324`) must stop trusting the first entry.
+Shape for the port: a `TRUSTED_PROXY_COUNT` config key (0 for local dev,
+1 behind the host's nginx); take the entry that many hops from the right
+of `X-Forwarded-For`, and with 0 trust only `RemoteAddr`. Because nginx
+appends the real client address last, the right-hand side is the only
+part the client cannot forge. Both the lockout keys and the per-minute
+rate keys use `ClientIP`, so one change covers both. Add a Go unit test
+for the header shapes (absent, one entry, forged leading entries) and
+confirm the infra nginx confs set `X-Forwarded-For` with
+`$proxy_add_x_forwarded_for`. The appendix line for XFF is closed by
+this item.

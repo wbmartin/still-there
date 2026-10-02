@@ -331,21 +331,48 @@ func (sh *AppHelper) CheckJWT() *AppHelper {
 	return sh
 }
 
-// ClientIP returns the caller's IP: the first valid entry of
-// X-Forwarded-For when a proxy set it, else the host part of RemoteAddr.
-// It keys anonymous rate limiting and login lockout, so both paths agree.
-func ClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		ip := strings.TrimSpace(strings.Split(xff, ",")[0])
-		if net.ParseIP(ip) != nil {
-			return ip
+// ClientIP returns the caller's IP. It keys anonymous rate limiting and
+// login lockout, so both paths agree.
+//
+// trustedProxyCount is how many proxies in front of the API append to
+// X-Forwarded-For (TRUSTED_PROXY_COUNT). Each appends the address it saw,
+// so only the right-hand entries are trustworthy; everything to their left
+// is whatever the client sent. 0 ignores the header and uses RemoteAddr.
+// N takes the entry N hops from the right (the one the outermost trusted
+// proxy wrote), falling back to RemoteAddr when the header is shorter or
+// that entry is not an address.
+func ClientIP(r *http.Request, trustedProxyCount int) string {
+	if trustedProxyCount > 0 {
+		var hopList []string
+		for _, value := range r.Header.Values("X-Forwarded-For") {
+			hopList = append(hopList, strings.Split(value, ",")...)
+		}
+		if len(hopList) >= trustedProxyCount {
+			hop := hopList[len(hopList)-trustedProxyCount]
+			if ip := parseHostIP(hop); ip != "" {
+				return ip
+			}
 		}
 	}
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
+	if ip := parseHostIP(r.RemoteAddr); ip != "" {
+		return ip
 	}
-	return ip
+	return r.RemoteAddr
+}
+
+// parseHostIP returns the IP in "ip", "ip:port", "[v6]" or "[v6]:port", in
+// canonical form, or "" when there is none.
+func parseHostIP(value string) string {
+	host := strings.TrimSpace(value)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return ""
+	}
+	return ip.String()
 }
 
 // CheckRateLimit checks request rate limits
@@ -384,7 +411,9 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 		keyIdentifier = sh.claims.Subject
 	} else {
 		limit = sh.appServices.Config.MaxUnauthReqPerMin
-		keyIdentifier = ClientIP(sh.r)
+		keyIdentifier = ClientIP(
+			sh.r, sh.appServices.Config.TrustedProxyCount,
+		)
 	}
 
 	currentMinute := time.Now().Minute()
@@ -436,7 +465,8 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 		rateKey = fmt.Sprintf("RPM*%s*%d", sh.claims.Subject, currentMinute)
 		limit = sh.appServices.Config.MaxUserReqPerMin
 	} else {
-		rateKey = fmt.Sprintf("RPM*%s*%d", ClientIP(sh.r), currentMinute)
+		clientIP := ClientIP(sh.r, sh.appServices.Config.TrustedProxyCount)
+		rateKey = fmt.Sprintf("RPM*%s*%d", clientIP, currentMinute)
 		limit = sh.appServices.Config.MaxUnauthReqPerMin
 	}
 

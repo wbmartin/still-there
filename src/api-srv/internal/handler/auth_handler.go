@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/wbmartin/starter-api/internal/cache"
 	"github.com/wbmartin/starter-api/internal/config"
 	"github.com/wbmartin/starter-api/internal/model"
+	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
 )
 
@@ -167,7 +169,9 @@ func AuthHandler(
 		)
 
 		// Check for account lockout
-		clientIP := security.ClientIP(r)
+		clientIP := security.ClientIP(
+			r, appServices.Config.TrustedProxyCount,
+		)
 		locked, err := isAccountLocked(appServices.KV, clientIP, req.UserName)
 		if err != nil {
 			// The store is in-process, so an error is a bug, not an outage:
@@ -192,29 +196,36 @@ func AuthHandler(
 			return
 		}
 
-		// Read user from database
+		// Read user from database. An unknown name is not an error here: it
+		// goes through the same hash check and failure branch as a wrong
+		// password. Anything else is an outage, not bad credentials.
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), req.UserName)
-		if err != nil {
-			appServices.Logger.Warn(
-				"USR_LKUP_FAIL",
-				"User lookup failed for user: "+req.UserName+", error: "+err.Error(),
-				"username",
-				req.UserName,
-			)
+		if errors.Is(err, repository.ErrNotFound) {
+			user = nil
+		} else if err != nil {
 			app.WriteError(
 				w,
-				http.StatusUnauthorized,
-				"Invalid credentials",
-				"INVALID_CREDS",
+				http.StatusInternalServerError,
+				"Login is temporarily unavailable",
+				"USR_LKUP_FAIL",
 				err,
 			)
 			return
 		}
 
-		// Verify password
-		if !auth.CheckPasswordHash(req.Password, user.PwHash) {
-			appServices.Logger.Warn("PWD_VFY_FAIL",
-				"Password verification failed for user: "+req.UserName)
+		// Always run argon2 (against a dummy for an unknown name) so response
+		// time does not reveal which names exist, and count every failure.
+		storedHash := ""
+		if user != nil {
+			storedHash = user.PwHash
+		}
+		verified := auth.CheckPasswordHashOrDummy(req.Password, storedHash)
+		if user == nil || !verified {
+			reason := "Password verification failed for user: "
+			if user == nil {
+				reason = "Login for unknown user: "
+			}
+			appServices.Logger.Warn("PWD_VFY_FAIL", reason+req.UserName)
 			// Increment failed attempt counters
 			err := incrementFailedAttempt(
 				appServices.KV,

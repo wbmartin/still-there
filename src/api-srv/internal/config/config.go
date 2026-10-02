@@ -27,6 +27,7 @@ type Config struct {
 	FailedLoginAttemptWindowDuration string   `json:"failed_login_attempt_window_duration"`
 	FailedLoginLockoutDuration       string   `json:"failed_login_lockout_duration"`
 	CorsAllowedOrigins               []string `json:"cors_allowed_origins"`
+	TrustedProxyCount                int      `json:"trusted_proxy_count"`
 }
 
 // ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,
@@ -152,6 +153,18 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	config.FailedLoginLockoutDuration = env["FAILED_LOGIN_LOCKOUT_DURATION"]
 	if config.FailedLoginLockoutDuration == "" {
 		return nil, fmt.Errorf("FAILED_LOGIN_LOCKOUT_DURATION is required")
+	}
+
+	// Optional, default 0: no proxy, so X-Forwarded-For is ignored. Behind
+	// the host's nginx it is 1 (security.ClientIP).
+	if proxyCountStr := env["TRUSTED_PROXY_COUNT"]; proxyCountStr != "" {
+		val, err := strconv.Atoi(proxyCountStr)
+		if err != nil || val < 0 {
+			return nil, fmt.Errorf(
+				"TRUSTED_PROXY_COUNT must be a non-negative integer",
+			)
+		}
+		config.TrustedProxyCount = val
 	}
 
 	if corsOriginsStr := env["CORS_ALLOWED_ORIGINS"]; corsOriginsStr != "" {

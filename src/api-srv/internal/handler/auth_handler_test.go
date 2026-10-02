@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,8 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/auth"
 	"github.com/wbmartin/starter-api/internal/model"
+	"github.com/wbmartin/starter-api/internal/repository"
 )
 
 // TestAuthHandler_MFAEnrolled: a user who owes a second factor gets a temp
@@ -108,4 +112,95 @@ func TestRefresh_TwiceKeepsTheSessionAndCsrfToken(t *testing.T) {
 	shortID, shortCsrf := refreshOnce(t, handler, secret, short)
 	assert.Len(t, shortID, 32, "an id too short to slice is replaced")
 	assert.Equal(t, shortID[len(shortID)-3:], shortCsrf)
+}
+
+// authAttempt posts one login from remoteAddr and returns the response.
+func authAttempt(
+	t *testing.T,
+	handler http.HandlerFunc,
+	remoteAddr, userName, password string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	body, err := json.Marshal(map[string]string{
+		"userName": userName, "password": password,
+	})
+	require.NoError(t, err)
+	r := httptest.NewRequest(
+		http.MethodPost, "/auth", strings.NewReader(string(body)),
+	)
+	r.RemoteAddr = remoteAddr
+	w := httptest.NewRecorder()
+	handler(w, r)
+	return w
+}
+
+// lockoutServices is testServices with the login lockout configured.
+func lockoutServices(t *testing.T) *app.Services {
+	t.Helper()
+	s := testServices(t)
+	s.Config.FailedLoginAttemptThreshold = 7
+	s.Config.FailedLoginAttemptWindowDuration = "5min"
+	s.Config.FailedLoginLockoutDuration = "5min"
+	return s
+}
+
+// A name with no login gets the wrong-password answer and counts toward both
+// lockouts, so probing names is throttled and the answer does not say which
+// names exist (B007).
+func TestAuthHandler_UnknownLoginIsCountedLikeABadPassword(t *testing.T) {
+	s := lockoutServices(t)
+	hash, err := auth.HashPassword("right")
+	require.NoError(t, err)
+	repo := new(MockUserRepository)
+	repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+		Return(&model.AppUserModel{
+			AppUserID: 1, UserName: "alice", PwHash: hash,
+		}, nil)
+	repo.On("RetrieveUserByUserName", mock.Anything, mock.Anything).
+		Return(
+			(*model.AppUserModel)(nil),
+			fmt.Errorf("user not found: %w", repository.ErrNotFound),
+		)
+	handler := AuthHandler(s, repo)
+
+	wrongPassword := authAttempt(t, handler, "192.0.2.1:1", "alice", "wrong")
+	require.Equal(t, http.StatusUnauthorized, wrongPassword.Code)
+
+	threshold := s.Config.FailedLoginAttemptThreshold
+	for attempt := 1; attempt <= threshold; attempt++ {
+		w := authAttempt(t, handler, "192.0.2.22:1234", "nobody", "guess")
+		require.Equal(t, http.StatusUnauthorized, w.Code, "attempt %d", attempt)
+		assert.Equal(t, wrongPassword.Body.String(), w.Body.String(),
+			"attempt %d answers like a wrong password", attempt)
+	}
+
+	w := authAttempt(t, handler, "192.0.2.22:1234", "nobody", "guess")
+	assert.Equal(t, http.StatusTooManyRequests, w.Code, "eighth attempt")
+	w = authAttempt(t, handler, "192.0.2.99:1234", "nobody", "guess")
+	assert.Equal(t, http.StatusTooManyRequests, w.Code,
+		"the unknown name is locked from any address")
+	w = authAttempt(t, handler, "192.0.2.22:1234", "someone-else", "guess")
+	assert.Equal(t, http.StatusTooManyRequests, w.Code,
+		"the address is locked for any name")
+}
+
+// A lookup that fails for any reason but not-found is an outage: 500, not
+// "Invalid credentials", and it is not counted against the caller.
+func TestAuthHandler_LookupErrorIs500(t *testing.T) {
+	s := lockoutServices(t)
+	repo := new(MockUserRepository)
+	repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+		Return(
+			(*model.AppUserModel)(nil),
+			fmt.Errorf("failed to get user: %w", errors.New("conn reset")),
+		)
+	handler := AuthHandler(s, repo)
+
+	w := authAttempt(t, handler, "192.0.2.5:1", "alice", "pw")
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "Login is temporarily unavailable")
+	assert.NotContains(t, w.Body.String(), "conn reset")
+	count, err := s.KV.Get("loginfail-user-alice")
+	require.NoError(t, err)
+	assert.Empty(t, count, "an outage is not a failed attempt")
 }

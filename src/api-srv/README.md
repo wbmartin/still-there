@@ -35,6 +35,11 @@ Keys read by `internal/config/config.go` `LoadConfig`:
 - `JWT_SESSION_EXPIRE_HOURS`, `MAX_USER_REQ_PER_MIN`,
   `MAX_UNAUTH_REQ_PER_MIN` — optional, integer
 - `SERVER_BIND_ADDRESS` — optional; empty listens on every interface
+- `TRUSTED_PROXY_COUNT` — optional, non-negative integer, default 0. How
+  many proxies append to `X-Forwarded-For`; the client IP (rate limit and
+  login lockout keys) is the entry that many hops from the right. 0 ignores
+  the header (local dev, Playwright); 1 behind the host's nginx; the pytest
+  copy `bin/300-run-tests` builds sets 1
 - `CORS_ALLOWED_ORIGINS` — optional, comma-separated; empty means no CORS
 
 `TEST_BASE_URL` is not part of `Config` — the server ignores it. It is read

@@ -144,15 +144,22 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     # tests/test_z_error_scenarios.py drives a non-exempt user past the limit
     # and expects a 429 -- and is written against the developer values in
     # etc/loc-api-srv.env. So this instance runs on a COPY of the e2e config
-    # with just those two keys taken from the developer file.
+    # with just those two keys taken from the developer file, and
+    # TRUSTED_PROXY_COUNT=1 so pytest plays the proxy: a lockout case sends
+    # its own X-Forwarded-For and never locks the shared loopback address.
+    # Safe because this instance binds 127.0.0.1 and serves a scratch DB.
     PY_API_ENV="$LOG_DIR/py-api-srv.env"
     DEV_ENV="$PROJECT_ROOT/etc/loc-api-srv.env"
     limit_from_dev() { grep -E "^$1=" "$DEV_ENV" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' '; }
     USER_LIMIT="$(limit_from_dev MAX_USER_REQ_PER_MIN)"; USER_LIMIT="${USER_LIMIT:-200}"
     UNAUTH_LIMIT="$(limit_from_dev MAX_UNAUTH_REQ_PER_MIN)"; UNAUTH_LIMIT="${UNAUTH_LIMIT:-20}"
-    sed -e "s#^MAX_USER_REQ_PER_MIN=.*#MAX_USER_REQ_PER_MIN=$USER_LIMIT#" \
-        -e "s#^MAX_UNAUTH_REQ_PER_MIN=.*#MAX_UNAUTH_REQ_PER_MIN=$UNAUTH_LIMIT#" \
-        "$E2E_API_ENV" > "$PY_API_ENV"
+    {
+        sed -e "s#^MAX_USER_REQ_PER_MIN=.*#MAX_USER_REQ_PER_MIN=$USER_LIMIT#" \
+            -e "s#^MAX_UNAUTH_REQ_PER_MIN=.*#MAX_UNAUTH_REQ_PER_MIN=$UNAUTH_LIMIT#" \
+            -e "/^TRUSTED_PROXY_COUNT=/d" \
+            "$E2E_API_ENV"
+        printf "\nTRUSTED_PROXY_COUNT=1\n"
+    } > "$PY_API_ENV"
     API_BASE_URL="$(grep -E '^TEST_BASE_URL=' "$PY_API_ENV" | head -1 | cut -d= -f2- | tr -d ' ')"
     [ -n "$API_BASE_URL" ] || { echo "[ERROR] TEST_BASE_URL missing from $E2E_API_ENV"; exit 1; }
     if curl -sf "$API_BASE_URL/health" >/dev/null 2>&1; then

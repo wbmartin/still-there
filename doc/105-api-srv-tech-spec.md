@@ -123,6 +123,12 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
 1. **Initial Auth** (`/auth`):
    - Input: `{userName: string, password: string}`
    - Verify credentials against `app_user` table
+   - Every failure answers the same 401 "Invalid credentials": an unknown
+     name runs argon2 against a dummy hash (`auth.CheckPasswordHashOrDummy`)
+     so timing does not reveal which names exist, and it counts toward the
+     per-IP and per-username lockout exactly like a wrong password. A lookup
+     error other than not-found is an outage: 500 "Login is temporarily
+     unavailable", not counted
    - If `mfa_exempt = true`: Return full JWT
    - If `mfa_exempt = false`: Store temp token in the in-process KV store,
      return temp token and `mfaEnrolled` — true when a seed is stored and
@@ -205,6 +211,15 @@ second server or a need to survive restarts means a shared store (see
 2. **Rate Limiting**:
    - Authenticated: 200 requests/minute per user
    - Unauthenticated: 20 requests/minute per IP
+   - "IP" here and in the login lockout is `security.ClientIP`. With
+     `TRUSTED_PROXY_COUNT=0` (local dev) it is `RemoteAddr` and
+     `X-Forwarded-For` is ignored. With N (1 behind the host's nginx, which
+     sets `X-Forwarded-For $proxy_add_x_forwarded_for`) it is the entry N
+     hops from the right of `X-Forwarded-For`: the right-hand entries are
+     the ones the trusted proxies appended, anything to their left is
+     client-supplied and ignored. Ports are stripped. Behind a proxy this is
+     sound only if the API is reachable through that proxy alone (bind it
+     to loopback)
 3. **User Blocking**: Check the in-process KV store for blocked users
    (session revocation is part of step 1, JWT validation)
 4. **CSRF Protection**: Compare `X-CSRF-Token` header with last 3 chars of session ID (safe methods — GET, HEAD, OPTIONS, TRACE — are exempt)
@@ -235,7 +250,8 @@ difference where the auditor reads it, with `Skip*` calls:
   nothing, and says so.
 - `auth_handler.go` `AuthHandler` (login) — five `Skip*` calls: no JWT
   exists yet, and brute force is answered by the per-IP + per-username
-  lockout (7 failures / 5 min) that runs before the password check.
+  lockout (7 failures / 5 min) that runs before the password check and
+  counts unknown names as well as wrong passwords.
 - `RefreshHandler`, `LogoffHandler` — `CheckJWT`, rate limit and block, then
   `SkipCSRF` / `SkipAuthorization` with a one-line reason each.
 - `UserSelfCreateHandler`, `error_report_handler.go` — `SkipJWT` +

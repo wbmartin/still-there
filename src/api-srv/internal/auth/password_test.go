@@ -1,6 +1,10 @@
 package auth
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func TestHashCheckPasswordHash_RoundTrip(t *testing.T) {
 	hash, err := HashPassword("correct horse battery staple")
@@ -77,5 +81,30 @@ func TestHashPassword_EmptyPasswordRoundTrips(t *testing.T) {
 	}
 	if CheckPasswordHash("not-empty", hash) {
 		t.Error("CheckPasswordHash(\"not-empty\", hash of \"\"): want false, got true")
+	}
+}
+
+// An unknown user (empty hash) is always refused, after argon2 work against a
+// dummy built with the current parameters; a real hash is checked as usual.
+func TestCheckPasswordHashOrDummy(t *testing.T) {
+	if CheckPasswordHashOrDummy("anything", "") {
+		t.Error("empty hash: want false, got true")
+	}
+	wantPrefix := fmt.Sprintf(
+		"$argon2id$v=19$m=%d,t=%d,p=%d$",
+		argon2Memory, argon2Time, argon2Threads,
+	)
+	if dummy := dummyPasswordHash(); !strings.HasPrefix(dummy, wantPrefix) {
+		t.Errorf("dummy hash %q lacks current params %q", dummy, wantPrefix)
+	}
+	hash, err := HashPassword("right")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	if !CheckPasswordHashOrDummy("right", hash) {
+		t.Error("real hash, right password: want true, got false")
+	}
+	if CheckPasswordHashOrDummy("wrong", hash) {
+		t.Error("real hash, wrong password: want false, got true")
 	}
 }

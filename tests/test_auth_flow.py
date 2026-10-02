@@ -1,4 +1,8 @@
 import os
+import random
+import statistics
+import time
+import uuid
 
 import pytest
 import requests
@@ -110,6 +114,108 @@ class TestAuthentication:
     # MFA enrolment, verification, temp-token replay and the MFA lockout are
     # in tests/test_zz_mfa_totp.py (it runs last because the lockout locks
     # the shared IP out of /auth).
+
+
+# The pytest API (bin/300-run-tests) trusts one X-Forwarded-For hop, so each
+# case below sends from its own address in 198.18.0.0/15 and never spends the
+# loopback address's lockout allowance the rest of the suite logs in from.
+RUN_OCTET = random.randint(0, 255)
+
+
+def run_ip(host: int) -> str:
+    return f"198.18.{RUN_OCTET}.{host}"
+
+
+def _login(base_url: str, forwarded_for: str, user_name: str, password: str):
+    return requests.post(
+        f"{base_url}/auth",
+        json={"userName": user_name, "password": password},
+        headers={"X-Forwarded-For": forwarded_for},
+    )
+
+
+def _unknown_name() -> str:
+    return f"ghost{uuid.uuid4().hex[:16]}"
+
+
+class TestLoginEnumeration:
+    """An unknown name is answered, timed and counted like a wrong password."""
+
+    def test_unknown_name_costs_as_much_as_a_wrong_password(self, test_client):
+        base_url = test_client.base_url
+        suffix = uuid.uuid4().hex[:12]
+        create_response = test_client.make_request("POST", "/user", json={
+            "userName": f"timing{suffix}",
+            "firstName": "Timing",
+            "lastName": "Test",
+            "email": f"timing{suffix}@example.com",
+            "pwHash": "timingpass123!",
+            "mfaExempt": True,
+            "appUserGroupMembershipList": [],
+        })
+        assert create_response.status_code == 201, create_response.text
+        created = create_response.json()["data"]
+        try:
+            wrong_list, unknown_list, body_set = [], [], set()
+            # Five of each, interleaved, each kind from its own address:
+            # under the lockout threshold for both addresses and the user.
+            for _ in range(5):
+                for kind in ("wrong", "unknown"):
+                    started = time.perf_counter()
+                    if kind == "wrong":
+                        response = _login(
+                            base_url, run_ip(1), created["userName"], "nope"
+                        )
+                    else:
+                        response = _login(
+                            base_url, run_ip(2), _unknown_name(), "nope"
+                        )
+                    elapsed = time.perf_counter() - started
+                    assert response.status_code == 401, response.text
+                    body_set.add(response.text)
+                    (wrong_list if kind == "wrong" else unknown_list).append(
+                        elapsed
+                    )
+            assert len(body_set) == 1, body_set
+            wrong_median = statistics.median(wrong_list)
+            unknown_median = statistics.median(unknown_list)
+            assert unknown_median >= wrong_median / 2, (
+                f"unknown name {unknown_median * 1000:.1f} ms vs wrong "
+                f"password {wrong_median * 1000:.1f} ms: timing tells them apart"
+            )
+        finally:
+            test_client.make_request("DELETE", "/user", params={
+                "appUserId": str(created["appUserId"]),
+                "updateTs": f"{created['updateTs']:.7f}",
+            })
+
+    def test_unknown_name_attempts_reach_the_lockout(self):
+        base_url = os.environ["TEST_BASE_URL"]
+        threshold = int(os.environ.get("FAILED_LOGIN_ATTEMPT_THRESHOLD", "7"))
+        locked_ip = run_ip(3)
+        user_name = _unknown_name()
+        for attempt in range(threshold):
+            response = _login(base_url, locked_ip, user_name, "guess")
+            assert response.status_code == 401, (attempt, response.text)
+            assert "Invalid credentials" in response.text
+
+        response = _login(base_url, locked_ip, user_name, "guess")
+        assert response.status_code == 429, response.text
+
+        # The name is locked from any address.
+        response = _login(base_url, run_ip(5), user_name, "guess")
+        assert response.status_code == 429, response.text
+
+        # A forged entry left of the one the proxy appended is ignored: the
+        # request still comes from the locked address.
+        response = _login(
+            base_url, f"{run_ip(4)}, {locked_ip}", _unknown_name(), "guess"
+        )
+        assert response.status_code == 429, response.text
+
+        # Another address with another name is not locked.
+        response = _login(base_url, run_ip(4), _unknown_name(), "guess")
+        assert response.status_code == 401, response.text
 
 
 # Import TestClient for use in this module

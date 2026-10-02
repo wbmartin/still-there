@@ -98,6 +98,7 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserByUserNameNotFound() {
 	s.Error(err)
 	s.Nil(user)
 	s.Contains(err.Error(), "user not found")
+	s.ErrorIs(err, ErrNotFound, "/auth tells not-found from an outage")
 }
 
 func (s *UserRepositoryTestSuite) TestGetGrantsForGroups() {

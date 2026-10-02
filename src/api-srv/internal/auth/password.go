@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -90,4 +91,30 @@ func CheckPasswordHash(password, encodedHash string) bool {
 
 	// Compare hashes using constant-time comparison to prevent timing attacks
 	return subtle.ConstantTimeCompare(hash, expectedHash) == 1
+}
+
+// dummyPasswordHash is built on first use from a random password with the
+// current parameters, so checking against it costs what a real hash costs.
+var dummyPasswordHash = sync.OnceValue(func() string {
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		panic(fmt.Sprintf("dummy password hash: %v", err))
+	}
+	hash, err := HashPassword(base64.RawStdEncoding.EncodeToString(secret))
+	if err != nil {
+		panic(fmt.Sprintf("dummy password hash: %v", err))
+	}
+	return hash
+})
+
+// CheckPasswordHashOrDummy is CheckPasswordHash for a login whose user may
+// not exist. An empty encodedHash (no such user) runs the same argon2 work
+// against a dummy hash and returns false, so response time does not tell
+// an unknown name from a wrong password.
+func CheckPasswordHashOrDummy(password, encodedHash string) bool {
+	if encodedHash == "" {
+		_ = CheckPasswordHash(password, dummyPasswordHash())
+		return false
+	}
+	return CheckPasswordHash(password, encodedHash)
 }
