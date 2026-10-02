@@ -31,7 +31,7 @@ import AppUserGroupEditPage from './pages/app-user-group-edit-page'
 import UserPreferencesPage from './pages/user-preferences-page'
 import MFAOnboardingPage from './pages/mfa-onboarding-page'
 
-import { useAuthStore } from './stores/auth-store'
+import { useAuthStore, setRouteNavigator } from './stores/auth-store'
 import { ROUTES } from './constants/routes'
 import { grants } from './constants/grants'
 
@@ -147,6 +147,8 @@ const router = createBrowserRouter([
     ],
   },
 ])
+
+setRouteNavigator((path) => void router.navigate(path))
 
 function AppLayout() {
   const { logout, authState, grantList, securityContext } = useAuthStore();

@@ -1,3 +1,6 @@
+import { API_ENDPOINTS } from "../constants/api";
+import type { RefreshResponse } from "../types/auth-type";
+
 let csrfToken: string | null = null;
 
 export const getCsrfToken = (): string | null => {
@@ -31,9 +34,10 @@ export class ApiUnreachableError extends Error {
 export const isApiUnreachable = (error: unknown): boolean =>
   error instanceof ApiUnreachableError;
 
-const apiRequest = async (
+// The fetch itself, with the CSRF header and the outage mapping.
+const sendRequest = async (
   url: string,
-  options: RequestInit = {},
+  options: RequestInit,
   csrfToken?: string,
 ) => {
   const headers = new Headers(options.headers);
@@ -54,6 +58,112 @@ const apiRequest = async (
     }
     throw new ApiUnreachableError(url, { cause });
   }
+};
+
+/**
+ * The write was dropped because the session cookie now belongs to another
+ * user or tenant (signed in or switched in another tab). The tab has already
+ * moved to that identity; a caller can ignore this error.
+ */
+export class SessionChangedError extends Error {
+  constructor() {
+    super("Your session changed in another tab; this change was not saved.");
+    this.name = "SessionChangedError";
+  }
+}
+
+export const isSessionChanged = (error: unknown): boolean =>
+  error instanceof SessionChangedError;
+
+/**
+ * How the API layer asks the auth store about a refreshed session, through
+ * a callback for the same import-cycle reason as setSessionExpiredListener.
+ */
+export interface SessionResyncListener {
+  /** The refreshed session is the user and tenant this tab shows. */
+  isSameIdentity: (refreshed: RefreshResponse) => boolean;
+  /** It is not: the tab moves to the refreshed session. */
+  adoptSession: (refreshed: RefreshResponse) => void;
+}
+
+let sessionResyncListener: SessionResyncListener | null = null;
+
+export const setSessionResyncListener = (
+  listener: SessionResyncListener | null,
+): void => {
+  sessionResyncListener = listener;
+};
+
+type ResyncOutcome = "SAME" | "CHANGED" | "FAILED";
+
+const SAFE_METHOD_LIST = ["GET", "HEAD", "OPTIONS", "TRACE"];
+
+// A write the server refused for its CSRF token: another tab's sign-in or
+// context switch moved the shared cookie to a session this tab's token does
+// not match.
+const isCsrfRefusal = async (
+  response: Response,
+  options: RequestInit,
+): Promise<boolean> => {
+  if (response.status !== 403) return false;
+  const method = (options.method || "GET").toUpperCase();
+  if (SAFE_METHOD_LIST.includes(method)) return false;
+  try {
+    const body = (await response.clone().json()) as { code?: string };
+    return body.code === "CSRF";
+  } catch {
+    return false;
+  }
+};
+
+const refreshSession = async (): Promise<ResyncOutcome> => {
+  const listener = sessionResyncListener;
+  if (!listener) return "FAILED";
+  try {
+    const response = await sendRequest(API_ENDPOINTS.REFRESH, {});
+    if (!response.ok) return "FAILED";
+    const refreshed = (await response.json()) as RefreshResponse;
+    if (!refreshed.user || !refreshed.csrfToken) return "FAILED";
+    if (!listener.isSameIdentity(refreshed)) {
+      listener.adoptSession(refreshed);
+      return "CHANGED";
+    }
+    setCsrfToken(refreshed.csrfToken);
+    return "SAME";
+  } catch {
+    return "FAILED";
+  }
+};
+
+// Single flight: writes refused together share one /refresh and one verdict,
+// so a session is adopted once and no write is resent under it.
+let pendingResync: Promise<ResyncOutcome> | null = null;
+
+const resyncSession = (): Promise<ResyncOutcome> => {
+  pendingResync ??= refreshSession().finally(() => {
+    pendingResync = null;
+  });
+  return pendingResync;
+};
+
+/**
+ * fetch against the API. A write refused for a stale CSRF token is resent
+ * once after /refresh supplies the current token, if the session is still
+ * the user and tenant this tab shows; if it is not, the write is dropped and
+ * the tab moves to the new identity (SessionChangedError). A second refusal,
+ * or a failed refresh, returns the 403 as it came.
+ */
+const apiRequest = async (
+  url: string,
+  options: RequestInit = {},
+  csrfToken?: string,
+) => {
+  const response = await sendRequest(url, options, csrfToken);
+  if (!(await isCsrfRefusal(response, options))) return response;
+  const outcome = await resyncSession();
+  if (outcome === "CHANGED") throw new SessionChangedError();
+  if (outcome === "FAILED") return response;
+  return sendRequest(url, options);
 };
 
 /**

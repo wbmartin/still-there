@@ -59,3 +59,53 @@ func TestAuthHandler_MFAEnrolled(t *testing.T) {
 		})
 	}
 }
+
+// refreshOnce calls /refresh with token and returns the new cookie's session
+// id and the csrfToken in the body.
+func refreshOnce(
+	t *testing.T,
+	handler http.HandlerFunc,
+	jwtSecret string,
+	token string,
+) (string, string) {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodGet, "/refresh", nil)
+	r.AddCookie(&http.Cookie{Name: "auth", Value: token})
+	w := httptest.NewRecorder()
+	handler(w, r)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	claims, err := auth.ValidateJWT(authCookie(t, w), jwtSecret)
+	require.NoError(t, err)
+	var body model.Auth2ResponseWrapper
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	return claims.SessionID, body.CsrfToken
+}
+
+// Every tab shares the cookie but holds its own CSRF token: a refresh in one
+// tab must not change the token another tab sends (B004).
+func TestRefresh_TwiceKeepsTheSessionAndCsrfToken(t *testing.T) {
+	s := testServices(t)
+	repo := new(MockUserRepository)
+	repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+		Return(&model.AppUserModel{
+			AppUserID: 1, UserName: "alice", SecurityContext: 1,
+			AppUserGroupMembershipList: []int{1}, MFAExempt: true,
+		}, nil)
+	repo.On("GetGrantsForGroups", mock.Anything, []int{1}).
+		Return(map[int][]int{1: {model.GrantLogon}}, nil)
+	handler := RefreshHandler(s, repo)
+	secret := s.Config.JWTSecret
+
+	token := sessionToken(t, s, "alice", 1, "session-abc", nil)
+	firstID, firstCsrf := refreshOnce(t, handler, secret, token)
+	secondID, secondCsrf := refreshOnce(t, handler, secret, token)
+	assert.Equal(t, "session-abc", firstID)
+	assert.Equal(t, "session-abc", secondID)
+	assert.Equal(t, "abc", firstCsrf)
+	assert.Equal(t, "abc", secondCsrf)
+
+	short := sessionToken(t, s, "alice", 1, "ab", nil)
+	shortID, shortCsrf := refreshOnce(t, handler, secret, short)
+	assert.Len(t, shortID, 32, "an id too short to slice is replaced")
+	assert.Equal(t, shortID[len(shortID)-3:], shortCsrf)
+}

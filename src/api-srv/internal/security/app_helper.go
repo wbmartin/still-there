@@ -532,7 +532,7 @@ func (sh *AppHelper) CheckCSRF() *AppHelper {
 
 	csrfToken := sh.r.Header.Get("X-CSRF-Token")
 	if csrfToken == "" {
-		sh.failAndRespond(http.StatusForbidden, "Missing CSRF token")
+		sh.refuseCSRF("Missing CSRF token")
 		return sh
 	}
 
@@ -551,7 +551,7 @@ func (sh *AppHelper) CheckCSRF() *AppHelper {
 			"CSM0",
 			"CSRF token mismatch - received: "+csrfToken,
 		)
-		sh.failAndRespond(http.StatusForbidden, "CSRF validation failed")
+		sh.refuseCSRF("CSRF validation failed")
 		return sh
 	}
 
@@ -685,4 +685,19 @@ func (sh *AppHelper) failAndRespond(statusCode int, reason string) {
 
 	sh.blocked = true
 	sh.WriteError(sh.w, statusCode, reason, "SECF", nil)
+}
+
+// refuseCSRF answers 403 with "code": "CSRF" beside the message: the web
+// client resyncs its token once on that code, never on the message text.
+func (sh *AppHelper) refuseCSRF(reason string) {
+	if sh.blocked {
+		return
+	}
+
+	sh.blocked = true
+	sh.appServices.Logger.Error("SECF", reason, "username", sh.username)
+	sh.WriteJSON(sh.w, http.StatusForbidden, map[string]string{
+		"error": reason,
+		"code":  "CSRF",
+	})
 }

@@ -13,9 +13,11 @@ import {
   clearCsrfToken,
   isApiUnreachable,
   setSessionExpiredListener,
+  setSessionResyncListener,
 } from "../utils/api";
 import { clearAllCaches } from "../utils/cache-utils";
 import { API_ENDPOINTS } from "../constants/api";
+import { ROUTES } from "../constants/routes";
 import { notifications } from "@mantine/notifications";
 import { reportError } from "../utils/report-error";
 
@@ -183,6 +185,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
         { method: "POST", ...jsonBody({ securityContext: newContext }) },
       );
       if (data.user) {
+        // A new session id, so a new CSRF token: without it this tab's next
+        // write is refused.
+        setCsrfToken(data.csrfToken);
         set({
           authState: "YES",
           grantList: data.user.grantList || [],
@@ -249,4 +254,52 @@ setSessionExpiredListener(() => {
     color: "orange",
     autoClose: 6000,
   });
+});
+
+// The store cannot reach the router; the app registers how to navigate.
+let routeNavigator: ((path: string) => void) | null = null;
+
+export const setRouteNavigator = (
+  navigator: ((path: string) => void) | null,
+): void => {
+  routeNavigator = navigator;
+};
+
+// A write was refused because another tab moved the shared cookie. Same user
+// and tenant: the API layer takes the new token and resends. Anyone else: the
+// write is dropped and this tab reloads into the identity the cookie holds,
+// since what is on screen was authored under one that no longer has it.
+setSessionResyncListener({
+  isSameIdentity: (refreshed) => {
+    const state = useAuthStore.getState();
+    return (
+      refreshed.user.userName === state.userName &&
+      refreshed.user.securityContext === state.securityContext
+    );
+  },
+  adoptSession: (refreshed) => {
+    setCsrfToken(refreshed.csrfToken);
+    clearAllCaches();
+    useAuthStore.setState({
+      authState: "YES",
+      grantList: refreshed.user.grantList || [],
+      availableSecurityContextList:
+        refreshed.user.availableSecurityContextList || [],
+      userName: refreshed.user.userName || "",
+      securityContext: refreshed.user.securityContext || 0,
+      postAuthDestination: "",
+      mfaRequired: refreshed.user.mfaRequired || false,
+      mfaEnrolled: false,
+      error: null,
+    });
+    notifications.show({
+      title: "Session changed",
+      message:
+        "Your session changed in another tab. Unsaved changes here were " +
+        "not saved.",
+      color: "orange",
+      autoClose: 6000,
+    });
+    routeNavigator?.(ROUTES.DASHBOARD);
+  },
 });

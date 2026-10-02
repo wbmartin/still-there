@@ -58,4 +58,33 @@ test.describe("example pages", () => {
       page.getByRole("row", { name: /e2e jsonb example/ }),
     ).toHaveCount(0);
   });
+
+  // Every tab shares the cookie but keeps its own CSRF token; another tab
+  // loading must not leave this one's Save refused (B004).
+  test("a save still works after another tab loads", async ({
+    page,
+    context,
+  }) => {
+    await page.goto("/example?exampleId=new");
+    await page.getByLabel("Text", { exact: true }).fill("e2e two tabs");
+
+    const otherTab = await context.newPage();
+    await otherTab.goto("/exampleList");
+    await expect(otherTab.getByRole("table")).toBeVisible();
+    await otherTab.close();
+
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page).toHaveURL(/\/exampleList/);
+    await page
+      .getByRole("row", { name: /e2e two tabs/ })
+      .getByRole("button", { name: "Delete" })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Delete" })
+      .click();
+    await expect(
+      page.getByRole("row", { name: /e2e two tabs/ }),
+    ).toHaveCount(0);
+  });
 });

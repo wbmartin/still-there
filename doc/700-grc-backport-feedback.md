@@ -93,191 +93,6 @@ removed it and the "Create one here" link; admins create or invite (B035).
 capped (B011), generic answer.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ X\] skip
 
-### B004 — Refresh keeps its session id; web re-syncs CSRF once
-
-- **Priority:** P1  **Area:** go-api, web-app
-- **GRC:** `src/internal/handler/auth_handler.go:574-600,1037-1105`; `auth_handler_test.go:457-528`; `utils/api.ts:172-219,221-279`; `utils/api.test.ts:171-240`   **PROTO:** `src/api-srv/internal/handler/auth_handler.go:453-475,870-899` (new id :454); `utils/api.ts:34-56,129-143`
-- **Ticket:** `fbd5b80` (Go), `45d263d` (web)
-- **What:** PROTO's `/refresh` mints a new session id, and the CSRF token is its
-last 3 chars, so concurrent refreshes desync and writes 403. GRC re-signs on
-the same id; client resends a CSRF-refused write once.
-- **Port notes:** Low risk. Client matches `app_helper.go:508,527` message text;
-prefer an error code. 12-bit token: appendix.
-- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
-
-**Expanded for the adapt decision (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Paths: Go under `src/api-srv/internal/`, web under `src/web-app/`.
-
-1. **Login.** `createJWTForUser` mints a random 32-hex session id S1
-   (`handler/auth_handler.go:878-882`, `rand.Read(sessionIDBytes)` then
-   `hex.EncodeToString`), signs it into the JWT as claim `ses`
-   (`auth/jwt.go:14`), and the CSRF token is its tail
-   (`auth_handler.go:354`, `csrfToken = sessionID[len(sessionID)-3:]`). The
-   JWT rides in an HttpOnly, SameSite=Strict cookie that every tab of the
-   origin shares. The token lives only in that tab's JS memory
-   (`utils/api.ts:1`, `let csrfToken`; set at `stores/auth-store.ts:73`).
-2. **What calls /refresh.** No timer, no 401 handler.
-   `hooks/use-auth-guard.ts:16-20` calls `authenticateWithAuthToken()` while the
-   store is `"TBD"`, i.e. once per page load (new tab, reload, deep link).
-   "Try again" (`app.tsx:72`) calls it too; `<StrictMode>` (`main.tsx:12`)
-   doubles it on every dev boot, two refreshes in flight at once.
-3. **What /refresh does.** The same `createJWTForUser` as login
-   (`auth_handler.go:454`): a new id S2, the shared cookie overwritten (`:474`,
-   `setAuthCookie(w, jwt, 3600)`), tail(S2) returned (`:488`). Only the calling
-   tab stores it (`auth-store.ts:129`, `setCsrfToken(data.csrfToken)`).
-4. **The drift.** Tab A loaded at 9:00 holds tail(S1). Tab B opened at 9:05
-   sets the cookie to S2. Tab A keeps sending tail(S1) (`api.ts:40-42`); the
-   server checks the cookie's session (`security/app_helper.go:517-518`,
-   `expectedToken := sh.claims.SessionID[len(sh.claims.SessionID)-3:]` /
-   `if csrfToken != expectedToken {`) and answers 403
-   `"CSRF validation failed"` (`:527`). PROTO needs no overlap: one refresh
-   breaks every other open tab. True overlap (StrictMode, double-clicked "Try
-   again") can break one tab: cookie and memory land independently, so the
-   cookie can end on S2 while memory holds tail(S3).
-5. **What the user sees.** Reads keep working (`app_helper.go:495-497` skips
-   GET/HEAD/OPTIONS/TRACE). The first Save or Delete gets the 403, which
-   `throwForFailedResponse` treats as a dead session (`api.ts:98-100`,
-   `if (response.status === 401 || response.status === 403)`). The listener
-   (`auth-store.ts:223-246`) clears state, toasts "Session ended: Your session
-   has ended. Please sign in again." and the guard sends the tab to login; the
-   unsaved form is lost. That is B006 making it worse: without the 403 sign-out
-   this would be an error toast. Signing in again mints S3, which breaks tab B
-   the same way, so two open tabs evict each other in turn.
-6. **Classification.** Correctness/UX bug, not a security hole. "Drift" means
-   the tab's copy of the 3-char tail is stale against the session in the
-   cookie; the server fails closed and nothing is leaked or wrongly accepted.
-   Rotating the id on refresh bought no protection: refresh already requires a
-   valid JWT, and the id is server-random, so there is no fixation to close.
-   The token being only 12 bits is a separate issue (appendix).
-
-#### What GRC changed
-
-**Go, `fbd5b80`.** `createJWTForUser` now mints an id and delegates to a new
-`reissueJWTForUser(user, grantList, appServices, sessionID)`
-(`src/internal/handler/auth_handler.go:1038-1049`, `:1074-1105`). `/refresh`
-passes the caller's id (`:579-584`,
-`reissueJWTForUser(... jwtClaims.SessionID,)`). The JWT is re-signed with a
-fresh expiry; only the id is kept, so racing refreshes all return the same
-token. Login, MFA verify and the context switch still mint (`:447`,
-`user_mfa_handler.go:516`, `auth_handler.go:764`). An id under 3 chars is
-replaced (`:1084-1090`, `if len(sessionID) < 3 {`), so the slice cannot
-panic. Safe: the caller gets nothing it did not already hold. Pinned by
-`TestReissueKeepsTheSessionAndSoTheCsrfToken` (`auth_handler_test.go:457-515`):
-two reissues keep the id and token; "a login still mints a new session"
-(`:494`); "a session id too short to slice is replaced" (`:504`); no HTTP test.
-
-**Web, `45d263d`.** Heals a tab that already drifted. `apiJson` calls
-`apiJsonOnce(..., true)` (`src/web-app/utils/api.ts:226`); then (`:270-272`):
-`if (mayResync && !options.anonymous && isCsrfRefusal(...) && isWrite(method)
-&& await resyncCsrfToken()) return apiJsonOnce<T>(endpoint, init, options,
-false);`. Detection is text: `:213-214`,
-`status === 403 && /csrf/i.test(message)`, which matches both "Missing CSRF
-token" and "CSRF validation failed". `isWrite` (`:218`) reads the method, so a
-body-less DELETE counts. The fresh token is a bare
-`fetch("/api/refresh", { credentials: "include" })` (`:196`) then
-`setCsrfToken(body.csrfToken)` (`:200`), shared by concurrent failures
-(`resync ??=`, `:194`) and cleared by `queueMicrotask` (`:206`). Loop guard:
-the retry passes `mayResync = false`, and a failed refresh means no retry.
-Tests `utils/api.test.ts:171-240`: happy path and call order (`:174`), at most
-once (`:190`), a GET 403 left alone (`:204`), a permission 403 left alone
-(`:216`), a failed refresh not retried (`:229`).
-
-#### Adapted fix for PROTO
-
-1. **Go helper.** Split `createJWTForUser` (`auth_handler.go:872-899`) into
-   mint + `reissueJWTForUser`, keeping the `< 3` guard. Keep PROTO's
-   `auth.GenerateJWT(appServices.Config.AppName, user.UserName, ...)` order
-   (issuer first, PS0007); GRC's call puts AppName sixth and will not compile.
-   PROTO has no `auth.NewSessionID`; keep the inline `rand`/`hex`.
-2. **RefreshHandler.** `:454` calls `reissueJWTForUser(...,
-   jwtClaims.SessionID)`. Its repo param (`:385`) becomes
-   `UserRepositoryInterface` so tests can use `MockUserRepository`.
-3. **Other minters stay.** Login (`:332`), MFA verify
-   (`user_mfa_handler.go:602`) and `/changeSecurityContext` (`:622`) keep
-   minting (B005): a tenant change should change the id so a stale tab is
-   caught (step 6). Separate one-line web bug, whatever B005's skip means for
-   CSRF: `auth-store.ts` `changeSecurityContext` (`:173-197`) never calls
-   `setCsrfToken(data.csrfToken)`, so the switching tab's own next write 403s
-   and signs it out. Add it.
-4. **Error code, not text.** PROTO's body is only `{"error": clientMsg}`
-   (`app_helper.go:254`); `"SECF"` is a log code shared by every security
-   failure. Recommend CheckCSRF's two 403s (`:508`, `:527`) answer
-   `{"error": ..., "code": "CSRF"}` and the client tests `code === "CSRF"`.
-   Rewording a message silently disables a text match, `/csrf/i` would catch
-   any future message naming CSRF, and a Go test can pin a code.
-5. **Retry in `apiRequest`, not `apiJson`.** PROTO's writes mostly bypass
-   `apiJson`: `create-entity-store.ts:149,167,191`, `app-user-store.ts:57,85`,
-   `app-user-group-store.ts:30` and `examples-store.ts:22` call `apiRequest`
-   (`api.ts:34-57`) then `throwForFailedResponse`. A GRC-style `apiJson`-only
-   retry misses every entity write. In `apiRequest`: on 403, a write method,
-   not yet retried, and `response.clone().json()` carries `code: "CSRF"`, run a
-   single-flight resync and re-send once. A second 403 flows on unchanged.
-6. **Identity guard (not in GRC).** `/refresh` answers for whoever the cookie
-   holds now. If another tab switched tenant or signed in as someone else, a
-   blind retry runs this tab's write as that tenant or user while the screen
-   shows the old one; today the CSRF mismatch is what stops it. The resync
-   compares the response's `user.userName` and `user.securityContext` with the
-   tab's store and skips the retry on mismatch, via a registered callback like
-   `setSessionExpiredListener` (`api.ts` cannot import the store, `:78-80`).
-   With 5-6 in place drift never reaches B006's sign-out.
-7. **B003.** Revocation is keyed by session id (`SESSION_REVOKED*<sid>`). With
-   rotation, logoff revokes only the newest id, and JWTs carrying earlier ids
-   from that login live to their 72 h expiry. Keeping the id makes one login
-   one id, so logoff ends the chain. Land with or before B003. Do not copy
-   GRC's "no server-side state" comment (`:1068`); 720f5e1 made it false.
-8. **Tests.** Go, new `handler/auth_handler_test.go`: sign a JWT with id
-   `"session-abc"` as `user_mfa_handler_test.go:160` does, call
-   `RefreshHandler` twice with `testServices` (`example_handler_test.go:88`)
-   and a mock repo; assert both `csrfToken`s are `"abc"` and the cookie's `ses`
-   is unchanged; id `"ab"` gets a fresh 32-char id; a CSRF 403 body carries
-   `"code":"CSRF"`. Vitest, new `utils/api.test.ts`: GRC's five cases on
-   `apiRequest`, plus: identity mismatch, no retry; an entity-store write
-   heals; two refused writes share one `/refresh`.
-9. **Blind-copy traps.** Module `github.com/Radley-House/radley-grc` vs
-   `github.com/wbmartin/starter-api`; GRC's `appHelper` is PROTO's `app`;
-   cookie `MaxAge` 0 vs PROTO's `3600` (`:474`) is B029; `refusal()` and
-   `announce()` do not exist in PROTO; PS0001's 403-as-signed-out
-   (`api.ts:62-63,98`) means the retry must run before `throwForFailedResponse`.
-
-#### Is the CSRF control still working as designed? (Brandon, 2026-10-02)
-
-Yes. The control exists to stop a request from another site riding the
-user's cookie into a write. Three layers do that today and B004 touches
-none of them: the cookie is `SameSite=Strict`
-(`handler/auth_handler.go:38`), so a cross-site link or form post never
-carries it; the token travels in a custom `X-CSRF-Token` header
-(`utils/api.ts:42`, `security/app_helper.go:505`), which an HTML form cannot
-set and which forces a CORS preflight that only `CORS_ALLOWED_ORIGINS`
-passes (`security/security_headers.go:73-100`); and the token value is read
-from a same-origin JSON body another site cannot see. The defence rests on
-the attacker not knowing the token, not on the token changing. Rotating the
-id on refresh never added protection, because the attacker never had the
-old token either. The client-side retry runs only in the app's own code in
-response to its own write, so it is not reachable cross-site. The 12-bit
-token and the permissive OPTIONS handling are pre-existing appendix items,
-unchanged by this fix.
-
-#### Open question for Brandon
-
-Step 6 goes beyond GRC. When the cookie now belongs to another tenant or user,
-is today's outcome (the 403 stands and the tab is signed out) acceptable, or
-should the tab reload into the identity the cookie now carries?
-
-**Answered (Brandon, 2026-10-02): the tab reloads into the new identity.**
-So the resync in step 6 does not retry the write when `/refresh` answers
-with a different `user.userName` or `user.securityContext` than the tab
-holds. It drops the pending write, adopts the refreshed session (user,
-tenant, grants, CSRF token) into the auth store, clears the entity caches,
-and navigates to the app's landing route for that identity, with a
-notification saying the session changed in another tab. The user's
-unsaved form is lost, which is the honest outcome: it was authored under
-an identity that no longer holds the cookie. Add a vitest case for it
-beside the five GRC cases in step 8.
-- ADAPT REQUEST, Describe the fix before we continue
-
 ### B005 — `/changeSecurityContext` skipped CSRF and parsed the body first
 
 - **Priority:** P1  **Area:** go-api, web-app, tests, docs
@@ -8830,3 +8645,189 @@ in `CheckJWT`; KV error 500, revoked 401.
 grant edit (`app_user_group_handler.go:176-262`) must revoke. Add HTTP tests.
 Pairs B004, B034.
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+### B004 — COMPLETED — Refresh keeps its session id; web re-syncs CSRF once
+- **Completed:** 2026-10-02. The Go half (`/refresh` re-signs on the same session id via `reissueJWTForUser`) landed with B003; this adds `TestRefresh_TwiceKeepsTheSessionAndCsrfToken` (two refreshes keep id and token, an id under 3 chars is replaced) and makes CheckCSRF's two 403s answer `{"error": ..., "code": "CSRF"}` through a new `refuseCSRF` in `security/app_helper.go` (WriteError untouched; pinned by `security/csrf_test.go`). On the web, `utils/api.ts` `apiRequest` resends a CSRF-refused write once after a single-flight `/refresh` when the refreshed user and tenant match the tab (checked through `setSessionResyncListener`, registered in `stores/auth-store.ts`); on a mismatch it drops the write with `SessionChangedError`, and the store adopts the session, clears the entity caches, notifies and navigates to the dashboard through `setRouteNavigator` (registered in `app.tsx`). `changeSecurityContext` now stores the new `csrfToken`. Tests: `tests/csrf-resync.test.ts` (the GRC cases on `apiRequest`, shared refresh, user and tenant mismatch, entity-store heal, context-switch token) and an e2e two-tab save in `tests/e2e/example-pages.spec.ts`; pages still show their own error toast for a dropped write beside the "Session changed" notice (they do not special-case `isSessionChanged`). Tests: all green, go=216 unit=41 e2e=9 py=70
+
+- **Priority:** P1  **Area:** go-api, web-app
+- **GRC:** `src/internal/handler/auth_handler.go:574-600,1037-1105`; `auth_handler_test.go:457-528`; `utils/api.ts:172-219,221-279`; `utils/api.test.ts:171-240`   **PROTO:** `src/api-srv/internal/handler/auth_handler.go:453-475,870-899` (new id :454); `utils/api.ts:34-56,129-143`
+- **Ticket:** `fbd5b80` (Go), `45d263d` (web)
+- **What:** PROTO's `/refresh` mints a new session id, and the CSRF token is its
+last 3 chars, so concurrent refreshes desync and writes 403. GRC re-signs on
+the same id; client resends a CSRF-refused write once.
+- **Port notes:** Low risk. Client matches `app_helper.go:508,527` message text;
+prefer an error code. 12-bit token: appendix.
+- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
+
+**Expanded for the adapt decision (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Paths: Go under `src/api-srv/internal/`, web under `src/web-app/`.
+
+1. **Login.** `createJWTForUser` mints a random 32-hex session id S1
+   (`handler/auth_handler.go:878-882`, `rand.Read(sessionIDBytes)` then
+   `hex.EncodeToString`), signs it into the JWT as claim `ses`
+   (`auth/jwt.go:14`), and the CSRF token is its tail
+   (`auth_handler.go:354`, `csrfToken = sessionID[len(sessionID)-3:]`). The
+   JWT rides in an HttpOnly, SameSite=Strict cookie that every tab of the
+   origin shares. The token lives only in that tab's JS memory
+   (`utils/api.ts:1`, `let csrfToken`; set at `stores/auth-store.ts:73`).
+2. **What calls /refresh.** No timer, no 401 handler.
+   `hooks/use-auth-guard.ts:16-20` calls `authenticateWithAuthToken()` while the
+   store is `"TBD"`, i.e. once per page load (new tab, reload, deep link).
+   "Try again" (`app.tsx:72`) calls it too; `<StrictMode>` (`main.tsx:12`)
+   doubles it on every dev boot, two refreshes in flight at once.
+3. **What /refresh does.** The same `createJWTForUser` as login
+   (`auth_handler.go:454`): a new id S2, the shared cookie overwritten (`:474`,
+   `setAuthCookie(w, jwt, 3600)`), tail(S2) returned (`:488`). Only the calling
+   tab stores it (`auth-store.ts:129`, `setCsrfToken(data.csrfToken)`).
+4. **The drift.** Tab A loaded at 9:00 holds tail(S1). Tab B opened at 9:05
+   sets the cookie to S2. Tab A keeps sending tail(S1) (`api.ts:40-42`); the
+   server checks the cookie's session (`security/app_helper.go:517-518`,
+   `expectedToken := sh.claims.SessionID[len(sh.claims.SessionID)-3:]` /
+   `if csrfToken != expectedToken {`) and answers 403
+   `"CSRF validation failed"` (`:527`). PROTO needs no overlap: one refresh
+   breaks every other open tab. True overlap (StrictMode, double-clicked "Try
+   again") can break one tab: cookie and memory land independently, so the
+   cookie can end on S2 while memory holds tail(S3).
+5. **What the user sees.** Reads keep working (`app_helper.go:495-497` skips
+   GET/HEAD/OPTIONS/TRACE). The first Save or Delete gets the 403, which
+   `throwForFailedResponse` treats as a dead session (`api.ts:98-100`,
+   `if (response.status === 401 || response.status === 403)`). The listener
+   (`auth-store.ts:223-246`) clears state, toasts "Session ended: Your session
+   has ended. Please sign in again." and the guard sends the tab to login; the
+   unsaved form is lost. That is B006 making it worse: without the 403 sign-out
+   this would be an error toast. Signing in again mints S3, which breaks tab B
+   the same way, so two open tabs evict each other in turn.
+6. **Classification.** Correctness/UX bug, not a security hole. "Drift" means
+   the tab's copy of the 3-char tail is stale against the session in the
+   cookie; the server fails closed and nothing is leaked or wrongly accepted.
+   Rotating the id on refresh bought no protection: refresh already requires a
+   valid JWT, and the id is server-random, so there is no fixation to close.
+   The token being only 12 bits is a separate issue (appendix).
+
+#### What GRC changed
+
+**Go, `fbd5b80`.** `createJWTForUser` now mints an id and delegates to a new
+`reissueJWTForUser(user, grantList, appServices, sessionID)`
+(`src/internal/handler/auth_handler.go:1038-1049`, `:1074-1105`). `/refresh`
+passes the caller's id (`:579-584`,
+`reissueJWTForUser(... jwtClaims.SessionID,)`). The JWT is re-signed with a
+fresh expiry; only the id is kept, so racing refreshes all return the same
+token. Login, MFA verify and the context switch still mint (`:447`,
+`user_mfa_handler.go:516`, `auth_handler.go:764`). An id under 3 chars is
+replaced (`:1084-1090`, `if len(sessionID) < 3 {`), so the slice cannot
+panic. Safe: the caller gets nothing it did not already hold. Pinned by
+`TestReissueKeepsTheSessionAndSoTheCsrfToken` (`auth_handler_test.go:457-515`):
+two reissues keep the id and token; "a login still mints a new session"
+(`:494`); "a session id too short to slice is replaced" (`:504`); no HTTP test.
+
+**Web, `45d263d`.** Heals a tab that already drifted. `apiJson` calls
+`apiJsonOnce(..., true)` (`src/web-app/utils/api.ts:226`); then (`:270-272`):
+`if (mayResync && !options.anonymous && isCsrfRefusal(...) && isWrite(method)
+&& await resyncCsrfToken()) return apiJsonOnce<T>(endpoint, init, options,
+false);`. Detection is text: `:213-214`,
+`status === 403 && /csrf/i.test(message)`, which matches both "Missing CSRF
+token" and "CSRF validation failed". `isWrite` (`:218`) reads the method, so a
+body-less DELETE counts. The fresh token is a bare
+`fetch("/api/refresh", { credentials: "include" })` (`:196`) then
+`setCsrfToken(body.csrfToken)` (`:200`), shared by concurrent failures
+(`resync ??=`, `:194`) and cleared by `queueMicrotask` (`:206`). Loop guard:
+the retry passes `mayResync = false`, and a failed refresh means no retry.
+Tests `utils/api.test.ts:171-240`: happy path and call order (`:174`), at most
+once (`:190`), a GET 403 left alone (`:204`), a permission 403 left alone
+(`:216`), a failed refresh not retried (`:229`).
+
+#### Adapted fix for PROTO
+
+1. **Go helper.** Split `createJWTForUser` (`auth_handler.go:872-899`) into
+   mint + `reissueJWTForUser`, keeping the `< 3` guard. Keep PROTO's
+   `auth.GenerateJWT(appServices.Config.AppName, user.UserName, ...)` order
+   (issuer first, PS0007); GRC's call puts AppName sixth and will not compile.
+   PROTO has no `auth.NewSessionID`; keep the inline `rand`/`hex`.
+2. **RefreshHandler.** `:454` calls `reissueJWTForUser(...,
+   jwtClaims.SessionID)`. Its repo param (`:385`) becomes
+   `UserRepositoryInterface` so tests can use `MockUserRepository`.
+3. **Other minters stay.** Login (`:332`), MFA verify
+   (`user_mfa_handler.go:602`) and `/changeSecurityContext` (`:622`) keep
+   minting (B005): a tenant change should change the id so a stale tab is
+   caught (step 6). Separate one-line web bug, whatever B005's skip means for
+   CSRF: `auth-store.ts` `changeSecurityContext` (`:173-197`) never calls
+   `setCsrfToken(data.csrfToken)`, so the switching tab's own next write 403s
+   and signs it out. Add it.
+4. **Error code, not text.** PROTO's body is only `{"error": clientMsg}`
+   (`app_helper.go:254`); `"SECF"` is a log code shared by every security
+   failure. Recommend CheckCSRF's two 403s (`:508`, `:527`) answer
+   `{"error": ..., "code": "CSRF"}` and the client tests `code === "CSRF"`.
+   Rewording a message silently disables a text match, `/csrf/i` would catch
+   any future message naming CSRF, and a Go test can pin a code.
+5. **Retry in `apiRequest`, not `apiJson`.** PROTO's writes mostly bypass
+   `apiJson`: `create-entity-store.ts:149,167,191`, `app-user-store.ts:57,85`,
+   `app-user-group-store.ts:30` and `examples-store.ts:22` call `apiRequest`
+   (`api.ts:34-57`) then `throwForFailedResponse`. A GRC-style `apiJson`-only
+   retry misses every entity write. In `apiRequest`: on 403, a write method,
+   not yet retried, and `response.clone().json()` carries `code: "CSRF"`, run a
+   single-flight resync and re-send once. A second 403 flows on unchanged.
+6. **Identity guard (not in GRC).** `/refresh` answers for whoever the cookie
+   holds now. If another tab switched tenant or signed in as someone else, a
+   blind retry runs this tab's write as that tenant or user while the screen
+   shows the old one; today the CSRF mismatch is what stops it. The resync
+   compares the response's `user.userName` and `user.securityContext` with the
+   tab's store and skips the retry on mismatch, via a registered callback like
+   `setSessionExpiredListener` (`api.ts` cannot import the store, `:78-80`).
+   With 5-6 in place drift never reaches B006's sign-out.
+7. **B003.** Revocation is keyed by session id (`SESSION_REVOKED*<sid>`). With
+   rotation, logoff revokes only the newest id, and JWTs carrying earlier ids
+   from that login live to their 72 h expiry. Keeping the id makes one login
+   one id, so logoff ends the chain. Land with or before B003. Do not copy
+   GRC's "no server-side state" comment (`:1068`); 720f5e1 made it false.
+8. **Tests.** Go, new `handler/auth_handler_test.go`: sign a JWT with id
+   `"session-abc"` as `user_mfa_handler_test.go:160` does, call
+   `RefreshHandler` twice with `testServices` (`example_handler_test.go:88`)
+   and a mock repo; assert both `csrfToken`s are `"abc"` and the cookie's `ses`
+   is unchanged; id `"ab"` gets a fresh 32-char id; a CSRF 403 body carries
+   `"code":"CSRF"`. Vitest, new `utils/api.test.ts`: GRC's five cases on
+   `apiRequest`, plus: identity mismatch, no retry; an entity-store write
+   heals; two refused writes share one `/refresh`.
+9. **Blind-copy traps.** Module `github.com/Radley-House/radley-grc` vs
+   `github.com/wbmartin/starter-api`; GRC's `appHelper` is PROTO's `app`;
+   cookie `MaxAge` 0 vs PROTO's `3600` (`:474`) is B029; `refusal()` and
+   `announce()` do not exist in PROTO; PS0001's 403-as-signed-out
+   (`api.ts:62-63,98`) means the retry must run before `throwForFailedResponse`.
+
+#### Is the CSRF control still working as designed? (Brandon, 2026-10-02)
+
+Yes. The control exists to stop a request from another site riding the
+user's cookie into a write. Three layers do that today and B004 touches
+none of them: the cookie is `SameSite=Strict`
+(`handler/auth_handler.go:38`), so a cross-site link or form post never
+carries it; the token travels in a custom `X-CSRF-Token` header
+(`utils/api.ts:42`, `security/app_helper.go:505`), which an HTML form cannot
+set and which forces a CORS preflight that only `CORS_ALLOWED_ORIGINS`
+passes (`security/security_headers.go:73-100`); and the token value is read
+from a same-origin JSON body another site cannot see. The defence rests on
+the attacker not knowing the token, not on the token changing. Rotating the
+id on refresh never added protection, because the attacker never had the
+old token either. The client-side retry runs only in the app's own code in
+response to its own write, so it is not reachable cross-site. The 12-bit
+token and the permissive OPTIONS handling are pre-existing appendix items,
+unchanged by this fix.
+
+#### Open question for Brandon
+
+Step 6 goes beyond GRC. When the cookie now belongs to another tenant or user,
+is today's outcome (the 403 stands and the tab is signed out) acceptable, or
+should the tab reload into the identity the cookie now carries?
+
+**Answered (Brandon, 2026-10-02): the tab reloads into the new identity.**
+So the resync in step 6 does not retry the write when `/refresh` answers
+with a different `user.userName` or `user.securityContext` than the tab
+holds. It drops the pending write, adopts the refreshed session (user,
+tenant, grants, CSRF token) into the auth store, clears the entity caches,
+and navigates to the app's landing route for that identity, with a
+notification saying the session changed in another tab. The user's
+unsaved form is lost, which is the honest outcome: it was authored under
+an identity that no longer holds the cookie. Add a vitest case for it
+beside the five GRC cases in step 8.
+- ADAPT REQUEST, Describe the fix before we continue
