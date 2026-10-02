@@ -280,6 +280,17 @@ unchanged by this fix.
 Step 6 goes beyond GRC. When the cookie now belongs to another tenant or user,
 is today's outcome (the 403 stands and the tab is signed out) acceptable, or
 should the tab reload into the identity the cookie now carries?
+
+**Answered (Brandon, 2026-10-02): the tab reloads into the new identity.**
+So the resync in step 6 does not retry the write when `/refresh` answers
+with a different `user.userName` or `user.securityContext` than the tab
+holds. It drops the pending write, adopts the refreshed session (user,
+tenant, grants, CSRF token) into the auth store, clears the entity caches,
+and navigates to the app's landing route for that identity, with a
+notification saying the session changed in another tab. The user's
+unsaved form is lost, which is the honest outcome: it was authored under
+an identity that no longer holds the cookie. Add a vitest case for it
+beside the five GRC cases in step 8.
 - ADAPT REQUEST, Describe the fix before we continue
 
 ### B005 — `/changeSecurityContext` skipped CSRF and parsed the body first
