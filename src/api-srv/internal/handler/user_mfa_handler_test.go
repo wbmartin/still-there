@@ -96,6 +96,22 @@ func TestMFAVerifyHandler_TempTokenPath(t *testing.T) {
 		assert.Equal(t, "mfa", stillThere, "temp token survives a wrong code")
 	})
 
+	t.Run("counter write error → 500, no session", func(t *testing.T) {
+		s := newServices(t)
+		// An unparseable window makes the store refuse the Incr (B008).
+		s.Config.FailedLoginAttemptWindowDuration = "never"
+		require.NoError(t, s.KV.Set("TEMP_AUTH_SUCCESS_tok", "mfa", "10min"))
+		user, _ := mfaUser(t, true)
+		repo := new(MockUserRepository)
+		repo.On("RetrieveUserByUserName", mock.Anything, "mfa").Return(user, nil)
+		w := httptest.NewRecorder()
+		MFAVerifyHandler(s, repo)(w, mfaVerifyRequest(`{"tempToken":"tok","totpCode":"000000"}`))
+		assert.Equal(t, http.StatusInternalServerError, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), "Login is temporarily unavailable")
+		assert.Empty(t, w.Result().Cookies())
+		assert.NotContains(t, w.Body.String(), `"csrfToken"`)
+	})
+
 	t.Run("valid code on first enrolment → mfa_setup set, cookie issued, temp token burnt", func(t *testing.T) {
 		s := newServices(t)
 		require.NoError(t, s.KV.Set("TEMP_AUTH_SUCCESS_tok", "mfa", "10min"))

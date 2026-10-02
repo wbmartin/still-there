@@ -204,3 +204,46 @@ func TestAuthHandler_LookupErrorIs500(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, count, "an outage is not a failed attempt")
 }
+
+// A failure that cannot be counted is an outage, not a bad password: a
+// lockout that never trips is no lockout (B008). An unparseable window makes
+// the in-process store refuse the Incr, standing in for any write error.
+func TestAuthHandler_CounterWriteErrorIs500(t *testing.T) {
+	s := lockoutServices(t)
+	s.Config.FailedLoginAttemptWindowDuration = "never"
+	hash, err := auth.HashPassword("right")
+	require.NoError(t, err)
+	repo := new(MockUserRepository)
+	repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+		Return(&model.AppUserModel{
+			AppUserID: 1, UserName: "alice", PwHash: hash,
+		}, nil)
+	repo.On("RetrieveUserByUserName", mock.Anything, mock.Anything).
+		Return(
+			(*model.AppUserModel)(nil),
+			fmt.Errorf("user not found: %w", repository.ErrNotFound),
+		)
+	handler := AuthHandler(s, repo)
+
+	for _, userName := range []string{"alice", "nobody"} {
+		w := authAttempt(t, handler, "192.0.2.7:1", userName, "wrong")
+		assert.Equal(t, http.StatusInternalServerError, w.Code, userName)
+		assert.Contains(t, w.Body.String(), "Login is temporarily unavailable")
+		assert.NotContains(t, w.Body.String(), "invalid expiration")
+		assert.Empty(t, w.Result().Cookies(), userName)
+	}
+}
+
+// The lockout read fails closed as well: no store, no login attempt.
+func TestAuthHandler_LockoutReadErrorIs500(t *testing.T) {
+	s := lockoutServices(t)
+	s.KV.Close()
+	repo := new(MockUserRepository)
+	handler := AuthHandler(s, repo)
+
+	w := authAttempt(t, handler, "192.0.2.8:1", "alice", "pw")
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Empty(t, w.Result().Cookies())
+	repo.AssertNotCalled(t, "RetrieveUserByUserName",
+		mock.Anything, mock.Anything)
+}

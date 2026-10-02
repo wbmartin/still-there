@@ -234,13 +234,16 @@ func AuthHandler(
 				req.UserName,
 			)
 			if err != nil {
-				appServices.Logger.Error(
+				// Fail closed: an uncounted failure is a lockout that never
+				// trips, so this is an outage, not a plain bad password.
+				app.WriteError(
+					w,
+					http.StatusInternalServerError,
+					"Login is temporarily unavailable",
 					"FAILED_ATTEMPT_INCR_FAIL",
-					"Failed to increment failed attempts for user: "+req.UserName+", error: "+err.Error(),
-					"username",
-					req.UserName,
+					err,
 				)
-				// Don't fail the request, just log
+				return
 			}
 			app.WriteError(
 				w,

@@ -128,7 +128,9 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
      so timing does not reveal which names exist, and it counts toward the
      per-IP and per-username lockout exactly like a wrong password. A lookup
      error other than not-found is an outage: 500 "Login is temporarily
-     unavailable", not counted
+     unavailable", not counted. So is a lockout counter that cannot be read
+     or written (here and on `/mfaVerify`'s wrong code): the lockout fails
+     closed rather than silently stop counting
    - If `mfa_exempt = true`: Return full JWT
    - If `mfa_exempt = false`: Store temp token in the in-process KV store,
      return temp token and `mfaEnrolled` — true when a seed is stored and

@@ -106,17 +106,6 @@ doc/105:199: "no row written" is no reason to skip.
 - **Decision:** \[ \] pull / \[ \] adapt / \[X \] skip
 - BRANDON: I said skip because it's a not changing SERVER side data so seems fine to skip CSRF
 
-### B008 — Fail closed when the failed-attempt counter cannot be written
-
-- **Priority:** P1  **Area:** go-api
-- **GRC:** `src/internal/handler/auth_handler.go:332-358`   **PROTO:** `src/api-srv/internal/handler/auth_handler.go:216-243` (:233); `user_mfa_handler.go:540-552`
-- **Ticket:** RG0003 / `0d5146b`; RG0043 r1 / `720f5e1`
-- **What:** PROTO logs and continues, silently disabling the throttle. GRC
-answers 500 "Login is temporarily unavailable".
-- **Port notes:** Trivial. `/mfaVerify` fails open in both (GRC
-`user_mfa_handler.go:440-452`, RG0043 2.7); fix PROTO :540-552 too.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
 ### B009 — TOTP code replay inside the ±1-step window
 
 - **Priority:** P1  **Area:** go-api, tests
@@ -8846,3 +8835,15 @@ for the header shapes (absent, one entry, forged leading entries) and
 confirm the infra nginx confs set `X-Forwarded-For` with
 `$proxy_add_x_forwarded_for`. The appendix line for XFF is closed by
 this item.
+
+### B008 — COMPLETED — Fail closed when the failed-attempt counter cannot be written
+- **Completed:** 2026-10-02. A failed-attempt counter write error now answers 500 "Login is temporarily unavailable" (`FAILED_ATTEMPT_INCR_FAIL`, logged by `WriteError`) instead of logging and sending the 401, in `/auth`'s wrong-password/unknown-name branch (`handler/auth_handler.go`) and `/mfaVerify`'s wrong-code branch (`handler/user_mfa_handler.go`). The lockout read before the password/code check already failed closed in both (500 `LOCKOUT_CHECK_FAIL`); unchanged. No KV seam added: the tests make the in-process store refuse `Incr` with an unparseable `FAILED_LOGIN_ATTEMPT_WINDOW_DURATION` and refuse `Get` with `KV.Close()`. B009 (same `/mfaVerify` branch) not folded in. doc/105 /auth bullet updated. Tests: all green, go=242 unit=41 e2e=9 py=72
+
+- **Priority:** P1  **Area:** go-api
+- **GRC:** `src/internal/handler/auth_handler.go:332-358`   **PROTO:** `src/api-srv/internal/handler/auth_handler.go:216-243` (:233); `user_mfa_handler.go:540-552`
+- **Ticket:** RG0003 / `0d5146b`; RG0043 r1 / `720f5e1`
+- **What:** PROTO logs and continues, silently disabling the throttle. GRC
+answers 500 "Login is temporarily unavailable".
+- **Port notes:** Trivial. `/mfaVerify` fails open in both (GRC
+`user_mfa_handler.go:440-452`, RG0043 2.7); fix PROTO :540-552 too.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
