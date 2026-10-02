@@ -257,6 +257,24 @@ once (`:190`), a GET 403 left alone (`:204`), a permission 403 left alone
    `announce()` do not exist in PROTO; PS0001's 403-as-signed-out
    (`api.ts:62-63,98`) means the retry must run before `throwForFailedResponse`.
 
+#### Is the CSRF control still working as designed? (Brandon, 2026-10-02)
+
+Yes. The control exists to stop a request from another site riding the
+user's cookie into a write. Three layers do that today and B004 touches
+none of them: the cookie is `SameSite=Strict`
+(`handler/auth_handler.go:38`), so a cross-site link or form post never
+carries it; the token travels in a custom `X-CSRF-Token` header
+(`utils/api.ts:42`, `security/app_helper.go:505`), which an HTML form cannot
+set and which forces a CORS preflight that only `CORS_ALLOWED_ORIGINS`
+passes (`security/security_headers.go:73-100`); and the token value is read
+from a same-origin JSON body another site cannot see. The defence rests on
+the attacker not knowing the token, not on the token changing. Rotating the
+id on refresh never added protection, because the attacker never had the
+old token either. The client-side retry runs only in the app's own code in
+response to its own write, so it is not reachable cross-site. The 12-bit
+token and the permissive OPTIONS handling are pre-existing appendix items,
+unchanged by this fix.
+
 #### Open question for Brandon
 
 Step 6 goes beyond GRC. When the cookie now belongs to another tenant or user,
