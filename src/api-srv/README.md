@@ -53,7 +53,9 @@ All JSON is camelCase. List endpoints take `?<entity>IdList=1,2,3`
 - `POST /changeOwnPassword`
 - `POST /logoff`
 - `POST /userSelfCreate` — public self-registration
-- `POST /mfaSetup`, `POST /mfaVerify`
+- `POST /mfaSetup`, `POST /mfaVerify` — `/auth`'s `mfaEnrolled` sends an
+  enrolled user to verify; `/mfaSetup` refuses them 409 and never shows the
+  stored secret again
 - `POST /admin/resetUserMFA`
 
 ### Example (CRUD)

@@ -81,20 +81,6 @@ ticket-related part of any other item.
 
 # P1: security and real bugs in PROTO
 
-### B001 — MFA: enrolled login lands on setup; `/mfaSetup` returns the secret
-
-- **Priority:** P1  **Area:** go-api, web-app, tests, docs, tickets
-- **GRC:** `src/internal/handler/user_mfa_handler.go:130-142,241-244`; `src/internal/model/app_user_model.go:40-46`; `src/internal/model/security_model.go:19-21`; `src/internal/handler/auth_handler.go:411`; `types/auth-type.ts:10-11`; `stores/auth-store.ts:37-38,65,88,198`; `pages/login.tsx:50-51`; `constants/routes.ts:21-22`; `App.tsx:204-208`; `pages/mfa-onboarding-page.tsx:30-32,38,45-47,55-59,71,120`; `pages/invite-page.tsx:119`; tests `user_mfa_handler_test.go:712-752`, `model/app_user_model_test.go:45-65`, `stores/auth-store.test.ts:69-90`, `tests/test_zz_mfa_totp.py:194-235`; `tickets/02-working/RG0042-mfa-login-goes-to-setup/RG0042-mfa-login-goes-to-setup.md:23-51`; RG0042 md `:23-30`   **PROTO:** `src/api-srv/internal/handler/user_mfa_handler.go:276-372` (`mfaAlreadySetup` :362,367); `auth_handler.go:284-300`; `model/security_model.go:10-19`; `pages/login.tsx:54-56`; `pages/mfa-onboarding-page.tsx:31,33,37,43-57,70,119`; `stores/auth-store.ts:22-36,63-71`; `types/auth-type.ts:15-22`; `constants/routes.ts:19`; `app.tsx:97-101`; `tests/e2e/mfa.spec.ts`; `tests/test_zz_mfa_totp.py:98-108`; `pages/mfa-onboarding-page.tsx:31-57`
-- **Ticket:** RG0042 / `63ccf75`; new PS ticket
-- **What:** PROTO sends every MFA login to setup; `/mfaSetup` returns an
-enrolled user's decrypted seed + QR to a password-only temp token, and pytest
-asserts it (:103). GRC: `/auth` returns `mfaEnrolled`, login routes to
-`/mfa-verify`, `/mfaSetup` 409s.
-- **Port notes:** One change: Go, web, pytest, e2e (enrolled re-login never
-calls `/mfaSetup`). Test 409 by status, not GRC's regex (:56); drop `/grc`
-(:103). Harness B019; docs B051.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
 ### B002 — Retire public `POST /userSelfCreate`
 
 - **Priority:** P1  **Area:** go-api, web-app, tests, docs
@@ -8830,3 +8816,17 @@ each. The SKIP list holds 21 grouped veto lines; the appendix 16 items.
   Brandon's own and stay; only the lines binding them to `tickets/` go.
   The `backport-grc` work itself is tracked by this doc, not a ticket.
 - **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (Brandon, 2026-10-02)
+
+### B001 — COMPLETED — MFA: enrolled login lands on setup; `/mfaSetup` returns the secret
+- **Completed:** 2026-10-02. `/auth` now returns `mfaEnrolled` (new `AppUserModel.MFAEnrolled()`: `mfa_setup` and a stored seed) and `/mfaSetup` answers 409 `MFA_ALREADY_SETUP` to an enrolled user with no secret or QR; `mfaAlreadySetup` is gone from its answer. The web store keeps `mfaEnrolled`, login routes an enrolled user to the new `/mfa-verify` route (same page, verify only, never calls `/mfaSetup`), and the page detects a stale 409 by status code via `apiRequest`, not by message text. `AuthHandler` now takes `UserRepositoryInterface` so it can be unit tested; doc/105 MFA flow (the dead `/auth2` step replaced by `/mfaSetup` + `/mfaVerify`) and the api-srv README route note updated. Tests: all green, go=198 unit=31 e2e=8 py=67
+- **Priority:** P1  **Area:** go-api, web-app, tests, docs, tickets
+- **GRC:** `src/internal/handler/user_mfa_handler.go:130-142,241-244`; `src/internal/model/app_user_model.go:40-46`; `src/internal/model/security_model.go:19-21`; `src/internal/handler/auth_handler.go:411`; `types/auth-type.ts:10-11`; `stores/auth-store.ts:37-38,65,88,198`; `pages/login.tsx:50-51`; `constants/routes.ts:21-22`; `App.tsx:204-208`; `pages/mfa-onboarding-page.tsx:30-32,38,45-47,55-59,71,120`; `pages/invite-page.tsx:119`; tests `user_mfa_handler_test.go:712-752`, `model/app_user_model_test.go:45-65`, `stores/auth-store.test.ts:69-90`, `tests/test_zz_mfa_totp.py:194-235`; `tickets/02-working/RG0042-mfa-login-goes-to-setup/RG0042-mfa-login-goes-to-setup.md:23-51`; RG0042 md `:23-30`   **PROTO:** `src/api-srv/internal/handler/user_mfa_handler.go:276-372` (`mfaAlreadySetup` :362,367); `auth_handler.go:284-300`; `model/security_model.go:10-19`; `pages/login.tsx:54-56`; `pages/mfa-onboarding-page.tsx:31,33,37,43-57,70,119`; `stores/auth-store.ts:22-36,63-71`; `types/auth-type.ts:15-22`; `constants/routes.ts:19`; `app.tsx:97-101`; `tests/e2e/mfa.spec.ts`; `tests/test_zz_mfa_totp.py:98-108`; `pages/mfa-onboarding-page.tsx:31-57`
+- **Ticket:** RG0042 / `63ccf75`; new PS ticket
+- **What:** PROTO sends every MFA login to setup; `/mfaSetup` returns an
+enrolled user's decrypted seed + QR to a password-only temp token, and pytest
+asserts it (:103). GRC: `/auth` returns `mfaEnrolled`, login routes to
+`/mfa-verify`, `/mfaSetup` 409s.
+- **Port notes:** One change: Go, web, pytest, e2e (enrolled re-login never
+calls `/mfaSetup`). Test 409 by status, not GRC's regex (:56); drop `/grc`
+(:103). Harness B019; docs B051.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip

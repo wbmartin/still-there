@@ -24,3 +24,11 @@ type AppUserModel struct {
 	DeleteTS        *float64        `json:"deleteTs,omitempty"         db:"delete_ts"`
 	DeleteUserID    *int            `json:"deleteUserId,omitempty"     db:"delete_user_id"`
 }
+
+// MFAEnrolled reports a completed TOTP enrolment: a seed is stored and a code
+// from it has been verified once (mfa_setup). A seed without mfa_setup is an
+// enrolment still in progress, which /mfaSetup may show again; a completed
+// one it never shows.
+func (u *AppUserModel) MFAEnrolled() bool {
+	return u.MFASetup && u.TOTPSeed != nil && *u.TOTPSeed != ""
+}

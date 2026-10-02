@@ -124,15 +124,26 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
    - Input: `{userName: string, password: string}`
    - Verify credentials against `app_user` table
    - If `mfa_exempt = true`: Return full JWT
-   - If `mfa_exempt = false`: Store temp token in the in-process KV store, return temp token
+   - If `mfa_exempt = false`: Store temp token in the in-process KV store,
+     return temp token and `mfaEnrolled` — true when a seed is stored and
+     verified (`mfa_setup`), so the web app sends the user to verify a code
+     (`/mfa-verify`), not to enrol (`/mfa-setup`)
 
-2. **MFA Auth** (`/auth2`):
+2. **MFA enrolment** (`/mfaSetup`, temp token or session):
+   - Input: `{tempToken: string}` (or a session cookie)
+   - Generates a TOTP secret if the user has none, stores it AES-GCM
+     encrypted under `TOTP_ENCRYPTION_KEY`, and returns `secret` and
+     `qrCodeImage`. A seed stored but not yet verified is shown again
+   - An **enrolled** user is refused 409 `MFA_ALREADY_SETUP` with neither:
+     the stored secret is never shown again, since a temp token takes only
+     the password
+
+3. **MFA verify** (`/mfaVerify`):
    - Input: `{tempToken: string, totpCode: string}`
-   - Verify temp token from the in-process KV store
-   - Verify TOTP (placeholder implementation)
-   - Return full JWT with cookie
+   - Verify temp token from the in-process KV store, then the TOTP code
+   - Return full JWT with cookie; the temp token is single use
 
-3. **JWT Structure**:
+4. **JWT Structure**:
    ```json
    {
      "iss": "Proto App",

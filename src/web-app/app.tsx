@@ -100,6 +100,11 @@ const router = createBrowserRouter([
           errorElement: <ErrorPage />,
         },
         {
+          path: ROUTES.MFA_VERIFY,
+          element: <MFAOnboardingPage />,
+          errorElement: <ErrorPage />,
+        },
+        {
           path: ROUTES.DASHBOARD,
           element: <Dashboard />,
           errorElement: <ErrorPage />,

@@ -16,6 +16,9 @@ type AuthResponseModel struct {
 	GrantList                    []int  `json:"grantList"`
 	AvailableSecurityContextList []int  `json:"availableSecurityContextList"`
 	TempToken                    string `json:"tempToken,omitempty"` // MFA required
+	// With a temp token: true sends the web app to verify a code, false to
+	// enrol. The client never asks /mfaSetup to find out.
+	MFAEnrolled bool `json:"mfaEnrolled"`
 }
 
 // AuthResponseWrapper wraps the auth response for consistency

@@ -52,8 +52,8 @@ function Login() {
     // username is userName
     const state = useAuthStore.getState();
     if (state.authState === "MFA") {
-      // MFA required, navigate to setup
-      void navigate(ROUTES.MFA_SETUP);
+      // MFA required: an enrolled user verifies a code, anyone else enrols
+      void navigate(state.mfaEnrolled ? ROUTES.MFA_VERIFY : ROUTES.MFA_SETUP);
     } else if (state.authState !== "YES") {
       notifications.show({
         title: "Login Failed",

@@ -19,6 +19,8 @@ export interface User {
   securityContext: number;
   mfaRequired?: boolean;
   tempToken?: string;
+  /** With a temp token: verify a code (true) or enrol (false). */
+  mfaEnrolled?: boolean;
 }
 
 export interface LoginRequest {

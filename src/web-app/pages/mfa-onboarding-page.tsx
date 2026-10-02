@@ -15,7 +15,12 @@ import {
 } from "@mantine/core";
 import { IconCopy, IconCheck } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { apiJson, jsonBody } from "../utils/api";
+import {
+  apiJson,
+  apiRequest,
+  jsonBody,
+  readErrorMessage,
+} from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { useAuthStore } from "../stores/auth-store";
 import { ROUTES } from "../constants/routes";
@@ -28,33 +33,39 @@ function MFAOnboardingPage() {
   const [totpCode, setTotpCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [mfaAlreadySetup, setMfaAlreadySetup] = useState(false);
   const navigate = useNavigate();
-  const { tempToken } = useAuthStore();
+  const { tempToken, mfaEnrolled } = useAuthStore();
+  // An enrolled user only verifies: /mfaSetup is never asked, and it would
+  // refuse them anyway.
+  const [mfaAlreadySetup, setMfaAlreadySetup] = useState(mfaEnrolled);
   const hasFetched = useRef(false);
 
   useEffect(() => {
-    if (!tempToken || hasFetched.current) return;
+    if (!tempToken || mfaAlreadySetup || hasFetched.current) return;
     hasFetched.current = true;
 
     const fetchSetup = async () => {
       setLoading(true);
       try {
-        // anonymous: this runs on a temp token, before there is a session
-        const data = await apiJson<{
-          data: {
-            secret: string;
-            qrCodeImage: string;
-            mfaAlreadySetup: boolean;
-          };
-        }>(
-          API_ENDPOINTS.MFA_SETUP,
-          { method: "POST", ...jsonBody({ tempToken }) },
-          { anonymous: true },
-        );
+        // A temp token, not a session: a refusal here must not touch the
+        // session, so this reads the status itself instead of apiJson's
+        // session handling.
+        const response = await apiRequest(API_ENDPOINTS.MFA_SETUP, {
+          method: "POST",
+          ...jsonBody({ tempToken }),
+        });
+        // 409: enrolled after all (the login answer was stale); ask for
+        // the code.
+        if (response.status === 409) {
+          setMfaAlreadySetup(true);
+          return;
+        }
+        if (!response.ok) throw new Error(await readErrorMessage(response));
+        const data = (await response.json()) as {
+          data: { secret: string; qrCodeImage: string };
+        };
         setSecret(data.data.secret);
         setQrCodeImage(data.data.qrCodeImage);
-        setMfaAlreadySetup(data.data.mfaAlreadySetup || false);
       } catch (err) {
         notifications.show({
           title: "Error",
@@ -67,7 +78,7 @@ function MFAOnboardingPage() {
     };
 
     void fetchSetup();
-  }, [tempToken, hasFetched]);
+  }, [tempToken, mfaAlreadySetup]);
 
   // ^^^^^^^^^^^^^^^^^^^^^^^^ Hook Line  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

@@ -277,7 +277,22 @@ func MFASetupHandler(
 			return
 		}
 
-		// Generate TOTP secret if not exists
+		// An enrolled user verifies a code; the stored secret is never shown
+		// again. Returning it here would hand the seed and its QR code to
+		// anyone holding a temp token, which takes only the password.
+		if user.MFAEnrolled() {
+			app.WriteError(
+				w,
+				http.StatusConflict,
+				"MFA is already set up: enter the code from your authenticator app",
+				"MFA_ALREADY_SETUP",
+				nil,
+			)
+			return
+		}
+
+		// Generate a TOTP secret if none exists. An existing seed here is an
+		// enrolment not yet verified, so the same secret is shown again.
 		var secret string
 		if user.TOTPSeed != nil && *user.TOTPSeed != "" {
 			// Decrypt existing seed
@@ -359,12 +374,9 @@ func MFASetupHandler(
 			png,
 		)
 
-		mfaAlreadySetup := user.MFASetup
-
 		response := map[string]interface{}{
-			"secret":          secret,
-			"qrCodeImage":     qrCodeImage,
-			"mfaAlreadySetup": mfaAlreadySetup,
+			"secret":      secret,
+			"qrCodeImage": qrCodeImage,
 		}
 
 		wrapper := model.DataWrapper{Data: response}

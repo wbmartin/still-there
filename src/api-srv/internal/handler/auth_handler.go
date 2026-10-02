@@ -111,7 +111,7 @@ func resetFailedAttempts(
 // AuthHandler handles initial authentication (username/password)
 func AuthHandler(
 	appServices *app.Services,
-	userRepo *repository.UserRepository,
+	userRepo UserRepositoryInterface,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var csrfToken string
@@ -294,6 +294,7 @@ func AuthHandler(
 				GrantList:                    []int{}, // Empty for MFA flow
 				AvailableSecurityContextList: []int{}, // Empty for MFA flow
 				TempToken:                    tempToken,
+				MFAEnrolled:                  user.MFAEnrolled(),
 			}
 
 			wrapper := model.AuthResponseWrapper{User: response}

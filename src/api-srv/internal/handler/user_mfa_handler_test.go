@@ -167,3 +167,71 @@ func TestMFAVerifyHandler_JWTPath(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	})
 }
+
+// TestMFASetupHandler_TempTokenPath: /mfaSetup shows a secret only to a user
+// still enrolling. An enrolled user is refused 409 with neither the secret
+// nor a QR code; holding a temp token takes only the password.
+func TestMFASetupHandler_TempTokenPath(t *testing.T) {
+	newServices := func(t *testing.T) *app.Services {
+		s := testServices(t)
+		s.Config.TOTPEncryptionKey = testTOTPKey
+		s.Config.AppName = "Test"
+		require.NoError(t, s.KV.Set("TEMP_AUTH_SUCCESS_tok", "mfa", "10min"))
+		return s
+	}
+	setupRequest := func() *http.Request {
+		r := httptest.NewRequest(
+			http.MethodPost, "/mfaSetup",
+			strings.NewReader(`{"tempToken":"tok"}`),
+		)
+		r.Header.Set("Content-Type", "application/json")
+		return r
+	}
+
+	t.Run("enrolled user → 409, no secret, no QR, seed untouched", func(t *testing.T) {
+		s := newServices(t)
+		user, secret := mfaUser(t, true)
+		repo := new(MockUserRepository)
+		repo.On("RetrieveUserByUserName", mock.Anything, "mfa").Return(user, nil)
+		w := httptest.NewRecorder()
+		MFASetupHandler(s, repo)(w, setupRequest())
+		assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+		assert.NotContains(t, w.Body.String(), secret)
+		assert.NotContains(t, w.Body.String(), "qrCodeImage")
+		repo.AssertNotCalled(t, "UpdateUserTOTPSeed",
+			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+			mock.Anything)
+	})
+
+	t.Run("seed stored, never verified → 200 with the same secret", func(t *testing.T) {
+		s := newServices(t)
+		user, secret := mfaUser(t, false)
+		repo := new(MockUserRepository)
+		repo.On("RetrieveUserByUserName", mock.Anything, "mfa").Return(user, nil)
+		w := httptest.NewRecorder()
+		MFASetupHandler(s, repo)(w, setupRequest())
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), secret)
+		assert.Contains(t, w.Body.String(), "qrCodeImage")
+		repo.AssertNotCalled(t, "UpdateUserTOTPSeed",
+			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+			mock.Anything)
+	})
+
+	t.Run("no seed → 200, a new seed is stored", func(t *testing.T) {
+		s := newServices(t)
+		user := &model.AppUserModel{
+			AppUserID: 7, UserName: "mfa", SecurityContext: 1,
+			AppUserGroupMembershipList: []int{1}, UpdateTS: 1.5,
+		}
+		repo := new(MockUserRepository)
+		repo.On("RetrieveUserByUserName", mock.Anything, "mfa").Return(user, nil)
+		repo.On("UpdateUserTOTPSeed", mock.Anything, 7, mock.Anything, 1.5, 7).
+			Return(2.5, nil)
+		w := httptest.NewRecorder()
+		MFASetupHandler(s, repo)(w, setupRequest())
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), `"secret"`)
+		repo.AssertExpectations(t)
+	})
+}

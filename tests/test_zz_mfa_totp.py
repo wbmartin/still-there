@@ -25,8 +25,11 @@ def _base_url() -> str:
     return os.environ["TEST_BASE_URL"]
 
 
-def _password_step(session: requests.Session) -> str:
-    """POST /auth for the mfa user: no session yet, a temp token instead."""
+def _password_step(session: requests.Session, enrolled: bool) -> str:
+    """POST /auth for the mfa user: no session yet, a temp token instead.
+
+    mfaEnrolled tells the web app to verify a code (True) or enrol (False).
+    """
     response = session.post(
         f"{_base_url()}/auth", json={"userName": MFA_USER, "password": MFA_PASSWORD}
     )
@@ -35,6 +38,7 @@ def _password_step(session: requests.Session) -> str:
     assert user["tempToken"], "non-exempt user must get a temp token"
     assert user["grantList"] == [], "no grants before the second factor"
     assert "auth" not in session.cookies, "no session cookie before the second factor"
+    assert user["mfaEnrolled"] is enrolled, user
     return user["tempToken"]
 
 
@@ -52,12 +56,11 @@ class TestMFATOTP:
 
         # --- Enrolment: password → temp token → setup → verify ---
         session = requests.Session()
-        temp_token = _password_step(session)
+        temp_token = _password_step(session, enrolled=False)
 
         response = session.post(f"{_base_url()}/mfaSetup", json={"tempToken": temp_token})
         assert response.status_code == 200, response.text
         setup = response.json()["data"]
-        assert setup["mfaAlreadySetup"] is False
         secret = setup["secret"]
         assert setup["qrCodeImage"]
 
@@ -96,11 +99,14 @@ class TestMFATOTP:
         assert response.status_code == 401
 
         # --- Second sign-in: enrolled user, same secret ---
+        # /mfaSetup refuses an enrolled user: the stored secret and its QR
+        # code are never shown again to a holder of the password alone.
         session2 = requests.Session()
-        temp_token2 = _password_step(session2)
+        temp_token2 = _password_step(session2, enrolled=True)
         response = session2.post(f"{_base_url()}/mfaSetup", json={"tempToken": temp_token2})
-        assert response.status_code == 200
-        assert response.json()["data"]["mfaAlreadySetup"] is True
+        assert response.status_code == 409, response.text
+        assert secret not in response.text
+        assert "qrCodeImage" not in response.text
         response = session2.post(
             f"{_base_url()}/mfaVerify",
             json={"tempToken": temp_token2, "totpCode": pyotp.TOTP(secret).now()},
@@ -110,7 +116,7 @@ class TestMFATOTP:
         # --- Admin reset: the old secret no longer works ---
         _reset_mfa(admin, app_user_id)
         session3 = requests.Session()
-        temp_token3 = _password_step(session3)
+        temp_token3 = _password_step(session3, enrolled=False)
         response = session3.post(f"{_base_url()}/mfaSetup", json={"tempToken": temp_token3})
         assert response.status_code == 200
         assert response.json()["data"]["secret"] != secret
@@ -122,7 +128,7 @@ class TestMFATOTP:
         threshold = int(os.environ.get("FAILED_LOGIN_ATTEMPT_THRESHOLD", "7"))
 
         session = requests.Session()
-        temp_token = _password_step(session)
+        temp_token = _password_step(session, enrolled=False)
         response = session.post(f"{_base_url()}/mfaSetup", json={"tempToken": temp_token})
         assert response.status_code == 200
         app_user_id = None

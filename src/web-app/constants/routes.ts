@@ -17,4 +17,7 @@ export const ROUTES = {
   LOGIN: "/login",
   USER_PREFERENCES: "/userPreferences",
   MFA_SETUP: "/mfa-setup",
+  // An enrolled user's second step: the same page, no QR code and no call
+  // to /mfaSetup.
+  MFA_VERIFY: "/mfa-verify",
 } as const;

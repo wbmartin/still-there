@@ -22,6 +22,8 @@ import { reportError } from "../utils/report-error";
 interface AuthStore extends Omit<AuthState, "csrfToken"> {
   mfaRequired: boolean;
   tempToken?: string;
+  /** /auth's answer for this temp token: enrolled users verify, the rest enrol. */
+  mfaEnrolled: boolean;
   authenticateWithUsernamePassword: (
     userName: string,
     password: string,
@@ -46,6 +48,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   error: null,
   mfaRequired: false,
   tempToken: undefined,
+  mfaEnrolled: false,
   //============================^FUNCTION LINE ^============================
   authenticateWithUsernamePassword: async (
     userName: string,
@@ -67,6 +70,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
             authState: "MFA",
             mfaRequired: true,
             tempToken: data.user.tempToken,
+            mfaEnrolled: data.user.mfaEnrolled === true,
             userName: data.user.userName || "",
           });
         } else {
@@ -167,6 +171,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       securityContext: 0,
       postAuthDestination: "",
       mfaRequired: false,
+      mfaEnrolled: false,
     });
   },
 
@@ -235,6 +240,7 @@ setSessionExpiredListener(() => {
     userName: "",
     securityContext: 0,
     mfaRequired: false,
+    mfaEnrolled: false,
     error: message,
   });
   notifications.show({
