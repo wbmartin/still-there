@@ -106,168 +106,6 @@ doc/105:199: "no row written" is no reason to skip.
 - **Decision:** \[ \] pull / \[ \] adapt / \[X \] skip
 - BRANDON: I said skip because it's a not changing SERVER side data so seems fine to skip CSRF
 
-### B006 — A 403 signs the user out
-
-- **Priority:** P1  **Area:** web-app, docs
-- **GRC:** `utils/api.ts:66-91,286-298`; `utils/api.test.ts:81-130`; `stores/auth-store.ts:183-203,256-266`; `README.md:45-65`; `tickets/03-done/RG0018-web-api-error-semantics-error-boundary/RG0018-web-api-error-semantics-error-boundary.md:65-96`   **PROTO:** `utils/api.ts:62-63,93-102,124`; `stores/auth-store.ts:217-245`; `tests/session-expired.test.ts:50`; `tests/api-unreachable.test.ts:137`; `src/web-app/utils/api.ts:62-66`
-- **Ticket:** RG0018 / `d752dbd`
-- **What:** PROTO 403s on grant (`app_helper.go:562-563`), block (`:449,480`),
-CSRF (`:508,527`), handler refusals
-(`user_handler.go:396,556,791,804,908,921`, `auth_handler.go:609`); the client
-signs out on each. GRC: only an established session's 401 expires it.
-- **Port notes:** Brandon's call: reverse PS0001's "403 too" (`api.ts:62-63`)?
-After B004 + B005. Update both tests.
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-
-**Expanded for the adapt decision (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Every authenticated web call ends in one function. Any 401 or 403 there
-fires the session-expired listener (`src/web-app/utils/api.ts:98-100`):
-
-    if (response.status === 401 || response.status === 403) {
-      sessionExpiredListener?.();
-      throw new SessionExpiredError(response.status, message);
-
-The auth store registers that listener at load
-(`stores/auth-store.ts:223-246`). It clears the CSRF token and every entity
-cache, sets `authState: "NO"`, wipes `grantList` and `userName`, and shows an
-orange toast titled "Session ended": "Your session has ended. Please sign in
-again." `hooks/use-auth-guard.ts:22-28` then sees `NO`, saves the current
-path in `postAuthDestination` and navigates to `/login`. The user is signed
-out locally even though the `auth` cookie is still valid.
-
-The API answers 403 for many things that are not a dead session; each site
-and when a legitimate user meets it:
-
-- `security/app_helper.go:562-563` "Permission denied (grant ... required)":
-  a page guarded on grant A makes one call that needs grant B.
-- `app_helper.go:449,480` "User account is blocked": an admin blocks the
-  account mid-session.
-- `app_helper.go:508,527` "Missing CSRF token" / "CSRF validation failed":
-  the in-memory token no longer matches the session id.
-- `handler/user_handler.go:396,556` (`CreateUser`, `UpdateUser`) and
-  `:791,804,908,921` (add/remove users to a group) "Access denied: ... same
-  security context": a stale id from another tenant, or a DB error, since
-  the check is `!valid || err != nil`.
-- `handler/auth_handler.go:609` "Security context not available": switching
-  to a tenant the user just lost.
-
-Three concrete scenarios:
-
-1. Missing grant. `pages/app-user-edit-page.tsx:63` guards on
-   `[requiredGrant, grants.READ_USER]`, but `:77` also calls
-   `readAppUserGroupList()`, which the API gates on `GrantUserGroupRead`
-   (`app_user_group_handler.go:39`). A user with user-update but not
-   group-read opens the page, gets a 403, and lands on the login screen.
-2. CSRF drift. The token is the session id's last 3 chars
-   (`auth_handler.go:354,488,646`); `/refresh` mints a new id (`:454`, B004),
-   so tab A's refresh leaves tab B's token stale. `changeSecurityContext`
-   (`stores/auth-store.ts:173-197`) never calls `setCsrfToken`, though the
-   server sends a new one (`:646,662`, B005). Either way the next write
-   answers 403 "CSRF validation failed" and the user is signed out.
-3. Blocked mid-session. Every authenticated call runs the block check, so
-   the next call 403s "User account is blocked". The user is signed out and
-   told the session "ended", which is the wrong reason.
-
-Why PS0001 chose this. The PS0001 ticket records only the outcome:
-"auth-store signs out only on 401/403, not on network/5xx"
-(`tickets/04-archive/PS0001-backport-derivatives.md:31`). It was ported from
-atticus-meeting in commit `8559400`. The only stated reason is the comment at
-`utils/api.ts:62-64`: "403 is included: CSRF validation rejects with 403, and
-from the user's side that is the same event -- the credential they were
-carrying is no longer good." That holds for a stale CSRF token, which a fresh
-sign-in does fix. It does not hold for a missing grant, a security-context
-refusal or a DB error dressed as 403, where signing in again changes
-nothing and the user loops back to the same refusal.
-
-Severity: a UX and correctness issue, not a security hole. The server
-enforces every check on every call; the client only decides what the user
-sees, so not signing out on a 403 grants nothing. A blocked user keeps a
-UI whose every call 403s, and the next page load signs them out (step 2).
-
-#### What GRC changed
-
-The rule: only a 401 on a non-anonymous call is "session expired". In the
-API only `CheckJWT` writes a 401 (missing, invalid or expired `auth` cookie;
-PROTO matches: `app_helper.go:282,294`). A 403 stays a plain `Error`
-carrying the server's message. GRC `src/web-app/utils/api.ts:71,77-78`: "**A
-403 is not this** ... A 403 therefore stays a plain `Error`: the screen shows
-the API's reason and the session is untouched." The classifier, `:292-297`:
-
-    if (status === 401 && !options.anonymous) {
-      const error = new SessionExpiredError(message, status);
-      announce({ kind: "session-expired", error });
-      return error;
-    }
-    return new Error(message);
-
-The store reacts only to that announcement (`stores/auth-store.ts:263-266`)
-and only from an established session (`:187`,
-`if (get().authState !== "YES") return;`), then clears state as PROTO does
-(`:188-202`). The page-load `/refresh` path is separate: any non-outage
-failure there, 401 or 403, still sets `NO` (`auth-store.ts:145-150`).
-
-README rule (`src/web-app/README.md:51-52,54-57`): `SessionExpiredError` is
-"**401** on a call that was not `anonymous`"; plain `Error` is "everything
-else: 400, **403**, 404, 409". "A **403 is not an expired session** ...
-signing out on one would sign a signed-in user out of the first list their
-role may not read." RG0018 (`:80-84`) adds that the body carries no code,
-"so the client cannot tell a grant refusal from a dead session". Tests:
-`utils/api.test.ts:108-117` pins a 403 as a plain `Error` with the API's
-message and no announcement; `:81-90` pins the 401 path, `:92-106` the
-anonymous exception. Commit `d752dbd` touches only those two files.
-
-#### Adapted fix for PROTO
-
-1. `utils/api.ts:98`: change the test to `response.status === 401`. Rewrite
-   the doc comment at `:59-65` with GRC's reasoning (a 403 is a refusal, not
-   an expiry; list the four 403 sources) and fix the `:124` comment
-   ("a 401/403 is a SessionExpiredError" becomes "a 401").
-2. `stores/auth-store.ts:223-246`: no logic change; the `NO` guard at
-   `:226` already plays GRC's `:187` role. Leave `authenticateWithAuthToken`
-   (`:111`) alone: `/refresh` skips CSRF and authorization
-   (`auth_handler.go:390-393`), so its only 403 is the block check and a
-   blocked user is still signed out at the next page load, as in GRC.
-3. Tests. `tests/session-expired.test.ts:50`: change `it.each([401, 403])` to
-   401 only, and add a 403 case asserting a plain `Error` with the server's
-   message, not `SessionExpiredError`, and `authState` still `"YES"`.
-   `tests/api-unreachable.test.ts:137` ("reports NO on a 403") tests the
-   `/refresh` path, not `throwForFailedResponse`; it stays, since that 403
-   means "blocked". B006's "update both tests" overstates it: one flips.
-4. Callers. Nothing outside the tests uses `SessionExpiredError` or
-   `isSessionExpired` (grep of `src/web-app`), and no page tests for 403.
-   After the change a 403 reaches existing catch blocks: list reads set the
-   store `error` (`stores/create-entity-store.ts:139-144`) and log via
-   `reportError`, which only writes to the console; saves show a generic
-   toast ("Failed to save user", `app-user-edit-page.tsx:154-160`). A
-   refused read becomes silent (an empty group picker). Optional follow-up:
-   show `err.message` in those toasts.
-5. Order. Land after B004 and after B005's web line (`changeSecurityContext`
-   adopting `data.csrfToken`). Today sign-out is the only recovery from a
-   stale CSRF token. If B006 lands first, scenario 2 leaves the user signed
-   in with every write failing until a reload. B005 is marked "skip" for
-   the server CSRF change; its one-line web fix is independent and needed.
-6. Do not take GRC's `components/grc/gate.tsx` and `forbidden.tsx`. They
-   mirror GRC's role/verb matrix (`useCan`, auditor/external roles) and have
-   no PROTO counterpart; PROTO's `useAuthGuard` already redirects on missing
-   page grants. GRC's `subscribeApiOutcome` seam and refresh retries are
-   separate items, not part of this port.
-
-#### Open question for Brandon
-
-PS0001 decided a 403 signs the user out; GRC reversed it so only a 401 on an
-established session does. Recommendation: reverse it (after B004 and the
-B005 web line), because a sign-in cannot fix a missing grant or a context
-refusal, and signing out hides the real reason behind "Session ended".
-
-**Answered (Brandon, 2026-10-02): reverse it.** Only a 401 on an
-established session signs the user out. A 403 stays a plain error with the
-server's message. Order holds: land after B004 and after the one-line
-`changeSecurityContext` CSRF-token fix.
-- Brandon: Need you to explain more about how you'd fix
-
 ### B007 — `/auth` username oracle: unknown login fast and uncounted
 
 - **Priority:** P1  **Area:** go-api, tests
@@ -8831,3 +8669,166 @@ unsaved form is lost, which is the honest outcome: it was authored under
 an identity that no longer holds the cookie. Add a vitest case for it
 beside the five GRC cases in step 8.
 - ADAPT REQUEST, Describe the fix before we continue
+
+### B006 — COMPLETED — A 403 signs the user out
+- **Completed:** 2026-10-02. `utils/api.ts` `throwForFailedResponse` now treats only a 401 as session expired (listener + `SessionExpiredError`); a 403 is a plain `Error` with the server's message and the session is untouched. Comments in `api.ts` rewritten; `src/web-app/README.md` gains an "API Errors" section with GRC's rule adapted. `tests/session-expired.test.ts`: the 401/403 case is 401 only and a new 403 case pins a plain Error, no "Session ended" toast, `authState` "YES"; `authenticateWithAuthToken` and `api-unreachable.test.ts:137` unchanged; no Playwright/pytest asserted a 403 sign-out. Deviation: the optional `err.message` toast follow-up skipped (8 copies across 4 scaffolding pages, no shared place). Tests: all green, go=216 unit=41 e2e=9 py=70
+
+- **Priority:** P1  **Area:** web-app, docs
+- **GRC:** `utils/api.ts:66-91,286-298`; `utils/api.test.ts:81-130`; `stores/auth-store.ts:183-203,256-266`; `README.md:45-65`; `tickets/03-done/RG0018-web-api-error-semantics-error-boundary/RG0018-web-api-error-semantics-error-boundary.md:65-96`   **PROTO:** `utils/api.ts:62-63,93-102,124`; `stores/auth-store.ts:217-245`; `tests/session-expired.test.ts:50`; `tests/api-unreachable.test.ts:137`; `src/web-app/utils/api.ts:62-66`
+- **Ticket:** RG0018 / `d752dbd`
+- **What:** PROTO 403s on grant (`app_helper.go:562-563`), block (`:449,480`),
+CSRF (`:508,527`), handler refusals
+(`user_handler.go:396,556,791,804,908,921`, `auth_handler.go:609`); the client
+signs out on each. GRC: only an established session's 401 expires it.
+- **Port notes:** Brandon's call: reverse PS0001's "403 too" (`api.ts:62-63`)?
+After B004 + B005. Update both tests.
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+
+**Expanded for the adapt decision (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Every authenticated web call ends in one function. Any 401 or 403 there
+fires the session-expired listener (`src/web-app/utils/api.ts:98-100`):
+
+    if (response.status === 401 || response.status === 403) {
+      sessionExpiredListener?.();
+      throw new SessionExpiredError(response.status, message);
+
+The auth store registers that listener at load
+(`stores/auth-store.ts:223-246`). It clears the CSRF token and every entity
+cache, sets `authState: "NO"`, wipes `grantList` and `userName`, and shows an
+orange toast titled "Session ended": "Your session has ended. Please sign in
+again." `hooks/use-auth-guard.ts:22-28` then sees `NO`, saves the current
+path in `postAuthDestination` and navigates to `/login`. The user is signed
+out locally even though the `auth` cookie is still valid.
+
+The API answers 403 for many things that are not a dead session; each site
+and when a legitimate user meets it:
+
+- `security/app_helper.go:562-563` "Permission denied (grant ... required)":
+  a page guarded on grant A makes one call that needs grant B.
+- `app_helper.go:449,480` "User account is blocked": an admin blocks the
+  account mid-session.
+- `app_helper.go:508,527` "Missing CSRF token" / "CSRF validation failed":
+  the in-memory token no longer matches the session id.
+- `handler/user_handler.go:396,556` (`CreateUser`, `UpdateUser`) and
+  `:791,804,908,921` (add/remove users to a group) "Access denied: ... same
+  security context": a stale id from another tenant, or a DB error, since
+  the check is `!valid || err != nil`.
+- `handler/auth_handler.go:609` "Security context not available": switching
+  to a tenant the user just lost.
+
+Three concrete scenarios:
+
+1. Missing grant. `pages/app-user-edit-page.tsx:63` guards on
+   `[requiredGrant, grants.READ_USER]`, but `:77` also calls
+   `readAppUserGroupList()`, which the API gates on `GrantUserGroupRead`
+   (`app_user_group_handler.go:39`). A user with user-update but not
+   group-read opens the page, gets a 403, and lands on the login screen.
+2. CSRF drift. The token is the session id's last 3 chars
+   (`auth_handler.go:354,488,646`); `/refresh` mints a new id (`:454`, B004),
+   so tab A's refresh leaves tab B's token stale. `changeSecurityContext`
+   (`stores/auth-store.ts:173-197`) never calls `setCsrfToken`, though the
+   server sends a new one (`:646,662`, B005). Either way the next write
+   answers 403 "CSRF validation failed" and the user is signed out.
+3. Blocked mid-session. Every authenticated call runs the block check, so
+   the next call 403s "User account is blocked". The user is signed out and
+   told the session "ended", which is the wrong reason.
+
+Why PS0001 chose this. The PS0001 ticket records only the outcome:
+"auth-store signs out only on 401/403, not on network/5xx"
+(`tickets/04-archive/PS0001-backport-derivatives.md:31`). It was ported from
+atticus-meeting in commit `8559400`. The only stated reason is the comment at
+`utils/api.ts:62-64`: "403 is included: CSRF validation rejects with 403, and
+from the user's side that is the same event -- the credential they were
+carrying is no longer good." That holds for a stale CSRF token, which a fresh
+sign-in does fix. It does not hold for a missing grant, a security-context
+refusal or a DB error dressed as 403, where signing in again changes
+nothing and the user loops back to the same refusal.
+
+Severity: a UX and correctness issue, not a security hole. The server
+enforces every check on every call; the client only decides what the user
+sees, so not signing out on a 403 grants nothing. A blocked user keeps a
+UI whose every call 403s, and the next page load signs them out (step 2).
+
+#### What GRC changed
+
+The rule: only a 401 on a non-anonymous call is "session expired". In the
+API only `CheckJWT` writes a 401 (missing, invalid or expired `auth` cookie;
+PROTO matches: `app_helper.go:282,294`). A 403 stays a plain `Error`
+carrying the server's message. GRC `src/web-app/utils/api.ts:71,77-78`: "**A
+403 is not this** ... A 403 therefore stays a plain `Error`: the screen shows
+the API's reason and the session is untouched." The classifier, `:292-297`:
+
+    if (status === 401 && !options.anonymous) {
+      const error = new SessionExpiredError(message, status);
+      announce({ kind: "session-expired", error });
+      return error;
+    }
+    return new Error(message);
+
+The store reacts only to that announcement (`stores/auth-store.ts:263-266`)
+and only from an established session (`:187`,
+`if (get().authState !== "YES") return;`), then clears state as PROTO does
+(`:188-202`). The page-load `/refresh` path is separate: any non-outage
+failure there, 401 or 403, still sets `NO` (`auth-store.ts:145-150`).
+
+README rule (`src/web-app/README.md:51-52,54-57`): `SessionExpiredError` is
+"**401** on a call that was not `anonymous`"; plain `Error` is "everything
+else: 400, **403**, 404, 409". "A **403 is not an expired session** ...
+signing out on one would sign a signed-in user out of the first list their
+role may not read." RG0018 (`:80-84`) adds that the body carries no code,
+"so the client cannot tell a grant refusal from a dead session". Tests:
+`utils/api.test.ts:108-117` pins a 403 as a plain `Error` with the API's
+message and no announcement; `:81-90` pins the 401 path, `:92-106` the
+anonymous exception. Commit `d752dbd` touches only those two files.
+
+#### Adapted fix for PROTO
+
+1. `utils/api.ts:98`: change the test to `response.status === 401`. Rewrite
+   the doc comment at `:59-65` with GRC's reasoning (a 403 is a refusal, not
+   an expiry; list the four 403 sources) and fix the `:124` comment
+   ("a 401/403 is a SessionExpiredError" becomes "a 401").
+2. `stores/auth-store.ts:223-246`: no logic change; the `NO` guard at
+   `:226` already plays GRC's `:187` role. Leave `authenticateWithAuthToken`
+   (`:111`) alone: `/refresh` skips CSRF and authorization
+   (`auth_handler.go:390-393`), so its only 403 is the block check and a
+   blocked user is still signed out at the next page load, as in GRC.
+3. Tests. `tests/session-expired.test.ts:50`: change `it.each([401, 403])` to
+   401 only, and add a 403 case asserting a plain `Error` with the server's
+   message, not `SessionExpiredError`, and `authState` still `"YES"`.
+   `tests/api-unreachable.test.ts:137` ("reports NO on a 403") tests the
+   `/refresh` path, not `throwForFailedResponse`; it stays, since that 403
+   means "blocked". B006's "update both tests" overstates it: one flips.
+4. Callers. Nothing outside the tests uses `SessionExpiredError` or
+   `isSessionExpired` (grep of `src/web-app`), and no page tests for 403.
+   After the change a 403 reaches existing catch blocks: list reads set the
+   store `error` (`stores/create-entity-store.ts:139-144`) and log via
+   `reportError`, which only writes to the console; saves show a generic
+   toast ("Failed to save user", `app-user-edit-page.tsx:154-160`). A
+   refused read becomes silent (an empty group picker). Optional follow-up:
+   show `err.message` in those toasts.
+5. Order. Land after B004 and after B005's web line (`changeSecurityContext`
+   adopting `data.csrfToken`). Today sign-out is the only recovery from a
+   stale CSRF token. If B006 lands first, scenario 2 leaves the user signed
+   in with every write failing until a reload. B005 is marked "skip" for
+   the server CSRF change; its one-line web fix is independent and needed.
+6. Do not take GRC's `components/grc/gate.tsx` and `forbidden.tsx`. They
+   mirror GRC's role/verb matrix (`useCan`, auditor/external roles) and have
+   no PROTO counterpart; PROTO's `useAuthGuard` already redirects on missing
+   page grants. GRC's `subscribeApiOutcome` seam and refresh retries are
+   separate items, not part of this port.
+
+#### Open question for Brandon
+
+PS0001 decided a 403 signs the user out; GRC reversed it so only a 401 on an
+established session does. Recommendation: reverse it (after B004 and the
+B005 web line), because a sign-in cannot fix a missing grant or a context
+refusal, and signing out hides the real reason behind "Session ended".
+
+**Answered (Brandon, 2026-10-02): reverse it.** Only a 401 on an
+established session signs the user out. A 403 stays a plain error with the
+server's message. Order holds: land after B004 and after the one-line
+`changeSecurityContext` CSRF-token fix.
+- Brandon: Need you to explain more about how you'd fix

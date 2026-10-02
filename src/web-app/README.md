@@ -61,6 +61,31 @@ read — mutations never touch it. Every store registers a cache clearer so
 sign-out and security-context switches cannot leave another tenant's rows
 in memory.
 
+## API Errors
+
+Every call goes through `utils/api.ts` (`apiJson`, or `apiRequest` +
+`throwForFailedResponse`). A failure becomes one of:
+
+| Thrown | When | Who reacts |
+|---|---|---|
+| `ApiUnreachableError` | `fetch` itself failed (API down, connection dropped) | the caller; the page-load `/refresh` sets `authState` `"UNREACHABLE"` |
+| `SessionExpiredError` | **401** on a call that was not `anonymous` — `CheckJWT`'s answer to a missing, invalid, expired or revoked `auth` cookie | `stores/auth-store.ts`'s session-expired listener: the one sign-out path, and only from an established session |
+| `SessionChangedError` | a write refused for CSRF whose `/refresh` shows another user or tenant (another tab) | `apiRequest` has already moved the tab to that identity |
+| plain `Error` | everything else: 400, **403**, 404, 409, 5xx | the calling store or page |
+
+A **403 is not an expired session**. The API answers 403 for a missing
+grant, a blocked account, a CSRF token `apiRequest` could not resync
+(it retries a `"code": "CSRF"` refusal once after `/refresh`) and a
+cross-tenant refusal; signing in again fixes none of them, so signing out
+on one would send a signed-in user to the login page for the first call
+their role may not make, behind the wrong reason ("Session ended").
+
+`anonymous: true` marks the pre-session calls (`/auth`, `/mfaVerify`),
+where a 401 means a wrong password or code and must not touch the session.
+The page-load `/refresh` (`authenticateWithAuthToken`) is separate: there
+a 401 or 403 (the block check) sets `authState` `"NO"`, and any other
+failure `"UNREACHABLE"`.
+
 ## Scaffolding
 
 Entity pages are deliberate copy-paste scaffolding. Each page is

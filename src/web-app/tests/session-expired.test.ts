@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { notifications } from "@mantine/notifications";
 import {
   SessionExpiredError,
   isSessionExpired,
@@ -47,17 +48,35 @@ describe("throwForFailedResponse", () => {
     resetAuthStore();
   });
 
-  it.each([401, 403])(
-    "throws SessionExpiredError and signs the app out on %i",
-    async (status) => {
-      await expect(
-        throwForFailedResponse(responseWith(status), readMessage),
-      ).rejects.toBeInstanceOf(SessionExpiredError);
+  it("throws SessionExpiredError and signs the app out on 401", async () => {
+    const toast = vi.spyOn(notifications, "show");
+    await expect(
+      throwForFailedResponse(responseWith(401), readMessage),
+    ).rejects.toBeInstanceOf(SessionExpiredError);
 
-      expect(useAuthStore.getState().authState).toBe("NO");
-      expect(useAuthStore.getState().userName).toBe("");
-    },
-  );
+    expect(useAuthStore.getState().authState).toBe("NO");
+    expect(useAuthStore.getState().userName).toBe("");
+    expect(toast).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the session on a 403 and carries its reason", async () => {
+    // A 403 is a refusal (grant, blocked, CSRF, tenant); signing in again
+    // fixes none of them, so it must not sign the user out. The store's
+    // session-expired listener is the only caller of the "Session ended"
+    // toast, so no toast means it never ran.
+    const toast = vi.spyOn(notifications, "show");
+    const error = await throwForFailedResponse(
+      responseWith(403, { error: "Permission denied" }),
+      readMessage,
+    ).catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(SessionExpiredError);
+    expect((error as Error).message).toBe("Permission denied");
+    expect(toast).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().authState).toBe("YES");
+    expect(useAuthStore.getState().userName).toBe("someone@example.com");
+  });
 
   it("leaves other failures alone", async () => {
     // A 500 says nothing about the session. Signing the user out here is the

@@ -167,11 +167,13 @@ const apiRequest = async (
 };
 
 /**
- * The server said this person is not signed in.
+ * The server said this person is not signed in: a 401, which CheckJWT
+ * writes for a missing, invalid, expired or revoked `auth` cookie.
  *
- * 403 is included: CSRF validation rejects with 403, and from the user's side
- * that is the same event -- the credential they were carrying is no longer
- * good.
+ * A 403 is not this. It is a refusal -- a missing grant, a blocked account,
+ * a CSRF token apiRequest could not resync, a cross-tenant refusal -- and
+ * signing in again fixes none of them. It stays a plain Error carrying the
+ * server's message, and the session is untouched.
  */
 export class SessionExpiredError extends Error {
   readonly status: number;
@@ -205,7 +207,7 @@ export const throwForFailedResponse = async (
   readMessage: (response: Response) => Promise<string>,
 ): Promise<never> => {
   const message = await readMessage(response);
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401) {
     sessionExpiredListener?.();
     throw new SessionExpiredError(response.status, message);
   }
@@ -231,7 +233,7 @@ export const readErrorMessage = async (response: Response): Promise<string> => {
 /**
  * apiRequest + the failure handling every caller used to repeat: a non-2xx
  * response throws and a 2xx one is parsed as JSON, so callers never look at
- * response.ok. By default a 401/403 is a SessionExpiredError and the app is
+ * response.ok. By default a 401 is a SessionExpiredError and the app is
  * told; `anonymous: true` is for the endpoints reached before there is a
  * session (login, MFA setup/verify, self-registration), where a 401 means
  * "wrong password/code", not "signed out", and must not touch the session.
