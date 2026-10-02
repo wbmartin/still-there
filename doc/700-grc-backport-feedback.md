@@ -8345,6 +8345,20 @@ is an idempotent, superuser-run host setup creating ddl/app/ci roles
 
 None.
 
+### B092 — Wrong old password on "change my password" signs the user out
+- **Priority:** P2  **Area:** go-api, web-app
+- **GRC:** not checked   **PROTO:** `src/api-srv/internal/handler/auth_handler.go` `ChangeOwnPasswordHandler` ("Old password is incorrect", 401); `src/web-app/stores/auth-store.ts` (the change-password call, not `anonymous`)
+- **Ticket:** found while implementing B006 (2026-10-02)
+- **What:** The handler answers a mistyped old password with 401. The web
+  treats a 401 on an established session as an expired session, so the
+  user is signed out for a typo. This predates B006; B006 made 401 the only
+  sign-out trigger, so the fix is now one status code.
+- **Port notes:** Answer 403 (or 400) "Old password is incorrect" so the
+  page shows the message and the session survives. Count the attempt like
+  a failed login if the handler already does. Pytest: wrong old password
+  returns the new status and the session cookie still works.
+- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
+
 # SKIP / Brandon-veto list (tick to override)
 
 **Recommendations against porting**
