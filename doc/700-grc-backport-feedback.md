@@ -59,9 +59,9 @@ Pull = queued, not started. Adapt = expanded below under the item with
 | B001 MFA setup secret leak | pull | queued |
 | B002 retire `/userSelfCreate` | skip | template keeps self-registration |
 | B003 session revocation | pull | queued |
-| B004 refresh keeps session id, CSRF resync | adapt | expanded |
+| B004 refresh keeps session id, CSRF resync | adapt | expanded; identity mismatch reloads tab |
 | B005 `/changeSecurityContext` CSRF | skip | |
-| B006 403 signs the user out | adapt | expanded |
+| B006 403 signs the user out | adapt | expanded; reverse PS0001, 401 only |
 | B007 `/auth` username oracle | adapt | expanded |
 | B008 fail closed on counter write | pull | queued |
 
@@ -461,6 +461,11 @@ PS0001 decided a 403 signs the user out; GRC reversed it so only a 401 on an
 established session does. Recommendation: reverse it (after B004 and the
 B005 web line), because a sign-in cannot fix a missing grant or a context
 refusal, and signing out hides the real reason behind "Session ended".
+
+**Answered (Brandon, 2026-10-02): reverse it.** Only a 401 on an
+established session signs the user out. A 403 stays a plain error with the
+server's message. Order holds: land after B004 and after the one-line
+`changeSecurityContext` CSRF-token fix.
 - Brandon: Need you to explain more about how you'd fix
 
 ### B007 — `/auth` username oracle: unknown login fast and uncounted
