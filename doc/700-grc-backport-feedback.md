@@ -72,7 +72,12 @@ Pull = queued, not started. Adapt = expanded below under the item with
 | B007 `/auth` username oracle | adapt | expanded; XFF fix in same batch |
 | B008 fail closed on counter write | pull | queued |
 
-Items from B009 on are not yet decided; each is expanded below.
+B009-B039 marked by Brandon in the doc. B040-B090 marked 2026-10-02: nine
+by Brandon (B046 pull, B049 skip, B050 skip, B057 skip, B067 skip, B068
+skip, B071 adapt post-sales only, B074 pull, B079 skip), the rest "per
+recommendation". Unmarked B028 taken per recommendation (pull).
+**B091 (new): remove the ticket system from ProtoStack.** It trumps every
+ticket-related part of any other item.
 
 # P1: security and real bugs in PROTO
 
@@ -643,7 +648,7 @@ for the header shapes (absent, one entry, forged leading entries) and
 confirm the infra nginx confs set `X-Forwarded-For` with
 `$proxy_add_x_forwarded_for`. The appendix line for XFF is closed by
 this item.
-- Brandon: Need you to explain more about how you'd fix
+
 
 ### B008 — Fail closed when the failed-attempt counter cannot be written
 
@@ -666,7 +671,7 @@ accepted step per login (`TOTP_LAST_STEP*<user>`, 2 min); a step at or below
 it is a wrong code; KV error fails closed.
 - **Port notes:** Keep `GenerateTOTPURI`. Port `fresh_code()` with it
 (`TOTP.now()` would flake). Harness B019.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -790,6 +795,7 @@ choice), or be refused without counting so a user who double-submits is
 not penalised? Recommendation: count it, as GRC does; a legitimate double
 submit is one count out of seven and the answer stays indistinguishable
 from a wrong code.
+Brandon: yes
 
 ### B010 — PS0021: reset-MFA grant 9020; completed login clears counters
 
@@ -802,7 +808,7 @@ clears seed + `mfa_setup`, 400s on a nil or `''` seed (PROTO :483: nil only).
 (after `/mfaVerify`).
 - **Port notes:** `Del`, not `"0"` 1 s (`Incr` keeps TTL). Write "where a login
 completes" into doc/105, PS0021. Open: per-IP clear behind NAT.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -926,6 +932,7 @@ account log in every six guesses and keep the IP below 7 while spraying
 other names; behind NAT one user's success also wipes a colleague's
 strikes. Recommendation: clear only `loginfail-user-<name>` and let the IP
 key expire on its window, a one-line deviation from GRC.
+Brandon: Per User only
 
 ### B011 — Body caps on every login-layer write; 413, not 400
 
@@ -937,7 +944,7 @@ answer 400 with decoder text. GRC caps every decode (4 KiB unauth, 64 KiB
 login layer) and answers 413 `BODY_TOO_LARGE`.
 - **Port notes:** One `limitBody` spelling incl. example handlers; add a 64 KiB
 pytest; doc/105 lists PROTO's caps.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -1072,7 +1079,7 @@ derived apps inherit a cap they raise per entity.
 `existsInContext` 404; writes carry the row's own tenant.
 - **Port notes:** 4 signatures + fakes; `rows.Err()`. Pytest via `db` (B018).
 Rule into doc/900, README:141.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -1207,7 +1214,7 @@ and `GetGrantsForGroups` skips deleted groups, so the leftover id is inert.
 time. pytest posts `appUserId`, so only the web is wrong.
 - **Port notes:** One line + fetch-stubbing vitest in `tests/`. README rule in
 B076.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -1324,7 +1331,7 @@ v5.5.5 GO-2026-5004 (`migrate.go:152`); x/text v0.14.0 GO-2026-5970
 (`cmd/migrate/main.go:84`). GRC's versions clear all.
 - **Port notes:** Bump jwt 5.3.1, pgx 5.10.0, x/crypto 0.55.0, x/text; tidy; go
 1.26 vs host (B047); gate (B040).
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -1441,7 +1448,7 @@ that ships known-vulnerable pins propagates them to every derived app.
 ships none; bootstrap fills it from `DATABASE_URL`.
 - **Port notes:** No Go bootstrap: `psql -v svc_pw=...` from `etc/*.env` in
 `bin/510`/`610`, `:'svc_pw'` in `roles.sql`. Pairs B027.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ \] adapt / \[X \] skip
 
 **Expanded (2026-10-02).**
 
@@ -1576,7 +1583,7 @@ firewalled); infra env already binds 127.0.0.1. GRC binds loopback, 12 h
 sessions.
 - **Port notes:** Add the key with GRC's comment. Brandon's call: deployed
 session 12 h or 72 h? File defects B088.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -1692,7 +1699,7 @@ Recommendation: 12 h for UAT and prd templates, keep 72 h for local dev.
 CVE-2024-35195 bump. GRC pins 9.0.3/2.34.2 with reasons; pip-audit clean.
 - **Port notes:** Re-run pip-audit at port time; psycopg2 only with B018. Tests
 P1, docs P2.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -1805,7 +1812,7 @@ non-`*_e2e_db`; load test refuses tenant != 2.
 (PS0022 :35-38, which the lock forbids, as does `bin/515`)? Renumber in
 `local-seed.sql`; skip GRC grants; export `TEST_API_ENV`; close GRC 4.25 now;
 CLAUDE.md rule. bin/go-api P2.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -1929,6 +1936,7 @@ isolation is proved between 1 and 2. The two cannot coexist: the lock
 forbids that user. Which? Recommendation: GRC's shape, because a test
 database that can hold tenant 1 cannot catch a test that silently writes
 there, and 2-vs-3 proves the same isolation property.
+Brandon: accept reccomendation.
 
 ### B019 — MFA pytest harness: per-run XFF, throwaway lockout user
 
@@ -1940,7 +1948,7 @@ GRC: MFA client, fresh XFF per test, disposable lockout user, threshold via
 `api_env`, nine cases.
 - **Port notes:** Prereq for B001/B009/B010 tests. Relies on XFF trust
 (appendix). Case split restructures PS0020 behaviour.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -2064,6 +2072,7 @@ Should the manual "pytest against your own `bin/215` API" mode stay
 supported (which forces `TRUSTED_PROXY_COUNT=1` into `etc/loc-api-srv.env`
 too), or does pytest run only through `bin/300`? Recommendation: `bin/300`
 only, so no developer config ever trusts a forged header.
+Brandon: Bin/300
 
 ### B020 — Nightly backup cannot write its dump
 
@@ -2074,7 +2083,7 @@ only, so no developer config ever trusts a forged header.
 root-made dir: permission denied. GRC: root writes `sudo -u postgres pg_dump -Fc`, dir 0700, DB first, excludes `backup`/`stg`, `REMOTE_DIR`.
 - **Port notes:** `APP_ENV` from app root (B045); drop blob wording; encryption
 in B050.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -2199,6 +2208,7 @@ Should the nightly tarball keep shipping `etc/` (secrets) in clear to
 `REMOTE_SERVER` until B050's encryption lands? Recommendation: yes, ship
 this fix now with the 0700 directory, because today there is no database
 backup at all and the secrets already travel in clear.
+Brandon: yes
 
 ### B021 — Cert renewal: non-interactive; key not owned by www-data
 
@@ -2208,7 +2218,7 @@ backup at all and the secrets already travel in clear.
 - **What:** No `--agree-tos -n` (first issue hangs under cron); `chown -R www-data` hands over `privkey.pem`. GRC: flags, `root:www-data` 0750/0640,
 `nginx -t` before reload.
 - **Port notes:** Drop-in. Keep the note: renew once before linking the site.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -2341,7 +2351,7 @@ None.
 - **What:** Server-level headers inherit into `/api/`: duplicates, and a relaxed
 header gets overridden by `DENY`. GRC moves them into `location /`.
 - **Port notes:** Add to `location /` when removing :33-36.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -2465,7 +2475,7 @@ None.
 user hits `maxretry` in 60 s and ufw bans them. GRC: `ignoreregex = "(GET|POST|HEAD) /api/`.
 - **Port notes:** Both jails; README: auth brute force is the API's job.
 Brandon's call: uat `maxretry` 10 or 20? Ops P1, docs P2.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -2591,6 +2601,8 @@ on the box: set both PROTO copies to 10 (what the surveyed hosts run) or
 keep uat at 20? Recommendation: 10 on both, because the template mirrors
 the host and cannot choose a per-app value there.
 
+Brandon: 10 on both
+
 ### B024 — App root `root:shrmpl-hook 1775` so web publish works
 
 - **Priority:** P1  **Area:** infra, docs
@@ -2600,7 +2612,7 @@ the host and cannot choose a per-app value there.
 which PROTO's setup forbids. GRC: root `root:shrmpl-hook 1775`, hook-owned
 `web-pub/`, `--no-same-owner`, chmod before the swap (PROTO after, :50).
 - **Port notes:** Small script change; README/doc in B049, B026.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -2739,7 +2751,7 @@ in `AppShell.Section grow component={ScrollArea}` scrolls on its own.
 - **Port notes:** Rewrite `AppLayout`: header + account menu (GRC :87-98),
 navbar NavLinks, main `Outlet`. Drop GRC extras. Fix `index.css`
 notifications. Then B063.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -2834,6 +2846,8 @@ Should Logout move into a header account menu (GRC) or stay as the last
 nav entry (PROTO today)? Recommendation: header menu, since it stays
 visible however long the nav grows in a derived app.
 
+Brandon: Header
+
 ### B026 — Server deploy runbooks: doc/330, doc/331, doc/340, infra/sql
 
 - **Priority:** P2  **Area:** docs, infra, tickets
@@ -2847,7 +2861,9 @@ Rename-aside replaces `ALTER OWNER`. Genericize names; drop worker/blobs.
 Paste rules: `: "${APP_ROOT:?}"`, no `<placeholder>`, no zsh inline `#`, no
 argv passwords, `fill` only `SERVERONLY`, `psql < file`, uuid from `/proc`.
 Deps B071, B035, B027; lessons B020-B024, B046, B057, B058, B074.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
+
+Brandon: These docs will have to be adapted for the generic proto template
 
 **Expanded (2026-10-02).**
 
@@ -2941,6 +2957,8 @@ renamed aside), or does the host start from a fresh export as GRC did?
 Recommendation: dump and restore the presales data, so UAT testers keep
 their work and rollback is still one rename.
 
+Brandon: Every project will be different, but in general when we go from presales to post sales, we setup UAT and Prod with whatever we've been working on our locals.
+
 ### B027 — Presales deploy: refuse post-sales hosts; generate secrets on host
 
 - **Priority:** P2  **Area:** bin, etc, docs
@@ -2952,7 +2970,7 @@ three secrets; GRC fills a template on the host once (`openssl rand -hex 32`,
 0640).
 - **Port notes:** Glob `*-${APP_SLUG}-deploy.env` (not `etc/deploy.env`); names
 from `etc/uat-deploy.env`; password only (B015).
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -3056,7 +3074,7 @@ sentinels, one mapper, `ClientMessageError`. `retry.go` never retries anything
 pgx returns (31 call lines); GRC deleted it.
 - **Port notes:** Prereq for B007; apply to the example handler. Fix
 doc/105:279, doc/810:57. `pgconn.SafeToRetry` skipped on purpose.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -3150,6 +3168,7 @@ message case); `repository/errors_test.go:40,57`.
 Soft-deleted row: 410 Gone (PROTO example and doc/105 today) or 404 like
 a missing row (GRC)? Recommendation: 404; 410 tells a caller the id once
 existed, and no web code acts on 410.
+Brandon: 404
 
 ### B029 — RG0004: one JSON writer; session cookie without `Max-Age`
 
@@ -3161,7 +3180,7 @@ existed, and no web code acts on 410.
 sessions after an hour; GRC: JWT expiry is the only lifetime.
 - **Port notes:** `setAuthCookie` + named constants into `common.go`. Pytest: no
 Max-Age, logoff 0. Tests rated the cookie P1.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -3265,7 +3284,7 @@ needs no new config.
 user gets 404. GRC: row by subject, write in the row's tenant, 200-char
 fields, preference shape check.
 - **Port notes:** Keep PROTO's `ProfileHandler`; change lookup and scope.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -3370,7 +3389,7 @@ per health poll. GRC: optional `LOG_LEVEL` (debug|info|warn|error, default
 info, else refused); health at Debug.
 - **Port notes:** Keep PROTO's logger; add a level. Add the key to every env
 file and doc/905 (GRC never did; its doc/105:435 is stale).
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -3502,6 +3521,7 @@ to pass `LevelDebug` explicitly. No pytest needed.
 Should a missing `LOG_LEVEL` default to `info`, or be a required key
 like the others (B032/B061)? Recommendation: required, since every env
 file gets the line anyway and a silent default hides a typo'd file.
+Brandon: required
 
 ### B032 — Config docs: env grammar and required-key policy
 
@@ -3513,7 +3533,7 @@ no `export`/`$VAR`/inline comments, last wins), missing keys rejected, only
 `TEST_DATABASE_URL` read from env.
 - **Port notes:** Grammar applies as-is (`unquote`). Brandon's call: make
 optional keys required? Ties to B061, appendix.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -3639,7 +3659,9 @@ and the bind address under B061.
 Error. GRC's client posted to the wrong origin; GRC deleted it.
 - **Port notes:** Brandon's call: delete, or require a session? Keep
 `test_error_reporting.py` unless the route goes.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+
+Brandon: Let's just require a session
 
 **Expanded (2026-10-02).**
 
@@ -3743,6 +3765,8 @@ Delete the route, or keep it behind a session? Recommendation: delete;
 no client calls it, and a session-only version misses the crashes it
 would exist to catch.
 
+Brandon: keep behind a session.
+
 ### B034 — User block feature (PROTO ships dead block primitives)
 
 - **Priority:** P2  **Area:** go-api, web-app, tests
@@ -3753,7 +3777,7 @@ would exist to catch.
 refuses non-active, KV flag reloaded, revocation, UI, pytest.
 - **Port notes:** Needs B035's migration and B003. Brandon's call: port, or
 delete the dead primitives (PS0011)?
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -3860,6 +3884,8 @@ Port the block feature, or delete the dead primitives (`BLOCKED*` check,
 Recommendation: port it; disabling a login without deleting it is a
 baseline admin need, and half the plumbing is already shipped.
 
+Brandon: Port Blocked
+
 ### B035 — Invite-link onboarding (replaces self-registration)
 
 - **Priority:** P2  **Area:** go-api, web-app, tests, etc
@@ -3871,7 +3897,7 @@ activates in one transaction.
 - **Port notes:** Strip `audit_log` calls (:351-388) or B067. `account_status`
 NOT NULL, no DEFAULT. Rewrite pytest off `grc` fixture. No email (RG0040).
 Enables B071.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -3984,6 +4010,8 @@ With self-registration kept, should a self-registered login stay
 Recommendation: keep it `active` (today's behaviour) and leave approval
 to a later ticket; B035 is about admin onboarding only.
 
+Brandon: Let's adapt so we have both invite links and self create, the generated app will have to decid what it wants.
+
 ### B036 — Web: API unreachable seam for 5xx/429; `/refresh` retried
 
 - **Priority:** P2  **Area:** web-app, docs
@@ -3995,7 +4023,7 @@ one self-clearing notice, retries `/refresh` 1/2/4 s.
 - **Port notes:** Keep boot `UNREACHABLE`; seam replaces
 `setSessionExpiredListener`; rewrite `api-unreachable.test.ts:56`; README
 section.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -4106,6 +4134,8 @@ stay a per-call error saying "too many requests"? Recommendation: banner,
 since PROTO's bucket resets each minute and the banner clears itself on
 the next success.
 
+Brandon: banner
+
 ### B037 — Web: one fetch path; unexport `apiRequest`
 
 - **Priority:** P2  **Area:** web-app, docs
@@ -4117,7 +4147,7 @@ anonymous.
 - **Port notes:** Keep PROTO's store design; swap fetches. CLAUDE.md "Web:"
 bullet (apiJson only, console only in `report-error.ts`, kebab-case, mirrors
 name source); skip max-len 200.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -4237,7 +4267,7 @@ None. The B004 placement question resolves itself: the retry stays in
 PROTO's list rule. GRC: `password`, `userIdList`, `appUserGroupId`, `any`.
 - **Port notes:** Breaking: Go, web, pytest together. go-api P3, web/tests P2.
 Typo B089.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -4352,7 +4382,7 @@ authz, gate before the repository, plus lockout, temp token, 9020, 409,
 refresh id, logoff, no secrets serialized. PROTO has no auth handler test.
 - **Port notes:** Port beside each fix; handlers take `UserRepositoryInterface`
 (GRC :182-186, :633-636).
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 
 **Expanded (2026-10-02).**
 
@@ -4471,7 +4501,7 @@ implies one and says 120 columns. GRC fails on `gofmt -l` output and any
 - **Port notes:** Run per module (`src/api-srv`, `src/load-test`); expect a
 cleanup pass; `U1000` skips exported names. Add govulncheck (B014). Then
 CLAUDE.md, skill, doc/902, PS0011.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -4582,7 +4612,7 @@ and offline.
 fails if `eslint --fix-dry-run` would rewrite and requires empty `git status --short` after a run; ignores root `package*.json`, load-test binary.
 - **Port notes:** Add `coverage` to `src/web-app/.gitignore`. Fail on
 `errorCount > 0` too? Brandon's call: max-len carve-out (:9-12)? Typo B088.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -4689,7 +4719,7 @@ backlog PROTO does not have.
 measured only, test API, `TEST_PERSONA_PASSWORD`, tenant 2.
 - **Port notes:** Keep the example cycle (+`UpdateExample`); 330 starts a
 private instance (bin/300 :140-182) or needs 8082. After B018.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -4809,7 +4839,7 @@ minute. New gates that pass today: userName bounds, JWT `iss`, error classes,
 `totpSeed` absent, duplicate 409, own-profile on a throwaway login.
 - **Port notes:** Needs `api_env`/`db` (B018). GRC `/me` wraps `data.profile`;
 PROTO `data`. Keys per B038.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -4921,7 +4951,7 @@ None.
 on files and deps. GRC states test API + tenant 2 only, MFA ordering/XFF,
 helpers, reports.
 - **Port notes:** Write fresh for bin/300; GRC's is stale at :79,84,129,136.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -5032,7 +5062,7 @@ across hosts. Hook scripts re-exec as `shrmpl-hook`; PROTO's uat ones run as
 root and leave root-owned files.
 - **Port notes:** Fewer names for `bin/000-rebrand:88`. README: diff shared
 scripts after edits. Promote passes `$DEPLOY_TAG`.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -5141,7 +5171,7 @@ older migrator beside a newer API. GRC runs the schema step from the pull dir,
 swaps nothing until it succeeds, keeps `*.prev`, prints rollback.
 - **Port notes:** Skip worker wait (:84-104). Brandon's call: `api-srv` in
 post-sales too (RG0013 #4)?
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (Brandon: yes, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -5247,7 +5277,7 @@ removes a row from the doc/330 name table and one rename step at cutover.
 preflights `git psql pg_dump`, names a stale host Go.
 - **Port notes:** Toolchain check only if needed (B014). Replace "Radley GRC"
 and module path (:99-101).
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -5353,7 +5383,7 @@ None.
 - **What:** `keepalive 64` is unused without `Connection ""`. GRC adds it,
 `X-Real-IP`, drops `Origin`, plain 301, `[::]:443`.
 - **Port notes:** Keep PROTO's 8088 and 20M body.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -5454,7 +5484,7 @@ None.
 dir. PROTO's has partial owners and a wrong step 1 (B024).
 - **Port notes:** Keep PROTO's comparison and Deriving sections; strip
 blobs/worker. Docs P3.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ \] adapt / \[X\] skip  (Brandon: bin/ stays hook-owned; fix in an app if it bites, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -5560,7 +5590,7 @@ registry credential (4.20); argv passwords (4.22); no `pipefail` (4.12);
 `pkill -f vite`, cwd-relative `tmp/` (4.10/4.11).
 - **Port notes:** One PS ticket: app NOLOGIN roles with S/I/U/D, `umask 077` +
 encrypt, pull-only prod creds, `set -euo pipefail` sweep.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ \] adapt / \[X\] skip  (Brandon: no second registry, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -5667,7 +5697,7 @@ future (:356), claims stateless scaling (:337). GRC: real routes, exceptions
 table, fail-closed contract, single process.
 - **Port notes:** Write PROTO's truth until B002/B005/B033 land; check B059
 first. README facts follow each code item.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -5783,7 +5813,7 @@ synthetic. (b) Review found the app counting attempts as successes and faking
 a metric: never show what the code has not verified.
 - **Port notes:** (a) as a DERIVING.md rule citing RG0044. Docs part 4 rated (a)
 P1.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -5898,7 +5928,7 @@ the leak happens during later import work, long after derivation.
 miss. On PROTO: 35 of 207 missing in 16 docs (B090).
 - **Port notes:** `cd` to repo root; allowlist placeholders
 (`src/web-app/README.md:77-80`). Wire into bin/300 or the skill.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -5996,7 +6026,7 @@ fixture, vitest replays it, with a floor and parser canary. PROTO mirrors
 grants and routes unchecked.
 - **Port notes:** Start with `AllKnownGrants` -&gt; `testdata/grants.json` vs
 `grants.ts`. Web P3, docs P2.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6101,7 +6131,7 @@ routes are legitimately web-unused, so one direction is enough.
 bumped the linter (4 -&gt; 34 findings); seven of nine advisories were in unused
 deps.
 - **Port notes:** Order: depcheck, `npm audit --omit=dev`, `npm update <advised>`, toolchain as its own ticket. Same for `go get -u`.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (per recommendation, minus the standing ticket (B091), 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6206,7 +6236,7 @@ checklist of template invariants (check order, tenant predicates, no
 covered" section.
 - **Port notes:** Drop GRC matrix/blob/Entra lines. Brandon's call: skill or
 doc?
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6305,7 +6335,7 @@ approvals, full shas, rollback by `sha-<commit>`. Hazard: metadata on `main`
 is a prod release.
 - **Port notes:** Keep PROTO `main`-only; document as the post-sales model in
 DERIVING.md + infra/README. Ops P3, docs P2, skills SKIP.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ \] adapt / \[X\] skip  (superseded by B091, ticket system removed, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6414,7 +6444,7 @@ publish, then test; failure Slacks "don't promote" and exits 0; runner from
 the checkout writes `stg/run-tests.result`.
 - **Port notes:** Brandon's call (ops P3, docs P2). Generic either way: result
 file, `_test_db` drop guard.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6479,7 +6509,7 @@ Recommend yes: deploy-then-test is safe only if promote cannot ship red.
 `/assets/` for a JSON-only server; GRC: `default-src 'none'`, XFO DENY always.
 Anonymous buckets get `ip:`; CSRF mismatch logs no token.
 - **Port notes:** Confirm no bundle served; update the header test.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6546,7 +6576,7 @@ None.
 `model.Now()`; TOTP regexp compiled once; threshold checked once;
 `net.JoinHostPort`; `WriteError`; stale comments.
 - **Port notes:** One mechanical hygiene ticket.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6616,7 +6646,7 @@ None.
 - **What:** GRC refuses to start without a bind address; PROTO's empty default
 is deliberate for LAN/phone dev.
 - **Port notes:** Brandon's call; B016 covers deployed hosts.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6687,7 +6717,7 @@ loopback, and fail-closed protects every env file a derived app adds.
 them only on `/me`. PROTO's `resolvePreference` trusts any `rowsPerPage`
 (100000 renders every row); GRC allow-lists.
 - **Port notes:** Keep PROTO naming. Docs rated P2.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6760,7 +6790,7 @@ Recommend the list; "valid" becomes a one-line check.
 - **Ticket:** `b52fa25`, `3d48e65`
 - **What:** Title block and filters stay visible while long tables scroll.
 - **Port notes:** After B025; rename `grc-page`/`--grc-*`.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6834,7 +6864,7 @@ when the first filter row lands.
 next user); GRC applies on `YES`. Stale `?page=` clamps; sort keeps other
 params; group list sorts.
 - **Port notes:** Scaffolding pages: per page, no factoring.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6907,7 +6937,7 @@ None.
 untrusted content.
 - **Port notes:** `use-sort` to `useSearchParams`; `safe-href` once untrusted
 HTML renders; `use-draft` lacks try/finally.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -6982,7 +7012,7 @@ None.
 and console errors, via node scripts with no runner.
 - **Port notes:** Keep Playwright; one spec over `ROUTES` x users; copy
 `requireTestTenant` into `global-setup.ts`.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7048,7 +7078,7 @@ None.
 - **What:** Tamper-evident entries in the write's transaction; GRC has not
 covered user/group/password writes (RG0043 2.3).
 - **Port notes:** Feature; needs roles forbidding TRUNCATE (B050).
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ \] adapt / \[X\] skip  (Brandon: no audit log in the template, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7120,7 +7150,7 @@ rewrite is detectable off-box.
 checks stay explicit in one handler. PROTO: \~2300 lines per entity.
 - **Port notes:** Conflicts with "scaffolding" and moves check differences into
 a matrix. ADR first.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ \] adapt / \[X\] skip  (Brandon, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7194,7 +7224,7 @@ template.
 - **What:** depcheck carries a recorded exception list. PROTO's other deps are
 newer.
 - **Port notes:** Brandon's call: caret or exact zod? `coverage` ignore is B041.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7266,7 +7296,7 @@ long-lived test API on 8082; staged changes mark a bundle dirty;
 repository/model coverage HTML.
 - **Port notes:** PROTO's per-run instance is the better gate. Keep
 `tmp/api-srv/`. 221 is SKIP.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7336,7 +7366,7 @@ threshold, since it rides the existing `go test` run.
 `tmp/survey/`. 620 copies the DB, sets every login `invited`, dumps
 `--no-owner`, MANIFEST + sha256.
 - **Port notes:** Names from `APP_SLUG`; mask is best-effort. 620 needs B035.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (Brandon: post-sales only, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7412,7 +7442,7 @@ for now, since presales UAT is demo data and the scrub needs B035.
 the certbot line.
 - **Port notes:** GRC's template lacks security headers (add B022's); PROTO body
 cap; `UAT_DOMAIN` in `etc/uat-deploy.env`.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7484,7 +7514,7 @@ doc/900 points SQL authors at it. PROTO makes readers replay every migration.
 - **Port notes:** Add `schema-reference` to `cmd/migrate` (pgx, sorted);
 regenerate in bin/510; fail bin/300 on diff. A `bin/205` around `up` is
 trivial.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7558,7 +7588,7 @@ Env headers: secret recipe, back up `TOTP_ENCRYPTION_KEY` with the DB,
 `sslmode=disable`.
 - **Port notes:** `svc-proto` touches README:143, doc/330/340, rebrand. Both
 lack `ProtectKernel*`, `SystemCallFilter` etc.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (Brandon: fix in the template; old hosts stay as they are, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7639,7 +7669,7 @@ change.
 gate contract. 810: one column end-to-end as a layer table.
 - **Port notes:** Drop PowerShell/worker/imports. 810 feeds PS0010. Gate text
 after B040/B041/B018.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7715,7 +7745,7 @@ None.
 page notifies; body keys equal json tags; Zustand `set` hides misspelled keys;
 reload form on route-id change.
 - **Port notes:** Docs only; example test from B013.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7788,7 +7818,7 @@ cross-tenant 404 never 403; STRIDE for B1/B2/B7 (T-9 `mfa_exempt` humans, T-11
 3-char CSRF); testable controls; pull-based backup target.
 - **Port notes:** Cite `scoped_query.go`; mark controls PROTO meets; A-047 vs
 PS0016 UUID.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7862,7 +7892,7 @@ policy now, enforced by a test once B010/B018 land.
 - **What:** A "not in Y" assertion needs proof Y was read; macOS path for OS
 probes; anchored detectors; gates fail, not skip; `<X>_LIVE=1` for live tests.
 - **Port notes:** "Rebuild before pytest" is SKIP: bin/300 already rebuilds.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -7936,7 +7966,7 @@ gate per batch (RG0037: a test never run). (b) Readability, maintainability,
 speed; tolerate duplication; reviewable parts (not covered by the global
 file).
 - **Port notes:** Brandon's call on both; drop GRC's 440/106.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ \] adapt / \[X\] skip  (superseded by B091, ticket system removed, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8011,7 +8041,7 @@ has no 440-check smoke to make it slow; a derived app can batch.
 fixtures never in migrations; 409 when record state refuses; `app :=` shadows
 package `app` (33 sites); pin deps that raise `go`.
 - **Port notes:** One docs ticket; the `app` rename is code.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (per recommendation, minus every ticket rule (B091), 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8074,7 +8104,7 @@ Recommend its own, so the mechanical diff does not bury the doc lines.
 - **What:** GRC wrote the section DERIVING asks for: derive commit, last tag and
 range, three `git` commands, PS id in `raised_by:`.
 - **Port notes:** Add to DERIVING §8.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (per recommendation, lineage block must not cite tickets/ (B091), 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8138,7 +8168,7 @@ moment and nowhere else so cheaply.
 (pre-flight, approvals, UAT, prod, rollback, hash-checked host edits) as a
 checklist.
 - **Port notes:** Wait for RG0044's run; strip hosts and hashes; after B057.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8202,7 +8232,7 @@ first; make it a skill once two derived apps have used it.
 - **What:** Override XFO/CSP for inline PDFs; cap declared and actual size
 (413); type from magic bytes (415); `private, no-store`; every miss 404.
 - **Port notes:** Docs until a blob route exists (PS0018 avatars); then P2.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8267,7 +8297,7 @@ PR Brandon merges" reconciles skill with CLAUDE.md; lint message hardcodes
 "PS" (`ID_PREFIX` :87); handoff's `tasks/todo.md §0` has no file.
 - **Port notes:** s/uat/main/; handoff creates `tasks/todo.md` if absent; skip
 GRC's rounds.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ \] adapt / \[X\] skip  (superseded by B091, skills and tickets removed, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8331,7 +8361,7 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
 - **What:** Both READMEs send newcomers to `bin/510`, which refuses non-scratch
 names; the dev DB is built per doc/050.
 - **Port notes:** Point at doc/050; dev migrate script is B073.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8392,7 +8422,7 @@ startup failure.
 - **Ticket:** none
 - **What:** `bin/515` is `reseed-db`; no `515-run-postgres.sh` exists.
 - **Port notes:** Fix now or in B075.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8455,7 +8485,7 @@ run`; a derived app's developers will not have infrahub.
 - **What:** The `curl -k https://...:8443/health` line names a personal dev
 host from another project (the same host as GRC's `TLS_NAME`).
 - **Port notes:** Use `http://localhost:8080/health`.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8517,7 +8547,7 @@ Recommend leaving the archive and fixing only live docs.
 - **Ticket:** none
 - **What:** Cut sentence; header with no keys; wrong script name (`bin/300`).
 - **Port notes:** Fix with B016/B041.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8575,7 +8605,7 @@ None.
 - **What:** Sends `userGroupId`; API reads `groupId`; passes only because authz
 refuses first.
 - **Port notes:** Fix regardless of B038.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8636,7 +8666,7 @@ None.
 - **What:** B053's linter: 35 of 207 tokens missing; doc/330's SQL file never
 existed.
 - **Port notes:** doc/330 via B026; rest by hand or B053.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
 
 **Expanded (2026-10-02).**
 
@@ -8688,6 +8718,26 @@ is an idempotent, superuser-run host setup creating ddl/app/ci roles
 #### Open question for Brandon
 
 None.
+
+### B091 — Remove the ticket system from ProtoStack (Brandon, 2026-10-02)
+- **Priority:** P1  **Area:** tickets, skills, docs, scripts
+- **GRC:** n/a   **PROTO:** `tickets/` (whole tree: `01-open/`, `04-archive/`, `engineering-log/`, `README.md`, `STATUS.md`); `scripts/lint-tickets.py`; `.claude/skills/ticket-workflow/`, `.claude/skills/ticket-triage/`, `.claude/skills/compact-tickets/`, `.claude/skills/handoff/` (ticket-bound: records to the ticket and `tasks/todo.md`; remove or rewrite, flagged for veto); `CLAUDE.md` "Tickets" section and the ticket lines in "Layout" and "Branches"; `DERIVING.md` §8 template-lineage via `tickets/04-archive/` and `template-` tags; `README.md` ticket references; `doc/902-project-commands.md` lint-tickets lines; the `pr-ticket-docs` / `security-considerations` wording in `CLAUDE.md` that points them at the ticket folder.
+- **Ticket:** Brandon's directive 2026-10-02: "rip out the whole ticket scheme from protostack ... the skills, everything related to tickets"
+- **What:** The template carries a full ticket workflow (PS numbering, folder
+  states, linter, four skills, lineage tags) that a derived app inherits
+  whether or not it wants one. Brandon is removing it from the template.
+  Derived apps keep whatever tracker they choose.
+- **Port notes:** Trumps every other item that mentions tickets: B057 and
+  B079 skip; B055, B080, B081 lose their ticket parts; B084 skips. Items
+  whose Port notes say "new PS ticket" simply become work. Open PS tickets
+  in `tickets/01-open/` (PS0010, PS0011, PS0017, PS0021, PS0022) are
+  covered by B028, B060, B010, B018 or are dropped (PS0017 passkey);
+  record that in the removal commit. Branch naming `TKT-PS####-slug` goes
+  with it; pick a plain `feature/<slug>` convention in `CLAUDE.md`. The
+  global `pr-ticket-docs` and `security-considerations` skills are
+  Brandon's own and stay; only the lines binding them to `tickets/` go.
+  The `backport-grc` work itself is tracked by this doc, not a ticket.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (Brandon, 2026-10-02)
 
 # SKIP / Brandon-veto list (tick to override)
 
