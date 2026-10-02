@@ -62,7 +62,7 @@ Pull = queued, not started. Adapt = expanded below under the item with
 | B004 refresh keeps session id, CSRF resync | adapt | expanded; identity mismatch reloads tab |
 | B005 `/changeSecurityContext` CSRF | skip | |
 | B006 403 signs the user out | adapt | expanded; reverse PS0001, 401 only |
-| B007 `/auth` username oracle | adapt | expanded |
+| B007 `/auth` username oracle | adapt | expanded; XFF fix in same batch |
 | B008 fail closed on counter write | pull | queued |
 
 Items from B009 on are not yet decided.
@@ -622,6 +622,20 @@ header and avoid the IP lock completely. After this fix, the username lock
 holds, but probing many names from rotating forged IPs is still capped
 only by argon2's cost. Should B007 wait for the XFF fix (doc/700
 appendix), or ship first and leave that gap to the XFF item?
+
+**Answered (Brandon, 2026-10-02): fix both in the same batch.** B007
+carries the `X-Forwarded-For` fix with it. `ClientIP`
+(`security/app_helper.go:310-324`) must stop trusting the first entry.
+Shape for the port: a `TRUSTED_PROXY_COUNT` config key (0 for local dev,
+1 behind the host's nginx); take the entry that many hops from the right
+of `X-Forwarded-For`, and with 0 trust only `RemoteAddr`. Because nginx
+appends the real client address last, the right-hand side is the only
+part the client cannot forge. Both the lockout keys and the per-minute
+rate keys use `ClientIP`, so one change covers both. Add a Go unit test
+for the header shapes (absent, one entry, forged leading entries) and
+confirm the infra nginx confs set `X-Forwarded-For` with
+`$proxy_add_x_forwarded_for`. The appendix line for XFF is closed by
+this item.
 - Brandon: Need you to explain more about how you'd fix
 
 ### B008 — Fail closed when the failed-attempt counter cannot be written
@@ -1632,7 +1646,7 @@ Found by RG0043 (§2 numbering), unfixed in GRC; PROTO has the same code.
 - Admin can soft-delete their own login: GRC `user_handler.go:659-740`; PROTO `user_handler.go:645-733` (2.13).
 - Password policy is length &gt;= 8 only, in four places (2.14).
 - `/mfaSetup`, `/mfaVerify` `SkipCSRF` also on the JWT path: GRC `user_mfa_handler.go:34,265`; PROTO `user_mfa_handler.go:188,385` (2.15).
-- First `X-Forwarded-For` entry trusted for lockout/rate keys: GRC `security/client_ip.go:25-38`; PROTO `security/app_helper.go:310-324`. GRC will not fix behind nginx; the template should document it or count from the right.
+- First `X-Forwarded-For` entry trusted for lockout/rate keys: GRC `security/client_ip.go:25-38`; PROTO `security/app_helper.go:310-324`. GRC will not fix behind nginx; the template should document it or count from the right. **Folded into B007 (Brandon, 2026-10-02).**
 - `admin` subject exempt from rate limit and block: GRC `app_helper.go:356,409`; PROTO `app_helper.go:348,398` (`:347-348`). A literal tied to a fixture login; doc/105 states it as fact (worth a security look).
 - Group grant edit does not end member sessions: GRC `app_user_group_handler.go:176-262` (fix in B003).
 - systemd units lack kernel/syscall hardening (B074).
