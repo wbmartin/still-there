@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -15,11 +13,6 @@ import (
 	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/security"
 )
-
-// maxMFABodyBytes caps the pre-auth body reads in MFASetupHandler and
-// MFAVerifyHandler. Both bodies are a temp token and a six-digit code, so this
-// is orders of magnitude more than either needs.
-const maxMFABodyBytes = 4 << 10 // 4 KiB
 
 // UserSelfCreateHandler handles user self-registration (public endpoint)
 func UserSelfCreateHandler(
@@ -52,14 +45,7 @@ func UserSelfCreateHandler(
 			Username string `json:"username"`
 			Password string `json:"password"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(
-				w,
-				http.StatusBadRequest,
-				"Invalid request body",
-				"IRB0",
-				err,
-			)
+		if !decodeJSONBody(app, w, r, maxAuthBodyBytes, &req) {
 			return
 		}
 
@@ -199,21 +185,10 @@ func MFASetupHandler(
 		// CheckAllChecksComplete(). That makes bounding it the only protection
 		// available: an unauthenticated caller reaches this line, and a
 		// rate-limited one does too, because nothing checks blocked first.
-		r.Body = http.MaxBytesReader(w, r.Body, maxMFABodyBytes)
-		bodyBytes, err := io.ReadAll(r.Body)
-		if err != nil {
-			app.WriteError(
-				w,
-				http.StatusBadRequest,
-				"Failed to read request body",
-				"MFA_READ_BODY",
-				err,
-			)
+		bodyBytes, ok := readBody(app, w, r, maxAuthBodyBytes)
+		if !ok {
 			return
 		}
-		r.Body = io.NopCloser(
-			bytes.NewReader(bodyBytes),
-		) // Reset body for later
 		if err := json.Unmarshal(bodyBytes, &tempReq); err == nil &&
 			tempReq.TempToken != "" {
 			// Temp token path - skip JWT for temp token authentication.
@@ -405,27 +380,7 @@ func MFAVerifyHandler(
 		}
 		// Same reasoning as MFASetupHandler: read before the auth gate, so
 		// bound it.
-		r.Body = http.MaxBytesReader(w, r.Body, maxMFABodyBytes)
-		bodyBytes, err := io.ReadAll(r.Body)
-		if err != nil {
-			app.WriteError(
-				w,
-				http.StatusBadRequest,
-				"Failed to read request body",
-				"MFA_READ_BODY",
-				err,
-			)
-			return
-		}
-		r.Body = io.NopCloser(bytes.NewReader(bodyBytes)) // Reset body
-		if err := json.Unmarshal(bodyBytes, &req); err != nil {
-			app.WriteError(
-				w,
-				http.StatusBadRequest,
-				"Invalid request body",
-				"IRB0",
-				err,
-			)
+		if !decodeJSONBody(app, w, r, maxAuthBodyBytes, &req) {
 			return
 		}
 
@@ -733,14 +688,7 @@ func AdminResetUserMFAHandler(
 		var req struct {
 			UserID int `json:"userId"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(
-				w,
-				http.StatusBadRequest,
-				"Invalid request body",
-				"IRB0",
-				err,
-			)
+		if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
 			return
 		}
 

@@ -219,6 +219,33 @@ before it is good again until it expires. Accepted for one app server; a
 second server or a need to survive restarts means a shared store (see
 `internal/cache/kv.go`).
 
+### Request Body Limits
+Go puts no bound on `r.Body`, so every handler that reads one caps it
+first, through `decodeJSONBody` (or `readBody` for raw bytes) in
+`internal/handler/common.go`. Over the cap the read stops and the answer is
+**413** `{"error": "Request body too large"}` (logged `BODY_TOO_LARGE`); a
+malformed body is **400** `{"error": "Invalid request body"}`. The decoder's
+own text goes to the log only.
+
+| Cap | Routes |
+|---|---|
+| 4 KiB (`maxAuthBodyBytes`) | `/auth`, `/mfaSetup`, `/mfaVerify`, `/changeSecurityContext`, `/userSelfCreate` (read before or without a session) |
+| 8 KiB | `/error-report` |
+| 12 KiB (4 KiB + `maxPreferenceBytes`) | `PUT /me` |
+| 64 KiB (`maxLoginLayerBodyBytes`) | `POST`/`PUT /user`, `POST`/`PUT /appUserGroup`, `/addUserListToGroup`, `/removeUserListFromGroup`, `/changeOwnPassword`, `/changeOtherUserPassword`, `/admin/resetUserMFA` |
+| 1 MiB (`maxEntityBodyBytes`) | `example_handler.go` writes, bulk lists included |
+
+Deletes take their ids in the query string and read no body. The entity cap
+is per entity: a derived app copies it with the handler and raises it where
+a real bulk payload needs more. The cap is applied after the handler's
+security checks except where the body is read before them (the 4 KiB
+routes), so a signed-in caller can make the server hold at most the cap.
+
+On servers nginx's `client_max_body_size` (20M in
+`infra/*/etc/nginx_*`) is the outer bound and answers its own 413 before
+the API sees the request; the per-route caps above are the inner bound, and
+the only one when the API is reached without nginx (local dev).
+
 ### Authorization (RBAC)
 - **Grants**: Context-specific permissions in JWT (only current context's grants)
 - **User Groups**: Collections of grants assigned to users per security context
@@ -342,6 +369,7 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
 - **404**: Not Found
 - **409**: Conflict (optimistic locking)
 - **410**: Gone (soft deleted)
+- **413**: Request body over the route's cap (see Request Body Limits)
 - **429**: Too Many Requests (rate limited)
 - **500**: Internal Server Error
 

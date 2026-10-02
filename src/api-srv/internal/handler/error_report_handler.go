@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"io"
 	"net/http"
 
 	"github.com/wbmartin/starter-api/internal/app"
@@ -44,23 +43,10 @@ func (h *ErrorReportHandler) HandleErrorReport(
 		return
 	}
 
-	// Bounded before it is read, not after. The truncation below runs on a
-	// string that is already in memory, so without this an unauthenticated
-	// caller allocates the whole body first and the 2000-char cap protects
-	// only the log line. MaxBytesReader makes ReadAll fail instead, which the
-	// existing error path already turns into a 400.
-	r.Body = http.MaxBytesReader(w, r.Body, maxErrorReportBodyBytes)
-
-	// Read the request body
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			"Failed to read request body",
-			"CLER",
-			err,
-		)
+	// Bounded before it is read, not after: the truncation below runs on a
+	// string already in memory, so it protects only the log line.
+	body, ok := readBody(app, w, r, maxErrorReportBodyBytes)
+	if !ok {
 		return
 	}
 

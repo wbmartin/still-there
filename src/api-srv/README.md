@@ -107,6 +107,11 @@ explicitly, in order, via the `AppHelper` in
 5. `CheckAllChecksComplete` — every handler calls this before doing any
    work
 
+A handler reads its body through `decodeJSONBody` / `readBody`
+(`internal/handler/common.go`), which caps it before the first byte is
+decoded: 413 over the cap, 400 when malformed. Caps per route are in
+`doc/105-api-srv-tech-spec.md` (Request Body Limits).
+
 Entities are `example`, `appUser`, `appUserGroup`. Grants are centralized
 in `internal/model/grants.go` (e.g. `GrantExampleRead`, `GrantUserRead`,
 `GrantUserGroupRead`).

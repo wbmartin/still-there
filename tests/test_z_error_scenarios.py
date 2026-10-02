@@ -121,6 +121,8 @@ class TestErrorScenarios:
             headers={"Content-Type": "application/json"},
         )
         assert response.status_code == 400
+        # The decoder's own text stays in the log.
+        assert response.json()["error"] == "Invalid request body"
 
     def test_missing_required_fields_returns_400(self, test_client):
         """Test that requests missing required fields return 400"""

@@ -3,7 +3,6 @@ package handler
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,11 +16,6 @@ import (
 	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
 )
-
-// maxAuthBodyBytes caps the pre-auth body reads in AuthHandler (a username
-// and password) and ChangeSecurityContextHandler (one integer), both of which
-// decode the body before any rate-limit or JWT check runs.
-const maxAuthBodyBytes = 4 << 10 // 4 KiB
 
 // maxUserNameLen matches app_user.user_name VARCHAR(50).
 const maxUserNameLen = 50
@@ -150,16 +144,8 @@ func AuthHandler(
 
 		// Parse request. Nothing has checked rate limit or lockout yet, so
 		// bound what an anonymous caller can make the decoder allocate.
-		r.Body = http.MaxBytesReader(w, r.Body, maxAuthBodyBytes)
 		var req model.AuthRequestModel
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(
-				w,
-				http.StatusBadRequest,
-				fmt.Sprintf("Invalid request body for auth: %v", err),
-				"INV_REQ_BODY",
-				err,
-			)
+		if !decodeJSONBody(app, w, r, maxAuthBodyBytes, &req) {
 			return
 		}
 		// user_name is VARCHAR(50); anything longer cannot be a user and would
@@ -531,16 +517,8 @@ func ChangeSecurityContextHandler(
 
 		// Parse request first to get security context. This precedes the JWT
 		// and rate-limit checks, so bound it.
-		r.Body = http.MaxBytesReader(w, r.Body, maxAuthBodyBytes)
 		var req model.ChangeSecurityContextRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(
-				w,
-				http.StatusBadRequest,
-				fmt.Sprintf("Invalid request body for context change: %v", err),
-				"INV_REQ_BODY",
-				err,
-			)
+		if !decodeJSONBody(app, w, r, maxAuthBodyBytes, &req) {
 			return
 		}
 
@@ -786,17 +764,7 @@ func ChangeOwnPasswordHandler(
 			OldPassword string `json:"oldPassword"`
 			NewPassword string `json:"newPassword"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			app.WriteError(
-				w,
-				http.StatusBadRequest,
-				fmt.Sprintf(
-					"Invalid request body for password change: %v",
-					err,
-				),
-				"INV_REQ_BODY",
-				err,
-			)
+		if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
 			return
 		}
 

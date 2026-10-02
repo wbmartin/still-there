@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -107,14 +106,7 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 
 	// Parse request body
 	var group model.AppUserGroupModel
-	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			"Invalid request body",
-			"GENERAL_ERROR",
-			nil,
-		)
+	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &group) {
 		return
 	}
 
@@ -191,14 +183,7 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 
 	// Parse request body
 	var group model.AppUserGroupModel
-	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			"Invalid request body",
-			"GENERAL_ERROR",
-			nil,
-		)
+	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &group) {
 		return
 	}
 

@@ -106,141 +106,6 @@ doc/105:199: "no row written" is no reason to skip.
 - **Decision:** \[ \] pull / \[ \] adapt / \[X \] skip
 - BRANDON: I said skip because it's a not changing SERVER side data so seems fine to skip CSRF
 
-### B011 — Body caps on every login-layer write; 413, not 400
-
-- **Priority:** P1  **Area:** go-api, tests, docs
-- **GRC:** `src/internal/handler/common.go:14-56`; `auth_handler.go:187,643,893`; `user_handler.go:392,549,769,904,1028`; `user_mfa_handler.go:29,260,632`; `app_user_group_handler.go:109,196`; `own_profile_handler.go:165`; `user_block_handler.go:86`; `user_invite_handler.go:131,318,345,503`; `tests/test_auth_flow.py:123-150`; `doc/105-api-srv-tech-spec.md:378-398`   **PROTO:** unbounded `user_handler.go:359,522,760,881,989`, `app_user_group_handler.go:110,194`, `user_mfa_handler.go:696`, `auth_handler.go:741`; capped `auth_handler.go:143,514`, `user_mfa_handler.go:201,395`, `profile_handler.go:109`; 400 at `auth_handler.go:145-152`; doc/105 after `:209`
-- **Ticket:** RG0002 / `be58262`, `b33c9b9`; RG0043 item 45 / `720f5e1`
-- **What:** Authenticated callers stream unbounded bodies; PROTO's existing caps
-answer 400 with decoder text. GRC caps every decode (4 KiB unauth, 64 KiB
-login layer) and answers 413 `BODY_TOO_LARGE`.
-- **Port notes:** One `limitBody` spelling incl. example handlers; add a 64 KiB
-pytest; doc/105 lists PROTO's caps.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Paths are under `src/api-srv/internal/handler/` unless stated. Neither Go
-nor the server at `cmd/server/main.go:201-204` limits `r.Body`; only a
-handler that wraps it in `http.MaxBytesReader` first is bounded.
-**(1) Most writes are unbounded.**
-
-```go
-// user_handler.go:358-359 (CreateUser)
-var req model.CreateUserRequest
-if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-```
-
-Same shape at `user_handler.go:522,760,881,989`,
-`app_user_group_handler.go:110,194`, `user_mfa_handler.go:696` (admin MFA
-reset) and `auth_handler.go:741` (change own password, any signed-in
-user). The copy-me template is unbounded too:
-`example_handler.go:165,251,595,723`. All of these run their JWT, rate,
-CSRF and grant checks first, so the caller is signed in.
-
-**Correction to the item:** it says only authenticated callers are
-unbounded. `user_mfa_handler.go:54` (`POST /userSelfCreate`, public) also
-decodes with no cap, behind only the anonymous per-IP limiter. B002 was
-skipped, so that route stays and needs a cap.
-
-`json.Decoder` holds each JSON value whole, so one large string field sits
-in memory in full. On servers nginx bounds a request at 20 MiB
-(`client_max_body_size 20M`, `infra/uat/etc/nginx_uat-proto.example.com:32`).
-Local dev, or an API port reachable without nginx (B016), has no bound. A
-few concurrent 20 MiB bodies from one signed-in user cost hundreds of MiB.
-This is a robustness gap (DoS by a signed-in user); nothing leaks.
-
-**(2) The caps that exist answer 400.** Five sites are capped at 4 KiB:
-`auth_handler.go:143,514` (`maxAuthBodyBytes`, `:23`),
-`user_mfa_handler.go:201,395` (`maxMFABodyBytes`, `:21`), and
-`profile_handler.go:109` (4 KiB + 8 KiB). Over the cap the read fails and
-the generic branch answers 400:
-
-```go
-// auth_handler.go:145-149
-if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-    app.WriteError(w, http.StatusBadRequest,
-        fmt.Sprintf("Invalid request body for auth: %v", err),
-```
-
-"400 with decoder text" holds only for `/auth` and `/changeSecurityContext`
-(`:516-523`): the client sees "...: http: request body too large". The MFA
-sites say "Failed to read request body", `/me` says "Invalid request body".
-No client, test or log search can tell "too big" from "malformed".
-`error_report_handler.go:52` (8 KiB) also answers 400. doc/105 has no
-body-limit section; its status table (`:261-271`) has no 413. A DX gap.
-
-#### What GRC changed
-
-RG0002 (`be58262`, `b33c9b9`) capped the pre-auth routes and made the cap
-answer 413. RG0043 item 45 (`720f5e1`) capped every authenticated
-login-layer write. The pieces live in `src/internal/handler/common.go:15-60`:
-
-```go
-// common.go:31, 35-36
-const maxLoginLayerBodyBytes int64 = 64 << 10
-func limitBody(w http.ResponseWriter, r *http.Request, maxBytes int64) {
-```
-
-`handledBodyTooLarge` (`:43-60`) uses `errors.As` for `*http.MaxBytesError`;
-on a hit it writes 413 "Request body too large" (`BODY_TOO_LARGE`) and
-returns true. Each decode error branch calls it before its own 400, as at
-`auth_handler.go:229-233`. Caps: 4 KiB at `auth_handler.go:187,643`,
-`user_mfa_handler.go:29,260`, `user_invite_handler.go:318,345`; 64 KiB at
-`auth_handler.go:893`, `user_handler.go:392,549,769,904,1028`,
-`user_mfa_handler.go:632`, `app_user_group_handler.go:109,196`,
-`user_invite_handler.go:131,503`; 12 KiB on `/me`
-(`own_profile_handler.go:165`). 64 KiB holds a membership list of
-thousands of ids (`common.go:28-30`).
-
-Tests: pytest `test_oversized_login_body_is_413`
-(`tests/test_auth_flow.py:123-150`, 5 KiB `/auth` body, 413, then a normal
-login) and Go `TestOwnProfileBodyOverTheCapIs413`
-(`own_profile_check_sequence_test.go:337`). Nothing tests the 64 KiB cap,
-and GRC's doc/105 "Request Body Limits" (`doc/105-api-srv-tech-spec.md:378-397`)
-omits it. GRC slip not to copy: `user_block_handler.go:86` caps but never
-calls `handledBodyTooLarge`, so it still answers 400.
-
-#### Proposed fix for PROTO
-
-1. **New `handler/common.go`**: `maxAuthBodyBytes` (moved from
-   `auth_handler.go:23`), `maxLoginLayerBodyBytes = 64 << 10`, `limitBody`,
-   `handledBodyTooLarge`. Delete `maxMFABodyBytes` (same 4 KiB). Keep
-   `maxPreferenceBytes` (`profile_handler.go:29`). Traps: GRC's local is
-   `appHelper`, PROTO's is `app`; import path is
-   `github.com/wbmartin/starter-api/...`.
-2. **Five existing caps**: replace `http.MaxBytesReader` with `limitBody`
-   and put `if handledBodyTooLarge(app, w, err) { return }` first in each
-   error branch. At the MFA sites the error comes from `io.ReadAll`
-   (`user_mfa_handler.go:202,396`); `errors.As` works there too.
-3. **Unbounded sites**: `limitBody(w, r, maxLoginLayerBodyBytes)` plus the
-   413 branch at `user_handler.go:359,522,760,881,989`,
-   `app_user_group_handler.go:110,194`, `user_mfa_handler.go:696`,
-   `auth_handler.go:741`. `maxAuthBodyBytes` at `user_mfa_handler.go:54`.
-4. **Example handlers** `example_handler.go:165,251,595,723`: cap them so
-   every derived entity starts capped (size: open question). Leave
-   `/error-report` at 400 if B033 removes it; else add the 413 branch.
-5. **Docs**: "Request Body Limits" in doc/105 after `:209` with PROTO's own
-   caps (no invite, block or 4 MiB GRC resource caps), the 413 rule, and a
-   413 row at `:261-271`. One line in `src/api-srv/README.md` `## Security`
-   (`:83`): cap before decode.
-6. **Dependencies**: none hard. B016 makes nginx's 20 MiB the outer bound
-   on servers. B028 edits the same error branches; either order works.
-
-Tests: Go unit test for `handledBodyTooLarge`; Go 13 KiB `PUT /me` is 413
-(`profile_handler_test.go`); Go 65 KiB `CreateUser` is 413 with the repo
-untouched (`user_handler_test.go`); pytest port of
-`test_oversized_login_body_is_413`; pytest 65 KiB `POST /user` is 413.
-
-#### Open question for Brandon
-
-What cap should the copy-me example handlers carry, given a bulk
-`POST /exampleList` can legitimately exceed 64 KiB? Recommendation: a
-separate `maxEntityBodyBytes = 1 << 20` (1 MiB) in `example_handler.go`, so
-derived apps inherit a cap they raise per entity.
-
 ### B012 — Cross-tenant ids answered 409; unscoped writes and member count
 
 - **Priority:** P1  **Area:** go-api, tests, docs
@@ -8849,3 +8714,140 @@ other names; behind NAT one user's success also wipes a colleague's
 strikes. Recommendation: clear only `loginfail-user-<name>` and let the IP
 key expire on its window, a one-line deviation from GRC.
 Brandon: Per User only
+
+### B011 — COMPLETED — Body caps on every login-layer write; 413, not 400
+
+- **Completed:** 2026-10-02. New `decodeJSONBody` / `readBody` in `handler/common.go` cap `r.Body` with `http.MaxBytesReader` and answer 413 "Request body too large" (`*http.MaxBytesError` via `errors.As`) or a generic 400 "Invalid request body", decoder text to the log only; every JSON-body handler in user, group, auth, MFA, profile, example and error-report handlers now reads through them (one helper instead of GRC's `limitBody` + `handledBodyTooLarge` pair, so no branch can forget the 413). Caps: 4 KiB `maxAuthBodyBytes` on `/auth`, `/mfaSetup`, `/mfaVerify`, `/changeSecurityContext` and the public `/userSelfCreate` (`maxMFABodyBytes` deleted), 64 KiB `maxLoginLayerBodyBytes` on the previously unbounded login-layer writes, `PUT /me` kept at 12 KiB and `/error-report` at 8 KiB (now 413; B033 undecided), and per the open question a separate `maxEntityBodyBytes = 1 << 20` in `example_handler.go`. Check order unchanged; `/changeSecurityContext` (B005 skipped) and `/mfaSetup` still read the body before their checks, now bounded. Docs: doc/105 Request Body Limits (nginx `client_max_body_size 20M` as outer bound) and 413 row, api-srv README. Tests: Go `body_limit_test.go` (helper, `CreateUser` 65 KiB, `PUT /me` 13 KiB, `/auth` 5 KiB, example list under/over 1 MiB), pytest `TestBodyLimits` (5 KiB `/auth`, 65 KiB `POST /user` then the session still reads and writes) and a no-decoder-text assertion in `test_invalid_request_body_returns_400`. Tests: all green, go=274 unit=41 e2e=9 py=77
+
+- **Priority:** P1  **Area:** go-api, tests, docs
+- **GRC:** `src/internal/handler/common.go:14-56`; `auth_handler.go:187,643,893`; `user_handler.go:392,549,769,904,1028`; `user_mfa_handler.go:29,260,632`; `app_user_group_handler.go:109,196`; `own_profile_handler.go:165`; `user_block_handler.go:86`; `user_invite_handler.go:131,318,345,503`; `tests/test_auth_flow.py:123-150`; `doc/105-api-srv-tech-spec.md:378-398`   **PROTO:** unbounded `user_handler.go:359,522,760,881,989`, `app_user_group_handler.go:110,194`, `user_mfa_handler.go:696`, `auth_handler.go:741`; capped `auth_handler.go:143,514`, `user_mfa_handler.go:201,395`, `profile_handler.go:109`; 400 at `auth_handler.go:145-152`; doc/105 after `:209`
+- **Ticket:** RG0002 / `be58262`, `b33c9b9`; RG0043 item 45 / `720f5e1`
+- **What:** Authenticated callers stream unbounded bodies; PROTO's existing caps
+answer 400 with decoder text. GRC caps every decode (4 KiB unauth, 64 KiB
+login layer) and answers 413 `BODY_TOO_LARGE`.
+- **Port notes:** One `limitBody` spelling incl. example handlers; add a 64 KiB
+pytest; doc/105 lists PROTO's caps.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Paths are under `src/api-srv/internal/handler/` unless stated. Neither Go
+nor the server at `cmd/server/main.go:201-204` limits `r.Body`; only a
+handler that wraps it in `http.MaxBytesReader` first is bounded.
+**(1) Most writes are unbounded.**
+
+```go
+// user_handler.go:358-359 (CreateUser)
+var req model.CreateUserRequest
+if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+```
+
+Same shape at `user_handler.go:522,760,881,989`,
+`app_user_group_handler.go:110,194`, `user_mfa_handler.go:696` (admin MFA
+reset) and `auth_handler.go:741` (change own password, any signed-in
+user). The copy-me template is unbounded too:
+`example_handler.go:165,251,595,723`. All of these run their JWT, rate,
+CSRF and grant checks first, so the caller is signed in.
+
+**Correction to the item:** it says only authenticated callers are
+unbounded. `user_mfa_handler.go:54` (`POST /userSelfCreate`, public) also
+decodes with no cap, behind only the anonymous per-IP limiter. B002 was
+skipped, so that route stays and needs a cap.
+
+`json.Decoder` holds each JSON value whole, so one large string field sits
+in memory in full. On servers nginx bounds a request at 20 MiB
+(`client_max_body_size 20M`, `infra/uat/etc/nginx_uat-proto.example.com:32`).
+Local dev, or an API port reachable without nginx (B016), has no bound. A
+few concurrent 20 MiB bodies from one signed-in user cost hundreds of MiB.
+This is a robustness gap (DoS by a signed-in user); nothing leaks.
+
+**(2) The caps that exist answer 400.** Five sites are capped at 4 KiB:
+`auth_handler.go:143,514` (`maxAuthBodyBytes`, `:23`),
+`user_mfa_handler.go:201,395` (`maxMFABodyBytes`, `:21`), and
+`profile_handler.go:109` (4 KiB + 8 KiB). Over the cap the read fails and
+the generic branch answers 400:
+
+```go
+// auth_handler.go:145-149
+if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+    app.WriteError(w, http.StatusBadRequest,
+        fmt.Sprintf("Invalid request body for auth: %v", err),
+```
+
+"400 with decoder text" holds only for `/auth` and `/changeSecurityContext`
+(`:516-523`): the client sees "...: http: request body too large". The MFA
+sites say "Failed to read request body", `/me` says "Invalid request body".
+No client, test or log search can tell "too big" from "malformed".
+`error_report_handler.go:52` (8 KiB) also answers 400. doc/105 has no
+body-limit section; its status table (`:261-271`) has no 413. A DX gap.
+
+#### What GRC changed
+
+RG0002 (`be58262`, `b33c9b9`) capped the pre-auth routes and made the cap
+answer 413. RG0043 item 45 (`720f5e1`) capped every authenticated
+login-layer write. The pieces live in `src/internal/handler/common.go:15-60`:
+
+```go
+// common.go:31, 35-36
+const maxLoginLayerBodyBytes int64 = 64 << 10
+func limitBody(w http.ResponseWriter, r *http.Request, maxBytes int64) {
+```
+
+`handledBodyTooLarge` (`:43-60`) uses `errors.As` for `*http.MaxBytesError`;
+on a hit it writes 413 "Request body too large" (`BODY_TOO_LARGE`) and
+returns true. Each decode error branch calls it before its own 400, as at
+`auth_handler.go:229-233`. Caps: 4 KiB at `auth_handler.go:187,643`,
+`user_mfa_handler.go:29,260`, `user_invite_handler.go:318,345`; 64 KiB at
+`auth_handler.go:893`, `user_handler.go:392,549,769,904,1028`,
+`user_mfa_handler.go:632`, `app_user_group_handler.go:109,196`,
+`user_invite_handler.go:131,503`; 12 KiB on `/me`
+(`own_profile_handler.go:165`). 64 KiB holds a membership list of
+thousands of ids (`common.go:28-30`).
+
+Tests: pytest `test_oversized_login_body_is_413`
+(`tests/test_auth_flow.py:123-150`, 5 KiB `/auth` body, 413, then a normal
+login) and Go `TestOwnProfileBodyOverTheCapIs413`
+(`own_profile_check_sequence_test.go:337`). Nothing tests the 64 KiB cap,
+and GRC's doc/105 "Request Body Limits" (`doc/105-api-srv-tech-spec.md:378-397`)
+omits it. GRC slip not to copy: `user_block_handler.go:86` caps but never
+calls `handledBodyTooLarge`, so it still answers 400.
+
+#### Proposed fix for PROTO
+
+1. **New `handler/common.go`**: `maxAuthBodyBytes` (moved from
+   `auth_handler.go:23`), `maxLoginLayerBodyBytes = 64 << 10`, `limitBody`,
+   `handledBodyTooLarge`. Delete `maxMFABodyBytes` (same 4 KiB). Keep
+   `maxPreferenceBytes` (`profile_handler.go:29`). Traps: GRC's local is
+   `appHelper`, PROTO's is `app`; import path is
+   `github.com/wbmartin/starter-api/...`.
+2. **Five existing caps**: replace `http.MaxBytesReader` with `limitBody`
+   and put `if handledBodyTooLarge(app, w, err) { return }` first in each
+   error branch. At the MFA sites the error comes from `io.ReadAll`
+   (`user_mfa_handler.go:202,396`); `errors.As` works there too.
+3. **Unbounded sites**: `limitBody(w, r, maxLoginLayerBodyBytes)` plus the
+   413 branch at `user_handler.go:359,522,760,881,989`,
+   `app_user_group_handler.go:110,194`, `user_mfa_handler.go:696`,
+   `auth_handler.go:741`. `maxAuthBodyBytes` at `user_mfa_handler.go:54`.
+4. **Example handlers** `example_handler.go:165,251,595,723`: cap them so
+   every derived entity starts capped (size: open question). Leave
+   `/error-report` at 400 if B033 removes it; else add the 413 branch.
+5. **Docs**: "Request Body Limits" in doc/105 after `:209` with PROTO's own
+   caps (no invite, block or 4 MiB GRC resource caps), the 413 rule, and a
+   413 row at `:261-271`. One line in `src/api-srv/README.md` `## Security`
+   (`:83`): cap before decode.
+6. **Dependencies**: none hard. B016 makes nginx's 20 MiB the outer bound
+   on servers. B028 edits the same error branches; either order works.
+
+Tests: Go unit test for `handledBodyTooLarge`; Go 13 KiB `PUT /me` is 413
+(`profile_handler_test.go`); Go 65 KiB `CreateUser` is 413 with the repo
+untouched (`user_handler_test.go`); pytest port of
+`test_oversized_login_body_is_413`; pytest 65 KiB `POST /user` is 413.
+
+#### Open question for Brandon
+
+What cap should the copy-me example handlers carry, given a bulk
+`POST /exampleList` can legitimately exceed 64 KiB? Recommendation: a
+separate `maxEntityBodyBytes = 1 << 20` (1 MiB) in `example_handler.go`, so
+derived apps inherit a cap they raise per entity.

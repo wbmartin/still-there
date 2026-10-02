@@ -267,5 +267,42 @@ class TestLoginCounterReset:
             })
 
 
+class TestBodyLimits:
+    """Bodies over the cap are 413, never decoded; malformed ones are 400."""
+
+    def test_oversized_login_body_is_413(self):
+        base_url = os.environ["TEST_BASE_URL"]
+        login_ip = run_ip(8)
+        # 5 KiB of password, over the 4 KiB cap on /auth.
+        response = _login(base_url, login_ip, "admin", "a" * 5120)
+        assert response.status_code == 413, response.text
+        assert response.json()["error"] == "Request body too large"
+
+        # Not counted as a failed login; a normal body still signs in.
+        response = _login(base_url, login_ip, "admin", "admin123!")
+        assert response.status_code == 200, response.text
+
+    def test_oversized_login_layer_write_is_413(self, test_client):
+        # 65 KiB, over the 64 KiB login-layer cap: refused before decode.
+        response = test_client.make_request("POST", "/user", json={
+            "userName": f"big{uuid.uuid4().hex[:12]}",
+            "firstName": "x" * (65 * 1024),
+        })
+        assert response.status_code == 413, response.text[:200]
+        assert response.json()["error"] == "Request body too large"
+
+        # The session that sent it still reads and writes.
+        response = test_client.make_request("GET", "/me")
+        assert response.status_code == 200, response.text
+        response = test_client.make_request(
+            "POST",
+            "/user",
+            data="{",
+            headers={"Content-Type": "application/json"},
+        )
+        assert response.status_code == 400, response.text
+        assert response.json()["error"] == "Invalid request body"
+
+
 # Import TestClient for use in this module
 from conftest import TestClient

@@ -2,7 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +15,64 @@ import (
 	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/security"
 )
+
+// maxAuthBodyBytes caps a body read with no session or before the auth
+// gate: /auth, /mfaSetup, /mfaVerify, /changeSecurityContext and the public
+// /userSelfCreate. Each carries a credential, a temp token or one id.
+const maxAuthBodyBytes int64 = 4 << 10
+
+// maxLoginLayerBodyBytes caps every signed-in login-layer write: user,
+// group, membership, password and MFA-reset routes. 64 KiB holds a
+// membership list of thousands of ids.
+const maxLoginLayerBodyBytes int64 = 64 << 10
+
+// decodeJSONBody caps r.Body at maxBytes and decodes it into dst. On failure
+// it has already answered (413 over the cap, 400 otherwise) and returns false.
+func decodeJSONBody(
+	app *security.AppHelper,
+	w http.ResponseWriter,
+	r *http.Request,
+	maxBytes int64,
+	dst any,
+) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		writeBodyError(app, w, err)
+		return false
+	}
+	return true
+}
+
+// readBody is decodeJSONBody for a handler that needs the raw bytes.
+func readBody(
+	app *security.AppHelper,
+	w http.ResponseWriter,
+	r *http.Request,
+	maxBytes int64,
+) ([]byte, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeBodyError(app, w, err)
+		return nil, false
+	}
+	return body, true
+}
+
+// writeBodyError answers a failed body read: 413 when the cap was hit, else
+// 400. The decoder's text goes to the log only, never to the client.
+func writeBodyError(
+	app *security.AppHelper, w http.ResponseWriter, err error,
+) {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		app.WriteError(w, http.StatusRequestEntityTooLarge,
+			"Request body too large", "BODY_TOO_LARGE", err)
+		return
+	}
+	app.WriteError(w, http.StatusBadRequest, "Invalid request body",
+		"INV_REQ_BODY", err)
+}
 
 // writeJSON writes a JSON response
 func writeJSON(w http.ResponseWriter, status int, data interface{},

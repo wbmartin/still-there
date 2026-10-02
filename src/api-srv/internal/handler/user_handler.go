@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -356,14 +355,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Parse request body into CreateUserRequest
 	var req model.CreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			fmt.Sprintf("Invalid request body for create user: %v", err),
-			"BRQ0",
-			nil,
-		)
+	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
 		return
 	}
 
@@ -519,14 +511,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Parse request body
 	var user model.AppUserModel
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			fmt.Sprintf("Invalid request body for update user: %v", err),
-			"BRQ0",
-			nil,
-		)
+	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &user) {
 		return
 	}
 
@@ -795,14 +780,7 @@ func (h *UserHandler) AddUserListToGroupHandler(
 		GroupId      int       `json:"groupId"`
 		UpdateTsList []float64 `json:"updateTsList"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			fmt.Sprintf("Invalid request body for add users to group: %v", err),
-			"BRQ0",
-			nil,
-		)
+	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
 		return
 	}
 
@@ -922,14 +900,7 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 		GroupId      int       `json:"groupId"`
 		UpdateTsList []float64 `json:"updateTsList"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			"Invalid request body",
-			"BRQ0",
-			nil,
-		)
+	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
 		return
 	}
 
@@ -1036,14 +1007,7 @@ func (h *UserHandler) ChangeOtherUserPassword(
 		UserID      int    `json:"appUserId"`
 		NewPassword string `json:"newPassword"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			"Invalid request body",
-			"BRQ0",
-			nil,
-		)
+	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
 		return
 	}
 

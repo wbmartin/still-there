@@ -106,11 +106,8 @@ func (h *ProfileHandler) UpdateOwnProfile(
 	app.Info("ME_UP_START", "UpdateOwnProfile invoked")
 	jwtClaims := app.GetClaims()
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxAuthBodyBytes+maxPreferenceBytes)
 	var req ProfileUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body",
-			"BAD_REQUEST", err)
+	if !decodeJSONBody(app, w, r, maxAuthBodyBytes+maxPreferenceBytes, &req) {
 		return
 	}
 

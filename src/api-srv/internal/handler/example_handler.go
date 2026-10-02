@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,6 +11,11 @@ import (
 	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
 )
+
+// maxEntityBodyBytes caps every example write, bulk lists included. A
+// derived app copies it per entity and raises it where a real bulk payload
+// needs more.
+const maxEntityBodyBytes int64 = 1 << 20
 
 // ExampleRepositoryInterface is what ExampleHandler needs from the
 // repository. *repository.ExampleRepository satisfies it; a mock does in
@@ -162,14 +166,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 
 	// Parse request body
 	var example model.ExampleModel
-	if err := json.NewDecoder(r.Body).Decode(&example); err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			fmt.Sprintf("Invalid request body for create example: %v", err),
-			"BAD_REQUEST",
-			nil,
-		)
+	if !decodeJSONBody(app, w, r, maxEntityBodyBytes, &example) {
 		return
 	}
 
@@ -248,14 +245,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 
 	// Parse request body
 	var example model.ExampleModel
-	if err := json.NewDecoder(r.Body).Decode(&example); err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			fmt.Sprintf("Invalid request body for update example: %v", err),
-			"BAD_REQUEST",
-			nil,
-		)
+	if !decodeJSONBody(app, w, r, maxEntityBodyBytes, &example) {
 		return
 	}
 
@@ -592,17 +582,7 @@ func (h *ExampleHandler) CreateExampleList(
 
 	// Parse request body
 	var exampleList []model.ExampleModel
-	if err := json.NewDecoder(r.Body).Decode(&exampleList); err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			fmt.Sprintf(
-				"Invalid request body for bulk create examples: %v",
-				err,
-			),
-			"BAD_REQUEST",
-			nil,
-		)
+	if !decodeJSONBody(app, w, r, maxEntityBodyBytes, &exampleList) {
 		return
 	}
 
@@ -720,17 +700,7 @@ func (h *ExampleHandler) UpdateExampleList(
 
 	// Parse request body
 	var exampleList []model.ExampleModel
-	if err := json.NewDecoder(r.Body).Decode(&exampleList); err != nil {
-		app.WriteError(
-			w,
-			http.StatusBadRequest,
-			fmt.Sprintf(
-				"Invalid request body for bulk update examples: %v",
-				err,
-			),
-			"BAD_REQUEST",
-			nil,
-		)
+	if !decodeJSONBody(app, w, r, maxEntityBodyBytes, &exampleList) {
 		return
 	}
 
