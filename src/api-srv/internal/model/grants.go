@@ -29,6 +29,10 @@ const (
 	GrantUserGroupDelete     = 9013
 	GrantAddUserToGroup      = 9014
 	GrantRemoveUserFromGroup = 9015
+
+	// Stripping another user's second factor is its own authority, apart
+	// from editing the user (9003).
+	GrantResetUserMFA = 9020
 )
 
 // AllKnownGrants maps grant short codes to their IDs (centralized)
@@ -51,18 +55,20 @@ var AllKnownGrants = map[string]int{
 	"DELETE_USER_GROUP":      GrantUserGroupDelete,
 	"ADD_USER_TO_GROUP":      GrantAddUserToGroup,
 	"REMOVE_USER_FROM_GROUP": GrantRemoveUserFromGroup,
+	"RESET_MFA_TOKEN":        GrantResetUserMFA,
 }
 
 // UserGrants maps grant short codes to their IDs for user-related operations
 var UserGrants = map[string]int{
-	"LOGON":          GrantLogon,
-	"CHG_OWN_PW":     GrantChangeOwnPassword,
-	"CREATE_USER":    GrantUserCreate,
-	"READ_USER":      GrantUserRead,
-	"UPDATE_USER":    GrantUserUpdate,
-	"DELETE_USER":    GrantUserDelete,
-	"BLOCK_USER":     GrantUserBlock,
-	"CHANGE_USER_PW": GrantChangeOtherUserPassword,
+	"LOGON":           GrantLogon,
+	"CHG_OWN_PW":      GrantChangeOwnPassword,
+	"CREATE_USER":     GrantUserCreate,
+	"READ_USER":       GrantUserRead,
+	"UPDATE_USER":     GrantUserUpdate,
+	"DELETE_USER":     GrantUserDelete,
+	"BLOCK_USER":      GrantUserBlock,
+	"CHANGE_USER_PW":  GrantChangeOtherUserPassword,
+	"RESET_MFA_TOKEN": GrantResetUserMFA,
 }
 
 // ExampleGrants maps grant short codes to their IDs for the Example entity
@@ -93,4 +99,5 @@ var GrantIDToShortCodeMap = map[int]string{
 	GrantUserGroupDelete:         "DELETE_USER_GROUP",
 	GrantAddUserToGroup:          "ADD_USER_TO_GROUP",
 	GrantRemoveUserFromGroup:     "REMOVE_USER_FROM_GROUP",
+	GrantResetUserMFA:            "RESET_MFA_TOKEN",
 }

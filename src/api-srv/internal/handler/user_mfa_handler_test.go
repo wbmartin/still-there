@@ -384,7 +384,7 @@ func TestAdminResetUserMFA_ClearsTheLastTOTPStep(t *testing.T) {
 	repo.On("UpdateUserTOTPSeed", mock.Anything, 7, "", 1.5, 1).
 		Return(2.5, nil)
 	admin := sessionToken(t, s, "alice", 1, "session-admin",
-		[]int{model.GrantUserUpdate})
+		[]int{model.GrantResetUserMFA})
 	w := httptest.NewRecorder()
 	AdminResetUserMFAHandler(s, repo)(w, sessionRequest(
 		http.MethodPost, "/admin/resetUserMFA", `{"userId":7}`,
@@ -393,4 +393,102 @@ func TestAdminResetUserMFA_ClearsTheLastTOTPStep(t *testing.T) {
 	lastStep, err := s.KV.Get("TOTP_LAST_STEP*mfa")
 	require.NoError(t, err)
 	assert.Empty(t, lastStep)
+}
+
+// Stripping a user's second factor needs 9020; editing the user (9003) is
+// not enough (B010).
+func TestAdminResetUserMFARequiresGrant9020(t *testing.T) {
+	testCaseList := []struct {
+		name      string
+		grantList []int
+		want      int
+	}{
+		{"update user only → 403", []int{model.GrantUserUpdate},
+			http.StatusForbidden},
+		{"reset MFA → 200", []int{model.GrantResetUserMFA}, http.StatusOK},
+	}
+	for _, testCase := range testCaseList {
+		t.Run(testCase.name, func(t *testing.T) {
+			s := testServices(t)
+			repo := new(MockUserRepository)
+			repo.On("RetrieveUserList", mock.Anything, 1, []int{7}, float64(0)).
+				Return([]*model.AppUserModel{
+					{AppUserID: 7, UserName: "mfa", UpdateTS: 1.5},
+				}, nil)
+			repo.On("UpdateUserTOTPSeed", mock.Anything, 7, "", 1.5, 1).
+				Return(2.5, nil)
+			admin := sessionToken(t, s, "alice", 1, "session-admin",
+				testCase.grantList)
+			w := httptest.NewRecorder()
+			AdminResetUserMFAHandler(s, repo)(w, sessionRequest(
+				http.MethodPost, "/admin/resetUserMFA", `{"userId":7}`,
+				admin, "session-admin"))
+			require.Equal(t, testCase.want, w.Code, w.Body.String())
+			if testCase.want == http.StatusForbidden {
+				assert.Contains(t, w.Body.String(), "RESET_MFA_TOKEN")
+				repo.AssertNotCalled(t, "UpdateUserTOTPSeed",
+					mock.Anything, mock.Anything, mock.Anything,
+					mock.Anything, mock.Anything)
+			}
+		})
+	}
+}
+
+// An admin reset leaves an empty seed, not NULL: /mfaVerify asks the user to
+// enrol again instead of failing to decrypt it.
+func TestMFAVerifyHandler_EmptySeedAsksToEnrol(t *testing.T) {
+	s := testServices(t)
+	s.Config.TOTPEncryptionKey = testTOTPKey
+	require.NoError(t, s.KV.Set("TEMP_AUTH_SUCCESS_tok", "mfa", "10min"))
+	user, _ := mfaUser(t, false)
+	empty := ""
+	user.TOTPSeed = &empty
+	repo := new(MockUserRepository)
+	repo.On("RetrieveUserByUserName", mock.Anything, "mfa").Return(user, nil)
+	w := httptest.NewRecorder()
+	MFAVerifyHandler(s, repo)(w,
+		mfaVerifyRequest(`{"tempToken":"tok","totpCode":"000000"}`))
+	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "restart MFA setup")
+}
+
+// The code step completes an MFA login, so it clears the username's failure
+// counter; the address's counter is left to its window (B010).
+func TestMFAVerifyHandler_CompletedLoginClearsTheUserCounterOnly(t *testing.T) {
+	s := testServices(t)
+	s.Config.TOTPEncryptionKey = testTOTPKey
+	s.Config.AppName = "Test"
+	s.Config.FailedLoginAttemptThreshold = 7
+	s.Config.FailedLoginAttemptWindowDuration = "5min"
+	s.Config.FailedLoginLockoutDuration = "5min"
+	require.NoError(t, s.KV.Set("TEMP_AUTH_SUCCESS_tok", "mfa", "10min"))
+	for attempt := 1; attempt <= 6; attempt++ {
+		require.NoError(t,
+			incrementFailedAttempt(s.KV, s.Config, "192.0.2.5", "mfa"))
+	}
+	user, secret := mfaUser(t, true)
+	code, err := totp.GenerateCode(secret, time.Now())
+	require.NoError(t, err)
+	repo := new(MockUserRepository)
+	repo.On("RetrieveUserByUserName", mock.Anything, "mfa").Return(user, nil)
+	repo.On("GetGrantsForGroups", mock.Anything, []int{1}).
+		Return(map[int][]int{1: {model.GrantLogon}}, nil)
+	r := mfaVerifyRequest(`{"tempToken":"tok","totpCode":"` + code + `"}`)
+	r.RemoteAddr = "192.0.2.5:1"
+	w := httptest.NewRecorder()
+	MFAVerifyHandler(s, repo)(w, r)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	userCount, err := s.KV.Get("loginfail-user-mfa")
+	require.NoError(t, err)
+	assert.Empty(t, userCount)
+	ipCount, err := s.KV.Get("loginfail-ip-192.0.2.5")
+	require.NoError(t, err)
+	assert.Equal(t, "6", ipCount)
+
+	require.NoError(t,
+		incrementFailedAttempt(s.KV, s.Config, "192.0.2.6", "mfa"))
+	userCount, err = s.KV.Get("loginfail-user-mfa")
+	require.NoError(t, err)
+	assert.Equal(t, "1", userCount, "a later failure starts a fresh count")
 }

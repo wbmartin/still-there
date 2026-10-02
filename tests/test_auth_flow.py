@@ -218,5 +218,54 @@ class TestLoginEnumeration:
         assert response.status_code == 401, response.text
 
 
+class TestLoginCounterReset:
+    """A completed login clears the user's failure count, not the address's."""
+
+    def test_success_between_typos_does_not_lock_the_user(self, test_client):
+        base_url = test_client.base_url
+        threshold = int(os.environ.get("FAILED_LOGIN_ATTEMPT_THRESHOLD", "7"))
+        suffix = uuid.uuid4().hex[:12]
+        password = "typos123!"
+        create_response = test_client.make_request("POST", "/user", json={
+            "userName": f"typo{suffix}",
+            "firstName": "Typo",
+            "lastName": "Test",
+            "email": f"typo{suffix}@example.com",
+            "pwHash": password,
+            "mfaExempt": True,
+            "appUserGroupMembershipList": [],
+        })
+        assert create_response.status_code == 201, create_response.text
+        created = create_response.json()["data"]
+        user_name = created["userName"]
+        typing_ip, later_ip = run_ip(6), run_ip(7)
+        try:
+            for attempt in range(threshold - 1):
+                response = _login(base_url, typing_ip, user_name, "typo")
+                assert response.status_code == 401, (attempt, response.text)
+            response = _login(base_url, typing_ip, user_name, password)
+            assert response.status_code == 200, response.text
+
+            # Without the reset this is the user's seventh failure: a lock.
+            response = _login(base_url, later_ip, user_name, "typo")
+            assert response.status_code == 401, response.text
+            response = _login(base_url, later_ip, user_name, password)
+            assert response.status_code == 200, response.text
+
+            # The address's count was not cleared: its seventh failure locks
+            # it, while the user still signs in from elsewhere.
+            response = _login(base_url, typing_ip, user_name, "typo")
+            assert response.status_code == 401, response.text
+            response = _login(base_url, typing_ip, user_name, password)
+            assert response.status_code == 429, response.text
+            response = _login(base_url, later_ip, user_name, password)
+            assert response.status_code == 200, response.text
+        finally:
+            test_client.make_request("DELETE", "/user", params={
+                "appUserId": str(created["appUserId"]),
+                "updateTs": f"{created['updateTs']:.7f}",
+            })
+
+
 # Import TestClient for use in this module
 from conftest import TestClient

@@ -94,19 +94,28 @@ func incrementFailedAttempt(
 	return nil
 }
 
-// resetFailedAttempts resets the failed attempt counters for user and IP on successful login
-func resetFailedAttempts(
-	kv *cache.KV,
-	ip, username string,
-) error {
-	userCounterKey := "loginfail-user-" + username
-	ipCounterKey := "loginfail-ip-" + ip
-	// Reset counters to 0 with short TTL to effectively clear them
-	err := kv.Set(userCounterKey, "0", "1s")
-	if err != nil {
-		return err
+// resetFailedAttempts deletes the per-username failure counter once a login
+// completes. Del, not a short-TTL "0": Incr keeps an existing key's TTL, so
+// the next failure would inherit it. The per-IP counter is left to expire on
+// its window: clearing it would let anyone holding one valid account reset
+// the IP between guesses at other names. Lock flags are untouched; a locked
+// account is refused before any credential check.
+func resetFailedAttempts(kv *cache.KV, username string) error {
+	return kv.Del("loginfail-user-" + username)
+}
+
+// resetFailedAttemptsOrLog clears the counter and only logs a failure:
+// clearing is a convenience, not a security control.
+func resetFailedAttemptsOrLog(appServices *app.Services, username string) {
+	if err := resetFailedAttempts(appServices.KV, username); err != nil {
+		appServices.Logger.Warn(
+			"RESET_FAILED_ATTEMPTS_FAIL",
+			"Failed to reset failed attempts for user: "+username+
+				", error: "+err.Error(),
+			"username",
+			username,
+		)
 	}
-	return kv.Set(ipCounterKey, "0", "1s")
 }
 
 // AuthHandler handles initial authentication (username/password)
@@ -255,14 +264,6 @@ func AuthHandler(
 			return
 		}
 
-		// Reset failed attempt counters on successful login
-		// err = resetFailedAttempts(appServices.KV, clientIP, req.UserName)
-		// if err != nil {
-		// 	appServices.Logger.Warn("RESET_FAILED_ATTEMPTS_FAIL",
-		// 		"Failed to reset failed attempts for user: "+req.UserName+", error: "+err.Error(), "username", req.UserName)
-		// 	// Don't fail auth, just log
-		// }
-
 		// Check if MFA is required
 		if !user.MFAExempt {
 			// Generate temp token for MFA
@@ -363,6 +364,9 @@ func AuthHandler(
 		}
 		// Set JWT cookie
 		setAuthCookie(w, jwt, 0)
+		// Login completes here for an MFA-exempt user only; an MFA login
+		// completes in MFAVerifyHandler.
+		resetFailedAttemptsOrLog(appServices, user.UserName)
 
 		// CSRF token is last 3 characters of session ID
 		csrfToken = sessionID[len(sessionID)-3:]

@@ -11,6 +11,7 @@ IP out of /auth (resetUserMFA itself needs only a session + CSRF).
 """
 import os
 import time
+import uuid
 
 import pyotp
 import pytest
@@ -176,6 +177,56 @@ class TestMFATOTP:
 
         # Un-enrol, which also forgets the spent step, for the next test.
         _reset_mfa(admin, app_user_id)
+
+    def test_reset_needs_reset_mfa_grant_not_update_user(self):
+        """Editing a user (9003) does not let you strip their second factor.
+
+        A throwaway group holding READ_USER and UPDATE_USER but not
+        RESET_MFA_TOKEN (9020), and an exempt user in it, made here and
+        removed at the end. Runs before the lockout case, which locks the
+        loopback address out of /auth.
+        """
+        admin = TestClient(_base_url())
+        admin.authenticate()
+        suffix = uuid.uuid4().hex[:12]
+        password = "noreset123!"
+        response = admin.make_request("POST", "/appUserGroup", json={
+            "groupName": f"Editors {suffix}",
+            "userGrantList": [1, 9002, 9003],
+        })
+        assert response.status_code == 201, response.text
+        group = response.json()["data"]
+        response = admin.make_request("POST", "/user", json={
+            "userName": f"editor{suffix}",
+            "firstName": "Editor",
+            "lastName": "NoReset",
+            "email": f"editor{suffix}@example.com",
+            "pwHash": password,
+            "mfaExempt": True,
+            "appUserGroupMembershipList": [group["appUserGroupId"]],
+        })
+        assert response.status_code == 201, response.text
+        editor_row = response.json()["data"]
+        try:
+            editor = TestClient(_base_url())
+            body = editor.authenticate(editor_row["userName"], password)
+            assert 9003 in body["user"]["grantList"]
+            assert 9020 not in body["user"]["grantList"]
+            response = editor.make_request(
+                "POST", "/admin/resetUserMFA",
+                json={"userId": editor_row["appUserId"]},
+            )
+            assert response.status_code == 403, response.text
+            assert "RESET_MFA_TOKEN" in response.text
+        finally:
+            admin.make_request("DELETE", "/user", params={
+                "appUserId": str(editor_row["appUserId"]),
+                "updateTs": f"{editor_row['updateTs']:.7f}",
+            })
+            admin.make_request("DELETE", "/appUserGroup", params={
+                "appUserGroupId": str(group["appUserGroupId"]),
+                "updateTs": f"{group['updateTs']:.7f}",
+            })
 
     def test_mfa_lockout_after_failed_attempts(self):
         """MFA failures count towards the login lockout and lock the user."""

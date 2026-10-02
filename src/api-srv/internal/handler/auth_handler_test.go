@@ -247,3 +247,62 @@ func TestAuthHandler_LockoutReadErrorIs500(t *testing.T) {
 	repo.AssertNotCalled(t, "RetrieveUserByUserName",
 		mock.Anything, mock.Anything)
 }
+
+// A completed login clears the username's failure counter, so earlier typos
+// do not combine with later ones into a lockout; the address's counter runs
+// out its window. The password step of an MFA login completes nothing and
+// clears nothing (B010).
+func TestAuthHandler_CompletedLoginClearsTheUserCounterOnly(t *testing.T) {
+	hash, err := auth.HashPassword("right")
+	require.NoError(t, err)
+	testCaseList := []struct {
+		name        string
+		mfaExempt   bool
+		wantCleared bool
+	}{
+		{"MFA-exempt login completes at /auth", true, true},
+		{"MFA login owes a code, counter kept", false, false},
+	}
+	for _, testCase := range testCaseList {
+		t.Run(testCase.name, func(t *testing.T) {
+			s := lockoutServices(t)
+			repo := new(MockUserRepository)
+			repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+				Return(&model.AppUserModel{
+					AppUserID: 1, UserName: "alice", PwHash: hash,
+					SecurityContext: 1, AppUserGroupMembershipList: []int{1},
+					MFAExempt: testCase.mfaExempt,
+				}, nil)
+			repo.On("GetGrantsForGroups", mock.Anything, []int{1}).
+				Return(map[int][]int{1: {model.GrantLogon}}, nil)
+			handler := AuthHandler(s, repo)
+
+			for attempt := 1; attempt <= 6; attempt++ {
+				w := authAttempt(t, handler, "192.0.2.5:1", "alice", "typo")
+				require.Equal(t, http.StatusUnauthorized, w.Code)
+			}
+			w := authAttempt(t, handler, "192.0.2.5:1", "alice", "right")
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+			userCount, err := s.KV.Get("loginfail-user-alice")
+			require.NoError(t, err)
+			ipCount, err := s.KV.Get("loginfail-ip-192.0.2.5")
+			require.NoError(t, err)
+			assert.Equal(t, "6", ipCount, "the address counter is kept")
+			if !testCase.wantCleared {
+				assert.Equal(t, "6", userCount)
+				return
+			}
+			assert.Empty(t, userCount)
+
+			// A later typo starts a fresh count rather than locking the user.
+			w = authAttempt(t, handler, "192.0.2.6:1", "alice", "typo")
+			require.Equal(t, http.StatusUnauthorized, w.Code)
+			userCount, err = s.KV.Get("loginfail-user-alice")
+			require.NoError(t, err)
+			assert.Equal(t, "1", userCount)
+			w = authAttempt(t, handler, "192.0.2.6:1", "alice", "right")
+			assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		})
+	}
+}

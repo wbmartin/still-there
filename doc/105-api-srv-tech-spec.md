@@ -103,6 +103,7 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
 | POST | /user | Yes | Yes | ADD_USER | Create new user |
 | PUT | /user | Yes | Yes | CHG_USER | Update user |
 | DELETE | /user | Yes | Yes | DEL_USER | Delete user |
+| POST | /admin/resetUserMFA | Yes | Yes | RESET_MFA_TOKEN | Clear a user's TOTP seed (9020: its own grant, not CHG_USER) |
 | POST | /addUserListToGroup | Yes | Yes | CHG_USER_GROUP | Add users to group |
 | POST | /removeUserListFromGroup | Yes | Yes | CHG_USER_GROUP | Remove users from group |
 | GET | /grantList | Yes | No | GET_USER | Retrieve available grants |
@@ -131,6 +132,11 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
      unavailable", not counted. So is a lockout counter that cannot be read
      or written (here and on `/mfaVerify`'s wrong code): the lockout fails
      closed rather than silently stop counting
+   - A completed login deletes the per-username counter
+     (`loginfail-user-<name>`): at `/auth` for an MFA-exempt user, at
+     `/mfaVerify` with a temp token otherwise, never after the password step
+     alone. The per-IP counter is not cleared (one valid account must not
+     reset an address's count); it and any lock run out their windows
    - If `mfa_exempt = true`: Return full JWT
    - If `mfa_exempt = false`: Store temp token in the in-process KV store,
      return temp token and `mfaEnrolled` — true when a seed is stored and
@@ -157,6 +163,8 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
      "Invalid TOTP code") and counts toward the lockout. A store error is
      500 `TOTP_STEP_STORE` (fail closed). `/admin/resetUserMFA` deletes the
      key so a re-enrolled secret starts clean
+   - No seed, or the empty seed an admin reset leaves, is 400
+     `TOTP_SECRET_MISSING` ("Please restart MFA setup")
    - Return full JWT with cookie; the temp token is single use
 
 4. **JWT Structure**:

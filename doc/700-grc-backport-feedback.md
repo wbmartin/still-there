@@ -106,143 +106,6 @@ doc/105:199: "no row written" is no reason to skip.
 - **Decision:** \[ \] pull / \[ \] adapt / \[X \] skip
 - BRANDON: I said skip because it's a not changing SERVER side data so seems fine to skip CSRF
 
-### B010 — PS0021: reset-MFA grant 9020; completed login clears counters
-
-- **Priority:** P1  **Area:** go-api, tests, docs, tickets
-- **GRC:** `src/internal/model/grants.go:25-31,52,74,87`; `handler/user_mfa_handler.go:614-620,536-543`; `handler/auth_handler.go:135-177,483-490`; tests `user_mfa_handler_test.go:435-497`, `tests/test_zz_mfa_totp.py:294-346,348-396,398-415,506-518`; `tickets/03-done/RG0003-mfa-temp-token-and-loose-ends/RG0003-mfa-temp-token-and-loose-ends.md:67,81,101-109`   **PROTO:** `src/api-srv/internal/model/grants.go:20-30`; `handler/user_mfa_handler.go:684` (9003), `:483`, `:620-630`; `handler/auth_handler.go:96-110,245-251` (commented :246); `constants/grants.ts:21`; `tests/test_zz_mfa_totp.py:110-116`; `tickets/01-open/PS0021-mfa-loose-ends.md:20-47`; `doc/105-api-srv-tech-spec.md` \~\`:183-200\`
-- **Ticket:** RG0003 / `0d5146b`, `37978ce`; closes PS0021 items 1, 3
-- **What:** (a) Web gates reset on 9020, API checks 9003; GRC checks 9020,
-clears seed + `mfa_setup`, 400s on a nil or `''` seed (PROTO :483: nil only).
-(b) Counters never clear on success; GRC `Del`s both after a completed login
-(after `/mfaVerify`).
-- **Port notes:** `Del`, not `"0"` 1 s (`Incr` keeps TTL). Write "where a login
-completes" into doc/105, PS0021. Open: per-IP clear behind NAT.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-PROTO Go paths are under `src/api-srv/internal/`. PS0021 filed three MFA
-loose ends. Two are real; one was fixed before PS0021 was written.
-
-**(a) Grant 9020 exists only on the web.** The web gates Reset MFA on a
-grant the API does not know (`src/web-app/constants/grants.ts:21`
-`RESET_MFA_TOKEN: 9020`; `src/web-app/pages/app-user-edit-page.tsx:313`).
-`model/grants.go:18-31` stops at 9015, and the route checks the general edit
-grant (`handler/user_mfa_handler.go:684`):
-
-```go
-app.CheckAuthorization(model.GrantUserUpdate)   // 9003
-```
-
-Consequence: anyone who can edit a user can strip that user's second factor,
-returning the account to password-only. A privilege-separation hole. It
-looks right only because the tenant 1 Admin group carries both 9003 and 9020
-(`src/api-srv/sql/fixtures/local-seed.sql:52`). A group with 9003 and no
-9020 gets an API that resets and a web that hides the button; the tenant 2
-`Admin2` group (`local-seed.sql:77`) is exactly that shape.
-
-**(b) An empty seed is decrypted.** Reset writes `''`, not NULL
-(`handler/user_mfa_handler.go:738-744` passes `""`). `/mfaVerify` checks only
-NULL (`:483`, `if user.TOTPSeed == nil {`), so `''` fails in
-`auth.DecryptTOTPSeed` ("ciphertext too short", `auth/totp.go:114-115`) and
-the caller gets 500 "Failed to decrypt TOTP secret" (`:497-503`) instead of
-400 "Please restart MFA setup". `/mfaSetup` already treats nil and `''`
-alike (`:282`). A correctness bug: the web calls `/mfaSetup` first, but any
-direct API client hits it right after a reset.
-
-**Correction to doc/700 and PS0021 item 2.** Both say reset leaves
-`mfa_setup` true. It does not: `repository/user_repository.go:221` has read
-`SET totp_seed = $1, mfa_setup = false, ...` since `eba4e08` (2026-05-19).
-GRC's repository is identical and GRC changed nothing there. PS0021 item 2
-closes as already done.
-
-**(c) A successful login never clears the failure counters.** Each failure
-increments `loginfail-ip-<addr>` and `loginfail-user-<name>`
-(`handler/auth_handler.go:67,71`), living 5 minutes. The clear is commented
-out (`:245-250`, `// err = resetFailedAttempts(appServices.KV, ...)`).
-
-Consequence: six typos at 09:00, a good login at 09:01, one typo at 09:03,
-and the user is locked out for 5 minutes. A UX bug that reads as a security
-event. The dead helper (`:96-109`) is wrong if merely uncommented: it writes
-`"0"` with a 1 s TTL, and `Incr` honours a TTL only on create
-(`cache/kv.go:209-211`), so the next real failure inherits 1 s and vanishes.
-
-#### What GRC changed
-
-RG0003, commits `0d5146b` (Go) and `37978ce` (pytest). Paths under
-`src/internal/`.
-
-1. `model/grants.go:25-31` adds `GrantResetUserMFA = 9020`, commented as its
-   own authority, in all three maps (`AllKnownGrants` `:55`, `UserGrants`
-   `:74`, `GrantIDToShortCodeMap` `:87`). The handler checks it
-   (`handler/user_mfa_handler.go:620`,
-   `appHelper.CheckAuthorization(model.GrantResetUserMFA)`).
-2. `/mfaVerify` treats `''` as missing (`handler/user_mfa_handler.go:373`,
-   `if user.TOTPSeed == nil || *user.TOTPSeed == "" {`), answering 400
-   `TOTP_SECRET_MISSING`. The doc's ref `:536-543` is the counter clear.
-3. `resetFailedAttempts` `Del`s both counter keys
-   (`handler/auth_handler.go:135-154`); `resetFailedAttemptsOrLog`
-   (`:156-172`) logs a failure without failing the login. Lock flags
-   (`loginlock-*`) stay: a locked account 429s before any password check.
-4. The clear runs only where a login completes: `/auth` for an
-   `mfa_exempt` user (`handler/auth_handler.go:483-490`) and the temp-token
-   branch of `/mfaVerify` (`handler/user_mfa_handler.go:537-543`). Not after
-   the password step of an MFA login, or anyone with the password but no
-   TOTP code could clear the counters at will.
-
-Tests: Go `TestAdminResetUserMFARequiresGrant9020`
-(`handler/user_mfa_handler_test.go:435`; 9003-only caller gets 403). pytest
-in `tests/test_zz_mfa_totp.py`: `:294` counters reset (6 fails, a success,
-3 fails, all 401); `:348` reset clears seed and `mfaSetup`, `/mfaVerify`
-asks to enrol; `:398` Basic user's reset is 403 naming `RESET_MFA_TOKEN`.
-
-#### Proposed fix for PROTO
-
-1. **`model/grants.go`**: add `GrantResetUserMFA = 9020` and
-   `"RESET_MFA_TOKEN"` to all three maps. Without the short-code entry the
-   403 at `security/app_helper.go:558-561` names `9020`, not the grant.
-   Update the expected maps in `model/user_grant_model_test.go:34-57,70-93`.
-2. **`handler/user_mfa_handler.go:684`**: check `model.GrantResetUserMFA`.
-3. **`handler/user_mfa_handler.go:483`**: `nil || *user.TOTPSeed == ""`.
-4. **`handler/auth_handler.go:96-109`**: two `kv.Del` calls plus GRC's doc
-   comment; add `resetFailedAttemptsOrLog`; delete `:245-250`. Call it after
-   `setAuthCookie` at `auth_handler.go:351` (exempt login) and at
-   `user_mfa_handler.go:619` (temp-token branch). `clientIP` is in scope
-   (`auth_handler.go:171`, `user_mfa_handler.go:509`).
-5. **Seed**: add 9020 to `Admin2` (`local-seed.sql:77`). Trap: GRC's
-   fixture is `bin/lib/test-db-fixture-logins.sql` plus a goose migration;
-   PROTO's is `local-seed.sql`. No migration (grants are code). A real
-   tenant whose admin group lacks 9020 loses reset on deploy; note it.
-6. **Docs**: extend the lockout sentence at
-   `doc/105-api-srv-tech-spec.md:194-197`: counters clear only where a login
-   completes (`/auth` for MFA-exempt, `/mfaVerify` with a temp token
-   otherwise). Close PS0021 items 1-3, item 2 as already done.
-7. **Traps**: GRC's helper var is `appHelper`, PROTO's `app`. GRC tests use
-   `stubUserRepository`; PROTO's use testify `MockUserRepository`. GRC's
-   `authCookieSessionMaxAge` is B029; keep PROTO's `0`.
-8. **Dependencies**: B008 (fail closed) and B009 (TOTP replay) edit the
-   same `/mfaVerify` branch; land together. B018/B019 (tenant 2, per-test
-   `X-Forwarded-For`) are needed for the counter pytest not to lock the
-   loopback IP.
-
-Tests:
-- Go: `TestAdminResetUserMFARequiresGrant9020` on `MockUserRepository`.
-- Go: after `resetFailedAttempts`, `Incr` returns 1 with the full window.
-- Go: `/mfaVerify` with seed `""` answers 400 `TOTP_SECRET_MISSING`.
-- pytest: port GRC `:294`, `:348`, `:398` into `tests/test_zz_mfa_totp.py`.
-
-#### Open question for Brandon
-
-Should a completed login clear the per-IP counter too, or only the
-per-username one? Clearing the IP key lets an attacker who owns any valid
-account log in every six guesses and keep the IP below 7 while spraying
-other names; behind NAT one user's success also wipes a colleague's
-strikes. Recommendation: clear only `loginfail-user-<name>` and let the IP
-key expire on its window, a one-line deviation from GRC.
-Brandon: Per User only
-
 ### B011 — Body caps on every login-layer write; 413, not 400
 
 - **Priority:** P1  **Area:** go-api, tests, docs
@@ -8848,3 +8711,141 @@ not penalised? Recommendation: count it, as GRC does; a legitimate double
 submit is one count out of seven and the answer stays indistinguishable
 from a wrong code.
 Brandon: yes
+
+### B010 — COMPLETED — PS0021: reset-MFA grant 9020; completed login clears counters
+- **Completed:** 2026-10-02. New `GrantResetUserMFA = 9020` (`RESET_MFA_TOKEN`) in all three maps of `model/grants.go`, and `/admin/resetUserMFA` checks it instead of 9003; `/mfaVerify` treats an empty seed like NULL (400 `TOTP_SECRET_MISSING`). A completed login (`/auth` for an MFA-exempt user, the temp-token branch of `/mfaVerify`) `Del`s only `loginfail-user-<name>` via `resetFailedAttemptsOrLog` (auth_handler.go; logs, never fails the login); per Brandon the per-IP counter is left to its window, a deviation from GRC. No migration: groups and their grant arrays are fixture rows only, so `local-seed.sql` gives `Admin2` 9020; a real tenant's admin group needs 9020 added by hand. Go tests in auth_handler_test.go / user_mfa_handler_test.go (the existing reset test now uses 9020), pytest 403 case and success-between-typos case, doc/105. Tests: all green, go=260 unit=41 e2e=9 py=75
+
+- **Priority:** P1  **Area:** go-api, tests, docs, tickets
+- **GRC:** `src/internal/model/grants.go:25-31,52,74,87`; `handler/user_mfa_handler.go:614-620,536-543`; `handler/auth_handler.go:135-177,483-490`; tests `user_mfa_handler_test.go:435-497`, `tests/test_zz_mfa_totp.py:294-346,348-396,398-415,506-518`; `tickets/03-done/RG0003-mfa-temp-token-and-loose-ends/RG0003-mfa-temp-token-and-loose-ends.md:67,81,101-109`   **PROTO:** `src/api-srv/internal/model/grants.go:20-30`; `handler/user_mfa_handler.go:684` (9003), `:483`, `:620-630`; `handler/auth_handler.go:96-110,245-251` (commented :246); `constants/grants.ts:21`; `tests/test_zz_mfa_totp.py:110-116`; `tickets/01-open/PS0021-mfa-loose-ends.md:20-47`; `doc/105-api-srv-tech-spec.md` \~\`:183-200\`
+- **Ticket:** RG0003 / `0d5146b`, `37978ce`; closes PS0021 items 1, 3
+- **What:** (a) Web gates reset on 9020, API checks 9003; GRC checks 9020,
+clears seed + `mfa_setup`, 400s on a nil or `''` seed (PROTO :483: nil only).
+(b) Counters never clear on success; GRC `Del`s both after a completed login
+(after `/mfaVerify`).
+- **Port notes:** `Del`, not `"0"` 1 s (`Incr` keeps TTL). Write "where a login
+completes" into doc/105, PS0021. Open: per-IP clear behind NAT.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+PROTO Go paths are under `src/api-srv/internal/`. PS0021 filed three MFA
+loose ends. Two are real; one was fixed before PS0021 was written.
+
+**(a) Grant 9020 exists only on the web.** The web gates Reset MFA on a
+grant the API does not know (`src/web-app/constants/grants.ts:21`
+`RESET_MFA_TOKEN: 9020`; `src/web-app/pages/app-user-edit-page.tsx:313`).
+`model/grants.go:18-31` stops at 9015, and the route checks the general edit
+grant (`handler/user_mfa_handler.go:684`):
+
+```go
+app.CheckAuthorization(model.GrantUserUpdate)   // 9003
+```
+
+Consequence: anyone who can edit a user can strip that user's second factor,
+returning the account to password-only. A privilege-separation hole. It
+looks right only because the tenant 1 Admin group carries both 9003 and 9020
+(`src/api-srv/sql/fixtures/local-seed.sql:52`). A group with 9003 and no
+9020 gets an API that resets and a web that hides the button; the tenant 2
+`Admin2` group (`local-seed.sql:77`) is exactly that shape.
+
+**(b) An empty seed is decrypted.** Reset writes `''`, not NULL
+(`handler/user_mfa_handler.go:738-744` passes `""`). `/mfaVerify` checks only
+NULL (`:483`, `if user.TOTPSeed == nil {`), so `''` fails in
+`auth.DecryptTOTPSeed` ("ciphertext too short", `auth/totp.go:114-115`) and
+the caller gets 500 "Failed to decrypt TOTP secret" (`:497-503`) instead of
+400 "Please restart MFA setup". `/mfaSetup` already treats nil and `''`
+alike (`:282`). A correctness bug: the web calls `/mfaSetup` first, but any
+direct API client hits it right after a reset.
+
+**Correction to doc/700 and PS0021 item 2.** Both say reset leaves
+`mfa_setup` true. It does not: `repository/user_repository.go:221` has read
+`SET totp_seed = $1, mfa_setup = false, ...` since `eba4e08` (2026-05-19).
+GRC's repository is identical and GRC changed nothing there. PS0021 item 2
+closes as already done.
+
+**(c) A successful login never clears the failure counters.** Each failure
+increments `loginfail-ip-<addr>` and `loginfail-user-<name>`
+(`handler/auth_handler.go:67,71`), living 5 minutes. The clear is commented
+out (`:245-250`, `// err = resetFailedAttempts(appServices.KV, ...)`).
+
+Consequence: six typos at 09:00, a good login at 09:01, one typo at 09:03,
+and the user is locked out for 5 minutes. A UX bug that reads as a security
+event. The dead helper (`:96-109`) is wrong if merely uncommented: it writes
+`"0"` with a 1 s TTL, and `Incr` honours a TTL only on create
+(`cache/kv.go:209-211`), so the next real failure inherits 1 s and vanishes.
+
+#### What GRC changed
+
+RG0003, commits `0d5146b` (Go) and `37978ce` (pytest). Paths under
+`src/internal/`.
+
+1. `model/grants.go:25-31` adds `GrantResetUserMFA = 9020`, commented as its
+   own authority, in all three maps (`AllKnownGrants` `:55`, `UserGrants`
+   `:74`, `GrantIDToShortCodeMap` `:87`). The handler checks it
+   (`handler/user_mfa_handler.go:620`,
+   `appHelper.CheckAuthorization(model.GrantResetUserMFA)`).
+2. `/mfaVerify` treats `''` as missing (`handler/user_mfa_handler.go:373`,
+   `if user.TOTPSeed == nil || *user.TOTPSeed == "" {`), answering 400
+   `TOTP_SECRET_MISSING`. The doc's ref `:536-543` is the counter clear.
+3. `resetFailedAttempts` `Del`s both counter keys
+   (`handler/auth_handler.go:135-154`); `resetFailedAttemptsOrLog`
+   (`:156-172`) logs a failure without failing the login. Lock flags
+   (`loginlock-*`) stay: a locked account 429s before any password check.
+4. The clear runs only where a login completes: `/auth` for an
+   `mfa_exempt` user (`handler/auth_handler.go:483-490`) and the temp-token
+   branch of `/mfaVerify` (`handler/user_mfa_handler.go:537-543`). Not after
+   the password step of an MFA login, or anyone with the password but no
+   TOTP code could clear the counters at will.
+
+Tests: Go `TestAdminResetUserMFARequiresGrant9020`
+(`handler/user_mfa_handler_test.go:435`; 9003-only caller gets 403). pytest
+in `tests/test_zz_mfa_totp.py`: `:294` counters reset (6 fails, a success,
+3 fails, all 401); `:348` reset clears seed and `mfaSetup`, `/mfaVerify`
+asks to enrol; `:398` Basic user's reset is 403 naming `RESET_MFA_TOKEN`.
+
+#### Proposed fix for PROTO
+
+1. **`model/grants.go`**: add `GrantResetUserMFA = 9020` and
+   `"RESET_MFA_TOKEN"` to all three maps. Without the short-code entry the
+   403 at `security/app_helper.go:558-561` names `9020`, not the grant.
+   Update the expected maps in `model/user_grant_model_test.go:34-57,70-93`.
+2. **`handler/user_mfa_handler.go:684`**: check `model.GrantResetUserMFA`.
+3. **`handler/user_mfa_handler.go:483`**: `nil || *user.TOTPSeed == ""`.
+4. **`handler/auth_handler.go:96-109`**: two `kv.Del` calls plus GRC's doc
+   comment; add `resetFailedAttemptsOrLog`; delete `:245-250`. Call it after
+   `setAuthCookie` at `auth_handler.go:351` (exempt login) and at
+   `user_mfa_handler.go:619` (temp-token branch). `clientIP` is in scope
+   (`auth_handler.go:171`, `user_mfa_handler.go:509`).
+5. **Seed**: add 9020 to `Admin2` (`local-seed.sql:77`). Trap: GRC's
+   fixture is `bin/lib/test-db-fixture-logins.sql` plus a goose migration;
+   PROTO's is `local-seed.sql`. No migration (grants are code). A real
+   tenant whose admin group lacks 9020 loses reset on deploy; note it.
+6. **Docs**: extend the lockout sentence at
+   `doc/105-api-srv-tech-spec.md:194-197`: counters clear only where a login
+   completes (`/auth` for MFA-exempt, `/mfaVerify` with a temp token
+   otherwise). Close PS0021 items 1-3, item 2 as already done.
+7. **Traps**: GRC's helper var is `appHelper`, PROTO's `app`. GRC tests use
+   `stubUserRepository`; PROTO's use testify `MockUserRepository`. GRC's
+   `authCookieSessionMaxAge` is B029; keep PROTO's `0`.
+8. **Dependencies**: B008 (fail closed) and B009 (TOTP replay) edit the
+   same `/mfaVerify` branch; land together. B018/B019 (tenant 2, per-test
+   `X-Forwarded-For`) are needed for the counter pytest not to lock the
+   loopback IP.
+
+Tests:
+- Go: `TestAdminResetUserMFARequiresGrant9020` on `MockUserRepository`.
+- Go: after `resetFailedAttempts`, `Incr` returns 1 with the full window.
+- Go: `/mfaVerify` with seed `""` answers 400 `TOTP_SECRET_MISSING`.
+- pytest: port GRC `:294`, `:348`, `:398` into `tests/test_zz_mfa_totp.py`.
+
+#### Open question for Brandon
+
+Should a completed login clear the per-IP counter too, or only the
+per-username one? Clearing the IP key lets an attacker who owns any valid
+account log in every six guesses and keep the IP below 7 while spraying
+other names; behind NAT one user's success also wipes a colleague's
+strikes. Recommendation: clear only `loginfail-user-<name>` and let the IP
+key expire on its window, a one-line deviation from GRC.
+Brandon: Per User only

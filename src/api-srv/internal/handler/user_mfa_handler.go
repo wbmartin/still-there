@@ -492,8 +492,8 @@ func MFAVerifyHandler(
 			return
 		}
 
-		// Decrypt TOTP secret
-		if user.TOTPSeed == nil {
+		// Decrypt TOTP secret; an admin reset leaves '' rather than NULL
+		if user.TOTPSeed == nil || *user.TOTPSeed == "" {
 			app.WriteError(
 				w,
 				http.StatusBadRequest,
@@ -655,6 +655,8 @@ func MFAVerifyHandler(
 
 			// Set JWT cookie
 			setAuthCookie(w, jwt, 0)
+			// The login completes here (password step, then this code)
+			resetFailedAttemptsOrLog(appServices, userName)
 
 			// CSRF token
 			csrfToken := sessionID[len(sessionID)-3:]
@@ -719,7 +721,7 @@ func AdminResetUserMFAHandler(
 		app.CheckJWT()
 		app.CheckRateLimitAndUserBlock()
 		app.CheckCSRF()
-		app.CheckAuthorization(model.GrantUserUpdate)
+		app.CheckAuthorization(model.GrantResetUserMFA)
 
 		if !app.CheckAllChecksComplete() {
 			return
