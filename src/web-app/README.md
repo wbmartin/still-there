@@ -63,15 +63,18 @@ in memory.
 
 ## API Errors
 
-Every call goes through `utils/api.ts` (`apiJson`, or `apiRequest` +
-`throwForFailedResponse`). A failure becomes one of:
+Every call goes through `apiJson` in `utils/api.ts`; it is the only
+export that touches the network (the raw request function is private, and
+ESLint's `no-restricted-globals` keeps `fetch` out of app code). A 2xx
+comes back parsed; no caller reads `response.ok`. A failure becomes one
+of:
 
 | Thrown | When | Who reacts |
 |---|---|---|
 | `ApiUnreachableError` | `fetch` itself failed (API down, connection dropped), or a **5xx** or **429** (nginx's 502 while the API restarts, the per-minute rate limit, an account lockout); `status` is set for the last two, with the server's message | `stores/api-status-store.ts` raises one banner above the page ("still signed in"), cleared by the next 2xx; the page-load `/refresh` retries at 1/2/4 s, then sets `authState` `"UNREACHABLE"` |
 | `SessionExpiredError` | **401** on a call that was not `anonymous` — `CheckJWT`'s answer to a missing, invalid, expired or revoked `auth` cookie | `stores/auth-store.ts`, subscribed to `session-expired`: the one sign-out path, and only from an established session |
-| `SessionChangedError` | a write refused for CSRF whose `/refresh` shows another user or tenant (another tab) | `apiRequest` has already moved the tab to that identity |
-| plain `Error` | everything else: 400, **403**, 404, 409 | the calling store or page |
+| `SessionChangedError` | a write refused for CSRF whose `/refresh` shows another user or tenant (another tab) | `utils/api.ts` has already moved the tab to that identity |
+| `ApiError` | everything else: 400, **403**, 404, 409; `status` set, the server's message (`SessionExpiredError` is a subclass) | the calling store or page; `isApiStatus(err, 404)` picks out one it expects |
 
 `utils/api.ts` announces each call's outcome through `subscribeApiOutcome`
 (`ok` on a 2xx, `unreachable`, `session-expired`); the api status store
@@ -81,14 +84,17 @@ toasted as "Session ended". The CSRF resync's own `/refresh` is a single
 attempt, neither retried nor announced.
 
 A **403 is not an expired session**. The API answers 403 for a missing
-grant, a blocked account, a CSRF token `apiRequest` could not resync
+grant, a blocked account, a CSRF token `utils/api.ts` could not resync
 (it retries a `"code": "CSRF"` refusal once after `/refresh`) and a
 cross-tenant refusal; signing in again fixes none of them, so signing out
 on one would send a signed-in user to the login page for the first call
 their role may not make, behind the wrong reason ("Session ended").
 
-`anonymous: true` marks the pre-session calls (`/auth`, `/mfaVerify`),
-where a 401 means a wrong password or code and must not touch the session.
+`anonymous: true` marks the calls made without a session (`/auth`,
+`/mfaSetup`, `/mfaVerify`, `/inviteCheck`, `/inviteRedeem`,
+`/userSelfCreate`) or leaving one (`/logoff`): no `X-CSRF-Token` header
+is sent, and a 401 means a wrong password or code (or a session already
+gone) and must not touch the session.
 The page-load `/refresh` (`authenticateWithAuthToken`) is separate: there
 a 401 or 403 (the block check) sets `authState` `"NO"`, an unreachable API
 is retried at 1, 2 and 4 s, and any other failure sets `"UNREACHABLE"`

@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { notifications } from "@mantine/notifications";
 import {
+  ApiError,
   SessionExpiredError,
+  apiJson,
   isSessionExpired,
-  throwForFailedResponse,
 } from "../utils/api";
 import { useAuthStore } from "../stores/auth-store";
 
@@ -37,22 +38,31 @@ const responseWith = (status: number, body: unknown = {}) =>
     headers: { "Content-Type": "application/json" },
   });
 
-const readMessage = async (response: Response) => {
-  const body = (await response.json()) as { error?: string };
-  return body.error || `Request failed (${response.status})`;
+// Every call answers with this status (a fresh Response each time).
+const answerAll = (status: number, body: unknown = {}) => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.resolve(responseWith(status, body))),
+  );
 };
 
-describe("throwForFailedResponse", () => {
+const callWith = (status: number, body: unknown = {}) => {
+  answerAll(status, body);
+  return apiJson<unknown>("/example");
+};
+
+describe("apiJson session handling", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     resetAuthStore();
   });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it("throws SessionExpiredError and signs the app out on 401", async () => {
     const toast = vi.spyOn(notifications, "show");
-    await expect(
-      throwForFailedResponse(responseWith(401), readMessage),
-    ).rejects.toBeInstanceOf(SessionExpiredError);
+    await expect(callWith(401)).rejects.toBeInstanceOf(SessionExpiredError);
 
     expect(useAuthStore.getState().authState).toBe("NO");
     expect(useAuthStore.getState().userName).toBe("");
@@ -65,12 +75,12 @@ describe("throwForFailedResponse", () => {
     // session-expired listener is the only caller of the "Session ended"
     // toast, so no toast means it never ran.
     const toast = vi.spyOn(notifications, "show");
-    const error = await throwForFailedResponse(
-      responseWith(403, { error: "Permission denied" }),
-      readMessage,
-    ).catch((error: unknown) => error);
+    const error = await callWith(403, { error: "Permission denied" }).catch(
+      (error: unknown) => error,
+    );
 
-    expect(error).toBeInstanceOf(Error);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(403);
     expect(error).not.toBeInstanceOf(SessionExpiredError);
     expect((error as Error).message).toBe("Permission denied");
     expect(toast).not.toHaveBeenCalled();
@@ -81,38 +91,47 @@ describe("throwForFailedResponse", () => {
   it("leaves other failures alone", async () => {
     // A 500 says nothing about the session. Signing the user out here is the
     // original bug in mirror image -- an outage reported as an expiry.
-    await expect(
-      throwForFailedResponse(responseWith(500), readMessage),
-    ).rejects.toThrow(Error);
-    await expect(
-      throwForFailedResponse(responseWith(500), readMessage),
-    ).rejects.not.toBeInstanceOf(SessionExpiredError);
+    await expect(callWith(500)).rejects.toThrow(Error);
+    await expect(callWith(500)).rejects.not.toBeInstanceOf(
+      SessionExpiredError,
+    );
 
     expect(useAuthStore.getState().authState).toBe("YES");
   });
 
   it("carries the server's message", async () => {
     await expect(
-      throwForFailedResponse(
-        responseWith(409, { error: "Someone else changed this first" }),
-        readMessage,
-      ),
+      callWith(409, { error: "Someone else changed this first" }),
     ).rejects.toThrow("Someone else changed this first");
   });
 
   it("does not stomp state when several requests fail at once", async () => {
     // A page with four in-flight reads gets four 401s. The first does the work;
     // the rest must not re-clear already-cleared state.
-    await expect(
-      throwForFailedResponse(responseWith(401), readMessage),
-    ).rejects.toThrow();
+    await expect(callWith(401)).rejects.toThrow();
     useAuthStore.setState({ error: "a later, more specific message" });
 
-    await expect(
-      throwForFailedResponse(responseWith(401), readMessage),
-    ).rejects.toThrow();
+    await expect(callWith(401)).rejects.toThrow();
 
     expect(useAuthStore.getState().error).toBe("a later, more specific message");
+  });
+
+  it("leaves the session alone on an anonymous 401", async () => {
+    // /auth's wrong password: an ApiError for the form, not a sign-out.
+    const toast = vi.spyOn(notifications, "show");
+    answerAll(401, { error: "Invalid credentials" });
+
+    const error = await apiJson<unknown>(
+      "/auth",
+      { method: "POST" },
+      { anonymous: true },
+    ).catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).not.toBeInstanceOf(SessionExpiredError);
+    expect((error as ApiError).message).toBe("Invalid credentials");
+    expect(toast).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().authState).toBe("YES");
   });
 
   it("identifies its own error type", () => {

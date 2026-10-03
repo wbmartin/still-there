@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { notifications } from "@mantine/notifications";
 import {
+  ApiError,
   SessionChangedError,
-  apiRequest,
+  apiJson,
   getCsrfToken,
   setCsrfToken,
 } from "../utils/api";
@@ -13,7 +14,7 @@ import { ROUTES } from "../constants/routes";
 
 // Every tab shares the session cookie but holds its own CSRF token. When
 // another tab signs in or switches tenant the cookie moves to a new session
-// and this tab's next write is refused 403 "code":"CSRF". apiRequest heals
+// and this tab's next write is refused 403 "code":"CSRF". apiJson heals
 // that once through /refresh -- unless the cookie now belongs to someone
 // else, in which case the write is dropped and the tab moves to them.
 
@@ -61,11 +62,24 @@ const calledPaths = (fetchMock: ReturnType<typeof stubFetch>) =>
 const sentToken = (fetchMock: ReturnType<typeof stubFetch>, call: number) =>
   new Headers(fetchMock.mock.calls[call][1]?.headers).get("X-CSRF-Token");
 
+// The status a call was refused with, or 200 when it resolved.
+const statusOf = (call: Promise<unknown>) =>
+  call.then(
+    () => 200,
+    (error: unknown) => {
+      if (error instanceof ApiError) return error.status;
+      throw error;
+    },
+  );
+
+const send = (url: string, options: RequestInit = {}) =>
+  statusOf(apiJson<unknown>(url, options));
+
 const navigateSpy = vi.fn();
 const cacheClearSpy = vi.fn();
 registerCacheClearer(cacheClearSpy);
 
-describe("apiRequest CSRF resync", () => {
+describe("apiJson CSRF resync", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setRouteNavigator(navigateSpy);
@@ -90,9 +104,9 @@ describe("apiRequest CSRF resync", () => {
       "/refresh": [() => refreshAnswer()],
     });
 
-    const response = await apiRequest("/example", { method: "POST" });
+    const status = await send("/example", { method: "POST" });
 
-    expect(response.status).toBe(200);
+    expect(status).toBe(200);
     expect(calledPaths(fetchMock)).toEqual([
       "/api/example",
       "/api/refresh",
@@ -110,18 +124,18 @@ describe("apiRequest CSRF resync", () => {
       "/refresh": [() => refreshAnswer()],
     });
 
-    const response = await apiRequest("/example", { method: "PUT" });
+    const status = await send("/example", { method: "PUT" });
 
-    expect(response.status).toBe(403);
+    expect(status).toBe(403);
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("leaves a refused GET alone", async () => {
     const fetchMock = stubFetch({ "/example": [() => csrfRefusal()] });
 
-    const response = await apiRequest("/example");
+    const status = await send("/example");
 
-    expect(response.status).toBe(403);
+    expect(status).toBe(403);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -130,9 +144,9 @@ describe("apiRequest CSRF resync", () => {
       "/example": [() => json(403, { error: "Access denied" })],
     });
 
-    const response = await apiRequest("/example", { method: "DELETE" });
+    const status = await send("/example", { method: "DELETE" });
 
-    expect(response.status).toBe(403);
+    expect(status).toBe(403);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -142,9 +156,9 @@ describe("apiRequest CSRF resync", () => {
       "/refresh": [() => json(401, { error: "Unauthorized" })],
     });
 
-    const response = await apiRequest("/example", { method: "POST" });
+    const status = await send("/example", { method: "POST" });
 
-    expect(response.status).toBe(403);
+    expect(status).toBe(403);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(getCsrfToken()).toBe("old");
   });
@@ -161,12 +175,12 @@ describe("apiRequest CSRF resync", () => {
     });
 
     const [first, second] = await Promise.all([
-      apiRequest("/example", { method: "POST" }),
-      apiRequest("/example", { method: "POST" }),
+      send("/example", { method: "POST" }),
+      send("/example", { method: "POST" }),
     ]);
 
-    expect(first.status).toBe(200);
-    expect(second.status).toBe(200);
+    expect(first).toBe(200);
+    expect(second).toBe(200);
     expect(
       calledPaths(fetchMock).filter((path) => path === "/api/refresh"),
     ).toHaveLength(1);
@@ -185,10 +199,10 @@ describe("apiRequest CSRF resync", () => {
 
       await Promise.all([
         expect(
-          apiRequest("/example", { method: "POST" }),
+          apiJson("/example", { method: "POST" }),
         ).rejects.toBeInstanceOf(SessionChangedError),
         expect(
-          apiRequest("/example", { method: "POST" }),
+          apiJson("/example", { method: "POST" }),
         ).rejects.toBeInstanceOf(SessionChangedError),
       ]);
 

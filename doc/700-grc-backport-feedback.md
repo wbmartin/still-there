@@ -242,128 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B037 — Web: one fetch path; unexport `apiRequest`
-
-- **Priority:** P2  **Area:** web-app, docs
-- **GRC:** `utils/api.ts:1-34,221-279`; `README.md:33-43,67-71`; `CLAUDE.md:79-84`   **PROTO:** `utils/api.ts:34-56,149`; raw calls `stores/create-entity-store.ts:98-101,149-154,167-172,191-195`, `stores/app-user-store.ts:57-62,85-88`, `stores/app-user-group-store.ts:30-33`, `stores/examples-store.ts:22-26`, `stores/auth-store.ts:105-115,153`; `eslint.config.js:28,35`; `constants/api.ts:1-4`; `CLAUDE.md:51`
-- **Ticket:** RG0007 / `b659bea`, `3ddb71d`
-- **What:** PROTO exports the raw fetch; each store re-does `!response.ok`; CSRF
-goes on anonymous calls. GRC: one path (`apiJson` + `jsonBody`), no CSRF on
-anonymous.
-- **Port notes:** Keep PROTO's store design; swap fetches. CLAUDE.md "Web:"
-bullet (apiJson only, console only in `report-error.ts`, kebab-case, mirrors
-name source); skip max-len 200.
-- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Web paths are under `src/web-app/`. `utils/api.ts` offers two ways to
-call the API, and the stores use the raw one for most entity traffic.
-
-1. **Raw path exported.** `apiRequest` (`utils/api.ts:34-57`) returns the
-   bare `Response`; `:149` exports it. `apiJson` (`:129-141`) wraps it and
-   throws on non-2xx, but is used at only 11 sites. Ten calls in five
-   files take the raw path and repeat the same three steps:
-   ```ts
-   // stores/create-entity-store.ts:149, 154-155
-   const response = await apiRequest(config.itemEndpoint, {
-   if (!response.ok) {
-     await throwForFailedResponse(response, readErrorMessage);
-   ```
-   Sites: `stores/create-entity-store.ts:98,149,167,191` (every entity
-   list, create, update, delete), `stores/app-user-store.ts:57,85`,
-   `stores/app-user-group-store.ts:30`, `stores/examples-store.ts:22`,
-   `stores/auth-store.ts:105,153` (`/refresh`, `/logoff`).
-2. **Consequence.** Every rule about API errors has to be applied in ten
-   places, or in `apiRequest` before any caller sees a status. B004's
-   adapted fix already hit this: its step 5 put the CSRF retry in
-   `apiRequest` "not `apiJson`" because entity writes bypass `apiJson`.
-   B006 (401-only sign-out) and B036 (5xx/429 as unreachable) have the
-   same problem. A new store copying any of these sites inherits the
-   pattern; nothing stops a bare `fetch` either.
-3. **CSRF on anonymous calls.** `apiRequest` sets `X-CSRF-Token` whenever
-   a token is in memory (`utils/api.ts:40-43`). `anonymous: true`
-   (`:132`, used by `/auth`, MFA setup/verify and self-registration) only
-   changes how a failure is classified (`:136`); a leftover token from an
-   ended session still rides on `/auth`. The server skips CSRF there, so
-   nothing breaks. Quality gap, not a hole.
-
-Overall: a quality/DX gap that makes B004, B006 and B036 harder to land
-correctly.
-
-#### What GRC changed
-
-RG0007, commits `b659bea` and `3ddb71d`.
-
-- `apiRequest` is unexported, not renamed. Header of
-  `src/web-app/utils/api.ts:21-23`: "a second, raw path is how
-  `response.ok` handling grew in nine files". 33 call sites in 10 files
-  moved to `apiJson`.
-- `apiJson` (`:221-279`) always reads the body (an unread refused body
-  left Chromium requests "in flight" and stalled network-idle waits),
-  returns the parsed envelope, and throws an `Error` with the API's
-  `{"error"}` text. No caller reads `response.ok`.
-- `anonymous: true` now withholds the CSRF header (`:237`,
-  `if (!options.anonymous && token)`).
-- Later, RG0018 and `45d263d` built the error classes, the outcome seam
-  and the CSRF resync into the same function (`:270-272`), which only
-  works because nothing bypasses it.
-- `CLAUDE.md:79-84`: a "Web (RG0007)" rule: `apiJson` only, `console.*`
-  only in `utils/report-error.ts`, kebab-case files, mirrors name the Go
-  file they mirror.
-
-Tests: `src/web-app/utils/api.test.ts:150` (CSRF header on a session
-call, withheld from an anonymous one) plus the classification cases.
-No lint rule bans a raw `fetch`; unexporting is the only guard.
-
-#### Proposed fix for PROTO
-
-1. **Move the ten sites to `apiJson`/`jsonBody`.** Keep PROTO's store
-   factory and its shapes; only the call changes, e.g.
-   `const body = await apiJson<{data?: TEntity[]}>(url)`. The DELETE in
-   `create-entity-store.ts:191` stays body-less.
-2. **`auth-store` `/refresh` (`:105`)** moves to `apiJson` and maps typed
-   errors: `ApiUnreachableError` to `UNREACHABLE`, anything else to `NO`.
-   Trap: `apiJson` fires the session-expired listener on 401, and the
-   guard at `stores/auth-store.ts:226` only skips `NO`, so the login page
-   would toast "Session ended" during `CHECKING`. Change the guard to
-   `!== "YES"` here (B036 needs the same).
-3. **Unexport**: delete `:149`; make `throwForFailedResponse` private.
-   Update the `apiRequest` mention in `constants/api.ts:4`.
-4. **Anonymous calls send no CSRF header**: pass `anonymous` down to the
-   private request function.
-5. **Reconcile with B004.** Brandon's B004 decision puts the CSRF resync
-   and retry in `apiRequest`. That still holds: `apiRequest` becomes the
-   private function `apiJson` calls, so the retry sits below every call
-   and B037 removes the only way around it. B004's reason for avoiding
-   `apiJson` (writes bypass it) disappears, but moving the retry up buys
-   nothing. Keep the B004 resync's own `/refresh` on a direct `fetch`
-   inside `api.ts`, so it cannot recurse into the retry. **Order:** B037
-   first, then B004, then B006 and B036. B004's vitest cases then run
-   through `apiJson` only, and its "an entity-store write heals" case
-   comes free.
-6. **Optional, PROTO-only guard**: `no-restricted-globals` for `fetch`
-   in `eslint.config.js`, with an override for `utils/api.ts` and
-   `tests/**`, next to the `no-console` pair at `:28` and `:35`.
-7. **`CLAUDE.md`**: add a "Web" bullet after `:51` (apiJson only; console
-   only in `report-error.ts`; kebab-case; `constants/api.ts` and
-   `constants/grants.ts` name the Go file they mirror). Skip GRC's
-   `max-len` 200; PROTO keeps ~80. Add a header to `constants/grants.ts`
-   naming `model/grants.go` (`constants/api.ts:1-4` already has one).
-
-Tests (vitest): rewrite `tests/api-unreachable.test.ts`, which imports
-`apiRequest` (`:2`), against `apiJson`; CSRF header present on a session
-call and absent on `anonymous`; one entity-store create, update, delete
-through mocked `fetch`; `tests/session-expired.test.ts` moves from
-`throwForFailedResponse` to `apiJson`. `npm run lint`, `tsc`, vitest.
-
-#### Open question for Brandon
-
-None. The B004 placement question resolves itself: the retry stays in
-`apiRequest`, now private, and B037 lands first.
-
 ### B038 — Wire renames: `pwHash` -&gt; `password`; `fooList` keys
 
 - **Priority:** P2  **Area:** go-api, web-app, tests
@@ -8897,3 +8775,126 @@ since PROTO's bucket resets each minute and the banner clears itself on
 the next success.
 
 Brandon: banner
+
+### B037 — COMPLETED — Web: one fetch path; unexport `apiRequest`
+- **Completed:** 2026-10-03. Pulled. `utils/api.ts`: `apiRequest` is private (export and `throwForFailedResponse`/`readErrorMessage` exports gone); `apiJson` is the one way to the API. It always reads the body (an empty 200 or 204 is `undefined`), throws `ApiUnreachableError` (5xx/429/failed fetch, unchanged from B036), `SessionExpiredError` on a session 401 (announced), and otherwise a new `ApiError` carrying `status` and the server's message (`SessionExpiredError` now extends it; `isApiStatus(err, ...statusList)` helper). `anonymous: true` now withholds `X-CSRF-Token` and skips the B004 resync (the resync stays below every session call, its own `/refresh` still a direct unannounced `sendRequest`). Moved to `apiJson`: every `create-entity-store` call (list, create, update, body-less DELETE), `app-user-store` group change and `readUserById`, `app-user-group-store`, `examples-store` (404/400 still `null` via `isApiStatus`), `mfa-onboarding-page` `/mfaSetup` (anonymous; 409 via `isApiStatus`), and the auth store: the page-load `/refresh` (B036 step left over) maps `ApiError` 401/403 to `NO` and everything else to `UNREACHABLE` as before (its 401 announces session-expired, ignored because `authState` is `CHECKING`; B036 already made the guard `!== "YES"`); `/logoff` is `anonymous` (it skips CSRF server-side) so a 401 from an already-dead session raises no "Session ended" toast and is not reported. Optional step 6 taken: `no-restricted-globals` bans `fetch` outside `utils/api.ts` and `tests/**`. CLAUDE.md "Web:" bullet; `constants/grants.ts` header names `model/grants.go`; `constants/api.ts` comment; README "API Errors" (one path, `ApiError` row, anonymous list). Deviations: GRC throws a plain `Error`; PROTO adds `ApiError.status` because `/refresh`, `examples-store` and `/mfaSetup` act on a specific status. Tests: `session-expired.test.ts` and `csrf-resync.test.ts` now drive `apiJson` through stubbed `fetch` (+1 anonymous-401 case); `entity-store-cache` mocks are real `Response`s; `api-unreachable` +1 (`/refresh` 404 is `UNREACHABLE`, no retry; unparsable 200 now a real `Response`); new `tests/api-json.test.ts` (11: CSRF header on session call, absent on anonymous, empty 200/204, status on refusal, entity create/update/delete request shape, refused write leaves cache, `readExampleById` 404/400/403, quiet `/logoff` 401). All green: go=429 unit=80 e2e=12 py=96, govulncheck clean, `gofmt -l` empty, eslint and tsc clean.
+
+- **Priority:** P2  **Area:** web-app, docs
+- **GRC:** `utils/api.ts:1-34,221-279`; `README.md:33-43,67-71`; `CLAUDE.md:79-84`   **PROTO:** `utils/api.ts:34-56,149`; raw calls `stores/create-entity-store.ts:98-101,149-154,167-172,191-195`, `stores/app-user-store.ts:57-62,85-88`, `stores/app-user-group-store.ts:30-33`, `stores/examples-store.ts:22-26`, `stores/auth-store.ts:105-115,153`; `eslint.config.js:28,35`; `constants/api.ts:1-4`; `CLAUDE.md:51`
+- **Ticket:** RG0007 / `b659bea`, `3ddb71d`
+- **What:** PROTO exports the raw fetch; each store re-does `!response.ok`; CSRF
+goes on anonymous calls. GRC: one path (`apiJson` + `jsonBody`), no CSRF on
+anonymous.
+- **Port notes:** Keep PROTO's store design; swap fetches. CLAUDE.md "Web:"
+bullet (apiJson only, console only in `report-error.ts`, kebab-case, mirrors
+name source); skip max-len 200.
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Web paths are under `src/web-app/`. `utils/api.ts` offers two ways to
+call the API, and the stores use the raw one for most entity traffic.
+
+1. **Raw path exported.** `apiRequest` (`utils/api.ts:34-57`) returns the
+   bare `Response`; `:149` exports it. `apiJson` (`:129-141`) wraps it and
+   throws on non-2xx, but is used at only 11 sites. Ten calls in five
+   files take the raw path and repeat the same three steps:
+   ```ts
+   // stores/create-entity-store.ts:149, 154-155
+   const response = await apiRequest(config.itemEndpoint, {
+   if (!response.ok) {
+     await throwForFailedResponse(response, readErrorMessage);
+   ```
+   Sites: `stores/create-entity-store.ts:98,149,167,191` (every entity
+   list, create, update, delete), `stores/app-user-store.ts:57,85`,
+   `stores/app-user-group-store.ts:30`, `stores/examples-store.ts:22`,
+   `stores/auth-store.ts:105,153` (`/refresh`, `/logoff`).
+2. **Consequence.** Every rule about API errors has to be applied in ten
+   places, or in `apiRequest` before any caller sees a status. B004's
+   adapted fix already hit this: its step 5 put the CSRF retry in
+   `apiRequest` "not `apiJson`" because entity writes bypass `apiJson`.
+   B006 (401-only sign-out) and B036 (5xx/429 as unreachable) have the
+   same problem. A new store copying any of these sites inherits the
+   pattern; nothing stops a bare `fetch` either.
+3. **CSRF on anonymous calls.** `apiRequest` sets `X-CSRF-Token` whenever
+   a token is in memory (`utils/api.ts:40-43`). `anonymous: true`
+   (`:132`, used by `/auth`, MFA setup/verify and self-registration) only
+   changes how a failure is classified (`:136`); a leftover token from an
+   ended session still rides on `/auth`. The server skips CSRF there, so
+   nothing breaks. Quality gap, not a hole.
+
+Overall: a quality/DX gap that makes B004, B006 and B036 harder to land
+correctly.
+
+#### What GRC changed
+
+RG0007, commits `b659bea` and `3ddb71d`.
+
+- `apiRequest` is unexported, not renamed. Header of
+  `src/web-app/utils/api.ts:21-23`: "a second, raw path is how
+  `response.ok` handling grew in nine files". 33 call sites in 10 files
+  moved to `apiJson`.
+- `apiJson` (`:221-279`) always reads the body (an unread refused body
+  left Chromium requests "in flight" and stalled network-idle waits),
+  returns the parsed envelope, and throws an `Error` with the API's
+  `{"error"}` text. No caller reads `response.ok`.
+- `anonymous: true` now withholds the CSRF header (`:237`,
+  `if (!options.anonymous && token)`).
+- Later, RG0018 and `45d263d` built the error classes, the outcome seam
+  and the CSRF resync into the same function (`:270-272`), which only
+  works because nothing bypasses it.
+- `CLAUDE.md:79-84`: a "Web (RG0007)" rule: `apiJson` only, `console.*`
+  only in `utils/report-error.ts`, kebab-case files, mirrors name the Go
+  file they mirror.
+
+Tests: `src/web-app/utils/api.test.ts:150` (CSRF header on a session
+call, withheld from an anonymous one) plus the classification cases.
+No lint rule bans a raw `fetch`; unexporting is the only guard.
+
+#### Proposed fix for PROTO
+
+1. **Move the ten sites to `apiJson`/`jsonBody`.** Keep PROTO's store
+   factory and its shapes; only the call changes, e.g.
+   `const body = await apiJson<{data?: TEntity[]}>(url)`. The DELETE in
+   `create-entity-store.ts:191` stays body-less.
+2. **`auth-store` `/refresh` (`:105`)** moves to `apiJson` and maps typed
+   errors: `ApiUnreachableError` to `UNREACHABLE`, anything else to `NO`.
+   Trap: `apiJson` fires the session-expired listener on 401, and the
+   guard at `stores/auth-store.ts:226` only skips `NO`, so the login page
+   would toast "Session ended" during `CHECKING`. Change the guard to
+   `!== "YES"` here (B036 needs the same).
+3. **Unexport**: delete `:149`; make `throwForFailedResponse` private.
+   Update the `apiRequest` mention in `constants/api.ts:4`.
+4. **Anonymous calls send no CSRF header**: pass `anonymous` down to the
+   private request function.
+5. **Reconcile with B004.** Brandon's B004 decision puts the CSRF resync
+   and retry in `apiRequest`. That still holds: `apiRequest` becomes the
+   private function `apiJson` calls, so the retry sits below every call
+   and B037 removes the only way around it. B004's reason for avoiding
+   `apiJson` (writes bypass it) disappears, but moving the retry up buys
+   nothing. Keep the B004 resync's own `/refresh` on a direct `fetch`
+   inside `api.ts`, so it cannot recurse into the retry. **Order:** B037
+   first, then B004, then B006 and B036. B004's vitest cases then run
+   through `apiJson` only, and its "an entity-store write heals" case
+   comes free.
+6. **Optional, PROTO-only guard**: `no-restricted-globals` for `fetch`
+   in `eslint.config.js`, with an override for `utils/api.ts` and
+   `tests/**`, next to the `no-console` pair at `:28` and `:35`.
+7. **`CLAUDE.md`**: add a "Web" bullet after `:51` (apiJson only; console
+   only in `report-error.ts`; kebab-case; `constants/api.ts` and
+   `constants/grants.ts` name the Go file they mirror). Skip GRC's
+   `max-len` 200; PROTO keeps ~80. Add a header to `constants/grants.ts`
+   naming `model/grants.go` (`constants/api.ts:1-4` already has one).
+
+Tests (vitest): rewrite `tests/api-unreachable.test.ts`, which imports
+`apiRequest` (`:2`), against `apiJson`; CSRF header present on a session
+call and absent on `anonymous`; one entity-store create, update, delete
+through mocked `fetch`; `tests/session-expired.test.ts` moves from
+`throwForFailedResponse` to `apiJson`. `npm run lint`, `tsc`, vitest.
+
+#### Open question for Brandon
+
+None. The B004 placement question resolves itself: the retry stays in
+`apiRequest`, now private, and B037 lands first.

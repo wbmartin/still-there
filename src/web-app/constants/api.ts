@@ -1,7 +1,7 @@
 // Every API path the web app calls. Mirrors the routes in
 // src/api-srv/cmd/server/main.go by hand -- the two lists are maintained
 // separately on purpose (no generator, no build-time coupling); when a route
-// is added there, add it here. apiRequest/apiJson take one of these.
+// is added there, add it here. apiJson takes one of these.
 export const API_ENDPOINTS = {
   // Session
   AUTH: "/auth",

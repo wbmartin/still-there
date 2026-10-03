@@ -7,7 +7,7 @@ import type {
 } from "../types/auth-type";
 import {
   apiJson,
-  apiRequest,
+  isApiStatus,
   jsonBody,
   setCsrfToken,
   clearCsrfToken,
@@ -32,10 +32,14 @@ const REFRESH_RETRY_DELAY_MS = [1000, 2000, 4000];
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-const requestRefreshWithRetry = async (): Promise<Response> => {
+const requestRefreshWithRetry = async (): Promise<
+  RefreshResponse | undefined
+> => {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await apiRequest(API_ENDPOINTS.REFRESH, {});
+      return await apiJson<RefreshResponse | undefined>(
+        API_ENDPOINTS.REFRESH,
+      );
     } catch (err) {
       if (!isApiUnreachable(err)) throw err;
       if (attempt >= REFRESH_RETRY_DELAY_MS.length) throw err;
@@ -132,27 +136,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
   authenticateWithAuthToken: async () => {
     set({ authState: "CHECKING", loading: true, error: null });
     try {
-      const response = await requestRefreshWithRetry();
-
-      // Only an explicit refusal means signed out. A 502 from a proxy while
-      // the API restarts (apiRequest throws it as ApiUnreachableError, and
-      // it is retried above) is not a verdict on the session -- so the
-      // question is "did the server say this person is not signed in", and
-      // only 401/403 say that.
-      if (response.status === 401 || response.status === 403) {
-        set({ authState: "NO", error: null });
-        return;
-      }
-      if (!response.ok) {
-        set({
-          authState: "UNREACHABLE",
-          error: `The server responded with ${response.status}`,
-        });
-        return;
-      }
-
-      const data = (await response.json()) as RefreshResponse;
-      if (!data.user) {
+      const data = await requestRefreshWithRetry();
+      if (!data?.user) {
         // A 200 with no user is a contract the server is not keeping.
         set({ authState: "NO", error: null });
         return;
@@ -167,9 +152,19 @@ export const useAuthStore = create<AuthStore>((set) => ({
         securityContext: data.user.securityContext || 0,
       });
     } catch (err) {
-      // What reaches here is an outage that outlasted the retries or a body
-      // that would not parse. Neither told us anything about the session,
-      // so neither may claim it has ended.
+      // Only an explicit refusal means signed out. A 502 from a proxy while
+      // the API restarts (an ApiUnreachableError, retried above) is not a
+      // verdict on the session -- so the question is "did the server say
+      // this person is not signed in", and only 401/403 say that. A 401
+      // here also announces session-expired; the listener below ignores it
+      // because authState is CHECKING, not YES.
+      if (isApiStatus(err, 401, 403)) {
+        set({ authState: "NO", error: null });
+        return;
+      }
+      // An outage that outlasted the retries, another status, or a body
+      // that would not parse: none told us anything about the session, so
+      // none may claim it has ended.
       set({
         authState: "UNREACHABLE",
         error: err instanceof Error ? err.message : "Refresh failed",
@@ -181,9 +176,16 @@ export const useAuthStore = create<AuthStore>((set) => ({
   //============================^FUNCTION LINE ^============================
   logout: async () => {
     try {
-      await apiRequest(API_ENDPOINTS.LOGOFF, { method: "POST" });
+      // anonymous: /logoff skips CSRF, and a 401 means the session is
+      // already gone -- it must not raise the "Session ended" toast for a
+      // sign-out the person asked for.
+      await apiJson<unknown>(
+        API_ENDPOINTS.LOGOFF,
+        { method: "POST" },
+        { anonymous: true },
+      );
     } catch (err) {
-      reportError(err, "logout");
+      if (!isApiStatus(err, 401)) reportError(err, "logout");
     }
     clearCsrfToken();
 

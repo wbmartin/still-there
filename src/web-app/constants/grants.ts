@@ -1,4 +1,5 @@
-// Grant ID constants (matching API short codes)
+// Grant ID constants. Mirrors src/api-srv/internal/model/grants.go by hand;
+// when a grant is added there, add it here.
 const grantConstants = {
   LOGON: 1,
   READ_EXAMPLE: 1001,

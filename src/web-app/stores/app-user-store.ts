@@ -4,10 +4,9 @@ import type {
   User,
 } from "../types/user-type";
 import type { ApiResponse } from "../types/api";
-import { apiJson, apiRequest, jsonBody, throwForFailedResponse } from "../utils/api";
+import { apiJson, jsonBody } from "../utils/api";
 import { API_ENDPOINTS, type ApiEndpoint } from "../constants/api";
 import { createEntityStore } from "./create-entity-store";
-import { readErrorMessage } from "../utils/api";
 
 interface AppUserExtras {
   // There is no GET /user; a single user is read through the list endpoint
@@ -80,15 +79,10 @@ export const useAppUserStore = createEntityStore<User, AppUserExtras>(
       body: { userIds: number[]; groupId: number; updateTsList: number[] },
     ) => {
       set({ error: null });
-      const response = await apiRequest(endpoint, {
+      const data = await apiJson<ApiResponse<User[]>>(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        ...jsonBody(body),
       });
-      if (!response.ok) {
-        await throwForFailedResponse(response, readErrorMessage);
-      }
-      const data = (await response.json()) as ApiResponse<User[]>;
       mergeUserList(data.data);
     };
 
@@ -108,13 +102,9 @@ export const useAppUserStore = createEntityStore<User, AppUserExtras>(
           appUserIdList: String(id),
           afterUpdateTs: String(get().maxUpdateTs),
         });
-        const response = await apiRequest(
+        const data = await apiJson<ApiResponse<User[]> | null | undefined>(
           `${API_ENDPOINTS.USER_LIST}?${searchParams.toString()}`,
         );
-        if (!response.ok) {
-          await throwForFailedResponse(response, readErrorMessage);
-        }
-        const data = (await response.json()) as ApiResponse<User[]> | null;
         if (data?.data && data.data.length > 0) {
           mergeUserList(data.data);
         }

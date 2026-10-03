@@ -15,12 +15,7 @@ import {
 } from "@mantine/core";
 import { IconCopy, IconCheck } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import {
-  apiJson,
-  apiRequest,
-  jsonBody,
-  readErrorMessage,
-} from "../utils/api";
+import { apiJson, isApiStatus, jsonBody } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { useAuthStore } from "../stores/auth-store";
 import { ROUTES } from "../constants/routes";
@@ -47,26 +42,24 @@ function MFAOnboardingPage() {
     const fetchSetup = async () => {
       setLoading(true);
       try {
-        // A temp token, not a session: a refusal here must not touch the
-        // session, so this reads the status itself instead of apiJson's
-        // session handling.
-        const response = await apiRequest(API_ENDPOINTS.MFA_SETUP, {
-          method: "POST",
-          ...jsonBody({ tempToken }),
-        });
-        // 409: enrolled after all (the login answer was stale); ask for
-        // the code.
-        if (response.status === 409) {
-          setMfaAlreadySetup(true);
-          return;
-        }
-        if (!response.ok) throw new Error(await readErrorMessage(response));
-        const data = (await response.json()) as {
+        // A temp token, not a session: anonymous, so a refusal here does
+        // not touch the session.
+        const data = await apiJson<{
           data: { secret: string; qrCodeImage: string };
-        };
+        }>(
+          API_ENDPOINTS.MFA_SETUP,
+          { method: "POST", ...jsonBody({ tempToken }) },
+          { anonymous: true },
+        );
         setSecret(data.data.secret);
         setQrCodeImage(data.data.qrCodeImage);
       } catch (err) {
+        // 409: enrolled after all (the login answer was stale); ask for
+        // the code.
+        if (isApiStatus(err, 409)) {
+          setMfaAlreadySetup(true);
+          return;
+        }
         notifications.show({
           title: "Error",
           message: err instanceof Error ? err.message : "Unknown error",

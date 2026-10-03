@@ -1,9 +1,8 @@
 import type { AppUserGroup } from "../types/app-user-group-type";
 import type { ApiResponse } from "../types/api";
-import { apiRequest, throwForFailedResponse } from "../utils/api";
+import { apiJson } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { createEntityStore } from "./create-entity-store";
-import { readErrorMessage } from "../utils/api";
 
 interface AppUserGroupExtras {
   // There is no GET /appUserGroup; a single group is read through the list
@@ -27,15 +26,9 @@ export const useAppUserGroupStore = createEntityStore<
       const searchParams = new URLSearchParams({
         appUserGroupIdList: String(id),
       });
-      const response = await apiRequest(
-        `${API_ENDPOINTS.APP_USER_GROUP_LIST}?${searchParams.toString()}`,
-      );
-      if (!response.ok) {
-        await throwForFailedResponse(response, readErrorMessage);
-      }
-      const data = (await response.json()) as
-        | ApiResponse<AppUserGroup[]>
-        | null;
+      const data = await apiJson<
+        ApiResponse<AppUserGroup[]> | null | undefined
+      >(`${API_ENDPOINTS.APP_USER_GROUP_LIST}?${searchParams.toString()}`);
       const group = data?.data?.[0];
       if (!group) return null;
       // Refresh the cached row if it is present, otherwise add it. maxUpdateTs

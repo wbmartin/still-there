@@ -21,7 +21,7 @@ export const clearCsrfToken = (): void => {
  * (the per-minute rate limit, an account lockout).
  *
  * A 401 or a 500 RESOLVES fetch with a response; only a connection-level
- * failure rejects, with a bare `TypeError: Failed to fetch`. apiRequest
+ * failure rejects, with a bare `TypeError: Failed to fetch`. apiJson
  * folds both shapes into this one error so callers can tell an outage the
  * user can wait out from a refusal that signing in again would fix. It says
  * nothing about the session.
@@ -75,15 +75,17 @@ const announce = (outcome: ApiOutcome): void => {
   for (const listener of [...apiOutcomeListenerList]) listener(outcome);
 };
 
-// The fetch itself, with the CSRF header and the outage mapping.
+// The fetch itself, with the CSRF header and the outage mapping. An
+// anonymous call (no session yet, or one that is ending) sends no CSRF
+// header, so a token left over from an ended session does not ride along.
 const sendRequest = async (
   url: string,
   options: RequestInit,
-  csrfToken?: string,
+  anonymous = false,
 ) => {
   const headers = new Headers(options.headers);
-  const token = csrfToken || getCsrfToken();
-  if (token) {
+  const token = getCsrfToken();
+  if (!anonymous && token) {
     headers.set("X-CSRF-Token", token);
   }
   try {
@@ -195,12 +197,8 @@ const resyncSession = (): Promise<ResyncOutcome> => {
 // this tab shows; if it is not, the write is dropped and the tab moves to the
 // new identity (SessionChangedError). A second refusal, or a failed refresh,
 // returns the 403 as it came.
-const sendWithCsrfResync = async (
-  url: string,
-  options: RequestInit,
-  csrfToken?: string,
-) => {
-  const response = await sendRequest(url, options, csrfToken);
+const sendWithCsrfResync = async (url: string, options: RequestInit) => {
+  const response = await sendRequest(url, options);
   if (!(await isCsrfRefusal(response, options))) return response;
   const outcome = await resyncSession();
   if (outcome === "CHANGED") throw new SessionChangedError();
@@ -214,18 +212,24 @@ const isUnavailableStatus = (status: number): boolean =>
   status >= 500 || status === 429;
 
 /**
- * fetch against the API, with the CSRF resync above. A 5xx or 429 throws
+ * fetch against the API, with the CSRF resync above (a session call only;
+ * an anonymous one sends no token to be refused). A 5xx or 429 throws
  * ApiUnreachableError carrying the server's message, as a failed fetch does.
  * Every call announces its outcome: `ok` on a 2xx, `unreachable` on an
- * ApiUnreachableError. Other statuses return to the caller as they came.
+ * ApiUnreachableError. Other statuses return to apiJson as they came.
+ *
+ * Private on purpose: a second, raw path is how `response.ok` handling grew
+ * in ten places. Everything goes through apiJson.
  */
 const apiRequest = async (
   url: string,
-  options: RequestInit = {},
-  csrfToken?: string,
+  options: RequestInit,
+  anonymous: boolean,
 ) => {
   try {
-    const response = await sendWithCsrfResync(url, options, csrfToken);
+    const response = anonymous
+      ? await sendRequest(url, options, true)
+      : await sendWithCsrfResync(url, options);
     if (isUnavailableStatus(response.status)) {
       throw new ApiUnreachableError(await readErrorMessage(response), {
         status: response.status,
@@ -240,49 +244,45 @@ const apiRequest = async (
 };
 
 /**
+ * The API answered and refused: any non-2xx that is not an outage. It
+ * carries the status so a caller can act on one it expects (a 404 read as
+ * "no such row", a 409, /refresh's 401/403 as "signed out") and the server's
+ * `{"error"}` text as its message.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+/** The call was refused with this status (never an outage). */
+export const isApiStatus = (error: unknown, ...statusList: number[]) =>
+  error instanceof ApiError && statusList.includes(error.status);
+
+/**
  * The server said this person is not signed in: a 401, which CheckJWT
  * writes for a missing, invalid, expired or revoked `auth` cookie.
  *
  * A 403 is not this. It is a refusal -- a missing grant, a blocked account,
  * a CSRF token apiRequest could not resync, a cross-tenant refusal -- and
- * signing in again fixes none of them. It stays a plain Error carrying the
- * server's message, and the session is untouched.
+ * signing in again fixes none of them. It stays a plain ApiError carrying
+ * the server's message, and the session is untouched.
  */
-export class SessionExpiredError extends Error {
-  readonly status: number;
+export class SessionExpiredError extends ApiError {
   constructor(status: number, message?: string) {
-    super(message || "Your session has ended. Please sign in again.");
+    super(status, message || "Your session has ended. Please sign in again.");
     this.name = "SessionExpiredError";
-    this.status = status;
   }
 }
 
 export const isSessionExpired = (error: unknown): boolean =>
   error instanceof SessionExpiredError;
 
-/**
- * Turn a failed response into the right error, and announce
- * `session-expired` on a 401 (the auth store signs out). Call this instead
- * of throwing on !response.ok.
- */
-export const throwForFailedResponse = async (
-  response: Response,
-  readMessage: (response: Response) => Promise<string>,
-): Promise<never> => {
-  const message = await readMessage(response);
-  if (response.status === 401) {
-    const error = new SessionExpiredError(response.status, message);
-    announce({ kind: "session-expired", error });
-    throw error;
-  }
-  throw new Error(message);
-};
-
-/**
- * The message a failed response carries, or a generic one. Both the entity
- * stores and the one-off calls pass this to throwForFailedResponse.
- */
-export const readErrorMessage = async (response: Response): Promise<string> => {
+// The message a failed response carries, or a generic one.
+const readErrorMessage = async (response: Response): Promise<string> => {
   try {
     const body = (await response.json()) as {
       error?: string;
@@ -295,25 +295,35 @@ export const readErrorMessage = async (response: Response): Promise<string> => {
 };
 
 /**
- * apiRequest + the failure handling every caller used to repeat: a non-2xx
- * response throws and a 2xx one is parsed as JSON, so callers never look at
- * response.ok. A 5xx or 429 is an ApiUnreachableError (from apiRequest).
- * By default a 401 is a SessionExpiredError and the app is told; `anonymous: true` is for the endpoints reached before there is a
- * session (login, MFA setup/verify, self-registration), where a 401 means
- * "wrong password/code", not "signed out", and must not touch the session.
+ * The one way to call the API. A 2xx is parsed as JSON (an empty body, a
+ * 204 or a bare 200, is undefined); anything else throws, so no caller looks
+ * at response.ok:
+ *   - a failed fetch, 5xx or 429: ApiUnreachableError;
+ *   - a 401: SessionExpiredError, and the app is told (it signs out);
+ *   - any other status: ApiError with that status and the server's message.
+ * `anonymous: true` is for the endpoints reached without a session (login,
+ * MFA setup/verify, invites, self-registration) or leaving one (/logoff): no
+ * CSRF header is sent, and a 401 means "wrong password/code" or "already
+ * gone", an ApiError that must not touch the session.
  */
 export const apiJson = async <T>(
   url: string,
   options: RequestInit = {},
   { anonymous = false }: { anonymous?: boolean } = {},
 ): Promise<T> => {
-  const response = await apiRequest(url, options);
+  const response = await apiRequest(url, options, anonymous);
   if (!response.ok) {
-    if (anonymous) throw new Error(await readErrorMessage(response));
-    await throwForFailedResponse(response, readErrorMessage);
+    const message = await readErrorMessage(response);
+    if (response.status === 401 && !anonymous) {
+      const error = new SessionExpiredError(response.status, message);
+      announce({ kind: "session-expired", error });
+      throw error;
+    }
+    throw new ApiError(response.status, message);
   }
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  // Always read the body: one left unread keeps the request open.
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 };
 
 /** JSON body + header for the POST/PUT calls. */
@@ -321,5 +331,3 @@ export const jsonBody = (body: unknown): RequestInit => ({
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
-
-export { apiRequest };

@@ -17,7 +17,7 @@ import { useApiStatusStore } from "../stores/api-status-store";
 //
 // It is worth stating why this needs a test rather than a careful reading.
 // `fetch` only REJECTS on a connection-level failure; a 401 and a 502 both
-// resolve normally. apiRequest folds a rejected fetch, a 5xx and a 429 into
+// resolve normally. apiJson folds a rejected fetch, a 5xx and a 429 into
 // one ApiUnreachableError, and a refactor that moves one status across that
 // line reclassifies an outage as a sign-out (or the reverse). Neither shows
 // up in a typecheck.
@@ -297,17 +297,26 @@ describe("auth store: unreachable vs unauthenticated", () => {
 
   it("does not claim a session ended because the body would not parse", async () => {
     // An HTML error page from a proxy arriving with a 200 is the shape here.
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.reject(new SyntaxError("Unexpected token <")),
-      }),
-    );
+    stubFetchSequence([
+      () =>
+        Promise.resolve(
+          new Response("<html>Bad gateway</html>", { status: 200 }),
+        ),
+    ]);
 
     await runRefresh();
 
+    expect(useAuthStore.getState().authState).toBe("UNREACHABLE");
+  });
+
+  it("does not claim a session ended on another refusal", async () => {
+    // Only 401/403 say "not signed in"; a 404 (a proxy routing /api wrong)
+    // says nothing about the session and is not retried.
+    const fetchMock = stubFetchSequence([answerWith(404)]);
+
+    await runRefresh();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(useAuthStore.getState().authState).toBe("UNREACHABLE");
   });
 

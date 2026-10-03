@@ -50,6 +50,10 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
   (`tagCache`, not `tc`); a variable holding an `ExampleRepository` is
   `exampleRepository` (Go receivers may be one letter).
 - Go and TypeScript: break lines around 80 columns.
+- Web: call the API only through `apiJson` (`utils/api.ts`); `console.*`
+  only in `utils/report-error.ts`; file names kebab-case; a file that
+  mirrors a Go file names it in its header (`constants/api.ts`,
+  `constants/grants.ts`).
 - Config is a flat `KEY=VALUE` file passed to the binary; no environment-
   variable lookups.
 - Git: summarize a PR from `git diff`, not memory, in markdown with headings.
