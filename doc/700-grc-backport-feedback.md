@@ -564,73 +564,6 @@ moves on a deliberate release; GRC left this open too.
 
 # P3: nice to have
 
-### B066 — Route-sweep Playwright spec (not GRC's `smoke/*.mjs`)
-
-- **Priority:** P3  **Area:** tests, web-app
-- **GRC:** `smoke/smoke.mjs:1-69`; `smoke/guard.mjs:1-60` (:24-31); `smoke/exercise.mjs`; `package.json` scripts   **PROTO:** `tests/e2e/`; `playwright.config.ts:47-80`; new `tests/e2e/route-sweep.spec.ts`; `tests/e2e/global-setup.ts`
-- **Ticket:** `5b5deb6`, `e9f945a`; RG0041; RG0037
-- **What:** GRC visits every route as every persona and flags error/blank pages
-and console errors, via node scripts with no runner.
-- **Port notes:** Keep Playwright; one spec over `ROUTES` x users; copy
-`requireTestTenant` into `global-setup.ts`.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-A test-coverage gap. PROTO's Playwright suite (`src/web-app/tests/e2e/`,
-`playwright.config.ts:46-73`) tests chosen flows: harness and login
-(`smoke.spec.ts`), entity pages, examples, MFA, profile. Nothing visits
-every route. Specs reuse one saved session as `admin`
-(`playwright.config.ts:43,68`; `tests/e2e/global-setup.ts:44`). So a route
-that crashes for a user without admin grants, or for anyone on a route no
-spec opens, shows the router's "Something went wrong" (`app.tsx:42`) or the
-boundary's "This page ran into a problem"
-(`components/error-boundary.tsx:59-60`) and no test fails. The route list
-is small today (`constants/routes.ts:4-20`, ten entries), but every
-derived app adds pages faster than specs.
-
-#### What GRC changed
-
-GRC wrote a route-by-role sweep as plain node scripts, not Playwright tests
-(`5b5deb6`, `e9f945a`). Paths are under GRC `src/web-app/smoke/`; the doc's
-`smoke/` refs omit that prefix.
-
-1. `smoke.mjs:13-32` lists 88 routes, `:12` five roles. For each pair
-   it navigates, then flags `ERROR_PAGE`, `NOT_FOUND_TEXT`, `BLANK`
-   (under 40 characters) and console errors (`:49-62`). It prints flagged
-   rows and a count; it never exits non-zero, so nothing gates on it.
-2. `guard.mjs:16-21` refuses any base URL but the test web app (RG0041);
-   `requireTestTenant` (`:24-31`) reads `/api/me` after sign-in and exits
-   unless `securityContext` is 2. `signInAs` (`:46-60`) posts `/auth` as
-   a persona.
-3. `package.json` scripts `smoke` and `smoke:crud`. RG0037 anchored the
-   not-found regex (`smoke.mjs:56-58`). No assertions, no CI wiring.
-
-#### Proposed fix for PROTO
-
-1. New `tests/e2e/route-sweep.spec.ts`: import `ROUTES`, add `?id=new` and
-   `?id=<fixture>` forms for edit pages, and generate one `test()` per
-   route x user. Assert no error heading, body text over 40 characters,
-   and no `console`/`pageerror` errors. Real assertions replace GRC's
-   printout, and `bin/300-run-tests` gates on them.
-2. Users: `admin` and `basic` (both MFA-exempt in
-   `sql/fixtures/local-seed.sql:114-119`). Sign each in with
-   `fixtures/api-client.ts` `signIn` and per-describe `storageState`.
-   Skip `mfa`.
-3. Trap: copying `requireTestTenant` into `global-setup.ts` fails at once.
-   Every fixture user sits in tenant 1 (`local-seed.sql:103`; the comment
-   at `:23-26` says so until PS0022). Land B018/PS0022 first, then add the
-   tenant-2 check to `global-setup.ts:44-63`.
-4. Leave out GRC's role matrix, personas, `exercise.mjs` and the Chrome
-   path. Expected refusals (basic on `/appUserList`) are an allow-list in
-   the spec.
-
-#### Open question for Brandon
-
-None.
-
 ### B067 — Hash-chained audit log for login-layer writes (pattern)
 
 - **Priority:** P3  **Area:** go-api
@@ -8990,3 +8923,72 @@ No tests for any of the six.
 None.
 
 - **Completed:** 2026-10-03. No Brandon line; took the recommendation. New `src/web-app/components/sort-th.tsx` (`SortTh`: a `<Table.Th>` holding an `UnstyledButton` and a Tabler chevron/selector icon, `aria-sort` on the sorted column only; props `label`, `column`, `sortColumn`, `sortDirection`, `onSort`, so it plugs into each page's existing `handleSort`, fix step 2) and `src/web-app/components/help-tip.tsx` (`HelpTip`, `LabelWithHelp`). The hand-written sortable headers on `app-user-list-page.tsx`, `app-user-group-list-page.tsx` and `example-list-page.tsx` are now `SortTh`; each page keeps its own sort code (fix step 3); the unused `.sortable-column` rule leaves `src/web-app/index.css`. The three `description` props (`example-edit-page.tsx` JSON and UUID, `user-preferences-page.tsx` Rows per page, now worded "How many rows each list page shows") become `LabelWithHelp` labels, so `HelpTip` has users. Deviations: `HelpTip`'s icon wrapper is `role="img"`, `aria-label="About <field>"`, `tabIndex=0` and the Tooltip opens on focus too, so a keyboard user can read the help (GRC's was hover-only); `use-sort` not ported (PROTO's sort lives in the URL); `save-bar` (step 4), `safe-href` and its `isSafeHref` test (step 5, no untrusted HTML yet) and `use-draft` (step 6, no edit page uses an edit buffer; when ported, wrap `save` in `try/finally` and drop the hard-coded tenant) deferred. `src/web-app/README.md` Project Structure and page-conventions bullets updated. Tests: vitest `tests/ui-helpers.test.tsx` (SortTh label is a `<button>` that calls `onSort`; `aria-sort` only on the sorted column, asc/desc; help icon named and focusable; bare label without help); Enter is proved in a real browser rather than jsdom (which does not synthesise a click from Enter): e2e `entity-pages.spec.ts` "a column sorts from the keyboard" (focus the Username header button, Enter sorts asc, Enter again desc, `aria-sort` follows); "an unknown dir sorts ascending" now checks `aria-sort` instead of the removed arrow glyph; `example-pages.spec.ts` focuses "About JSON" and sees the tooltip, and finds JSON/UUID by `getByRole("textbox")` because `getByLabel` would also match the icon's label. All green, infra=15 docs=505 go=700 unit=101 e2e=21 py=103 (docs +2 from new paths, unit +4, e2e +1), govulncheck clean, gofmt clean.
+
+### B066 — COMPLETED — Route-sweep Playwright spec (not GRC's `smoke/*.mjs`)
+
+- **Priority:** P3  **Area:** tests, web-app
+- **GRC:** `smoke/smoke.mjs:1-69`; `smoke/guard.mjs:1-60` (:24-31); `smoke/exercise.mjs`; `package.json` scripts   **PROTO:** `tests/e2e/`; `playwright.config.ts:47-80`; new `tests/e2e/route-sweep.spec.ts`; `tests/e2e/global-setup.ts`
+- **Ticket:** `5b5deb6`, `e9f945a`; RG0041; RG0037
+- **What:** GRC visits every route as every persona and flags error/blank pages
+and console errors, via node scripts with no runner.
+- **Port notes:** Keep Playwright; one spec over `ROUTES` x users; copy
+`requireTestTenant` into `global-setup.ts`.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+A test-coverage gap. PROTO's Playwright suite (`src/web-app/tests/e2e/`,
+`playwright.config.ts:46-73`) tests chosen flows: harness and login
+(`smoke.spec.ts`), entity pages, examples, MFA, profile. Nothing visits
+every route. Specs reuse one saved session as `admin`
+(`playwright.config.ts:43,68`; `tests/e2e/global-setup.ts:44`). So a route
+that crashes for a user without admin grants, or for anyone on a route no
+spec opens, shows the router's "Something went wrong" (`app.tsx:42`) or the
+boundary's "This page ran into a problem"
+(`components/error-boundary.tsx:59-60`) and no test fails. The route list
+is small today (`constants/routes.ts:4-20`, ten entries), but every
+derived app adds pages faster than specs.
+
+#### What GRC changed
+
+GRC wrote a route-by-role sweep as plain node scripts, not Playwright tests
+(`5b5deb6`, `e9f945a`). Paths are under GRC `src/web-app/smoke/`; the doc's
+`smoke/` refs omit that prefix.
+
+1. `smoke.mjs:13-32` lists 88 routes, `:12` five roles. For each pair
+   it navigates, then flags `ERROR_PAGE`, `NOT_FOUND_TEXT`, `BLANK`
+   (under 40 characters) and console errors (`:49-62`). It prints flagged
+   rows and a count; it never exits non-zero, so nothing gates on it.
+2. `guard.mjs:16-21` refuses any base URL but the test web app (RG0041);
+   `requireTestTenant` (`:24-31`) reads `/api/me` after sign-in and exits
+   unless `securityContext` is 2. `signInAs` (`:46-60`) posts `/auth` as
+   a persona.
+3. `package.json` scripts `smoke` and `smoke:crud`. RG0037 anchored the
+   not-found regex (`smoke.mjs:56-58`). No assertions, no CI wiring.
+
+#### Proposed fix for PROTO
+
+1. New `tests/e2e/route-sweep.spec.ts`: import `ROUTES`, add `?id=new` and
+   `?id=<fixture>` forms for edit pages, and generate one `test()` per
+   route x user. Assert no error heading, body text over 40 characters,
+   and no `console`/`pageerror` errors. Real assertions replace GRC's
+   printout, and `bin/300-run-tests` gates on them.
+2. Users: `admin` and `basic` (both MFA-exempt in
+   `sql/fixtures/local-seed.sql:114-119`). Sign each in with
+   `fixtures/api-client.ts` `signIn` and per-describe `storageState`.
+   Skip `mfa`.
+3. Trap: copying `requireTestTenant` into `global-setup.ts` fails at once.
+   Every fixture user sits in tenant 1 (`local-seed.sql:103`; the comment
+   at `:23-26` says so until PS0022). Land B018/PS0022 first, then add the
+   tenant-2 check to `global-setup.ts:44-63`.
+4. Leave out GRC's role matrix, personas, `exercise.mjs` and the Chrome
+   path. Expected refusals (basic on `/appUserList`) are an allow-list in
+   the spec.
+
+#### Open question for Brandon
+
+None.
+
+- **Completed:** 2026-10-03. No Brandon line; took the recommendation. New `src/web-app/tests/e2e/route-sweep.spec.ts`: a `SWEEP_ROW_LIST` over every `ROUTES` entry (edit pages as `?…Id=new` and a fixture id: `Sample example 1` and `basic` looked up through the admin API session, group 2 fixed), each row naming where `admin`, `basic` and a signed-out visitor land (path and heading; the allow-list of fix step 4: basic on the user pages and group edit lands on the dashboard, signed out on `/login`). One `test()` per row x visitor (45) checks the landing path and heading, then after `networkidle`: no "Something went wrong" / "This page ran into a problem" heading, body text over 40 characters, no `console` error, no `pageerror`, and no 4xx/5xx response but the signed-out `401 GET /api/refresh`. The browser's URL-less "Failed to load resource" console lines are judged by the response instead. A first test fails when a `ROUTES` path has no row; a last one proves the detector sees the router's error page on `/no-such-page`. `basic` signs in with `signIn` in `beforeAll` and its cookie is added per test (empty `storageState`). Found and fixed: basic on `/appUserList`, `/appUserEdit?appUserId=N` and `/appUserGroupEdit?appUserGroupId=2` called `GET /api/userList` (403, plus a `reportError` console line) while being redirected, because `useAuthGuard` returned `"YES"` without the grants. `src/web-app/hooks/use-auth-guard.ts` now returns `"DENIED"` for a signed-in user lacking the page's grants (the redirect is unchanged), so the `"YES"`-gated load effects never run; `user-preferences-page.tsx` treats `"DENIED"` as not signed in. Old guard: 3 basic rows fail with `403 GET /api/userList`; new: all pass. Deviations: fix step 3 already done (B018 seeded tenant 2; `global-setup.ts` refuses a non-2 session); the `mfa` routes are swept with no temp token (all visitors see the set-up heading), the `mfa` user is not. `src/web-app/README.md` (new-entity checklist, house-pattern bullet) and `doc/902-project-commands.md` mention the spec. All green, infra=15 docs=507 go=700 unit=101 e2e=68 py=103 (docs +2 from new paths, e2e +47: 45 sweep rows, the coverage test, the detector test), govulncheck clean, gofmt clean.

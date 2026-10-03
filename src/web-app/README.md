@@ -145,7 +145,10 @@ Then add, by hand, in each of:
   `WIDGET_EDIT: "/widget"` (absolute paths; the edit page takes
   `?widgetId=N` or `?widgetId=new`)
 - `app.tsx` — two entries in `createBrowserRouter` and a `NavLink`
-- `tests/e2e/` — a deep-link case like `entity-pages.spec.ts`
+- `tests/e2e/` — a deep-link case like `entity-pages.spec.ts`, and
+  two rows in `route-sweep.spec.ts` (`?widgetId=new` and a fixture id,
+  with where admin, basic and a signed-out visitor land); its first
+  test fails on a route it does not sweep
 
 The API half is `doc/810-create-new-entity-type-notes.md`.
 
@@ -157,7 +160,9 @@ House pattern inside a page, in this order:
   `CHECKING` / not-`YES` / loading, then handlers and JSX. Nothing below
   the banner may call a hook.
 - the load effect runs once (`hasFetched` ref), only when `authState`
-  is `"YES"`, and fetches by id through the store — never by searching
+  is `"YES"` (`useAuthGuard` answers `"DENIED"`, not `"YES"`, to a
+  user without the page's grants, so a refused page asks the API
+  nothing), and fetches by id through the store — never by searching
   `itemList`, which is empty on a deep link.
 - `form` from `useForm` is a new object each render, so the load effect
   carries a scoped `react-hooks/exhaustive-deps` disable with that reason.

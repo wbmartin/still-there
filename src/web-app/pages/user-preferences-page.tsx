@@ -126,7 +126,11 @@ function UserPreferencesPage() {
   if (authState === "CHECKING") {
     return <Container size={1280} px={32} py={32} mx="auto" maw="600px" ta="center"><Loader /></Container>;
   }
-  if (authState === "NO" || authState === "TBD") {
+  if (
+    authState === "NO" ||
+    authState === "TBD" ||
+    authState === "DENIED"
+  ) {
     return <Container size={1280} px={32} py={32} mx="auto" maw="600px"><Alert color="red">Authentication required.</Alert></Container>;
   }
 

@@ -131,6 +131,9 @@ To run the Playwright end-to-end suite directly:
   reseed is skipped when `bin/300` already rebuilt the database
   (`E2E_DB_SEEDED=1`), so a `bin/300-run-tests` run reseeds only once.
 - Specs are `src/web-app/tests/e2e/*.spec.ts`; vitest owns `*.test.ts`.
+- `route-sweep.spec.ts` opens every route as `admin`, `basic` and
+  signed out, and fails on an error heading, a near-blank page, a
+  console error or an unexpected 4xx/5xx.
 
 To load test the API (starts and stops its own private instance, like
 `py` mode; never touches the developer's 8080 or its database):
