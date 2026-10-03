@@ -513,34 +513,6 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 	return sh
 }
 
-// CheckUserBlocked checks if the user is blocked
-func (sh *AppHelper) CheckUserBlocked() *AppHelper {
-	if sh.blocked || sh.claims == nil {
-		return sh
-	}
-
-	blockedKey := "BLOCKED*" + sh.claims.Subject
-	blockedValue, err := sh.appServices.KV.Get(blockedKey)
-	if err != nil {
-		sh.appServices.Logger.Error("UBK0",
-			"Blocked-status check failed: "+err.Error())
-		sh.failAndRespond(http.StatusInternalServerError, "User block check failed")
-		return sh
-	}
-
-	if blockedValue != "" {
-		// Key exists, user is blocked
-		sh.appServices.Logger.Warn(
-			"UBK0",
-			"User is blocked: "+sh.claims.Subject,
-		)
-		sh.failAndRespond(http.StatusForbidden, "User account is blocked")
-		return sh
-	}
-
-	return sh
-}
-
 // CheckCSRF validates the CSRF token
 func (sh *AppHelper) CheckCSRF() *AppHelper {
 	sh.csrfChecked = true

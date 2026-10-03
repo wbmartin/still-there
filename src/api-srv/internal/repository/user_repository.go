@@ -37,7 +37,7 @@ func (r *UserRepository) RetrieveUserByUserName(
 	query := `
 		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
 		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
-		       preference_jsonb,
+		       account_status, preference_jsonb,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
@@ -48,7 +48,7 @@ func (r *UserRepository) RetrieveUserByUserName(
 		&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName,
 		&user.LastName, &user.Email, &user.SecurityContext,
 		&user.AppUserGroupMembershipList, &user.MFAExempt, &user.TOTPSeed,
-		&user.MFASetup,
+		&user.MFASetup, &user.AccountStatus,
 		&user.PreferenceJSONB,
 		&user.CreateTS, &user.CreateUserID, &user.UpdateTS,
 		&user.UpdateUserID, &user.DeleteTS, &user.DeleteUserID,
@@ -133,10 +133,14 @@ func (r *UserRepository) CreateUser(
 	query := `
 		INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email,
 		       security_context_id, app_user_group_membership_list, mfa_exempt,
-		       totp_seed, mfa_setup,
-		                     create_ts, create_user_id, update_ts, update_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		       totp_seed, mfa_setup, account_status,
+		       create_ts, create_user_id, update_ts, update_user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+		        $15)
 		RETURNING app_user_id`
+
+	// Every login is created active; account_status has no DEFAULT.
+	user.AccountStatus = model.AccountStatusActive
 
 	err := r.db.QueryRow(
 		ctx,
@@ -154,6 +158,7 @@ func (r *UserRepository) CreateUser(
 		// this, CreateUser fails: null value in column "totp_seed" violates not-null constraint.
 		"",
 		false,
+		user.AccountStatus,
 		user.CreateTS,
 		user.CreateUserID,
 		user.UpdateTS,
@@ -224,6 +229,74 @@ func (r *UserRepository) UpdateUserTOTPSeed(
 	return newUpdateTS, nil
 }
 
+// UpdateUserAccountStatus blocks or unblocks a login (B034) with
+// optimistic locking: active -> blocked, or blocked -> active, nothing
+// else. securityContext is the row's own (home) tenant.
+func (r *UserRepository) UpdateUserAccountStatus(
+	ctx context.Context, userID int, accountStatus string,
+	expectedUpdateTS float64, updateUserID int, securityContext int,
+) (newUpdateTS float64, err error) {
+	var fromStatus string
+	switch accountStatus {
+	case model.AccountStatusBlocked:
+		fromStatus = model.AccountStatusActive
+	case model.AccountStatusActive:
+		fromStatus = model.AccountStatusBlocked
+	default:
+		return 0, fmt.Errorf(
+			"account status %q is not blocked or active: %w",
+			accountStatus, ErrValidation,
+		)
+	}
+	newUpdateTS = CurrentTimestamp()
+	query := `
+		UPDATE app_user
+		SET account_status = $1, update_ts = $2, update_user_id = $3
+		WHERE app_user_id = $4 AND security_context_id = $5
+		  AND update_ts = $6 AND account_status = $7
+		  AND delete_user_id IS NULL`
+
+	result, err := r.db.Exec(ctx, query,
+		accountStatus, newUpdateTS, updateUserID, userID, securityContext,
+		expectedUpdateTS, fromStatus)
+	if err != nil {
+		return 0, fmt.Errorf("failed to update user account status: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return 0, zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			userID, securityContext)
+	}
+
+	return newUpdateTS, nil
+}
+
+// RetrieveBlockedUserNameList is every blocked login, across all tenants:
+// the API loads them into the KV at start, because the KV is in-process and
+// a restart would otherwise let a blocked login's unexpired session back
+// in. Unscoped on purpose, like the login-by-name read: user_name is unique.
+func (r *UserRepository) RetrieveBlockedUserNameList(
+	ctx context.Context,
+) ([]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT user_name FROM app_user
+		WHERE account_status = $1 AND delete_user_id IS NULL`,
+		model.AccountStatusBlocked)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list blocked users: %w", err)
+	}
+	defer rows.Close()
+	userNameList := []string{}
+	for rows.Next() {
+		var userName string
+		if err := rows.Scan(&userName); err != nil {
+			return nil, fmt.Errorf("failed to scan blocked user: %w", err)
+		}
+		userNameList = append(userNameList, userName)
+	}
+	return userNameList, rows.Err()
+}
+
 // UpdateUserMFASetup updates a user's MFA setup status with optimistic locking
 func (r *UserRepository) UpdateUserMFASetup(
 	ctx context.Context, userID int, mfaSetup bool,
@@ -286,7 +359,7 @@ func (r *UserRepository) RetrieveUserList(
 	query := `
 		SELECT app_user_id, user_name, first_name, last_name, email,
 		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
-		       preference_jsonb,
+		       account_status, preference_jsonb,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
@@ -327,6 +400,7 @@ func (r *UserRepository) RetrieveUserList(
 			&user.MFAExempt,
 			&user.TOTPSeed,
 			&user.MFASetup,
+			&user.AccountStatus,
 			&user.PreferenceJSONB,
 			&user.CreateTS,
 			&user.CreateUserID,

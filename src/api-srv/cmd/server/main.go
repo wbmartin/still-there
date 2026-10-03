@@ -82,6 +82,21 @@ func main() {
 		Logger: logger,
 	}
 
+	// The KV is in-process, so a start has no block flags: put every blocked
+	// login's back before the first request (B034, user_block_handler.go).
+	blockedUserNameList, err := userRepo.RetrieveBlockedUserNameList(
+		context.Background())
+	if err == nil {
+		err = handler.LoadBlockedUsers(appServices, blockedUserNameList)
+	}
+	if err != nil {
+		logger.Error("BLK_LOAD", "Failed to load blocked users: "+err.Error(),
+			"username", "app-root")
+		os.Exit(1)
+	}
+	logger.Info("BLK_LOAD", fmt.Sprintf("%d blocked login(s) flagged",
+		len(blockedUserNameList)), "username", "app-root")
+
 	// Initialize handlers
 	healthHandler := handler.HealthHandler(appServices)
 	authHandler := handler.AuthHandler(appServices, userRepo)
@@ -180,6 +195,13 @@ func main() {
 		userRepo,
 	)
 	mux.HandleFunc("POST /admin/resetUserMFA", adminResetMFAHandler)
+
+	// Block / unblock a login: account_status for /auth, revocation and the
+	// BLOCKED* KV flag for live sessions (user_block_handler.go)
+	mux.HandleFunc("POST /admin/blockUser",
+		handler.AdminBlockUserHandler(appServices, userRepo, true))
+	mux.HandleFunc("POST /admin/unblockUser",
+		handler.AdminBlockUserHandler(appServices, userRepo, false))
 
 	// Receive Grant list is available, but shouldn't be used in most cases.  Clients will have their own copy of it.
 	// This is an intentional coupling point, mitigated by most changes being additive only.

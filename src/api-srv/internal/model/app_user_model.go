@@ -15,6 +15,7 @@ type AppUserModel struct {
 	MFAExempt                  bool    `json:"mfaExempt"                  db:"mfa_exempt"`
 	MFASetup                   bool    `json:"mfaSetup"                   db:"mfa_setup"`
 	TOTPSeed                   *string `json:"-"                          db:"totp_seed"` // Never serialize
+	AccountStatus              string  `json:"accountStatus"              db:"account_status"`
 	// Free-form per-user preferences, owned by the user through PUT /me.
 	PreferenceJSONB json.RawMessage `json:"preferenceJsonb,omitempty" db:"preference_jsonb"`
 	CreateTS        float64         `json:"createTs"                   db:"create_ts"`
@@ -32,3 +33,12 @@ type AppUserModel struct {
 func (u *AppUserModel) MFAEnrolled() bool {
 	return u.MFASetup && u.TOTPSeed != nil && *u.TOTPSeed != ""
 }
+
+// The account_status values (B034). An active login signs in; a blocked one
+// was active until an admin blocked it, and neither signs in (/auth refuses
+// anything not active) nor, through the BLOCKED* KV flag, keeps a live
+// session until unblocked.
+const (
+	AccountStatusActive  = "active"
+	AccountStatusBlocked = "blocked"
+)

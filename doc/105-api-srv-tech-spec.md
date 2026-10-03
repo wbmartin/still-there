@@ -104,6 +104,8 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
 | PUT | /user | Yes | Yes | CHG_USER | Update user |
 | DELETE | /user | Yes | Yes | DEL_USER | Delete user |
 | POST | /admin/resetUserMFA | Yes | Yes | RESET_MFA_TOKEN | Clear a user's TOTP seed (9020: its own grant, not CHG_USER) |
+| POST | /admin/blockUser | Yes | Yes | BLOCK_USER | Block a login of the caller's tenant (see User Blocking) |
+| POST | /admin/unblockUser | Yes | Yes | BLOCK_USER | Unblock it |
 | POST | /addUserListToGroup | Yes | Yes | CHG_USER_GROUP | Add users to group |
 | POST | /removeUserListFromGroup | Yes | Yes | CHG_USER_GROUP | Remove users from group |
 | GET | /grantList | Yes | No | GET_USER | Retrieve available grants |
@@ -204,7 +206,8 @@ in-process KV keys on every request (`internal/security/session_revocation.go`):
   of that login issued earlier is refused, except the kept session. Written
   by `/changeOwnPassword` (keeps the caller's session: the person who changed
   the password stays signed in), and with nothing kept by
-  `/changeOtherUserPassword`, `/admin/resetUserMFA`, `PUT /user` (name,
+  `/changeOtherUserPassword`, `/admin/resetUserMFA`, `/admin/blockUser`,
+  `PUT /user` (name,
   groups, MFA exemption; the prior name), `DELETE /user`,
   `/addUserListToGroup`, `/removeUserListFromGroup`, and `PUT /appUserGroup`
   (every member of the group, any tenant).
@@ -212,6 +215,27 @@ in-process KV keys on every request (`internal/security/session_revocation.go`):
 A revoked token gets 401; a KV read error gets 500 (fail closed). A failed
 revocation after a committed write is answered 500 `SES_REVOKE`, never
 hidden. Entries live `JWT_SESSION_EXPIRE_HOURS`, the longest a token can.
+
+### User Blocking
+`POST /admin/blockUser` / `/admin/unblockUser`, body `{"userName": ...}`,
+grant `BLOCK_USER` (9008), `internal/handler/user_block_handler.go`.
+`app_user.account_status` is `active` or `blocked` (migration `0004`, NOT
+NULL, no DEFAULT; `CreateUser` writes `active`). Block:
+
+- sets the row `blocked`; `/auth` refuses any login that is not `active`
+  with the same counted 401 as a wrong password;
+- revokes every session of the login (`REVOKED_BEFORE*`, above): a live
+  token gets 401 and the web app signs out; unblock does not revive it;
+- sets `BLOCKED*<user name>` for `JWT_SESSION_EXPIRE_HOURS`, which
+  `CheckRateLimitAndUserBlock` answers 403. The server reloads every
+  blocked login's flag at start, so after a restart (revocations gone) a
+  pre-block token gets 403 "User account is blocked" per call until it
+  expires; the web app does not sign out on 403.
+
+Unblock sets the row `active` and clears the flag. Refusals: own login 400,
+another tenant's or unknown login 404, wrong starting state 409, stale row
+409. The `admin` subject is exempt from the flag check (as from the rate
+limit); its row still stops it signing in.
 
 **Limit: a restart forgets revocations.** The KV is process memory and
 revocations have no durable row, so after an API restart a token revoked
@@ -247,7 +271,7 @@ own text goes to the log only.
 | 4 KiB (`maxAuthBodyBytes`) | `/auth`, `/mfaSetup`, `/mfaVerify`, `/changeSecurityContext`, `/userSelfCreate` (read before or without a session) |
 | 8 KiB (`maxErrorReportBodyBytes`) | `/error-report` (signed-in; logs the first 2000 characters) |
 | 12 KiB (4 KiB + `maxPreferenceBytes`) | `PUT /me` |
-| 64 KiB (`maxLoginLayerBodyBytes`) | `POST`/`PUT /user`, `POST`/`PUT /appUserGroup`, `/addUserListToGroup`, `/removeUserListFromGroup`, `/changeOwnPassword`, `/changeOtherUserPassword`, `/admin/resetUserMFA` |
+| 64 KiB (`maxLoginLayerBodyBytes`) | `POST`/`PUT /user`, `POST`/`PUT /appUserGroup`, `/addUserListToGroup`, `/removeUserListFromGroup`, `/changeOwnPassword`, `/changeOtherUserPassword`, `/admin/resetUserMFA`, `/admin/blockUser`, `/admin/unblockUser` |
 | 1 MiB (`maxEntityBodyBytes`) | `example_handler.go` writes, bulk lists included |
 
 Deletes take their ids in the query string and read no body. The entity cap
@@ -281,7 +305,8 @@ the only one when the API is reached without nginx (local dev).
      sound only if the API is reachable through that proxy alone (bind it
      to loopback)
 3. **User Blocking**: Check the in-process KV store for blocked users
-   (session revocation is part of step 1, JWT validation)
+   (session revocation is part of step 1, JWT validation). See User
+   Blocking below
 4. **CSRF Protection**: Compare `X-CSRF-Token` header with last 3 chars of session ID (safe methods — GET, HEAD, OPTIONS, TRACE — are exempt)
 5. **RBAC**: Verify user has required grant for target security context
 

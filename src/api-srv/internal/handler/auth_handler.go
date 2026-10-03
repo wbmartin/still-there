@@ -200,10 +200,16 @@ func AuthHandler(
 			storedHash = user.PwHash
 		}
 		verified := auth.CheckPasswordHashOrDummy(req.Password, storedHash)
-		if user == nil || !verified {
+		// A login that is not active (blocked, B034) gets the same counted
+		// 401 as a wrong password, and only after the hash check.
+		active := user != nil &&
+			user.AccountStatus == model.AccountStatusActive
+		if user == nil || !verified || !active {
 			reason := "Password verification failed for user: "
 			if user == nil {
 				reason = "Login for unknown user: "
+			} else if verified {
+				reason = "Login for " + user.AccountStatus + " user: "
 			}
 			appServices.Logger.Warn("PWD_VFY_FAIL", reason+req.UserName)
 			// Increment failed attempt counters

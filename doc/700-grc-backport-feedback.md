@@ -242,125 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B034 — User block feature (PROTO ships dead block primitives)
-
-- **Priority:** P2  **Area:** go-api, web-app, tests
-- **GRC:** `src/internal/handler/user_block_handler.go:1-165`; `repository/user_repository.go:271-341`; `src/api-srv/cmd/server/main.go:95-109,223-228`; `model/app_user_model.go:48-58`; `handler/user_block_handler_test.go:93-174`; `stores/app-user-store.ts:55-56,380-393`; `pages/app-user-edit-page.tsx:259-283`; `pages/app-user-list-page.tsx:173-178`; `constants/api.ts:33-35`; `types/user-type.ts:3-5`; `tests/test_user_block.py:1-96`   **PROTO:** `src/api-srv/internal/security/app_helper.go:431-456,460-483`; `model/grants.go:22`; `model/security_model.go:87-91`; new web files
-- **Ticket:** RG0043 item 11 / `03ad0f3`
-- **What:** PROTO ships unused block parts (`BLOCKED*`, 9008,
-`CheckUserBlocked`). GRC: `account_status`, block/unblock routes, `/auth`
-refuses non-active, KV flag reloaded, revocation, UI, pytest.
-- **Port notes:** Needs B035's migration and B003. Brandon's call: port, or
-delete the dead primitives (PS0011)?
-- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-PROTO paths are under `src/api-srv/internal/` unless stated. PROTO has
-the read side of a "block a user" feature and no write side.
-
-- The live check. Every handler that calls `CheckRateLimitAndUserBlock`
-  (31 call sites) reads a KV flag on each authenticated request:
-  ```go
-  // security/app_helper.go:436-437, 449
-  if sh.claims != nil {
-      blockedValue, err := sh.appServices.KV.Get("BLOCKED*" + sh.claims.Subject)
-      sh.failAndRespond(http.StatusForbidden, "User account is blocked")
-  ```
-- `CheckUserBlocked` (`security/app_helper.go:459-485`) has no caller.
-- Grant 9008 (`model/grants.go:22`; `src/web-app/constants/grants.ts:13`)
-  is seeded to both admin groups (`sql/fixtures/local-seed.sql:52,77`);
-  no route checks it. `BlockUserRequest` (`model/security_model.go:87-91`)
-  is never decoded.
-
-Verified dead: the only writer of a `BLOCKED*` key is a test fixture
-(`handler/example_handler_test.go:170`). No `account_status` column
-exists (migrations `0001`-`0003`); `/auth` cannot refuse a disabled login.
-
-Consequence: an admin cannot disable a login except by `DELETE /user`,
-which loses the row and (until B003) leaves the JWT working to expiry.
-The UI offers a `BLOCK_USER` grant that does nothing. Missing feature
-plus misleading dead code, not a hole. PS0011
-(`tickets/01-open/PS0011-api-dead-code-config-loader.md:38`) lists
-`BlockUserRequest` as dead; Brandon deferred it because such DTOs "may be
-placeholders for planned endpoints". This item is that endpoint.
-
-#### What GRC changed
-
-GRC commit `03ad0f3` (RG0043 item 2.2) built the write side and deleted
-`CheckUserBlocked`.
-
-1. Column: `app_user.account_status`, values `invited|active|blocked`
-   (`src/internal/model/app_user_model.go:48-57`). It came from RG0035's
-   migration (`src/migrate-srv/sql/00024_user_invite.sql:8-10`); block
-   added the third value.
-2. Routes `POST /admin/blockUser` and `/admin/unblockUser`, grant 9008,
-   body `{userName}` (`src/api-srv/cmd/server/main.go:223-228`). The
-   handler (`src/internal/handler/user_block_handler.go:63-165`) refuses
-   self-block (400), another tenant's login (404), a wrong starting state
-   (409), and uses optimistic locking on `update_ts`
-   (`src/internal/repository/user_repository.go:276-313`).
-3. Two halves, because the KV is in-process
-   (`user_block_handler.go:15-28`): the row stops new logins
-   (`/auth` refuses non-active, `src/internal/handler/auth_handler.go:329`,
-   same counted 401 as a bad password); the `BLOCKED*` flag stops live
-   sessions with 403. The flag's TTL is `JWT_SESSION_EXPIRE_HOURS`, and
-   `main` reloads every blocked login's flag at start
-   (`src/api-srv/cmd/server/main.go:95-108`), so a restart does not
-   revive old tokens.
-4. Block also calls `RevokeUserSessions` (B003), so unblock does not
-   revive pre-block sessions (`user_block_handler.go:141-145`).
-5. Web: `setUserBlocked`, Block/Unblock buttons, list badge.
-
-Tests: Go `TestAdminBlockUser`, `TestLoadBlockedUsers`
-(`src/internal/handler/user_block_handler_test.go:93,164`); pytest
-`tests/test_user_block.py` (live session refused then restored; twice
-409; self 400; unknown 404; no grant 403).
-
-#### Proposed fix for PROTO
-
-1. **Migration.** Whichever of B034/B035 lands first adds
-   `sql/migrations/0004_app_user_account_status.sql` (latest is `0003`):
-   `account_status text`, backfill `'active'`, `SET NOT NULL`, no DEFAULT.
-   PROTO migrations are plain SQL, no goose markers, no Down section.
-2. **Every insert names the column**: `CreateUser`
-   (`repository/user_repository.go:143`, also used by `/userSelfCreate`,
-   kept by B002 SKIP) and `sql/fixtures/local-seed.sql:92`. Add
-   `AccountStatus` to `AppUserModel` and the three user reads.
-3. **`/auth`**: add `AccountStatus != "active"` to B007's failure branch.
-4. **Handler, repo, startup reload**: port `user_block_handler.go`,
-   `UpdateUserAccountStatus`, `RetrieveBlockedUserNameList`, and the
-   reload into `cmd/server/main.go`. Traps: module path is
-   `github.com/wbmartin/starter-api`; `mapRepoError` exists only after
-   B028; `limitBody(maxAuthBodyBytes)` only after B011. Delete
-   `CheckUserBlocked`.
-5. **Web**: two endpoints in `src/web-app/constants/api.ts`;
-   `setUserBlocked` in `stores/app-user-store.ts`; buttons and badge in
-   `pages/app-user-edit-page.tsx` / `app-user-list-page.tsx`; type in
-   `types/user-type.ts`. Use B037's fetch path if it has landed.
-
-Dependencies: B003 (PULL) first; B007 for `/auth`; B035 shares the
-column. B006 interaction: after B003 a blocked user's token fails
-`CheckJWT` with 401 and signs out. After a restart revocations are gone,
-only the flag answers, with 403, and B006 no longer signs out on 403; the
-user sees "User account is blocked" per call until expiry. Note it in
-the handler comment.
-
-Tests: Go handler table (self, other tenant, wrong state, success sets
-flag and revokes); Go `LoadBlockedUsers`; pytest `test_user_block.py`
-on PROTO fixtures in tenant 2; vitest for `setUserBlocked`.
-
-#### Open question for Brandon
-
-Port the block feature, or delete the dead primitives (`BLOCKED*` check,
-`CheckUserBlocked`, grant 9008, `BlockUserRequest`) under PS0011?
-Recommendation: port it; disabling a login without deleting it is a
-baseline admin need, and half the plumbing is already shipped.
-
-Brandon: Port Blocked
-
 ### B035 — Invite-link onboarding (replaces self-registration)
 
 - **Priority:** P2  **Area:** go-api, web-app, tests, etc
@@ -8892,3 +8773,123 @@ no client calls it, and a session-only version misses the crashes it
 would exist to catch.
 
 Brandon: keep behind a session.
+### B034 — COMPLETED — User block feature (PROTO ships dead block primitives)
+- **Completed:** 2026-10-03. Ported per Brandon ("Port Blocked"). Migration `0004_app_user_account_status.sql` adds `app_user.account_status` (backfill `active`, NOT NULL, no DEFAULT; B035 adds `invited` later); `CreateUser` and both seed files name it, `AppUserModel` and the two user reads carry it. `/auth` refuses a non-active login inside B007's failure branch (same counted 401, after argon2). New `user_block_handler.go`: `POST /admin/blockUser` / `/admin/unblockUser`, body `{userName}` (`BlockUserRequest`, no longer dead), grant 9008, explicit JWT/rate+block/CSRF/authz checks; self 400, other tenant or unknown 404, wrong state 409; block sets the row, the `BLOCKED*` flag (TTL `JWT_SESSION_EXPIRE_HOURS`) and revokes the login's sessions (B003), unblock clears the flag. Repo `UpdateUserAccountStatus` (optimistic, state-guarded) and `RetrieveBlockedUserNameList`; `main.go` reloads every blocked login's flag at start (exit 1 on failure). `CheckUserBlocked` deleted. Web: two endpoints, `setUserBlocked`, Block/Unblock button (hidden for own login, needs BLOCK_USER; re-reads the row so Save does not 409), Blocked badge on edit page, Status column on the list. Deviations: body cap is `maxLoginLayerBodyBytes` (PROTO's rule for signed-in login-layer writes), not GRC's 4 KiB; a live pre-block session gets 401 (revoked) rather than GRC pytest's 403, the 403 flag path after a restart is pinned in Go; `test_user_management.py::test_admin_block_user` (it tested DELETE) renamed `test_admin_delete_user`. Docs: doc/105 route table, revocation list, body caps, new User Blocking section; api-srv and tests READMEs. Tests: Go `TestAdminBlockUser`, `TestLoadBlockedUsers`, `TestAuthHandler_BlockedLoginIsRefusedLikeABadPassword`, repo `TestUpdateUserAccountStatus`; vitest `setUserBlocked` (2); pytest `test_user_block.py` (7). All green, govulncheck clean: go=398 unit=44 e2e=12 py=88. Local dev DB needs migration 0004 before the API starts.
+
+
+- **Priority:** P2  **Area:** go-api, web-app, tests
+- **GRC:** `src/internal/handler/user_block_handler.go:1-165`; `repository/user_repository.go:271-341`; `src/api-srv/cmd/server/main.go:95-109,223-228`; `model/app_user_model.go:48-58`; `handler/user_block_handler_test.go:93-174`; `stores/app-user-store.ts:55-56,380-393`; `pages/app-user-edit-page.tsx:259-283`; `pages/app-user-list-page.tsx:173-178`; `constants/api.ts:33-35`; `types/user-type.ts:3-5`; `tests/test_user_block.py:1-96`   **PROTO:** `src/api-srv/internal/security/app_helper.go:431-456,460-483`; `model/grants.go:22`; `model/security_model.go:87-91`; new web files
+- **Ticket:** RG0043 item 11 / `03ad0f3`
+- **What:** PROTO ships unused block parts (`BLOCKED*`, 9008,
+`CheckUserBlocked`). GRC: `account_status`, block/unblock routes, `/auth`
+refuses non-active, KV flag reloaded, revocation, UI, pytest.
+- **Port notes:** Needs B035's migration and B003. Brandon's call: port, or
+delete the dead primitives (PS0011)?
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+PROTO paths are under `src/api-srv/internal/` unless stated. PROTO has
+the read side of a "block a user" feature and no write side.
+
+- The live check. Every handler that calls `CheckRateLimitAndUserBlock`
+  (31 call sites) reads a KV flag on each authenticated request:
+  ```go
+  // security/app_helper.go:436-437, 449
+  if sh.claims != nil {
+      blockedValue, err := sh.appServices.KV.Get("BLOCKED*" + sh.claims.Subject)
+      sh.failAndRespond(http.StatusForbidden, "User account is blocked")
+  ```
+- `CheckUserBlocked` (`security/app_helper.go:459-485`) has no caller.
+- Grant 9008 (`model/grants.go:22`; `src/web-app/constants/grants.ts:13`)
+  is seeded to both admin groups (`sql/fixtures/local-seed.sql:52,77`);
+  no route checks it. `BlockUserRequest` (`model/security_model.go:87-91`)
+  is never decoded.
+
+Verified dead: the only writer of a `BLOCKED*` key is a test fixture
+(`handler/example_handler_test.go:170`). No `account_status` column
+exists (migrations `0001`-`0003`); `/auth` cannot refuse a disabled login.
+
+Consequence: an admin cannot disable a login except by `DELETE /user`,
+which loses the row and (until B003) leaves the JWT working to expiry.
+The UI offers a `BLOCK_USER` grant that does nothing. Missing feature
+plus misleading dead code, not a hole. PS0011
+(`tickets/01-open/PS0011-api-dead-code-config-loader.md:38`) lists
+`BlockUserRequest` as dead; Brandon deferred it because such DTOs "may be
+placeholders for planned endpoints". This item is that endpoint.
+
+#### What GRC changed
+
+GRC commit `03ad0f3` (RG0043 item 2.2) built the write side and deleted
+`CheckUserBlocked`.
+
+1. Column: `app_user.account_status`, values `invited|active|blocked`
+   (`src/internal/model/app_user_model.go:48-57`). It came from RG0035's
+   migration (`src/migrate-srv/sql/00024_user_invite.sql:8-10`); block
+   added the third value.
+2. Routes `POST /admin/blockUser` and `/admin/unblockUser`, grant 9008,
+   body `{userName}` (`src/api-srv/cmd/server/main.go:223-228`). The
+   handler (`src/internal/handler/user_block_handler.go:63-165`) refuses
+   self-block (400), another tenant's login (404), a wrong starting state
+   (409), and uses optimistic locking on `update_ts`
+   (`src/internal/repository/user_repository.go:276-313`).
+3. Two halves, because the KV is in-process
+   (`user_block_handler.go:15-28`): the row stops new logins
+   (`/auth` refuses non-active, `src/internal/handler/auth_handler.go:329`,
+   same counted 401 as a bad password); the `BLOCKED*` flag stops live
+   sessions with 403. The flag's TTL is `JWT_SESSION_EXPIRE_HOURS`, and
+   `main` reloads every blocked login's flag at start
+   (`src/api-srv/cmd/server/main.go:95-108`), so a restart does not
+   revive old tokens.
+4. Block also calls `RevokeUserSessions` (B003), so unblock does not
+   revive pre-block sessions (`user_block_handler.go:141-145`).
+5. Web: `setUserBlocked`, Block/Unblock buttons, list badge.
+
+Tests: Go `TestAdminBlockUser`, `TestLoadBlockedUsers`
+(`src/internal/handler/user_block_handler_test.go:93,164`); pytest
+`tests/test_user_block.py` (live session refused then restored; twice
+409; self 400; unknown 404; no grant 403).
+
+#### Proposed fix for PROTO
+
+1. **Migration.** Whichever of B034/B035 lands first adds
+   `sql/migrations/0004_app_user_account_status.sql` (latest is `0003`):
+   `account_status text`, backfill `'active'`, `SET NOT NULL`, no DEFAULT.
+   PROTO migrations are plain SQL, no goose markers, no Down section.
+2. **Every insert names the column**: `CreateUser`
+   (`repository/user_repository.go:143`, also used by `/userSelfCreate`,
+   kept by B002 SKIP) and `sql/fixtures/local-seed.sql:92`. Add
+   `AccountStatus` to `AppUserModel` and the three user reads.
+3. **`/auth`**: add `AccountStatus != "active"` to B007's failure branch.
+4. **Handler, repo, startup reload**: port `user_block_handler.go`,
+   `UpdateUserAccountStatus`, `RetrieveBlockedUserNameList`, and the
+   reload into `cmd/server/main.go`. Traps: module path is
+   `github.com/wbmartin/starter-api`; `mapRepoError` exists only after
+   B028; `limitBody(maxAuthBodyBytes)` only after B011. Delete
+   `CheckUserBlocked`.
+5. **Web**: two endpoints in `src/web-app/constants/api.ts`;
+   `setUserBlocked` in `stores/app-user-store.ts`; buttons and badge in
+   `pages/app-user-edit-page.tsx` / `app-user-list-page.tsx`; type in
+   `types/user-type.ts`. Use B037's fetch path if it has landed.
+
+Dependencies: B003 (PULL) first; B007 for `/auth`; B035 shares the
+column. B006 interaction: after B003 a blocked user's token fails
+`CheckJWT` with 401 and signs out. After a restart revocations are gone,
+only the flag answers, with 403, and B006 no longer signs out on 403; the
+user sees "User account is blocked" per call until expiry. Note it in
+the handler comment.
+
+Tests: Go handler table (self, other tenant, wrong state, success sets
+flag and revokes); Go `LoadBlockedUsers`; pytest `test_user_block.py`
+on PROTO fixtures in tenant 2; vitest for `setUserBlocked`.
+
+#### Open question for Brandon
+
+Port the block feature, or delete the dead primitives (`BLOCKED*` check,
+`CheckUserBlocked`, grant 9008, `BlockUserRequest`) under PS0011?
+Recommendation: port it; disabling a login without deleting it is a
+baseline admin need, and half the plumbing is already shipped.
+
+Brandon: Port Blocked

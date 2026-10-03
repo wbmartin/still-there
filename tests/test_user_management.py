@@ -120,18 +120,18 @@ class TestUserManagement:
         data = response.json()["data"]
         assert "message" in data
 
-    def test_admin_block_user(self, test_client):
-        """Test admin blocking (deleting) a user"""
+    def test_admin_delete_user(self, test_client):
+        """Test admin deleting a user (blocking is test_user_block.py)"""
         # Create a user
         import uuid
 
         suffix = uuid.uuid4().hex
         new_user_data = {
-            "userName": f"Testuser_block{suffix}",
-            "firstName": "Block",
+            "userName": f"Testuser_delete{suffix}",
+            "firstName": "Delete",
             "lastName": "Test",
-            "email": f"blocktest{suffix}@example.com",
-            "pwHash": "blockpass123!",
+            "email": f"deletetest{suffix}@example.com",
+            "pwHash": "deletepass123!",
             "mfaExempt": False,
             "appUserGroupMembershipList": [],
         }
@@ -142,13 +142,13 @@ class TestUserManagement:
         app_user_id = user_data["appUserId"]
         update_ts = user_data["updateTs"]
 
-        # Block the user
+        # Delete the user
         delete_data = {"appUserId": str(app_user_id), "updateTs": f"{update_ts:.7f}"}
 
         response = test_client.make_request("DELETE", "/user", params=delete_data)
         assert response.status_code == 200
 
-        # Verify user is blocked (soft deleted)
+        # Verify user is soft deleted
         get_response = test_client.make_request(
             "GET", "/userList?appUserIdList=" + str(app_user_id)
         )

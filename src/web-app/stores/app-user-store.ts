@@ -25,6 +25,9 @@ interface AppUserExtras {
     newPassword: string,
   ) => Promise<void>;
   resetUserMFA: (userId: number, updateTs: number) => Promise<void>;
+  // Block (true) or unblock (false) a login by name; the key is the
+  // handler's json tag (model.BlockUserRequest).
+  setUserBlocked: (userName: string, blocked: boolean) => Promise<void>;
 }
 
 export const useAppUserStore = createEntityStore<User, AppUserExtras>(
@@ -118,6 +121,14 @@ export const useAppUserStore = createEntityStore<User, AppUserExtras>(
 
       resetUserMFA: (userId, updateTs) =>
         postOrThrow(API_ENDPOINTS.ADMIN_RESET_USER_MFA, { userId, updateTs }),
+
+      setUserBlocked: (userName, blocked) =>
+        postOrThrow(
+          blocked
+            ? API_ENDPOINTS.ADMIN_BLOCK_USER
+            : API_ENDPOINTS.ADMIN_UNBLOCK_USER,
+          { userName },
+        ),
     };
   },
 );

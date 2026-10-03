@@ -1,6 +1,16 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Table, Button, Title, Group, Pagination, Container, Loader, Alert } from "@mantine/core";
+import {
+  Table,
+  Button,
+  Title,
+  Group,
+  Pagination,
+  Container,
+  Loader,
+  Alert,
+  Badge,
+} from "@mantine/core";
 import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
@@ -162,6 +172,7 @@ function UserAdminPage() {
               {sortColumn === "email" && (sortDirection === "asc" ? "↑" : "↓")}
             </Table.Th>
             <Table.Th>Groups</Table.Th>
+            <Table.Th>Status</Table.Th>
             <Table.Th>Actions</Table.Th>
           </Table.Tr>
         </Table.Thead>
@@ -178,6 +189,13 @@ function UserAdminPage() {
                 {user.appUserGroupMembershipList
                   .map((id) => getGroupName(id))
                   .join(", ")}
+              </Table.Td>
+              <Table.Td>
+                {user.accountStatus === "blocked" ? (
+                  <Badge color="red" variant="light">Blocked</Badge>
+                ) : (
+                  <Badge color="gray" variant="light">Active</Badge>
+                )}
               </Table.Td>
               <Table.Td>
                 <Group gap="xs" wrap="nowrap">

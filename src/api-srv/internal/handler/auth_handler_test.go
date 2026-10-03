@@ -41,7 +41,8 @@ func TestAuthHandler_MFAEnrolled(t *testing.T) {
 			user := &model.AppUserModel{
 				AppUserID: 7, UserName: "mfa", SecurityContext: 1,
 				PwHash: hash, MFASetup: testCase.mfaSetup,
-				TOTPSeed: testCase.seed,
+				TOTPSeed:      testCase.seed,
+				AccountStatus: model.AccountStatusActive,
 			}
 			repo := new(MockUserRepository)
 			repo.On("RetrieveUserByUserName", mock.Anything, "mfa").
@@ -271,7 +272,8 @@ func TestAuthHandler_CompletedLoginClearsTheUserCounterOnly(t *testing.T) {
 				Return(&model.AppUserModel{
 					AppUserID: 1, UserName: "alice", PwHash: hash,
 					SecurityContext: 1, AppUserGroupMembershipList: []int{1},
-					MFAExempt: testCase.mfaExempt,
+					MFAExempt:     testCase.mfaExempt,
+					AccountStatus: model.AccountStatusActive,
 				}, nil)
 			repo.On("GetGrantsForGroups", mock.Anything, []int{1}).
 				Return(map[int][]int{1: {model.GrantLogon}}, nil)

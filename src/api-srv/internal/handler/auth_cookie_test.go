@@ -54,7 +54,7 @@ func aliceRepo(hash string) *MockUserRepository {
 		Return(&model.AppUserModel{
 			AppUserID: 1, UserName: "alice", PwHash: hash,
 			SecurityContext: 1, AppUserGroupMembershipList: []int{1, 4},
-			MFAExempt: true,
+			MFAExempt: true, AccountStatus: model.AccountStatusActive,
 		}, nil)
 	repo.On("GetGrantsForGroups", mock.Anything, []int{1, 4}).
 		Return(map[int][]int{

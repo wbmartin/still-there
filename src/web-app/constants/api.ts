@@ -16,6 +16,10 @@ export const API_ENDPOINTS = {
   MFA_VERIFY: "/mfaVerify",
   ADMIN_RESET_USER_MFA: "/admin/resetUserMFA",
 
+  // Block / unblock a login (handler/user_block_handler.go)
+  ADMIN_BLOCK_USER: "/admin/blockUser",
+  ADMIN_UNBLOCK_USER: "/admin/unblockUser",
+
   // Users
   USER_LIST: "/userList",
   USER: "/user",

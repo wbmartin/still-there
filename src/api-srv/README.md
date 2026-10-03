@@ -72,6 +72,9 @@ All JSON is camelCase. List endpoints take `?<entity>IdList=1,2,3`
   enrolled user to verify; `/mfaSetup` refuses them 409 and never shows the
   stored secret again
 - `POST /admin/resetUserMFA`
+- `POST /admin/blockUser`, `POST /admin/unblockUser` — body `{userName}`;
+  block sets `account_status = blocked` (`/auth` refuses it), ends the
+  login's sessions and sets the `BLOCKED*` KV flag, reloaded at start
 
 ### Example (CRUD)
 - `GET /example?exampleId={id}`
@@ -109,7 +112,7 @@ explicitly, in order, via the `AppHelper` in
 
 1. `CheckJWT` — parse and validate the cookie
 2. `CheckRateLimitAndUserBlock` — per-user/unauthenticated rate limits and
-   admin blocks, backed by the in-process KV
+   admin blocks (`/admin/blockUser`), backed by the in-process KV
 3. `CheckCSRF` — `X-CSRF-Token` header must match the last 3 characters of
    the session ID; skipped for GET/HEAD/OPTIONS/TRACE
 4. `CheckAuthorization(grant)` — caller must hold the named grant for

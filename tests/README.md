@@ -94,6 +94,8 @@ authenticates in one step. Fixtures:
   tenant 3's groups; client-sent tenants are ignored
 - `test_session_revocation.py` — sign-out, an admin password change and a
   group grant edit end live sessions (old cookie gets 401)
+- `test_user_block.py` — block ends a login's sessions and refuses its
+  sign-in; unblock restores sign-in, not the old session; 409/400/404/403
 - `test_user_management.py` — user management operations (admin only)
 - `test_z_error_scenarios.py` — error conditions and status codes
 - `test_zz_mfa_totp.py` — TOTP enrolment, sign-in, code and temp-token

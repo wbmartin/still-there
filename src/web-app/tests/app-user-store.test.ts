@@ -41,4 +41,19 @@ describe("app user store request bodies", () => {
       newPassword: "n3w-passw0rd!",
     });
   });
+
+  it.each([
+    [true, "/api/admin/blockUser"],
+    [false, "/api/admin/unblockUser"],
+  ])("setUserBlocked(%s) posts userName to %s", async (blocked, path) => {
+    const fetchMock = recordFetch();
+
+    await useAppUserStore.getState().setUserBlocked("bob", blocked);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(path);
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual({ userName: "bob" });
+  });
 });

@@ -92,6 +92,7 @@ WITH common_vars AS (
 INSERT INTO app_user (
     user_name, pw_hash, first_name, last_name, email, security_context_id,
     app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
+    account_status,
     create_ts, create_user_id, update_ts, update_user_id
 )
 SELECT
@@ -105,6 +106,7 @@ SELECT
     data.mfa_exempt,
     '',
     FALSE,
+    'active',
     common_vars.ts,
     common_vars.system_id,
     common_vars.ts,

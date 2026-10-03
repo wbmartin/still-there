@@ -13,6 +13,7 @@ import {
   Container,
   Loader,
   Alert,
+  Badge,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { modals } from "@mantine/modals";
@@ -23,7 +24,10 @@ import { useAuthStore } from "../stores/auth-store";
 import { confirmDelete } from "../utils/confirm-delete";
 import { ChangePasswordModal } from "../components/change-password-modal";
 import { ROUTES } from "../constants/routes";
-import { defaultUserFormData } from "../types/user-type";
+import {
+  defaultUserFormData,
+  type AccountStatus,
+} from "../types/user-type";
 import { grants } from "../constants/grants";
 import { PasswordGenerator } from "../components/password-generator";
 import { reportError } from "../utils/report-error";
@@ -38,6 +42,7 @@ function UserEditPage() {
     deleteItem: deleteUser,
     changeOtherUserPassword,
     resetUserMFA,
+    setUserBlocked,
   } = useAppUserStore();
   const {
     readList: readAppUserGroupList,
@@ -62,6 +67,7 @@ function UserEditPage() {
   const requiredGrant = isNew ? grants.CREATE_USER : grants.UPDATE_USER;
   const authState = useAuthGuard([requiredGrant, grants.READ_USER]);
   const grantList = useAuthStore((state) => state.grantList);
+  const ownUserName = useAuthStore((state) => state.userName);
   const [userLoading, setUserLoading] = useState(!isNew && numericId !== null);
   const hasFetched = useRef(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -70,6 +76,9 @@ function UserEditPage() {
     string | undefined
   >();
   const [resetMFALoading, setResetMFALoading] = useState(false);
+  const [accountStatus, setAccountStatus] =
+    useState<AccountStatus>("active");
+  const [blockLoading, setBlockLoading] = useState(false);
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
@@ -89,6 +98,7 @@ function UserEditPage() {
                 pwHash: "",
                 updateTs: user.updateTs.toString(),
               });
+              setAccountStatus(user.accountStatus);
             }
           })
           .catch((error: unknown) => {
@@ -242,6 +252,40 @@ function UserEditPage() {
     }
   };
 
+  // The block changes the row's update_ts: re-read it so a later Save does
+  // not answer 409.
+  const handleSetBlocked = async (blocked: boolean) => {
+    if (!numericId) return;
+
+    setBlockLoading(true);
+    try {
+      await setUserBlocked(form.values.userName, blocked);
+      notifications.show({
+        title: blocked ? "User blocked" : "User unblocked",
+        message: blocked
+          ? "They cannot sign in, and their open sessions are ended."
+          : "They can sign in again.",
+        color: blocked ? "orange" : "green",
+      });
+      const user = await readUserById(numericId);
+      if (user) {
+        form.setFieldValue("updateTs", user.updateTs.toString());
+        setAccountStatus(user.accountStatus);
+      }
+    } catch (err) {
+      notifications.show({
+        title: "Error",
+        message:
+          err instanceof Error ? err.message : "Failed to change the block",
+        color: "red",
+      });
+    } finally {
+      setBlockLoading(false);
+    }
+  };
+
+  const isBlocked = accountStatus === "blocked";
+
   const groupOptions = appUserGroupList.map((g) => ({
     value: g.appUserGroupId.toString(),
     label: g.groupName,
@@ -251,6 +295,11 @@ function UserEditPage() {
     <Container size={1280} px={32} py={32} mx="auto">
       <Title order={1} mb="lg">
         {isNew ? "Add User" : "Edit User"}
+        {isBlocked && (
+          <Badge color="red" variant="light" ml="md">
+            Blocked
+          </Badge>
+        )}
       </Title>
       <form onSubmit={form.onSubmit(handleSubmit)}>
         <TextInput
@@ -329,6 +378,34 @@ function UserEditPage() {
                }
              >
                Reset MFA
+             </Button>
+           )}
+           {!isNew && grantList.includes(grants.BLOCK_USER) &&
+             form.values.userName !== ownUserName && (
+             <Button
+               color={isBlocked ? "green" : "orange"}
+               variant="outline"
+               loading={blockLoading}
+               onClick={() =>
+                 modals.openConfirmModal({
+                   title: isBlocked ? "Unblock user" : "Block user",
+                   children: (
+                     <Text size="sm">
+                       {isBlocked
+                         ? "They will be able to sign in again."
+                         : "They will not be able to sign in, and their open sessions end at once. Unblock to undo."}
+                     </Text>
+                   ),
+                   labels: {
+                     confirm: isBlocked ? "Unblock" : "Block",
+                     cancel: "Cancel",
+                   },
+                   confirmProps: { color: isBlocked ? "green" : "orange" },
+                   onConfirm: () => void handleSetBlocked(!isBlocked),
+                 })
+               }
+             >
+               {isBlocked ? "Unblock" : "Block"}
              </Button>
            )}
            {!isNew && (

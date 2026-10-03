@@ -405,6 +405,63 @@ func (s *UserRepositoryTestSuite) TestUpdateUserTOTPSeed() {
 	s.ErrorIs(err, ErrNotFound)
 }
 
+// B034: a login is created active; active -> blocked -> active, never from
+// another state or another tenant; and the blocked list the API reloads
+// into the KV at start.
+func (s *UserRepositoryTestSuite) TestUpdateUserAccountStatus() {
+	ctx := context.Background()
+	user := &model.AppUserModel{
+		UserName: "RepoTestBlockUser", PwHash: "$2a$10$test.hash",
+		FirstName: "Block", LastName: "User", Email: "block@example.com",
+		SecurityContext: testTenant, AppUserGroupMembershipList: []int{1},
+		CreateTS: 1234567890.123, CreateUserID: 1,
+		UpdateTS: 1234567890.123, UpdateUserID: 1,
+	}
+	created, err := s.repo.CreateUser(ctx, user, testTenant)
+	s.Require().NoError(err)
+	read, err := s.repo.RetrieveUserByUserName(ctx, "RepoTestBlockUser")
+	s.Require().NoError(err)
+	s.Equal(model.AccountStatusActive, read.AccountStatus)
+
+	// unblocking an active login touches nothing
+	_, err = s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		model.AccountStatusActive, created.UpdateTS, 2, testTenant)
+	s.ErrorIs(err, ErrConflict)
+
+	// another tenant's context finds no row
+	_, err = s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		model.AccountStatusBlocked, created.UpdateTS, 2, otherTenant)
+	s.ErrorIs(err, ErrNotFound)
+
+	blockedTS, err := s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		model.AccountStatusBlocked, created.UpdateTS, 2, testTenant)
+	s.Require().NoError(err)
+	userList, err := s.repo.RetrieveUserList(ctx, testTenant,
+		[]int{created.AppUserID}, 0)
+	s.Require().NoError(err)
+	s.Require().Len(userList, 1)
+	s.Equal(model.AccountStatusBlocked, userList[0].AccountStatus)
+	blockedList, err := s.repo.RetrieveBlockedUserNameList(ctx)
+	s.Require().NoError(err)
+	s.Contains(blockedList, "RepoTestBlockUser")
+
+	// a stale update_ts is a conflict
+	_, err = s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		model.AccountStatusActive, created.UpdateTS, 2, testTenant)
+	s.ErrorIs(err, ErrConflict)
+
+	_, err = s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		model.AccountStatusActive, blockedTS, 2, testTenant)
+	s.Require().NoError(err)
+	blockedList, err = s.repo.RetrieveBlockedUserNameList(ctx)
+	s.Require().NoError(err)
+	s.NotContains(blockedList, "RepoTestBlockUser")
+
+	_, err = s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		"invited", blockedTS, 2, testTenant)
+	s.ErrorIs(err, ErrValidation)
+}
+
 func (s *UserRepositoryTestSuite) TestUpdateUserMFAExempt() {
 	// Create test user
 	user := &model.AppUserModel{

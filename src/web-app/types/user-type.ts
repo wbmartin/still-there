@@ -1,4 +1,9 @@
 // User Types
+
+/** app_user.account_status: a blocked login can neither sign in nor keep a
+ *  session until an admin unblocks it (B034). */
+export type AccountStatus = "active" | "blocked";
+
 export interface User {
   appUserId: number;
   userName: string;
@@ -8,6 +13,7 @@ export interface User {
   securityContext: number;
   appUserGroupMembershipList: number[];
   mfaExempt: boolean;
+  accountStatus: AccountStatus;
   pwHash?: string;
   createTs: number;
   createUserId: number;
