@@ -454,105 +454,6 @@ repository and a prod repository that promote copies into, or accept that
 UAT's credential can move `:prd`? Recommendation: split; it is the only
 way a UAT compromise cannot ship to prod.
 
-### B056 — Review checklist skill (RG0043 method + "checked and clean")
-
-- **Priority:** P2  **Area:** skills
-- **GRC:** RG0043 md `:25-31,431-488,490-507,509-525`   **PROTO:** new `.claude/skills/stale-and-insecure-review/SKILL.md`
-- **Ticket:** RG0043
-- **What:** Four read-only passes plus a history secret scan, severities, a
-checklist of template invariants (check order, tenant predicates, no
-`innerHTML`, raw `fetch` only in `api.ts`, `pipefail`), and a required "Not
-covered" section.
-- **Port notes:** Drop GRC matrix/blob/Entra lines. Brandon's call: skill or
-doc?
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-A quality/process gap. PROTO has no procedure for a whole-tree review. Its
-skills are `compact-tickets`, `handoff`, `presales-deploy`, `ticket-triage`
-and `ticket-workflow` (`.claude/skills/`); none reviews code. The global
-`security-considerations` skill is per-PR: it asks questions about one
-change type. Nothing asks "does the whole tree still honour the template's
-invariants?" and nothing records what a past review covered.
-
-The invariants are stated as rules in `CLAUDE.md:35-53` (schema shape,
-tenant column, explicit check order, naming, no env lookups) but are
-checked by nobody between PRs. A spot check on 2026-10-02 shows the cost:
-
-- Holds: 0 `innerHTML`/`dangerouslySetInnerHTML`/`eval(` in
-  `src/web-app`; raw `fetch(` only in `utils/api.ts` and the e2e fixture
-  `tests/e2e/fixtures/api-client.ts`; 0 `os.Getenv` in Go.
-- Drifted: six bash scripts lack `pipefail`. `bin/100-build-api-server:6`,
-  `bin/215-run-api-srv:3`, `bin/216-stop-local-stack:3`,
-  `bin/510-reset-test-db:31` and `bin/515-reseed-db:25` use `set -e` only;
-  `bin/220-run-web-app` sets nothing. A failing command on the left of a
-  pipe goes unnoticed.
-
-Without a written method, a second review cannot tell which areas the
-first one cleared, so it either re-reads everything or misses the gaps.
-
-#### What GRC changed
-
-GRC wrote the method into ticket RG0043, not into a skill (GRC's
-`.claude/skills/` has the same four ticket skills as PROTO, no review skill).
-`tickets/02-working/RG0043-code-review-stale-artifacts-and-insecure-practice/RG0043-code-review-stale-artifacts-and-insecure-practice.md`:
-
-- `:25-31` Method: "read-only review ... four parallel passes: Go backend,
-  web app, infra / config / scripts / tests, docs / tasks / tickets / data,
-  plus a git-history secret scan across all refs. Every bullet was
-  confirmed by reading the cited file." Severity: H exploitable or privacy
-  or broken on a host; M latent bug or misleading drift; L hygiene.
-- `:431-488` "Checked and clean (so the next reviewer knows what was
-  covered)": counted assertions, for example "all 28 `NewAppHelper` sites
-  ... call JWT → rate-limit+block → CSRF → authorization →
-  `CheckAllChecksComplete`; every `Skip*` carries a reason", tenant
-  predicate in every repository write, "0 `dangerouslySetInnerHTML`
-  ... raw `fetch` only in `utils/api.ts`", "11 bash scripts `set -euo
-  pipefail`", "15 grant ids = `grants.go`", secrets scan over 486 commits.
-- `:490-507` "Not covered": live host state, named files not read, page
-  bodies read only by sweep.
-- `:509-525` a suggested split of findings into batches for triage.
-
-The review found the items behind many B-numbers in doc/700 (B007, B009,
-B015, B052 and others). No test pins the method; it is procedure.
-
-#### Proposed fix for PROTO
-
-1. Add `.claude/skills/stale-and-insecure-review/SKILL.md` (or a doc, see
-   the question). Contents: read-only; one ticket holds the findings; four
-   passes (Go `src/api-srv`, web `src/web-app`, infra/bin/tests/config,
-   docs/tickets) run as parallel subagents; a `git log -p --all` secret scan
-   over `etc/ infra/ bin/ tests/ src/ scripts/ .claude`; H/M/L definitions
-   as above; every finding cites `path:line` read by the reviewer.
-2. A checklist of PROTO invariants, each phrased as a countable assertion:
-   check order and `Skip*` reasons at every `NewAppHelper`;
-   `security_context_id` in every repository read/write; tenant 2 reserved;
-   no FK/trigger/`DEFAULT` in migrations; no `os.Getenv`; 0 `innerHTML`
-   family; raw `fetch` only in `utils/api.ts`; `constants/grants.ts` equals
-   `model/grants.go` and `constants/api.ts` paths are registered (B054
-   makes this a test); `set -euo pipefail` in every bash script; every
-   committed `infra/**/*.env` value is `SERVERONLY`; backticked doc paths
-   exist (B053 makes this a script).
-3. Required output sections: findings by severity, "Checked and clean"
-   with counts, "Not covered". A review without "Not covered" is incomplete.
-4. Leave out GRC-only lines: `authz/matrix.go`/`permissions.ts` replay,
-   blob store, Entra client assertion, pwsh runner, 85-entity counts, goose.
-5. Derived names: the skill must not say "proto"; use `etc/app.env` slugs.
-6. Dependencies: B053 and B054 turn two checklist lines into automated
-   checks; reference them once landed. First run would flag the six
-   `pipefail` gaps above.
-7. Tests: none (procedure). `scripts/lint-tickets.py` already validates the
-   findings ticket.
-
-#### Open question for Brandon
-
-Skill or doc? Recommendation: a skill, because it is a procedure an agent
-runs on request ("review the tree"), and skills are where PROTO's other
-procedures live; keep the invariant list in one place inside it.
-
 ### B057 — Branch model uat/main promote-on-push: document, do not adopt
 
 - **Priority:** P2  **Area:** docs, infra, skills
@@ -8926,3 +8827,103 @@ so dev advisories do not pile up once feature tickets stop bumping?
 Recommendation: yes, a standing ticket raised by `ticket-triage` when
 `npm audit` (dev included) is non-zero, since nothing else will trigger it.
 - **Completed:** 2026-10-03. Adapted per the decision (recommendation minus the standing toolchain-bump ticket, B091 removed the ticket system; the open question is closed by that). `src/web-app/README.md` "Dependency cadence" rewritten: every web change runs `npx depcheck` only; no blanket `npm update`; a change with a security reason works depcheck (remove unused first) -> `npm audit --omit=dev` -> `npm update --legacy-peer-deps <advised package>` (arborist note kept, lock committed) -> dev-only advisories and toolchain/major bumps as their own change with the lint fallout. `src/api-srv/README.md` new "Dependencies" section: `govulncheck ./...` (bin/300 all already runs and fails on it) -> `go get <module>@<fixed>` + `go mod tidy` -> toolchain/other upgrades their own change, for both `src/api-srv` and `src/load-test`; the two sections cross-reference. No dependency changed: at 12ccdc9 `npm audit --omit=dev` and full `npm audit` both report 0 and `npx depcheck` reports no issue, so `package-lock.json` is untouched. Step 3/4 ordering: B014 and B041 landed earlier (B041 is the eslint gate a blanket bump would break); B069 is still open and lands after this. No tests per step 5. Tests: all green, infra=15 docs=499 go=688 unit=87 e2e=13 py=102 (docs +5: new backticked paths in the two READMEs), govulncheck clean, gofmt clean.
+
+### B056 — COMPLETED — Review checklist skill (RG0043 method + "checked and clean")
+
+- **Priority:** P2  **Area:** skills
+- **GRC:** RG0043 md `:25-31,431-488,490-507,509-525`   **PROTO:** new `.claude/skills/stale-and-insecure-review/SKILL.md`
+- **Ticket:** RG0043
+- **What:** Four read-only passes plus a history secret scan, severities, a
+checklist of template invariants (check order, tenant predicates, no
+`innerHTML`, raw `fetch` only in `api.ts`, `pipefail`), and a required "Not
+covered" section.
+- **Port notes:** Drop GRC matrix/blob/Entra lines. Brandon's call: skill or
+doc?
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+A quality/process gap. PROTO has no procedure for a whole-tree review. Its
+skills are `compact-tickets`, `handoff`, `presales-deploy`, `ticket-triage`
+and `ticket-workflow` (`.claude/skills/`); none reviews code. The global
+`security-considerations` skill is per-PR: it asks questions about one
+change type. Nothing asks "does the whole tree still honour the template's
+invariants?" and nothing records what a past review covered.
+
+The invariants are stated as rules in `CLAUDE.md:35-53` (schema shape,
+tenant column, explicit check order, naming, no env lookups) but are
+checked by nobody between PRs. A spot check on 2026-10-02 shows the cost:
+
+- Holds: 0 `innerHTML`/`dangerouslySetInnerHTML`/`eval(` in
+  `src/web-app`; raw `fetch(` only in `utils/api.ts` and the e2e fixture
+  `tests/e2e/fixtures/api-client.ts`; 0 `os.Getenv` in Go.
+- Drifted: six bash scripts lack `pipefail`. `bin/100-build-api-server:6`,
+  `bin/215-run-api-srv:3`, `bin/216-stop-local-stack:3`,
+  `bin/510-reset-test-db:31` and `bin/515-reseed-db:25` use `set -e` only;
+  `bin/220-run-web-app` sets nothing. A failing command on the left of a
+  pipe goes unnoticed.
+
+Without a written method, a second review cannot tell which areas the
+first one cleared, so it either re-reads everything or misses the gaps.
+
+#### What GRC changed
+
+GRC wrote the method into ticket RG0043, not into a skill (GRC's
+`.claude/skills/` has the same four ticket skills as PROTO, no review skill).
+`tickets/02-working/RG0043-code-review-stale-artifacts-and-insecure-practice/RG0043-code-review-stale-artifacts-and-insecure-practice.md`:
+
+- `:25-31` Method: "read-only review ... four parallel passes: Go backend,
+  web app, infra / config / scripts / tests, docs / tasks / tickets / data,
+  plus a git-history secret scan across all refs. Every bullet was
+  confirmed by reading the cited file." Severity: H exploitable or privacy
+  or broken on a host; M latent bug or misleading drift; L hygiene.
+- `:431-488` "Checked and clean (so the next reviewer knows what was
+  covered)": counted assertions, for example "all 28 `NewAppHelper` sites
+  ... call JWT → rate-limit+block → CSRF → authorization →
+  `CheckAllChecksComplete`; every `Skip*` carries a reason", tenant
+  predicate in every repository write, "0 `dangerouslySetInnerHTML`
+  ... raw `fetch` only in `utils/api.ts`", "11 bash scripts `set -euo
+  pipefail`", "15 grant ids = `grants.go`", secrets scan over 486 commits.
+- `:490-507` "Not covered": live host state, named files not read, page
+  bodies read only by sweep.
+- `:509-525` a suggested split of findings into batches for triage.
+
+The review found the items behind many B-numbers in doc/700 (B007, B009,
+B015, B052 and others). No test pins the method; it is procedure.
+
+#### Proposed fix for PROTO
+
+1. Add `.claude/skills/stale-and-insecure-review/SKILL.md` (or a doc, see
+   the question). Contents: read-only; one ticket holds the findings; four
+   passes (Go `src/api-srv`, web `src/web-app`, infra/bin/tests/config,
+   docs/tickets) run as parallel subagents; a `git log -p --all` secret scan
+   over `etc/ infra/ bin/ tests/ src/ scripts/ .claude`; H/M/L definitions
+   as above; every finding cites `path:line` read by the reviewer.
+2. A checklist of PROTO invariants, each phrased as a countable assertion:
+   check order and `Skip*` reasons at every `NewAppHelper`;
+   `security_context_id` in every repository read/write; tenant 2 reserved;
+   no FK/trigger/`DEFAULT` in migrations; no `os.Getenv`; 0 `innerHTML`
+   family; raw `fetch` only in `utils/api.ts`; `constants/grants.ts` equals
+   `model/grants.go` and `constants/api.ts` paths are registered (B054
+   makes this a test); `set -euo pipefail` in every bash script; every
+   committed `infra/**/*.env` value is `SERVERONLY`; backticked doc paths
+   exist (B053 makes this a script).
+3. Required output sections: findings by severity, "Checked and clean"
+   with counts, "Not covered". A review without "Not covered" is incomplete.
+4. Leave out GRC-only lines: `authz/matrix.go`/`permissions.ts` replay,
+   blob store, Entra client assertion, pwsh runner, 85-entity counts, goose.
+5. Derived names: the skill must not say "proto"; use `etc/app.env` slugs.
+6. Dependencies: B053 and B054 turn two checklist lines into automated
+   checks; reference them once landed. First run would flag the six
+   `pipefail` gaps above.
+7. Tests: none (procedure). `scripts/lint-tickets.py` already validates the
+   findings ticket.
+
+#### Open question for Brandon
+
+Skill or doc? Recommendation: a skill, because it is a procedure an agent
+runs on request ("review the tree"), and skills are where PROTO's other
+procedures live; keep the invariant list in one place inside it.
+- **Completed:** 2026-10-03. Pulled per the decision (no Brandon line; open question "skill or doc?" taken as recommended: a skill). New `.claude/skills/stale-and-insecure-review/SKILL.md`: read-only whole-tree review, four parallel subagent passes (Go `src/api-srv`, web `src/web-app`, infra/bin/scripts/tests/etc, docs incl. `tasks/` and `.claude/skills/`) plus a `git log -p --all` secret scan (secrets reported by path/commit/kind, never value); H/M/L severities as in RG0043; every finding cites `path:line` read; a gate run first; a checklist of PROTO invariants as counted assertions (check order and `Skip*` reasons at every `NewAppHelper`, tenant predicate and `buildScopedWhere`, body tenant overwritten, tenant 2/3 and `test-tenant-lock.sql` coverage, no FK/trigger/`DEFAULT`, no edited migration, no `os.Getenv`, `fooList`, 0 `innerHTML` family, raw `fetch`/`console.*` only in `utils/api.ts`/`utils/report-error.ts`, no secrets in browser storage, `set -euo pipefail` everywhere, `SERVERONLY` secrets in `infra/**/*.env`, B052 customer-data and show-only-verified rules); lines the gate already enforces are marked *(gate)* with their check: B039 route contract test, B053 `check-doc-paths.sh`, B054 grants/route mirror tests, eslint `no-console`/`no-restricted-globals`, `bin/300-run-tests infra`. Required report sections: Summary, Findings by severity, Checked and clean (with counts), Not covered (a report without it is incomplete), Suggested batches. Deviations: ticket parts dropped (B091) -- findings are delivered in the reply and kept, if Brandon wants, in `tasks/todo.md`, not a findings ticket, and the `lint-tickets.py` step is gone; GRC-only lines (matrix/permissions replay, blob, Entra, pwsh, goose, entity counts) left out; "every committed infra env value is SERVERONLY" narrowed to every secret (non-secret values such as hosts are real); names via `etc/app.env`. Not done (out of scope, first run would flag): the six `pipefail` gaps (`bin/100`, `215`, `216`, `220`, `510`, `515`) are still open. No tests (procedure). Tests: all green, infra=15 docs=499 go=688 unit=87 e2e=13 py=102, govulncheck clean, gofmt clean.
