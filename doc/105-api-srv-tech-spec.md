@@ -53,7 +53,6 @@ src/api-srv/
 │       ├── app_user_group_repository_test.go # User group repository tests
 │       ├── user_repository.go      # User data operations
 │       └── user_repository_test.go # User repository tests
-├── .golangci.yml                   # Go linting configuration
 ├── go.mod
 ├── go.sum
 └── README.md
@@ -576,9 +575,11 @@ self-signup name check) use `errors.Is`, never the error's text.
 3. Run tests: `go test ./...`
 
 ### Code Quality
-- **Formatting**: `go fmt`
-- **Linting**: golangci-lint with `.golangci.yml` configuration
-- **Testing**: Run `go test ./...` to validate changes
+- **Formatting**: `gofmt`; the gate fails on any `gofmt -l` output
+- **Static analysis**: `go vet` and pinned `staticcheck`, zero findings
+  (`bin/300-run-tests go`, per module: `src/api-srv`, `src/load-test`)
+- **Testing**: `bin/300-run-tests go` runs all of the above plus
+  `go test ./...`
 - **Documentation**: Inline comments, README updates
 
 ## Future Enhancements
@@ -609,6 +610,6 @@ self-signup name check) use `errors.Is`, never the error's text.
 - **Security Context Switching**: Multi-tenant context switching with JWT updates
 - **Enhanced Error Handling**: Specific error codes and improved logging
 - **Database Optimization**: Strategic indexing for update_ts fields and optimistic locking
-- **Code Quality**: golangci-lint configuration and comprehensive test coverage
+- **Code Quality**: gofmt, go vet and staticcheck gate; comprehensive test coverage
 
 This specification captures the current implementation and serves as a foundation for future development and maintenance of the ProtoStack-ReactGo API server.

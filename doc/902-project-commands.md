@@ -53,7 +53,7 @@ To build and package the web app for deployment:
 The one command, on a laptop or a build host:
 ```
 ./bin/300-run-tests            # all: go + govulncheck + unit + e2e + py (load is not part of all)
-./bin/300-run-tests go         # go vet + go test (seconds; run before every commit)
+./bin/300-run-tests go         # gofmt, go vet, staticcheck, go test (run before every commit)
 ./bin/300-run-tests unit       # vitest (src/web-app/tests)
 ./bin/300-run-tests e2e        # Playwright only
 ./bin/300-run-tests py         # pytest HTTP suite against a private API instance
@@ -63,9 +63,18 @@ The one command, on a laptop or a build host:
   scratch database names, `TEST_PG_URL_BASE` for the migrator,
   `TEST_DATABASE_URL` for the Go repository suite, `E2E_API_ENV`
   for the API instance the e2e/py suites start, `TEST_LOG_DIR`.
-- `go`: rebuilds `loc_proto_test_db` via `bin/510`, runs `go vet ./...` and
-  `go test -v ./...` with `TEST_DATABASE_URL` exported. A repository
-  suite that cannot reach the database SKIPS (see
+- `go`: first, in each Go module (`src/api-srv`, `src/load-test`):
+  `gofmt -l .` (any file listed fails; fix with `gofmt -w`), `go vet ./...`
+  and `staticcheck ./...`. Checks only, nothing is rewritten; zero
+  findings is the gate. A staticcheck finding that is wrong for a line
+  gets `//lint:ignore <check> <reason>` above it, never a blanket config.
+  `U1000` (unused) skips exported names. staticcheck is pinned
+  (`STATICCHECK_VERSION` in the script) and installed once into
+  `tmp/tools/bin/` (needs proxy.golang.org the first time; v0.8.1 builds
+  with Go 1.26, which `go install` fetches unless `GOTOOLCHAIN=local`).
+  Then rebuilds `loc_proto_test_db` via `bin/510` and runs
+  `go test -v ./...` in `src/api-srv` with `TEST_DATABASE_URL` exported.
+  A repository suite that cannot reach the database SKIPS (see
   `internal/repository/testdb_test.go`); the runner greps for that skip and
   fails the run, so a green run always includes the integration suites.
 - `all` only: after the Go suites, `govulncheck ./...` in `src/api-srv`

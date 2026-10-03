@@ -242,119 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B040 — Go gate: `gofmt -l` + pinned staticcheck; delete `.golangci.yml`
-
-- **Priority:** P2  **Area:** bin, go-api, docs, skills
-- **GRC:** `bin/310-test-repo-model:13-37,78-89,91-103`; `CLAUDE.md:93-96`; `.claude/skills/ticket-workflow/SKILL.md:105,107`; `tickets/03-done/RG0015-api-dead-code-config-loader-lint/RG0015-api-dead-code-config-loader-lint.md:65-68,228-244`; `doc/902-project-commands.md:67`; `bin/310:13-18,80-89`   **PROTO:** `bin/300-run-tests:58-89` (`go vet` :64-66); `src/api-srv/.golangci.yml:1-21` (`lll: 120`, unused); `doc/105-api-srv-tech-spec.md:56,349,381`; `CLAUDE.md:51-54`; `.claude/skills/ticket-workflow/SKILL.md:100-102`; `doc/902-project-commands.md:56,66`; `tickets/01-open/PS0011-*:22,81`
-- **Ticket:** RG0015 / `93571f5`; RG0043 item 14; RG0006 / `0cf57f7`
-- **What:** PROTO's gate has no format check or static analysis; `.golangci.yml`
-implies one and says 120 columns. GRC fails on `gofmt -l` output and any
-`staticcheck@v0.8.1` finding (`go run`, no install).
-- **Port notes:** Run per module (`src/api-srv`, `src/load-test`); expect a
-cleanup pass; `U1000` skips exported names. Add govulncheck (B014). Then
-CLAUDE.md, skill, doc/902, PS0011.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Quality/DX gap: the Go gate checks less than the repo claims it checks.
-
-**(1) The gate is `go vet` plus tests.** `bin/300-run-tests go` runs:
-
-```bash
-# bin/300-run-tests:65-66, 72
-echo "[INFO] go vet"
-go vet ./...
-TEST_DATABASE_URL="$TEST_DATABASE_URL" go test -v ./... > "$GO_LOG" 2>&1 || true
-```
-
-It runs in `src/api-srv` only (`:64`). `src/load-test` is a second module
-(`src/load-test/go.mod`) and no gate compiles, vets or analyses it. There
-is no format check and no static analysis.
-
-**(2) A lint config implies a gate that does not exist.**
-`src/api-srv/.golangci.yml:4-21` enables eleven linters and sets
-`lll: line-length: 120`. No script runs `golangci-lint`. The 120 contradicts
-CLAUDE.md:51 ("break lines around 80 columns").
-`doc/105-api-srv-tech-spec.md:56,349,381` describe golangci-lint as the
-project's linting. `tickets/01-open/PS0011-api-dead-code-config-loader.md:
-22,81` uses it as a baseline (59 issues) and acceptance (at most 10).
-
-**(3) What a real analyser finds today.** Run read-only for this write-up:
-`gofmt -l` is empty in both modules. Pinned `staticcheck@v0.8.1` reports:
-
-- `src/api-srv/internal/handler/auth_handler.go:97:6: func
-  resetFailedAttempts is unused (U1000)`. A successful login never clears
-  the lockout counters. That is B010's bug, found by the tool.
-- `src/load-test/main.go:365:2` and `:395:2`: `exampleID` and `updateTs`
-  "never used" (SA4006). That is B042's broken create/update cycle.
-
-So the cleanup pass the doc expects is two fixes, both already items.
-
-**(4) The installed tools cannot run.** `~/go/bin/staticcheck` is 0.5.1;
-on Go 1.25.4 (both `go.mod:3`) it fails with "internal error in importing
-... unsupported version: 2". An unpinned, installed linter drifts out of
-step with the toolchain silently.
-
-#### What GRC changed
-
-RG0015 (`93571f5`) added go vet and staticcheck to `bin/310-test-repo-model`;
-RG0006 added the gofmt check; `5089ac0` deleted `.golangci.yml`.
-
-```bash
-# bin/310-test-repo-model:30, 81-82, 99-100
-STATICCHECK_VERSION="v0.8.1"
-UNFORMATTED=$(gofmt -l .)
-if [ -n "$UNFORMATTED" ]; then
-    (cd "$MODULE_DIR" && go run \
-        "honnef.co/go/tools/cmd/staticcheck@$STATICCHECK_VERSION" ./...) \
-```
-
-Rules from the ticket and script comments (`bin/310:13-21,25-37`): never
-rewrite code, only check; zero findings is the gate; fix or write
-`//lint:ignore <check> <reason>`; run per module, because a root `./...`
-missed a planted finding (RG0015 md `:236-243`). `go run pkg@version`
-needs no install and no `go.mod` entry. RG0015 also found `U1000` skips
-exported names (`:228-233`). GRC documents it in `CLAUDE.md:93-96`,
-`.claude/skills/ticket-workflow/SKILL.md:105,107` and
-`doc/902-project-commands.md:67`. No test pins the gate itself.
-
-#### Proposed fix for PROTO
-
-1. `bin/300-run-tests` go block (`:59-88`): before `go vet`, loop over
-   `MODULE_DIR_LIST=(src/api-srv src/load-test)`: `gofmt -l .` fails on
-   any output; `go vet ./...`; `go run honnef.co/go/tools/cmd/staticcheck@
-   $STATICCHECK_VERSION ./...`. Pin the version at the top of the script.
-2. Fix the three findings above under B010 and B042, or land B040 after
-   them. Do not suppress them.
-3. Delete `src/api-srv/.golangci.yml`; drop it from
-   `doc/105-api-srv-tech-spec.md:56,349,381`.
-4. Docs: one bullet in CLAUDE.md beside the 80-column rule; update
-   `.claude/skills/ticket-workflow/SKILL.md:100-102` and
-   `doc/902-project-commands.md:56,66`; rewrite PS0011's baseline and
-   acceptance (`:22,81`) to "staticcheck zero findings".
-5. govulncheck (B014): GRC does not run it in any gate (checked `bin/`,
-   CLAUDE.md, doc/902). Adding it is a PROTO choice, not a port. Pin it
-   the same way if wanted.
-
-Traps: GRC's `MODULE_DIR_LIST` names five modules under one `go.work`;
-PROTO has two modules and no `go.work`, so paths are from the project
-root. v0.8.1 needs Go 1.26: `go run` switched the toolchain to go1.26.8
-automatically here, so a host with `GOTOOLCHAIN=local` needs 1.26 (ties to
-B014 and B047). GRC's message suggests `golines -m 80`; PROTO has no
-golines, so say `gofmt -w`.
-
-Tests: none new; verify by planting a finding in each module once.
-
-#### Open question for Brandon
-
-Run govulncheck in the same gate (network on every run, can go red on a
-new advisory with no code change), or keep it a manual step? Recommend:
-gate it in `bin/300 all` only, not `go`, so the per-commit run stays fast
-and offline.
-
 ### B041 — Clean-tree gate: eslint as a check; `git status` stays empty
 
 - **Priority:** P2  **Area:** bin, docs, skills, etc, web-app
@@ -472,6 +359,7 @@ measured only, test API, `TEST_PERSONA_PASSWORD`, tenant 2.
 - **Port notes:** Keep the example cycle (+`UpdateExample`); 330 starts a
 private instance (bin/300 :140-182) or needs 8082. After B018.
 - **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+- **Partial (2026-10-03):** step 2 (`runCycle` as create, `UpdateExample`, get, delete; `UpdateExample` returns the new `updateTs`) landed with B040 to clear the staticcheck SA4006 findings. Steps 1, 3-7 still open.
 
 **Expanded (2026-10-02).**
 
@@ -8902,3 +8790,117 @@ One fake style for "repository must not be reached": GRC's
 `panicUserRepository` or PROTO's testify mock? Recommendation: keep
 testify for consistency, and add a comment on each sequence test that an
 unexpected call is the failure.
+
+### B040 — COMPLETED — Go gate: `gofmt -l` + pinned staticcheck; delete `.golangci.yml`
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). `bin/300-run-tests` go block now runs, per module in `GO_MODULE_DIR_LIST=(src/api-srv src/load-test)` and before the test DB rebuild: `gofmt -l .` (the toolchain go.mod selects; any output fails, message says `gofmt -w`), `go vet ./...` (new for `src/load-test`), and `staticcheck ./...` pinned `STATICCHECK_VERSION=v0.8.1`. Deviation: installed once into `tmp/tools/bin/` by a shared `install_go_tool` helper (version-checked with `go version -m`, reinstalled on mismatch) instead of `go run pkg@version`, so it matches the existing govulncheck pin (B014, now on the same helper and module list) and a later `go` run is offline. Open question answered by the existing B014 gate: govulncheck stays `all`-only. Findings: api-srv was already clean (B010 removed `resetFailedAttempts`); load-test had the four SA4006 at `main.go:365,395`. Fixed, not suppressed, by taking B042 step 2 now: `runCycle` is login, create, `UpdateExample`, get, delete, logout, each timed by a `record` helper; `UpdateExample` returns the new `updateTs` (via a `response` arg on `makeRequest`, replacing the unused `headers` arg) and the delete sends it. Rest of B042 stays open (noted there). Smoke run against a private e2e API on :8082 as tenant-2 admin, `--iterations 3 --concurrency 2`: 36 requests, 100% success, 6 rows created, updated and soft-deleted, none leaked. Deleted `src/api-srv/.golangci.yml`; doc/105 (tree entry, Code Quality, Completed Features) and doc/902 (`go` mode) rewritten; CLAUDE.md gains a gate bullet beside the 80-column rule. Skill and PS0011 steps moot (no ticket-workflow skill or tickets/ dir; B091). Not done: B038's deferred repository param renames (`userIds`, `groupId`) and `interface{}` -> `any` -- neither staticcheck's default checks nor this write-up call for them; left as a follow-up. Verified: planted an unformatted file and an unused func in each module, gate fails on each (gofmt / U1000); shellcheck 0.9.0 in `ubuntu:24.04` clean on the new script. All green, govulncheck clean, `gofmt -l` empty: go=676 unit=82 e2e=13 py=96 (unchanged; no new tests per the write-up).
+
+- **Priority:** P2  **Area:** bin, go-api, docs, skills
+- **GRC:** `bin/310-test-repo-model:13-37,78-89,91-103`; `CLAUDE.md:93-96`; `.claude/skills/ticket-workflow/SKILL.md:105,107`; `tickets/03-done/RG0015-api-dead-code-config-loader-lint/RG0015-api-dead-code-config-loader-lint.md:65-68,228-244`; `doc/902-project-commands.md:67`; `bin/310:13-18,80-89`   **PROTO:** `bin/300-run-tests:58-89` (`go vet` :64-66); `src/api-srv/.golangci.yml:1-21` (`lll: 120`, unused); `doc/105-api-srv-tech-spec.md:56,349,381`; `CLAUDE.md:51-54`; `.claude/skills/ticket-workflow/SKILL.md:100-102`; `doc/902-project-commands.md:56,66`; `tickets/01-open/PS0011-*:22,81`
+- **Ticket:** RG0015 / `93571f5`; RG0043 item 14; RG0006 / `0cf57f7`
+- **What:** PROTO's gate has no format check or static analysis; `.golangci.yml`
+implies one and says 120 columns. GRC fails on `gofmt -l` output and any
+`staticcheck@v0.8.1` finding (`go run`, no install).
+- **Port notes:** Run per module (`src/api-srv`, `src/load-test`); expect a
+cleanup pass; `U1000` skips exported names. Add govulncheck (B014). Then
+CLAUDE.md, skill, doc/902, PS0011.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Quality/DX gap: the Go gate checks less than the repo claims it checks.
+
+**(1) The gate is `go vet` plus tests.** `bin/300-run-tests go` runs:
+
+```bash
+# bin/300-run-tests:65-66, 72
+echo "[INFO] go vet"
+go vet ./...
+TEST_DATABASE_URL="$TEST_DATABASE_URL" go test -v ./... > "$GO_LOG" 2>&1 || true
+```
+
+It runs in `src/api-srv` only (`:64`). `src/load-test` is a second module
+(`src/load-test/go.mod`) and no gate compiles, vets or analyses it. There
+is no format check and no static analysis.
+
+**(2) A lint config implies a gate that does not exist.**
+`src/api-srv/.golangci.yml:4-21` enables eleven linters and sets
+`lll: line-length: 120`. No script runs `golangci-lint`. The 120 contradicts
+CLAUDE.md:51 ("break lines around 80 columns").
+`doc/105-api-srv-tech-spec.md:56,349,381` describe golangci-lint as the
+project's linting. `tickets/01-open/PS0011-api-dead-code-config-loader.md:
+22,81` uses it as a baseline (59 issues) and acceptance (at most 10).
+
+**(3) What a real analyser finds today.** Run read-only for this write-up:
+`gofmt -l` is empty in both modules. Pinned `staticcheck@v0.8.1` reports:
+
+- `src/api-srv/internal/handler/auth_handler.go:97:6: func
+  resetFailedAttempts is unused (U1000)`. A successful login never clears
+  the lockout counters. That is B010's bug, found by the tool.
+- `src/load-test/main.go:365:2` and `:395:2`: `exampleID` and `updateTs`
+  "never used" (SA4006). That is B042's broken create/update cycle.
+
+So the cleanup pass the doc expects is two fixes, both already items.
+
+**(4) The installed tools cannot run.** `~/go/bin/staticcheck` is 0.5.1;
+on Go 1.25.4 (both `go.mod:3`) it fails with "internal error in importing
+... unsupported version: 2". An unpinned, installed linter drifts out of
+step with the toolchain silently.
+
+#### What GRC changed
+
+RG0015 (`93571f5`) added go vet and staticcheck to `bin/310-test-repo-model`;
+RG0006 added the gofmt check; `5089ac0` deleted `.golangci.yml`.
+
+```bash
+# bin/310-test-repo-model:30, 81-82, 99-100
+STATICCHECK_VERSION="v0.8.1"
+UNFORMATTED=$(gofmt -l .)
+if [ -n "$UNFORMATTED" ]; then
+    (cd "$MODULE_DIR" && go run \
+        "honnef.co/go/tools/cmd/staticcheck@$STATICCHECK_VERSION" ./...) \
+```
+
+Rules from the ticket and script comments (`bin/310:13-21,25-37`): never
+rewrite code, only check; zero findings is the gate; fix or write
+`//lint:ignore <check> <reason>`; run per module, because a root `./...`
+missed a planted finding (RG0015 md `:236-243`). `go run pkg@version`
+needs no install and no `go.mod` entry. RG0015 also found `U1000` skips
+exported names (`:228-233`). GRC documents it in `CLAUDE.md:93-96`,
+`.claude/skills/ticket-workflow/SKILL.md:105,107` and
+`doc/902-project-commands.md:67`. No test pins the gate itself.
+
+#### Proposed fix for PROTO
+
+1. `bin/300-run-tests` go block (`:59-88`): before `go vet`, loop over
+   `MODULE_DIR_LIST=(src/api-srv src/load-test)`: `gofmt -l .` fails on
+   any output; `go vet ./...`; `go run honnef.co/go/tools/cmd/staticcheck@
+   $STATICCHECK_VERSION ./...`. Pin the version at the top of the script.
+2. Fix the three findings above under B010 and B042, or land B040 after
+   them. Do not suppress them.
+3. Delete `src/api-srv/.golangci.yml`; drop it from
+   `doc/105-api-srv-tech-spec.md:56,349,381`.
+4. Docs: one bullet in CLAUDE.md beside the 80-column rule; update
+   `.claude/skills/ticket-workflow/SKILL.md:100-102` and
+   `doc/902-project-commands.md:56,66`; rewrite PS0011's baseline and
+   acceptance (`:22,81`) to "staticcheck zero findings".
+5. govulncheck (B014): GRC does not run it in any gate (checked `bin/`,
+   CLAUDE.md, doc/902). Adding it is a PROTO choice, not a port. Pin it
+   the same way if wanted.
+
+Traps: GRC's `MODULE_DIR_LIST` names five modules under one `go.work`;
+PROTO has two modules and no `go.work`, so paths are from the project
+root. v0.8.1 needs Go 1.26: `go run` switched the toolchain to go1.26.8
+automatically here, so a host with `GOTOOLCHAIN=local` needs 1.26 (ties to
+B014 and B047). GRC's message suggests `golines -m 80`; PROTO has no
+golines, so say `gofmt -w`.
+
+Tests: none new; verify by planting a finding in each module once.
+
+#### Open question for Brandon
+
+Run govulncheck in the same gate (network on every run, can go red on a
+new advisory with no code change), or keep it a manual step? Recommend:
+gate it in `bin/300 all` only, not `go`, so the per-commit run stays fast
+and offline.

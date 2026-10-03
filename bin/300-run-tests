@@ -3,9 +3,11 @@ set -euo pipefail
 # The test gate -- the same one on a laptop and on a build host. The only
 # script that runs tests; none of them writes to the source tree.
 #
-#   bin/300-run-tests          # all: rebuild both scratch DBs, go vet + test,
-#                              #      govulncheck, vitest, playwright, pytest
-#   bin/300-run-tests go       # the Go suites only (seconds; run before every commit)
+#   bin/300-run-tests          # all: rebuild both scratch DBs, Go checks +
+#                              #      test, govulncheck, vitest, playwright,
+#                              #      pytest
+#   bin/300-run-tests go       # gofmt, go vet, staticcheck, go test
+#                              #   (seconds; run before every commit)
 #   bin/300-run-tests unit     # vitest (src/web-app/tests), no database
 #   bin/300-run-tests e2e      # Playwright only (bin/230-run-web-app-e2e)
 #   bin/300-run-tests py       # pytest HTTP suite (tests/) against a private
@@ -63,15 +65,64 @@ done
 GO_COUNT=0; UNIT_COUNT=0; E2E_COUNT=0; PY_COUNT=0
 SUMMARY=()
 
+# Go analysers are pinned and installed once under tmp/ (go install, no
+# go.mod entry), so every machine runs the same version and a later run
+# needs no network. An installed copy of another version is replaced.
+GO_MODULE_DIR_LIST=(src/api-srv src/load-test)
+STATICCHECK_VERSION=v0.8.1
+GOVULNCHECK_VERSION=v1.7.0
+TOOLS_BIN="$PROJECT_ROOT/tmp/tools/bin"
+# install_go_tool <binary> <module> <package> <version>
+install_go_tool() {
+    local binary="$TOOLS_BIN/$1" module="$2" package="$3" version="$4"
+    if go version -m "$binary" 2>/dev/null \
+            | grep -qE "^\s+mod\s+$module\s+$version\s"; then
+        return 0
+    fi
+    echo "[INFO] Installing $1 $version into $TOOLS_BIN"
+    mkdir -p "$TOOLS_BIN"
+    local install_log="$LOG_DIR/$1-install.log"
+    if ! GOBIN="$TOOLS_BIN" go install "$package@$version" \
+            > "$install_log" 2>&1; then
+        echo "[ERROR] cannot install $1 $version" \
+            "(needs proxy.golang.org) -- $install_log:"
+        tail -20 "$install_log"
+        exit 1
+    fi
+}
+
 # ------------------------------------------------------------------------------
 if [ "$MODE" = all ] || [ "$MODE" = go ]; then
+    # Checks only, never rewrites: zero findings is the gate. Fix the code,
+    # or for a staticcheck finding that is wrong here write
+    # //lint:ignore <check> <reason> on the line above. Per module, because
+    # each is its own go.mod and a root ./... would not reach it. gofmt is
+    # the one in the toolchain go.mod selects.
+    install_go_tool staticcheck honnef.co/go/tools \
+        honnef.co/go/tools/cmd/staticcheck "$STATICCHECK_VERSION"
+    for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
+        pushd "$PROJECT_ROOT/$module_dir" > /dev/null
+        echo "[INFO] gofmt, go vet, staticcheck $module_dir"
+        UNFORMATTED="$("$(go env GOROOT)/bin/gofmt" -l .)" \
+            || { echo "[ERROR] gofmt could not parse $module_dir"; exit 1; }
+        if [ -n "$UNFORMATTED" ]; then
+            echo "[ERROR] gofmt: not formatted (run gofmt -w on them):"
+            while IFS= read -r file; do
+                echo "    $module_dir/$file"
+            done <<< "$UNFORMATTED"
+            exit 1
+        fi
+        go vet ./... || { echo "[ERROR] go vet: $module_dir"; exit 1; }
+        "$TOOLS_BIN/staticcheck" ./... \
+            || { echo "[ERROR] staticcheck: $module_dir"; exit 1; }
+        popd > /dev/null
+    done
+
     echo "[INFO] Rebuilding $TEST_DB"
     "$SCRIPT_DIR/510-reset-test-db" "$TEST_DB" > "$LOG_DIR/reset-test-db.log" 2>&1 \
         || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-test-db.log:"; tail -20 "$LOG_DIR/reset-test-db.log"; exit 1; }
 
     pushd "$PROJECT_ROOT/src/api-srv" > /dev/null
-    echo "[INFO] go vet"
-    go vet ./...
     # -v so a skip is visible in the log; the grep for connectTestDB's exact
     # message turns it into a failure. (A plain '--- SKIP' would also catch an
     # upstream subtest that skips on purpose.)
@@ -100,41 +151,25 @@ fi
 # toolchain go.mod selects. "all" only: it reads vuln.go.dev, so the "go"
 # loop stays offline. Fails on any vulnerability the code calls; an
 # advisory in a package the code never reaches is not a failure.
-# Pinned and installed under tmp/ so every machine runs the same scanner.
-GOVULNCHECK_VERSION=v1.7.0
 if [ "$MODE" = all ]; then
-    TOOLS_BIN="$PROJECT_ROOT/tmp/tools/bin"
-    GOVULNCHECK="$TOOLS_BIN/govulncheck"
-    if ! go version -m "$GOVULNCHECK" 2>/dev/null \
-            | grep -qE "^\s+mod\s+golang.org/x/vuln\s+$GOVULNCHECK_VERSION\s"; then
-        echo "[INFO] Installing govulncheck $GOVULNCHECK_VERSION into $TOOLS_BIN"
-        mkdir -p "$TOOLS_BIN"
-        INSTALL_LOG="$LOG_DIR/govulncheck-install.log"
-        if ! GOBIN="$TOOLS_BIN" go install \
-                "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION" \
-                > "$INSTALL_LOG" 2>&1; then
-            echo "[ERROR] cannot install govulncheck $GOVULNCHECK_VERSION" \
-                "(needs proxy.golang.org) -- $INSTALL_LOG:"
-            tail -20 "$INSTALL_LOG"
-            exit 1
-        fi
-    fi
-    for module in api-srv load-test; do
-        echo "[INFO] govulncheck src/$module"
-        VULN_LOG="$LOG_DIR/govulncheck-$module.log"
+    install_go_tool govulncheck golang.org/x/vuln \
+        golang.org/x/vuln/cmd/govulncheck "$GOVULNCHECK_VERSION"
+    for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
+        echo "[INFO] govulncheck $module_dir"
+        VULN_LOG="$LOG_DIR/govulncheck-${module_dir##*/}.log"
         VULN_STATUS=0
-        (cd "$PROJECT_ROOT/src/$module" && "$GOVULNCHECK" ./...) \
+        (cd "$PROJECT_ROOT/$module_dir" && "$TOOLS_BIN/govulncheck" ./...) \
             > "$VULN_LOG" 2>&1 || VULN_STATUS=$?
         case "$VULN_STATUS" in
             0) ;;
             3)
-                echo "[ERROR] govulncheck: src/$module calls a known" \
+                echo "[ERROR] govulncheck: $module_dir calls a known" \
                     "vulnerability -- full log: $VULN_LOG"
                 grep -E '^Vulnerability #|Found in:|Fixed in:' "$VULN_LOG" | head -60
                 exit 1
                 ;;
             *)
-                echo "[ERROR] govulncheck could not scan src/$module" \
+                echo "[ERROR] govulncheck could not scan $module_dir" \
                     "(exit $VULN_STATUS; needs vuln.go.dev) -- $VULN_LOG:"
                 tail -20 "$VULN_LOG"
                 exit 1

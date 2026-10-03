@@ -332,133 +332,54 @@ func runWorker(
 	}
 }
 
+// runCycle is one login, create, update, get, delete, logout, each timed
+// on its own. A failed create leaves nothing to update or delete; a failed
+// update leaves the row at its create timestamp, which the delete then uses.
 func runCycle(client *APIClient, metricsChan chan<- OperationMetric) {
-	// 1. Login
-	start := time.Now()
-	err := client.Login()
-	duration := time.Since(start)
-
-	success := err == nil
-	errorType := ""
-	if err != nil {
-		errorType = err.Error()
-		if errorType != "" {
-			log.Printf("Authentication failed (continuing): %v", err)
-
+	record := func(operation Operation, start time.Time, err error) {
+		metricsChan <- OperationMetric{
+			Operation: operation,
+			Duration:  time.Since(start),
+			Success:   err == nil,
+			ErrorType: getErrorType(err),
+			Timestamp: time.Now(),
 		}
 	}
 
-	metricsChan <- OperationMetric{
-		Operation: OpLogin,
-		Duration:  duration,
-		Success:   success,
-		ErrorType: errorType,
-		Timestamp: time.Now(),
-	}
-
-	if !success {
+	start := time.Now()
+	err := client.Login()
+	record(OpLogin, start, err)
+	if err != nil {
+		log.Printf("Authentication failed (continuing): %v", err)
 		return
 	}
 
-	// 2. Create example
 	start = time.Now()
 	exampleID, updateTs, err := client.CreateExample()
-	duration = time.Since(start)
-
-	metricsChan <- OperationMetric{
-		Operation: OpCreate,
-		Duration:  duration,
-		Success:   err == nil,
-		ErrorType: getErrorType(err),
-		Timestamp: time.Now(),
-	}
-
+	record(OpCreate, start, err)
 	if err != nil {
 		client.Logout() // Cleanup
 		return
 	}
 
-	metricsChan <- OperationMetric{
-		Operation: OpLogin,
-		Duration:  duration,
-		Success:   success,
-		ErrorType: errorType,
-		Timestamp: time.Now(),
-	}
-
-	if !success {
-		return
-	}
-
-	// 2. Create example
 	start = time.Now()
-	exampleID, updateTs, err = client.CreateExample()
-	duration = time.Since(start)
-
-	metricsChan <- OperationMetric{
-		Operation: OpCreate,
-		Duration:  duration,
-		Success:   err == nil,
-		ErrorType: getErrorType(err),
-		Timestamp: time.Now(),
+	newUpdateTs, err := client.UpdateExample(exampleID, updateTs)
+	record(OpUpdate, start, err)
+	if err == nil {
+		updateTs = newUpdateTs
 	}
 
-	if err != nil {
-		client.Logout() // Cleanup
-		return
-	}
-
-	// 2. Create example
-	start = time.Now()
-	exampleID, updateTs, err = client.CreateExample()
-	duration = time.Since(start)
-
-	metricsChan <- OperationMetric{
-		Operation: OpUpdate,
-		Duration:  duration,
-		Success:   err == nil,
-		ErrorType: getErrorType(err),
-		Timestamp: time.Now(),
-	}
-
-	// 4. Get example
 	start = time.Now()
 	err = client.GetExample(exampleID)
-	duration = time.Since(start)
+	record(OpGet, start, err)
 
-	metricsChan <- OperationMetric{
-		Operation: OpGet,
-		Duration:  duration,
-		Success:   err == nil,
-		ErrorType: getErrorType(err),
-		Timestamp: time.Now(),
-	}
-
-	// 5. Delete example
 	start = time.Now()
 	err = client.DeleteExample(exampleID, updateTs)
-	duration = time.Since(start)
+	record(OpDelete, start, err)
 
-	metricsChan <- OperationMetric{
-		Operation: OpDelete,
-		Duration:  duration,
-		Success:   err == nil,
-		ErrorType: getErrorType(err),
-		Timestamp: time.Now(),
-	}
-
-	// 6. Logout
 	start = time.Now()
 	err = client.Logout()
-	duration = time.Since(start)
-
-	metricsChan <- OperationMetric{
-		Operation: OpLogout,
-		Duration:  duration,
-		Success:   err == nil,
-		ErrorType: getErrorType(err),
-		Timestamp: time.Now(),
-	}
+	record(OpLogout, start, err)
 }
 
 func getErrorType(err error) string {
