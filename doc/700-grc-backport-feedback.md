@@ -7632,7 +7632,7 @@ None.
   page shows the message and the session survives. Count the attempt like
   a failed login if the handler already does. Pytest: wrong old password
   returns the new status and the session cookie still works.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
+- **Decision:** \[ \] pull / \[ \] adapt / \[ X\] skip  (new, not yet decided)
 
 # SKIP / Brandon-veto list (tick to override)
 
