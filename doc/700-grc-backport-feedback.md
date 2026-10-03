@@ -240,143 +240,6 @@ published password off UAT hosts that already have it but makes the host
 env file the only source of truth? Recommendation: yes, and check the
 existing UAT host once by hand in the same ticket.
 
-### B023 — fail2ban app jail bans real users on `/api/` 4xx
-
-- **Priority:** P1  **Area:** infra, docs
-- **GRC:** `infra/uat-unified001/fail2ban/etc/jail.local:24,43-51`; `infra/prd-unified002/fail2ban/etc/jail.local:33-41`; `infra/README.md:31-33`; `doc/330-uat-postsales-cutover.md:319-320`   **PROTO:** `infra/uat/fail2ban/etc/jail.local:45,51-55`; `infra/prd/fail2ban/etc/jail.local:45,51-55`; `infra/*/fail2ban/etc/nginx-404.conf:6`; `infra/README.md:74-84`
-- **Ticket:** RG0013 / `a57d6ad`
-- **What:** Filter counts 400-406; the API 401/403/404s by design, so a busy
-user hits `maxretry` in 60 s and ufw bans them. GRC: `ignoreregex = "(GET|POST|HEAD) /api/`.
-- **Port notes:** Both jails; README: auth brute force is the API's job.
-Brandon's call: uat `maxretry` 10 or 20? Ops P1, docs P2.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-fail2ban watches each app's nginx access log and, through ufw, blocks a
-source IP that produces too many "failures". PROTO's jail treats every
-4xx on every path as a failure, including the API's normal answers.
-
-1. The filter, `infra/uat/fail2ban/etc/nginx-404.conf:6` (prd identical):
-
-       failregex = ^<HOST> -.*"(GET|POST|HEAD).*HTTP.*" 40[0123456]
-
-   Any GET, POST or HEAD answered 400-406 counts. The header (`:2-4`)
-   says why: "400/404/405/406 is scanning, 401/403 is auth probing."
-2. The thresholds, `infra/uat/fail2ban/etc/jail.local:44-46` (shared by
-   every jail on the host, since they sit in `[DEFAULT]`):
-
-       findtime = 60
-       maxretry = 20          # prd copy: 10
-       banaction = ufw
-
-3. The app jail, `:51-55`: `[uat-proto]`, `port = http,https`,
-   `filter = nginx-404`, `logpath = /srv/uat-proto/log/nginx_access.log`.
-   No `ignoreregex`, so `/api/` lines count.
-
-The API answers 4xx to legitimate users all the time, by design:
-
-- `GET /api/refresh` runs on every page load of a signed-out visitor
-  (`hooks/use-auth-guard.ts:16-21` calls `authenticateWithAuthToken`,
-  `stores/auth-store.ts:105`), and `CheckJWT` answers 401 with no cookie
-  (`security/app_helper.go:282`). One count per page load.
-- `POST /api/auth` with a mistyped password: 401
-  (`handler/auth_handler.go:235-237`). A wrong TOTP code: 401
-  (`user_mfa_handler.go:552-554`).
-- A missing grant, a stale CSRF token, a blocked user: 403 (the list is in
-  B006). A page that reads a list the role cannot read 403s on every visit.
-- A stale or deleted id: 404. A form that fails validation: 400.
-
-What happens: on prd, 10 of those from one IP inside 60 seconds and ufw
-denies that IP on 80 and 443 for `bantime = 10m` (`:20`). The user sees
-connection timeouts with no message, on every site the host serves, not
-just this app, because ufw blocks the port, not the vhost. The count is
-per source IP, so an office behind one NAT address pools every user's
-4xx: a morning of people opening bookmarks (401 each) and retyping
-passwords trips it quickly. This is an availability bug that locks out
-real users; it adds no security the API lacks, because the API already
-rate-limits (`CheckRateLimitAndUserBlock`, `app_helper.go:392`, 429) and
-locks out failed logins per user and per IP
-(`auth_handler.go:61-90`).
-
-`infra/README.md:74-84` documents the jail and claims `maxretry` is
-"deliberately stricter on prd (10) than uat (20)". GRC's survey of the
-real hosts found both run 10 (`RG0013 md:55-56`); the README describes a
-split no host has.
-
-#### What GRC changed
-
-GRC's API answers 404 for rows outside the caller's scope and 401 when a
-session lapses, so its users walked into bans the same way. RG0013 (commit
-`3a3fc94`, then `a57d6ad` which replaced the mirrors with the surveyed live
-files) adds one line to GRC's own jail only:
-
-- `infra/uat-unified001/fail2ban/etc/jail.local:43-51` (prd `:33-41`):
-
-      [uat-grc]
-      ...
-      filter  = nginx-404
-      # ... a busy user walks 4xx on /api/ legitimately: this jail counts
-      # only the scanner traffic that hits the static site.
-      ignoreregex = "(GET|POST|HEAD) /api/
-
-  The leading `"` is part of the regex: it anchors on the quote that opens
-  the request line in nginx's log format.
-- `:24`: `maxretry = 10`, as the hosts run.
-- The shared filter `nginx-404.conf` is unchanged: other apps' jails on
-  the host use it, so the exclusion sits in the app's jail.
-- GRC `infra/README.md:31-33` and `doc/330-uat-postsales-cutover.md:319-320`
-  (Lessons: "ProtoStack's jail counts 401/403/404 on every path; an app
-  that answers 404 for out-of-scope rows must exclude `/api/`").
-
-No automated test, and no `fail2ban-regex` run in the GRC record.
-
-Correction to GRC's comment: "counts only the scanner traffic that hits
-the static site" overstates what is left. `location /` answers every
-unknown path with `index.html` and 200 (`try_files $uri $uri/
-/index.html`), so `/wp-login.php` or `/.env` never 404 there. After the
-change the jail catches stale `/assets/` 404s, nginx 400s and 405s
-(a POST to a static file), little else. In practice the app jail becomes
-close to a no-op, and scanners on `/api/` are left to the API.
-
-#### Proposed fix for PROTO
-
-1. `infra/uat/fail2ban/etc/jail.local:51-55` and
-   `infra/prd/fail2ban/etc/jail.local:51-55`: add to the app jail a
-   comment (the API answers 401/403/404/400 to real users; auth brute
-   force is the API's job) and `ignoreregex = "(GET|POST|HEAD) /api/`.
-2. Leave `nginx-404.conf` alone; fix its header (`:2-4`) to say app jails
-   exclude `/api/`.
-3. `jail.local:45` (uat): set `maxretry` per the open question.
-4. `infra/README.md:74-84`: drop the prd-10/uat-20 sentence, state that
-   `[DEFAULT]` values are the host's (shared by every jail), and that the
-   app jail ignores `/api/` because the API rate-limits and locks out.
-5. Verification step in the README and B026's runbook: `fail2ban-regex
-   /srv/<env>-proto/log/nginx_access.log /etc/fail2ban/filter.d/nginx-404.conf
-   '"(GET|POST|HEAD) /api/'` shows API lines ignored, then
-   `fail2ban-client reload && fail2ban-client status <env>-proto`.
-
-Blind-copy traps: GRC's mirrors carry other apps' jails and log paths
-from its hosts; copy only the two lines. The jail name stays
-`[<env>-proto]` (rebranded by `bin/000-rebrand`). Keep `ignoreip`
-redacted as `SERVERONLY`.
-
-Depends on nothing. Related: B006, B012 (the API's 4xx), B007 (the API's
-per-IP counting), B026 (runbook).
-
-Tests: none automated for `infra/`; step 5's `fail2ban-regex` is the check.
-
-#### Open question for Brandon
-
-`maxretry` lives in `[DEFAULT]`, so it is a host value shared by every jail
-on the box: set both PROTO copies to 10 (what the surveyed hosts run) or
-keep uat at 20? Recommendation: 10 on both, because the template mirrors
-the host and cannot choose a per-app value there.
-
-Brandon: 10 on both
-
 ### B024 — App root `root:shrmpl-hook 1775` so web publish works
 
 - **Priority:** P1  **Area:** infra, docs
@@ -8866,3 +8729,141 @@ systemctl reload nginx`: `curl -sI https://<site>/api/health` shows one
 #### Open question for Brandon
 
 None.
+
+### B023 — COMPLETED — fail2ban app jail bans real users on `/api/` 4xx
+- **Completed:** 2026-10-02. The `[uat-proto]` and `[prd-proto]` jails in `infra/{uat,prd}/fail2ban/etc/jail.local` gain `ignoreregex = "(GET|POST|HEAD) /api/` with a short why, and uat `maxretry` goes 20 to 10 (Brandon: 10 on both). The shared `nginx-404.conf` filter is unchanged apart from its header, which now says app jails exclude `/api/`. `infra/README.md` drops the false prd-10/uat-20 sentence, says the `[DEFAULT]` values are the host's and why the app jail ignores `/api/`, and setup step 8 adds the `fail2ban-regex` check before the reload; B026's runbook is not written yet, so the check lives only in the README. Verified in ubuntu:24.04 on 12 sample access-log lines: old filter matched 10 (all six `/api/` 400/401/403/404 lines plus `/wp-login.php` 404, `/.env` 404, a stale `/assets/` 404 and a 405); with the jail ignoreregex 4 matched and the 6 `/api/` lines were ignored, and `fail2ban-client -d` shows `addignoreregex` and `maxretry 10` on both app jails. Tests: all green, go=279 unit=42 e2e=10 py=79
+
+- **Priority:** P1  **Area:** infra, docs
+- **GRC:** `infra/uat-unified001/fail2ban/etc/jail.local:24,43-51`; `infra/prd-unified002/fail2ban/etc/jail.local:33-41`; `infra/README.md:31-33`; `doc/330-uat-postsales-cutover.md:319-320`   **PROTO:** `infra/uat/fail2ban/etc/jail.local:45,51-55`; `infra/prd/fail2ban/etc/jail.local:45,51-55`; `infra/*/fail2ban/etc/nginx-404.conf:6`; `infra/README.md:74-84`
+- **Ticket:** RG0013 / `a57d6ad`
+- **What:** Filter counts 400-406; the API 401/403/404s by design, so a busy
+user hits `maxretry` in 60 s and ufw bans them. GRC: `ignoreregex = "(GET|POST|HEAD) /api/`.
+- **Port notes:** Both jails; README: auth brute force is the API's job.
+Brandon's call: uat `maxretry` 10 or 20? Ops P1, docs P2.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+fail2ban watches each app's nginx access log and, through ufw, blocks a
+source IP that produces too many "failures". PROTO's jail treats every
+4xx on every path as a failure, including the API's normal answers.
+
+1. The filter, `infra/uat/fail2ban/etc/nginx-404.conf:6` (prd identical):
+
+       failregex = ^<HOST> -.*"(GET|POST|HEAD).*HTTP.*" 40[0123456]
+
+   Any GET, POST or HEAD answered 400-406 counts. The header (`:2-4`)
+   says why: "400/404/405/406 is scanning, 401/403 is auth probing."
+2. The thresholds, `infra/uat/fail2ban/etc/jail.local:44-46` (shared by
+   every jail on the host, since they sit in `[DEFAULT]`):
+
+       findtime = 60
+       maxretry = 20          # prd copy: 10
+       banaction = ufw
+
+3. The app jail, `:51-55`: `[uat-proto]`, `port = http,https`,
+   `filter = nginx-404`, `logpath = /srv/uat-proto/log/nginx_access.log`.
+   No `ignoreregex`, so `/api/` lines count.
+
+The API answers 4xx to legitimate users all the time, by design:
+
+- `GET /api/refresh` runs on every page load of a signed-out visitor
+  (`hooks/use-auth-guard.ts:16-21` calls `authenticateWithAuthToken`,
+  `stores/auth-store.ts:105`), and `CheckJWT` answers 401 with no cookie
+  (`security/app_helper.go:282`). One count per page load.
+- `POST /api/auth` with a mistyped password: 401
+  (`handler/auth_handler.go:235-237`). A wrong TOTP code: 401
+  (`user_mfa_handler.go:552-554`).
+- A missing grant, a stale CSRF token, a blocked user: 403 (the list is in
+  B006). A page that reads a list the role cannot read 403s on every visit.
+- A stale or deleted id: 404. A form that fails validation: 400.
+
+What happens: on prd, 10 of those from one IP inside 60 seconds and ufw
+denies that IP on 80 and 443 for `bantime = 10m` (`:20`). The user sees
+connection timeouts with no message, on every site the host serves, not
+just this app, because ufw blocks the port, not the vhost. The count is
+per source IP, so an office behind one NAT address pools every user's
+4xx: a morning of people opening bookmarks (401 each) and retyping
+passwords trips it quickly. This is an availability bug that locks out
+real users; it adds no security the API lacks, because the API already
+rate-limits (`CheckRateLimitAndUserBlock`, `app_helper.go:392`, 429) and
+locks out failed logins per user and per IP
+(`auth_handler.go:61-90`).
+
+`infra/README.md:74-84` documents the jail and claims `maxretry` is
+"deliberately stricter on prd (10) than uat (20)". GRC's survey of the
+real hosts found both run 10 (`RG0013 md:55-56`); the README describes a
+split no host has.
+
+#### What GRC changed
+
+GRC's API answers 404 for rows outside the caller's scope and 401 when a
+session lapses, so its users walked into bans the same way. RG0013 (commit
+`3a3fc94`, then `a57d6ad` which replaced the mirrors with the surveyed live
+files) adds one line to GRC's own jail only:
+
+- `infra/uat-unified001/fail2ban/etc/jail.local:43-51` (prd `:33-41`):
+
+      [uat-grc]
+      ...
+      filter  = nginx-404
+      # ... a busy user walks 4xx on /api/ legitimately: this jail counts
+      # only the scanner traffic that hits the static site.
+      ignoreregex = "(GET|POST|HEAD) /api/
+
+  The leading `"` is part of the regex: it anchors on the quote that opens
+  the request line in nginx's log format.
+- `:24`: `maxretry = 10`, as the hosts run.
+- The shared filter `nginx-404.conf` is unchanged: other apps' jails on
+  the host use it, so the exclusion sits in the app's jail.
+- GRC `infra/README.md:31-33` and `doc/330-uat-postsales-cutover.md:319-320`
+  (Lessons: "ProtoStack's jail counts 401/403/404 on every path; an app
+  that answers 404 for out-of-scope rows must exclude `/api/`").
+
+No automated test, and no `fail2ban-regex` run in the GRC record.
+
+Correction to GRC's comment: "counts only the scanner traffic that hits
+the static site" overstates what is left. `location /` answers every
+unknown path with `index.html` and 200 (`try_files $uri $uri/
+/index.html`), so `/wp-login.php` or `/.env` never 404 there. After the
+change the jail catches stale `/assets/` 404s, nginx 400s and 405s
+(a POST to a static file), little else. In practice the app jail becomes
+close to a no-op, and scanners on `/api/` are left to the API.
+
+#### Proposed fix for PROTO
+
+1. `infra/uat/fail2ban/etc/jail.local:51-55` and
+   `infra/prd/fail2ban/etc/jail.local:51-55`: add to the app jail a
+   comment (the API answers 401/403/404/400 to real users; auth brute
+   force is the API's job) and `ignoreregex = "(GET|POST|HEAD) /api/`.
+2. Leave `nginx-404.conf` alone; fix its header (`:2-4`) to say app jails
+   exclude `/api/`.
+3. `jail.local:45` (uat): set `maxretry` per the open question.
+4. `infra/README.md:74-84`: drop the prd-10/uat-20 sentence, state that
+   `[DEFAULT]` values are the host's (shared by every jail), and that the
+   app jail ignores `/api/` because the API rate-limits and locks out.
+5. Verification step in the README and B026's runbook: `fail2ban-regex
+   /srv/<env>-proto/log/nginx_access.log /etc/fail2ban/filter.d/nginx-404.conf
+   '"(GET|POST|HEAD) /api/'` shows API lines ignored, then
+   `fail2ban-client reload && fail2ban-client status <env>-proto`.
+
+Blind-copy traps: GRC's mirrors carry other apps' jails and log paths
+from its hosts; copy only the two lines. The jail name stays
+`[<env>-proto]` (rebranded by `bin/000-rebrand`). Keep `ignoreip`
+redacted as `SERVERONLY`.
+
+Depends on nothing. Related: B006, B012 (the API's 4xx), B007 (the API's
+per-IP counting), B026 (runbook).
+
+Tests: none automated for `infra/`; step 5's `fail2ban-regex` is the check.
+
+#### Open question for Brandon
+
+`maxretry` lives in `[DEFAULT]`, so it is a host value shared by every jail
+on the box: set both PROTO copies to 10 (what the surveyed hosts run) or
+keep uat at 20? Recommendation: 10 on both, because the template mirrors
+the host and cannot choose a per-app value there.
+
+Brandon: 10 on both

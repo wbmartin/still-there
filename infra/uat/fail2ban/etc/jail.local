@@ -42,7 +42,7 @@ fail2ban_agent = Fail2Ban/%(fail2ban_version)s
 #
 
 findtime = 60
-maxretry = 20
+maxretry = 10
 banaction = ufw
 
 [sshd]
@@ -52,4 +52,9 @@ enabled = true
 enabled = true
 port    = http,https
 filter  = nginx-404
+# The API answers 400/401/403/404 to real users all day (a signed-out
+# page load, a mistyped password, a stale id); counting them bans a
+# whole office behind one NAT address. Auth brute force is the API's
+# job: it rate-limits and locks out failed logins itself.
+ignoreregex = "(GET|POST|HEAD) /api/
 logpath = /srv/uat-proto/log/nginx_access.log

@@ -81,7 +81,11 @@ only on the host.**
   log — this repo owns `[<env>-proto]`. On a host shared with other apps the
   live `jail.local` is the union of the jails each app's repo owns; carry a
   change in either direction so the two stay equal. Only `ignoreip` is
-  redacted. `maxretry` is deliberately stricter on prd (10) than uat (20).
+  redacted. `findtime`, `maxretry` and `banaction` sit in `[DEFAULT]`, so
+  they are the host's values, shared by every jail on it (both hosts run
+  `maxretry = 10`). The app jail ignores `/api/` lines: the API answers
+  4xx to real users by design, and it rate-limits and locks out failed
+  logins itself, so a ban there would only lock real users out.
 
 | Script | Sources | Required keys |
 |---|---|---|
@@ -183,6 +187,10 @@ full runbook belongs.
 8. **fail2ban.** If `/etc/fail2ban/jail.local` is still a real file rather
    than a symlink, run `fail2ban/bin/migrate-to-srv-config` as root once.
    Then copy `fail2ban/etc/*` to `/srv/fail2ban/etc/`, fill `ignoreip`, and
+   check the `/api/` exclusion against the live log with
+   `fail2ban-regex /srv/<env>-proto/log/nginx_access.log
+   /etc/fail2ban/filter.d/nginx-404.conf '"(GET|POST|HEAD) /api/'` (API
+   lines show as ignored), then
    `fail2ban-client reload && fail2ban-client status <env>-proto`. On a host
    that already carries other apps, merge this repo's `[<env>-proto]` jail
    into the live file instead of overwriting it, and bring the merged result
