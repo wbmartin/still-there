@@ -5700,6 +5700,20 @@ None.
   returns the new status and the session cookie still works.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ X\] skip  (new, not yet decided)
 
+### B093 — `bin/600-bundle-uat` fails at the Vite build without `VITE_API_PROXY_URL`
+- **Priority:** P2  **Area:** bin, web-app
+- **GRC:** not checked   **PROTO:** `src/web-app/vite.config.ts` (throws in production mode when the proxy URL is unset); `bin/600-bundle-uat` (Vite build step)
+- **Ticket:** found while implementing B027 (2026-10-03)
+- **What:** The presales bundle step builds the web app in production
+  mode, and `vite.config.ts` throws when `VITE_API_PROXY_URL` is unset,
+  so `bin/600` stops at the Vite step unless the operator exports a value.
+  The proxy only matters for the dev server; a production build serves
+  `/api/` through nginx and never uses it.
+- **Port notes:** Make the config require the proxy URL only for `vite`
+  serve (dev), not `vite build`, or have `bin/600` set a documented dummy.
+  Prefer the former. Check `bin/110-build-web-app` and the UAT build too.
+- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
+
 # SKIP / Brandon-veto list (tick to override)
 
 **Recommendations against porting**
