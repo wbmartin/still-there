@@ -13,7 +13,7 @@ func TestBuildScopedWhere(t *testing.T) {
 		idColumn        string
 		idList          []int
 		wantWhere       string
-		wantArgs        []interface{}
+		wantArgs        []any
 	}{
 		{
 			name:            "no ids, no afterUpdateTs",
@@ -22,7 +22,7 @@ func TestBuildScopedWhere(t *testing.T) {
 			idColumn:        "example_id",
 			idList:          nil,
 			wantWhere:       ` WHERE security_context_id = $1 AND delete_user_id IS NULL`,
-			wantArgs:        []interface{}{3},
+			wantArgs:        []any{3},
 		},
 		{
 			name:            "no ids, with afterUpdateTs",
@@ -32,7 +32,7 @@ func TestBuildScopedWhere(t *testing.T) {
 			idList:          nil,
 			wantWhere: ` WHERE security_context_id = $1 AND delete_user_id IS NULL` +
 				` AND update_ts > $2`,
-			wantArgs: []interface{}{3, 1700000000.0},
+			wantArgs: []any{3, 1700000000.0},
 		},
 		{
 			name:            "id list ignores afterUpdateTs",
@@ -42,7 +42,7 @@ func TestBuildScopedWhere(t *testing.T) {
 			idList:          []int{10, 20},
 			wantWhere: ` WHERE security_context_id = $1 AND delete_user_id IS NULL` +
 				` AND example_id IN ($2, $3)`,
-			wantArgs: []interface{}{3, 10, 20},
+			wantArgs: []any{3, 10, 20},
 		},
 	}
 
@@ -85,7 +85,7 @@ func TestBuildParentScopedWhere(t *testing.T) {
 		parentColumn    string
 		parentID        int
 		wantWhere       string
-		wantArgs        []interface{}
+		wantArgs        []any
 	}{
 		{
 			name:            "no parent filter",
@@ -94,7 +94,7 @@ func TestBuildParentScopedWhere(t *testing.T) {
 			parentColumn:    "parent_id",
 			parentID:        0,
 			wantWhere:       ` WHERE security_context_id = $1 AND delete_user_id IS NULL`,
-			wantArgs:        []interface{}{3},
+			wantArgs:        []any{3},
 		},
 		{
 			name:            "parent filter with no ids",
@@ -104,7 +104,7 @@ func TestBuildParentScopedWhere(t *testing.T) {
 			parentID:        5,
 			wantWhere: ` WHERE security_context_id = $1 AND delete_user_id IS NULL` +
 				` AND parent_id = $2`,
-			wantArgs: []interface{}{3, 5},
+			wantArgs: []any{3, 5},
 		},
 		{
 			name:            "parent filter placeholder numbered after id list",
@@ -116,7 +116,7 @@ func TestBuildParentScopedWhere(t *testing.T) {
 			wantWhere: ` WHERE security_context_id = $1 AND delete_user_id IS NULL` +
 				` AND example_id IN ($2, $3)` +
 				` AND parent_id = $4`,
-			wantArgs: []interface{}{3, 10, 20, 5},
+			wantArgs: []any{3, 10, 20, 5},
 		},
 	}
 

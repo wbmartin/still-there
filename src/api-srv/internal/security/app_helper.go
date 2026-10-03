@@ -207,7 +207,7 @@ func (ah *AppHelper) WarnWithCallerSkip(code, message string, skip int) {
 func (ah *AppHelper) WriteJSON(
 	w http.ResponseWriter,
 	status int,
-	data interface{},
+	data any,
 ) {
 	// Only enforce security checks for success responses (status < 400)
 	// Error responses (4xx/5xx) are allowed even if checks failed

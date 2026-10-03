@@ -378,7 +378,7 @@ func (r *UserRepository) RetrieveUserList(
 		FROM app_user
 		WHERE security_context_id = $1 AND delete_user_id IS NULL`
 
-	args := []interface{}{securityContext}
+	args := []any{securityContext}
 
 	if len(idList) > 0 {
 		query += ` AND app_user_id = ANY($2)`

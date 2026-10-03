@@ -72,7 +72,7 @@ type ChangeSecurityContextResponseWrapper struct {
 
 // DataWrapper wraps non-user data responses for consistency
 type DataWrapper struct {
-	Data interface{} `json:"data"`
+	Data any `json:"data"`
 }
 
 // BlockUserRequest represents the request body for blocking a user

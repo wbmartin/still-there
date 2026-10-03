@@ -334,12 +334,12 @@ func (h *UserHandler) RetrieveGrantList(
 
 	// Convert GrantIDToShortCodeMap to array of objects
 	grantList := make(
-		[]map[string]interface{},
+		[]map[string]any,
 		0,
 		len(model.GrantIDToShortCodeMap),
 	)
 	for id, text := range model.GrantIDToShortCodeMap {
-		grantList = append(grantList, map[string]interface{}{
+		grantList = append(grantList, map[string]any{
 			"id":   id,
 			"text": text,
 		})
@@ -672,7 +672,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	if !revokeUserSessionList(app, w, h.appsrv, deletedUserName) {
 		return
 	}
-	data := map[string]interface{}{
+	data := map[string]any{
 		"message":   "User deleted successfully",
 		"appUserId": deletedID,
 	}

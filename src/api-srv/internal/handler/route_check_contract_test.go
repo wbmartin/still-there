@@ -98,7 +98,8 @@ var routeContractList = []routeContract{
 	{route: "POST /changeSecurityContext",
 		handler: withUserRepo(ChangeSecurityContextHandler),
 		session: true, rate: true, block: true,
-		skip: "no CSRF until B005; the grant is checked against the " +
+		skip: "no CSRF by design: it changes no server-side data " +
+			"(B005 skipped); the grant is checked against the " +
 			"target context after the gate"},
 	fullChecks("POST /changeOwnPassword", model.GrantChangeOwnPassword,
 		withUserRepo(ChangeOwnPasswordHandler)),

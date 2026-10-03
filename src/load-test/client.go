@@ -131,7 +131,7 @@ func (c *APIClient) Login() error {
 }
 
 func (c *APIClient) CreateExample() (int, float64, error) {
-	exampleData := map[string]interface{}{
+	exampleData := map[string]any{
 		"exampleText":       "Load Test Example",
 		"exampleInt":        42,
 		"exampleFloat":      3.14,
@@ -200,7 +200,7 @@ func (c *APIClient) UpdateExample(
 	// For the update, we just exercise the update operation
 	// without changing values
 	// This tests the update path and optimistic locking
-	exampleData := map[string]interface{}{
+	exampleData := map[string]any{
 		"exampleId":         exampleID,
 		"exampleText":       "Load Test Example",
 		"exampleInt":        42,
@@ -244,8 +244,8 @@ func (c *APIClient) Logout() error {
 
 func (c *APIClient) makeRequest(
 	method, endpoint string,
-	data interface{},
-	response interface{},
+	data any,
+	response any,
 ) error {
 	var body io.Reader
 	if data != nil {

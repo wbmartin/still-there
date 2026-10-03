@@ -340,7 +340,7 @@ func MFASetupHandler(
 			png,
 		)
 
-		response := map[string]interface{}{
+		response := map[string]any{
 			"secret":      secret,
 			"qrCodeImage": qrCodeImage,
 		}
@@ -740,7 +740,7 @@ func AdminResetUserMFAHandler(
 			return
 		}
 		wrapper := model.DataWrapper{
-			Data: map[string]interface{}{
+			Data: map[string]any{
 				"message":  "MFA reset successfully",
 				"updateTs": newUpdateTS,
 			},

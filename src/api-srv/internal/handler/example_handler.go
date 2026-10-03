@@ -361,7 +361,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := map[string]interface{}{
+	data := map[string]any{
 		"message":    "Example deleted successfully",
 		"example_id": deletedID,
 	}
@@ -754,7 +754,7 @@ func (h *ExampleHandler) DeleteExampleList(
 	}
 
 	// Return success
-	data := map[string]interface{}{
+	data := map[string]any{
 		"message":       "Examples deleted successfully",
 		"exampleIdList": deletedIDList,
 	}

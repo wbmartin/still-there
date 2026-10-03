@@ -312,7 +312,7 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 		return
 	}
 
-	data := map[string]interface{}{
+	data := map[string]any{
 		"message": "User group deleted successfully", "userGroupId": deletedID}
 	wrapper := model.DataWrapper{Data: data}
 	app.WriteJSON(w, http.StatusOK, wrapper)
