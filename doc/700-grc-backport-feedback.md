@@ -242,112 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B046 — install-api: run the incoming migrator before touching libexec
-
-- **Priority:** P2  **Area:** infra
-- **GRC:** `infra/uat-unified001/bin/uat-grc-install-api:1-17,47-70,72-80,114-117`   **PROTO:** `infra/uat/bin/uat-proto-install-api:27-58,93-96` (:32-33) (+ prd); `infra/README.md:17-29`
-- **Ticket:** RG0013 / `3a3fc94`
-- **What:** PROTO installs the migrator before `verify`, so a refusal strands an
-older migrator beside a newer API. GRC runs the schema step from the pull dir,
-swaps nothing until it succeeds, keeps `*.prev`, prints rollback.
-- **Port notes:** Skip worker wait (:84-104). Brandon's call: `api-srv` in
-post-sales too (RG0013 #4)?
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (Brandon: yes, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-`infra/uat/bin/uat-proto-install-api` (prd twin identical here) pulls a
-build into `stg/pull.$$`, migrates, swaps the API binary and restarts. The
-incoming migrator is installed into `libexec/` first, and only then asked
-whether the database is acceptable:
-
-```bash
-# infra/uat/bin/uat-proto-install-api:32-33, 35-37
-install -m 0755 "$PULL_DIR/proto-migrate" "$SRV_ROOT/libexec/proto-migrate.new"
-mv -f "$SRV_ROOT/libexec/proto-migrate.new" "$SRV_ROOT/libexec/proto-migrate"
-MIGRATE="$SRV_ROOT/libexec/proto-migrate -config $MIGRATE_ENV"
-$MIGRATE verify
-```
-
-`verify` (`src/api-srv/internal/migrate/migrate.go:215-230`) fails when the
-database has an applied version with no file (it is ahead of the binary) or
-a file whose checksum drifted. Under `set -e` the script stops there. The
-comment at `:28` says "a failure leaves the old binary running", which is
-true for `proto-api` but not for `proto-migrate`.
-
-Concrete case: an operator reinstalls last week's tag after a migration
-shipped. `verify` correctly refuses, but `libexec/` now holds last week's
-migrator beside this week's API. Whoever next runs `libexec/proto-migrate`
-by hand (`doc/330-presales-to-postsales-migration.md:169`) gets a drift
-error from a binary that does not match what runs. The next good install
-overwrites it; nothing is lost, but the host is in a state nobody chose.
-
-Also: no previous binary is kept (`:55-56` overwrite `proto-api`). If
-`/health` fails (`:94-96`), reinstalling an older `sha-` tag is the only
-way back, and its migrator refuses `verify` if this deploy migrated. And an
-artifact with no migrator is tolerated (`:49-50`, `[WARN]`), though the
-build always ships one (`infra/uat/bin/uat-proto-build:73-74`). This is a
-correctness and operability gap, not a security hole.
-
-#### What GRC changed
-
-RG0013 / `3a3fc94`. The ticket states the intent: "install-api migrates
-with the **incoming** `migrate-srv` from the pull directory before swapping
-anything". GRC's UAT install script (prd copy byte-identical):
-
-1. Requires every binary and fixes the exec bit in the pull dir
-   (`uat-grc-install-api:52-55`).
-2. Runs `verify`, `pending`, `pg_dump`, `up` from the pull dir (`:57-70`):
-   `MIGRATE=("$PULL_DIR/migrate-srv" "$MIGRATE_ENV")`. `libexec/` is
-   untouched until the schema step succeeds.
-3. Then swaps each binary, keeping the old one (`:74-78`):
-   `cp -p "$LIBEXEC/$binary" "$LIBEXEC/$binary.prev"`.
-4. On a health failure prints the exact rollback (`:115-117`): move each
-   `.prev` back; the schema stays.
-5. The header (`:14-17`): rolling back across a migration is a restore
-   from `backup/`, not a reinstall.
-
-`:84-104` wait for a worker service PROTO lacks. The same commit added
-`verify`/`pending` to GRC's goose migrator, tested by `TestMigrationPlan`
-(`src/migrate-srv/cmd/migrate/verify_test.go:11`). No test covers the
-install script.
-
-#### Proposed fix for PROTO
-
-1. In `infra/uat/bin/uat-proto-install-api` and
-   `infra/prd/bin/prd-proto-install-api`, after the pull: refuse unless both
-   `proto-api` and `proto-migrate` are present, then `chmod 0755` both in
-   `$PULL_DIR`. Delete the `[WARN]` branch.
-2. Build the migrator command from the pull dir:
-   `MIGRATE=("$PULL_DIR/proto-migrate" -config "$MIGRATE_ENV")`. Trap: PROTO's
-   migrator takes `-config <file>`; GRC's goose binary takes the env file
-   positionally. Do not copy GRC's array literally.
-3. Keep `verify` -> `pending` -> `pg_dump` -> `up` as today, via the array.
-   B050 takes the database URL (with password) off `pg_dump`'s argv here.
-4. Then swap both binaries in a loop, `cp -p` each to `<name>.prev` first.
-5. Add the rollback line to the health-failure message at `:94-96`, and a
-   header comment stating the "rollback across a migration is a restore"
-   rule. Fix the `:28` comment.
-6. Skip GRC's worker wait and `grc.revision`; keep `proto-api.revision`.
-7. Do it with or after B045, so uat and prd share one file.
-8. Update `infra/README.md:107-109` (promotion-flow box): "the incoming
-   `proto-migrate`, from the pull dir".
-
-Tests: none automated for shell. Rehearse on a UAT host: install tag N+1
-with a migration, then install tag N; expect `verify` to refuse and
-`libexec/` unchanged (`sha256sum` before and after).
-
-#### Open question for Brandon
-
-GRC gave post-sales the presales binary names so the cutover moves no
-names (RG0013 "Corrections", item 4). In PROTO only the API differs
-(`api-srv` presales, `proto-api` post-sales: `infra/README.md:20`,
-doc/330:39); the migrator is `proto-migrate` in both. Should post-sales
-install `libexec/api-srv`? Recommendation: yes, in this ticket, since it
-removes a row from the doc/330 name table and one rename step at cutover.
-
 ### B047 — UAT build: lock waits, per-step failure report, full-sha Slack
 
 - **Priority:** P2  **Area:** infra
@@ -8911,3 +8805,111 @@ model, keeps `infra/<host>` a file-for-file mirror), or keep one copy under
 plus the check, so each host dir stays a literal mirror of the server.
 
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: two byte-identical copies plus a check, no `infra/shared/`). Every `infra/{uat,prd}/bin/*` script except `*-start`/`*-stop` sets `APP_ENV="$(basename "$SRV_ROOT")"` and builds env files (`$APP_ENV-deploy.env`, `-migrate.env`, `-test.env`, `-backup.env`), the build lock (`/var/lock/$APP_ENV-build.lock`), the restart-unit hint and every called script from it; blob/binary names keep the literal slug. `build`, `install-api`, `publish-web-client`, `promote-uat`, `promote-uat-and-deploy` re-exec first as `shrmpl-hook` (`exec sudo -u ... -H "$0" "$@"`); the prd/uat "Must run as" refusals are gone. `renew-web-certs`, `backup-all` stay root. `install-api`, `publish-web-client`, `renew-web-certs` are now byte-identical across hosts (one hint: "Re-run with --pull <tag>."; nack-monitor comment says `<env>-proto-...`). Promote-and-deploy passes `"$TARGET_TAG"` to install-api; promote's hint prints it too. `backup-all` derives `BACKUP_SRC=$SRV_ROOT`, `BACKUP_DST=$BACKUP_ROOT/$APP_ENV`; `BACKUP_ENV` dropped from `infra/prd/etc/prd-proto-backup.env`, `infra/README.md` table and `doc/331` B2. Check: new `bin/300-run-tests infra` mode (also in `all`): `bash -n` on every `infra/*/bin/*` and `cmp` of each shared job's copies, globbed as `infra/*/bin/*-$APP_SLUG-<job>` so it survives rebrand and host-dir renames. Deviation: lives in bin/300, not a new `scripts/` file (B053 not landed; no `scripts/` dir exists). Docs: `infra/README.md` (basename rule, `<env>-<slug>` root constraint, pair list, re-exec rule), `CLAUDE.md` infra bullet, `doc/902`. Verified in ubuntu:24.04 with stubbed oras/systemctl/curl/certbot against fake `/srv/{uat,prd}-proto` (README ownership): old root-run `install-api` leaves `libexec/proto-api.revision` root:root and the next hook run dies `Permission denied`; new re-execs, files are `shrmpl-hook`, next hook run healthy. One `install-api` file in both roots pulls `reg.uat/...:uat` vs `reg.prd/...:prd` and hints `uat-`/`prd-proto-restart.path`; old uat copy in the prd root fails on `etc/uat-proto-deploy.env`. Old `publish-web-client`/`promote-uat-and-deploy` as root refuse; new publish as `shrmpl-hook` end to end. Build as root: lock `uat-proto-build.lock`, `TEST_ENV=.../uat-proto-test.env`, push, install, publish. Old backup fails `BACKUP_ENV not set` on the new env file; new writes `/backup/prd-proto` 0700. shellcheck 0.9.0: same findings before and after (pre-existing SC2317/SC2015 notes, SC2043 in run-tests), none new; `bin/300` clean. Gate on the old tree fails on the install-api diff, new passes. Host action (when post-sales hosts exist): recopy `bin/`; a leftover `BACKUP_ENV` line in the host backup env is ignored. B046/B047 land on top. Tests: all green, `gofmt -l` empty (no Go change): infra=15 go=687 unit=82 e2e=13 py=102.
+
+### B046 — COMPLETED — install-api: run the incoming migrator before touching libexec
+
+- **Priority:** P2  **Area:** infra
+- **GRC:** `infra/uat-unified001/bin/uat-grc-install-api:1-17,47-70,72-80,114-117`   **PROTO:** `infra/uat/bin/uat-proto-install-api:27-58,93-96` (:32-33) (+ prd); `infra/README.md:17-29`
+- **Ticket:** RG0013 / `3a3fc94`
+- **What:** PROTO installs the migrator before `verify`, so a refusal strands an
+older migrator beside a newer API. GRC runs the schema step from the pull dir,
+swaps nothing until it succeeds, keeps `*.prev`, prints rollback.
+- **Port notes:** Skip worker wait (:84-104). Brandon's call: `api-srv` in
+post-sales too (RG0013 #4)?
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (Brandon: yes, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+`infra/uat/bin/uat-proto-install-api` (prd twin identical here) pulls a
+build into `stg/pull.$$`, migrates, swaps the API binary and restarts. The
+incoming migrator is installed into `libexec/` first, and only then asked
+whether the database is acceptable:
+
+```bash
+# infra/uat/bin/uat-proto-install-api:32-33, 35-37
+install -m 0755 "$PULL_DIR/proto-migrate" "$SRV_ROOT/libexec/proto-migrate.new"
+mv -f "$SRV_ROOT/libexec/proto-migrate.new" "$SRV_ROOT/libexec/proto-migrate"
+MIGRATE="$SRV_ROOT/libexec/proto-migrate -config $MIGRATE_ENV"
+$MIGRATE verify
+```
+
+`verify` (`src/api-srv/internal/migrate/migrate.go:215-230`) fails when the
+database has an applied version with no file (it is ahead of the binary) or
+a file whose checksum drifted. Under `set -e` the script stops there. The
+comment at `:28` says "a failure leaves the old binary running", which is
+true for `proto-api` but not for `proto-migrate`.
+
+Concrete case: an operator reinstalls last week's tag after a migration
+shipped. `verify` correctly refuses, but `libexec/` now holds last week's
+migrator beside this week's API. Whoever next runs `libexec/proto-migrate`
+by hand (`doc/330-presales-to-postsales-migration.md:169`) gets a drift
+error from a binary that does not match what runs. The next good install
+overwrites it; nothing is lost, but the host is in a state nobody chose.
+
+Also: no previous binary is kept (`:55-56` overwrite `proto-api`). If
+`/health` fails (`:94-96`), reinstalling an older `sha-` tag is the only
+way back, and its migrator refuses `verify` if this deploy migrated. And an
+artifact with no migrator is tolerated (`:49-50`, `[WARN]`), though the
+build always ships one (`infra/uat/bin/uat-proto-build:73-74`). This is a
+correctness and operability gap, not a security hole.
+
+#### What GRC changed
+
+RG0013 / `3a3fc94`. The ticket states the intent: "install-api migrates
+with the **incoming** `migrate-srv` from the pull directory before swapping
+anything". GRC's UAT install script (prd copy byte-identical):
+
+1. Requires every binary and fixes the exec bit in the pull dir
+   (`uat-grc-install-api:52-55`).
+2. Runs `verify`, `pending`, `pg_dump`, `up` from the pull dir (`:57-70`):
+   `MIGRATE=("$PULL_DIR/migrate-srv" "$MIGRATE_ENV")`. `libexec/` is
+   untouched until the schema step succeeds.
+3. Then swaps each binary, keeping the old one (`:74-78`):
+   `cp -p "$LIBEXEC/$binary" "$LIBEXEC/$binary.prev"`.
+4. On a health failure prints the exact rollback (`:115-117`): move each
+   `.prev` back; the schema stays.
+5. The header (`:14-17`): rolling back across a migration is a restore
+   from `backup/`, not a reinstall.
+
+`:84-104` wait for a worker service PROTO lacks. The same commit added
+`verify`/`pending` to GRC's goose migrator, tested by `TestMigrationPlan`
+(`src/migrate-srv/cmd/migrate/verify_test.go:11`). No test covers the
+install script.
+
+#### Proposed fix for PROTO
+
+1. In `infra/uat/bin/uat-proto-install-api` and
+   `infra/prd/bin/prd-proto-install-api`, after the pull: refuse unless both
+   `proto-api` and `proto-migrate` are present, then `chmod 0755` both in
+   `$PULL_DIR`. Delete the `[WARN]` branch.
+2. Build the migrator command from the pull dir:
+   `MIGRATE=("$PULL_DIR/proto-migrate" -config "$MIGRATE_ENV")`. Trap: PROTO's
+   migrator takes `-config <file>`; GRC's goose binary takes the env file
+   positionally. Do not copy GRC's array literally.
+3. Keep `verify` -> `pending` -> `pg_dump` -> `up` as today, via the array.
+   B050 takes the database URL (with password) off `pg_dump`'s argv here.
+4. Then swap both binaries in a loop, `cp -p` each to `<name>.prev` first.
+5. Add the rollback line to the health-failure message at `:94-96`, and a
+   header comment stating the "rollback across a migration is a restore"
+   rule. Fix the `:28` comment.
+6. Skip GRC's worker wait and `grc.revision`; keep `proto-api.revision`.
+7. Do it with or after B045, so uat and prd share one file.
+8. Update `infra/README.md:107-109` (promotion-flow box): "the incoming
+   `proto-migrate`, from the pull dir".
+
+Tests: none automated for shell. Rehearse on a UAT host: install tag N+1
+with a migration, then install tag N; expect `verify` to refuse and
+`libexec/` unchanged (`sha256sum` before and after).
+
+#### Open question for Brandon
+
+GRC gave post-sales the presales binary names so the cutover moves no
+names (RG0013 "Corrections", item 4). In PROTO only the API differs
+(`api-srv` presales, `proto-api` post-sales: `infra/README.md:20`,
+doc/330:39); the migrator is `proto-migrate` in both. Should post-sales
+install `libexec/api-srv`? Recommendation: yes, in this ticket, since it
+removes a row from the doc/330 name table and one rename step at cutover.
+
+- **Completed:** 2026-10-03. Pulled; Brandon's "yes" taken as yes to the open question too (post-sales installs `libexec/api-srv`). `infra/{uat,prd}/bin/*-install-api` (still byte-identical): header states the flow and the "rolling back across a migration is a restore from `backup/`, not a reinstall" rule; the stale "a failure leaves the old binary running" comment is gone. After the pull it refuses unless both `api-srv` and `proto-migrate` are present (the `[WARN]` no-migrator branch is deleted), `chmod 0755`s them in the pull dir, requires `etc/$APP_ENV-migrate.env`, and runs `verify` -> `pending` -> `pg_dump` -> `up` with `MIGRATE=("$PULL_DIR/proto-migrate" -config "$MIGRATE_ENV")`; `libexec/` is untouched until that succeeds. Then a loop over `BINARY_LIST=(api-srv proto-migrate)` copies each running binary to `<name>.prev` (`cp -p`) and swaps with install+mv. A health failure prints the paste-able rollback (`mv -f` each `.prev` back, touch `stg/restart.request`; schema stays). `proto-api.revision` kept (it is the blob's revision); no worker wait. Rename: `uat-proto-build` builds and pushes `api-srv` inside the `proto-api` blob (blob name unchanged); both `*-proto-api.service` units `ExecStart` `libexec/api-srv`. Docs: `infra/README.md` (path table, tell-apart rule now `proto-api.revision`, literal-slug names, promotion box "the incoming proto-migrate, from the pull dir", layout), `doc/320`, `doc/330` (signal table, name table row now "same name", intro), `doc/331`. Verified in ubuntu:24.04 against a fake `/srv/uat-proto` with stubbed oras/systemctl/curl/pg_dump and a fake migrator (run as root, so the re-exec path ran): install N+1 (migrates) then N: old fails verify with `libexec/proto-migrate` already swapped to N (sha256 differs); new fails verify, sha256 of libexec unchanged. Failing `up`: old swapped the migrator, new unchanged. Artifact without a migrator: old warns and swaps the API, new refuses, libexec unchanged. Health failure: new leaves `.prev` for both, prints the rollback, which runs as `shrmpl-hook` and restores. shellcheck 0.9.0: install-api clean before and after; build same pre-existing notes. Host action (when post-sales hosts exist): recopy `bin/` and the `*-proto-api.service` unit, `daemon-reload`; a tag built before this change has no `api-srv` and is refused. Tests: all green, `gofmt -l` empty (no Go change): infra=15 go=687 unit=82 e2e=13 py=102.

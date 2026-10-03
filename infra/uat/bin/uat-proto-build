@@ -76,16 +76,16 @@ mkdir -p "$SRV_ROOT/stg"
 pushd "$BUILD_STG/src/api-srv" > /dev/null
 
 # Static binaries (CGO_ENABLED=0). The migrator ships with the API; install-api runs it before swapping the binary.
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$SRV_ROOT/stg/proto-api" ./cmd/server
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$SRV_ROOT/stg/api-srv" ./cmd/server
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$SRV_ROOT/stg/proto-migrate" ./cmd/migrate
-[ -s "$SRV_ROOT/stg/proto-api" ] && [ -s "$SRV_ROOT/stg/proto-migrate" ] || { echo "[ERROR] go build produced no binaries"; exit 1; }
+[ -s "$SRV_ROOT/stg/api-srv" ] && [ -s "$SRV_ROOT/stg/proto-migrate" ] || { echo "[ERROR] go build produced no binaries"; exit 1; }
 popd > /dev/null
 
 printf 'commit=%s\nbranch=%s\nbuilt=%s\nhost=%s\n' \
     "$GIT_SHA" "$BRANCH_TO_CHECKOUT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(hostname)" \
     > "$SRV_ROOT/stg/proto-api.revision"
 
-if "$SRV_ROOT/stg/proto-api" >/dev/null 2>&1; then
+if "$SRV_ROOT/stg/api-srv" >/dev/null 2>&1; then
     echo "[WARN] API exited 0 with no config argument; expected the usage path."
 fi
 
@@ -111,7 +111,7 @@ echo "$CONTAINER_REGISTRY_PASSWORD" | oras login -u "$CONTAINER_REGISTRY_USER" -
 
 pushd "$SRV_ROOT/stg" > /dev/null
 oras push "$API_BLOB:sha-$GIT_SHA" \
-    "proto-api:application/vnd.proto.deploy.layer.v1+binary" \
+    "api-srv:application/vnd.proto.deploy.layer.v1+binary" \
     "proto-migrate:application/vnd.proto.deploy.layer.v1+binary" \
     "proto-api.revision:text/plain" \
     --annotation "org.opencontainers.image.description=proto-api linux/amd64" \

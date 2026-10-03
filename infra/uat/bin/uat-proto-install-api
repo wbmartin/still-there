@@ -1,4 +1,17 @@
 #!/bin/bash
+# Installs one build from the registry:
+#
+#   pull proto-api:<tag> -> proto-migrate verify -> pg_dump if pending
+#   -> proto-migrate up -> swap api-srv + proto-migrate (old kept as .prev)
+#   -> restart through the root-owned path unit -> MainPID change -> /health
+#
+#   <env>-proto-install-api [tag]      tag defaults to DEPLOY_TAG
+#
+# The schema step runs the INCOMING proto-migrate from the pull dir, before
+# anything in libexec/ changes: a refused verify or a failed up leaves every
+# installed binary as it was. verify refuses an older tag once the database
+# is past it, so rolling code back across a migration is a restore from
+# backup/, not a reinstall.
 set -euo pipefail
 
 # Run by hand as root, it re-runs as the hook user, so the files it writes
@@ -24,50 +37,52 @@ API_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-api"
 TAG="${1:-$DEPLOY_TAG}"
 
 RESTART_TRIGGER="$SRV_ROOT/stg/restart.request"
+MIGRATE_ENV="$SRV_ROOT/etc/$APP_ENV-migrate.env"
+[ -r "$MIGRATE_ENV" ] || { echo "[ERROR] $MIGRATE_ENV missing or unreadable"; exit 1; }
+LIBEXEC="$SRV_ROOT/libexec"
+BINARY_LIST=(api-srv proto-migrate)
 
 PULL_DIR="$SRV_ROOT/stg/pull.$$"
-mkdir -p "$PULL_DIR"
+mkdir -p "$PULL_DIR" "$LIBEXEC" "$SRV_ROOT/backup"
 trap 'rm -rf "$PULL_DIR"' EXIT
 
 echo "[INFO] Pulling $API_BLOB:$TAG"
 echo "$CONTAINER_REGISTRY_PASSWORD" | oras login -u "$CONTAINER_REGISTRY_USER" --password-stdin "$CONTAINER_REGISTRY_SERVER"
 oras pull "$API_BLOB:$TAG" --output "$PULL_DIR"
-[ -s "$PULL_DIR/proto-api" ] || { echo "[ERROR] $TAG contained no proto-api"; exit 1; }
+for binary in "${BINARY_LIST[@]}"; do
+    [ -s "$PULL_DIR/$binary" ] || { echo "[ERROR] $TAG contains no $binary"; exit 1; }
+    chmod 0755 "$PULL_DIR/$binary"   # oras drops the exec bit
+done
 
-mkdir -p "$SRV_ROOT/libexec"
-# Migrations run BEFORE the API binary is swapped; a failure leaves the old binary running.
-MIGRATE_ENV="$SRV_ROOT/etc/$APP_ENV-migrate.env"
-if [ -s "$PULL_DIR/proto-migrate" ]; then
-    [ -r "$MIGRATE_ENV" ] || { echo "[ERROR] $MIGRATE_ENV missing or unreadable"; exit 1; }
-    install -m 0755 "$PULL_DIR/proto-migrate" "$SRV_ROOT/libexec/proto-migrate.new"
-    mv -f "$SRV_ROOT/libexec/proto-migrate.new" "$SRV_ROOT/libexec/proto-migrate"
-    echo "[INFO] Installed proto-migrate from $TAG"
-    MIGRATE="$SRV_ROOT/libexec/proto-migrate -config $MIGRATE_ENV"
-    echo "[INFO] migrate verify"
-    $MIGRATE verify
-    PENDING=$($MIGRATE pending)
-    if [ "$PENDING" != "0" ]; then
-        DUMP="$SRV_ROOT/backup/pre-migrate-$(date -u +%Y%m%dT%H%M%SZ).dump"
-        mkdir -p "$SRV_ROOT/backup"
-        echo "[INFO] $PENDING migration(s) pending; dumping to $DUMP first"
-        pg_dump -Fc "$(sed -n 's/^DATABASE_URL=//p' "$MIGRATE_ENV")" > "$DUMP"
-        echo "[INFO] migrate up"
-        $MIGRATE up
-    else
-        echo "[INFO] migrate: nothing pending"
-    fi
+# Schema first, with the incoming migrator; libexec/ is untouched until it
+# succeeds.
+MIGRATE=("$PULL_DIR/proto-migrate" -config "$MIGRATE_ENV")
+echo "[INFO] migrate verify"
+"${MIGRATE[@]}" verify
+PENDING=$("${MIGRATE[@]}" pending)
+if [ "$PENDING" != "0" ]; then
+    DUMP="$SRV_ROOT/backup/pre-migrate-$(date -u +%Y%m%dT%H%M%SZ).dump"
+    echo "[INFO] $PENDING migration(s) pending; dumping to $DUMP first"
+    pg_dump -Fc "$(sed -n 's/^DATABASE_URL=//p' "$MIGRATE_ENV")" > "$DUMP"
+    echo "[INFO] migrate up"
+    "${MIGRATE[@]}" up
 else
-    echo "[WARN] $TAG carries no proto-migrate; schema left as is"
+    echo "[INFO] migrate: nothing pending"
 fi
 
 echo "[INFO] Installing $TAG"
-# ORAS drops the exec bit; install+mv keeps the swap atomic.
-install -m 0755 "$PULL_DIR/proto-api" "$SRV_ROOT/libexec/proto-api.new"
-mv -f "$SRV_ROOT/libexec/proto-api.new" "$SRV_ROOT/libexec/proto-api"
+# Keep the running binary as .prev; install+mv keeps each swap atomic.
+for binary in "${BINARY_LIST[@]}"; do
+    if [ -f "$LIBEXEC/$binary" ]; then
+        cp -p "$LIBEXEC/$binary" "$LIBEXEC/$binary.prev"
+    fi
+    install -m 0755 "$PULL_DIR/$binary" "$LIBEXEC/$binary.new"
+    mv -f "$LIBEXEC/$binary.new" "$LIBEXEC/$binary"
+done
 {
     [ -f "$PULL_DIR/proto-api.revision" ] && cat "$PULL_DIR/proto-api.revision"
     printf 'installed_tag=%s\ninstalled_at=%s\n' "$TAG" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-} > "$SRV_ROOT/libexec/proto-api.revision"
+} > "$LIBEXEC/proto-api.revision"
 
 echo "[INFO] Requesting restart of $SERVICE"
 pid_before=$(systemctl show -p MainPID --value "$SERVICE" 2>/dev/null || echo "")
@@ -95,7 +110,7 @@ fi
 for _ in $(seq 1 15); do
     if curl -fsS --max-time 2 "$HEALTH_URL" 2>/dev/null | grep -q '"status":"ok"'; then
         echo "[INFO] $SERVICE healthy"
-        [ -f "$SRV_ROOT/libexec/proto-api.revision" ] && cat "$SRV_ROOT/libexec/proto-api.revision"
+        cat "$LIBEXEC/proto-api.revision"
         exit 0
     fi
     sleep 1
@@ -103,4 +118,6 @@ done
 
 echo "[ERROR] $SERVICE restarted but did not report healthy within 15s."
 echo "        journalctl -u $SERVICE -n 40 --no-pager"
+echo "        Roll back the binaries (the schema stays) and restart:"
+echo "          for b in ${BINARY_LIST[*]}; do mv -f $LIBEXEC/\$b.prev $LIBEXEC/\$b; done; : > $RESTART_TRIGGER"
 exit 1

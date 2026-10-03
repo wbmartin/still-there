@@ -25,7 +25,7 @@ what surprised you to **Lessons** at the bottom (and to `doc/330`'s).
 | | Local (today) | Prod (after) |
 |---|---|---|
 | System of record | the local database | `prd_proto_db` on prod; local becomes a stale dev copy |
-| Binaries | built locally | UAT's registry digests retagged `:prd`; `libexec/proto-api`, `proto-migrate`, `proto-api.revision`, shrmpl-hook-owned |
+| Binaries | built locally | UAT's registry digests retagged `:prd`; `libexec/api-srv`, `proto-migrate` (+ `.prev`), `proto-api.revision`, shrmpl-hook-owned |
 | Host files | — | a `git archive` of `infra/prd` + `infra/sql` (no checkout) |
 | Deploy | — | `prd-proto-promote-uat-and-deploy`: by hand, or from a prod webhook (B6) |
 | Env | `etc/loc-api-srv.env` | `etc/prd-proto-{api,migrate,deploy,backup}.env` |
