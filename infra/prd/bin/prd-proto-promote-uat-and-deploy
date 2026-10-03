@@ -2,15 +2,18 @@
 
 set -euo pipefail
 
+# Run by hand as root, it re-runs as the hook user, so the files it writes
+# stay writable by the next webhook run.
 TARGET_USER="shrmpl-hook"
 if [ "$(id -un)" != "$TARGET_USER" ]; then
-    echo "[ERROR] Must run as $TARGET_USER (currently $(id -un))."
-    echo "        sudo -u $TARGET_USER -H $0 $*"
-    exit 1
+    exec sudo -u "$TARGET_USER" -H "$0" "$@"
 fi
 
 SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-DEPLOY_ENV="$SRV_ROOT/etc/prd-proto-deploy.env"
+# The app root is /srv/<env>-<slug>: every env, unit and script name comes
+# from it, so this file is the same on every host.
+APP_ENV="$(basename "$SRV_ROOT")"
+DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"
 [ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
 # shellcheck disable=SC1090
 source "$DEPLOY_ENV"
@@ -32,10 +35,10 @@ notify_failure() {
 trap notify_failure EXIT
 
 # Never rebuilds: retags the UAT digests, then installs exactly those bytes.
-"$DEPLOY_BIN/prd-proto-promote-uat" "$@"
+"$DEPLOY_BIN/$APP_ENV-promote-uat" "$@"
 
-"$DEPLOY_BIN/prd-proto-install-api"
-"$DEPLOY_BIN/prd-proto-publish-web-client" --pull "$TARGET_TAG"
+"$DEPLOY_BIN/$APP_ENV-install-api" "$TARGET_TAG"
+"$DEPLOY_BIN/$APP_ENV-publish-web-client" --pull "$TARGET_TAG"
 
 # Past the point where a failure needs reporting.
 trap - EXIT

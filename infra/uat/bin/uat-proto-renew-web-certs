@@ -1,7 +1,7 @@
 #!/bin/bash
 # Issues / renews the site's Let's Encrypt certificate and copies it to
 # crt/<site>/, which the nginx site reads. Root, from cron; the schedule is
-# NACK_CRON in shrmpl-etc/nack-monitors/uat-proto-renew-web-certs_NACKID.env.
+# NACK_CRON in shrmpl-etc/nack-monitors/<env>-proto-renew-web-certs_NACKID.env.
 # Checks in with nackmon only on success. Run it once by hand before linking
 # the nginx site, which fails nginx -t until the pem files exist.
 # --agree-tos -n: cron has no terminal for the ToS prompt.
@@ -11,7 +11,10 @@ set -euo pipefail
 export PATH=/usr/sbin:$PATH
 
 SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-DEPLOY_ENV="$SRV_ROOT/etc/uat-proto-deploy.env"
+# The app root is /srv/<env>-<slug>: every env, unit and script name comes
+# from it, so this file is the same on every host.
+APP_ENV="$(basename "$SRV_ROOT")"
+DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"
 [ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
 # shellcheck disable=SC1090
 source "$DEPLOY_ENV"

@@ -4,8 +4,18 @@
 # create and rename, and the sticky bit limits it to entries it owns.
 set -euo pipefail
 
+# Run by hand as root, it re-runs as the hook user, so web-pub/ stays
+# owned by the account that swaps it on the next deploy.
+TARGET_USER="shrmpl-hook"
+if [ "$(id -un)" != "$TARGET_USER" ]; then
+    exec sudo -u "$TARGET_USER" -H "$0" "$@"
+fi
+
 SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-DEPLOY_ENV="$SRV_ROOT/etc/uat-proto-deploy.env"
+# The app root is /srv/<env>-<slug>: every env, unit and script name comes
+# from it, so this file is the same on every host.
+APP_ENV="$(basename "$SRV_ROOT")"
+DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"
 [ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
 # shellcheck disable=SC1090
 source "$DEPLOY_ENV"
@@ -18,13 +28,6 @@ STG_DIR="$SRV_ROOT/stg"
 WEB_PUB_DIR="$SRV_ROOT/web-pub"
 TARBALL="proto-web-client.tar.gz"
 
-TARGET_USER="shrmpl-hook"
-if [ "$(id -un)" != "$TARGET_USER" ]; then
-    echo "[ERROR] Must run as $TARGET_USER (currently $(id -un))."
-    echo "        sudo -u $TARGET_USER -H $0 $*"
-    exit 1
-fi
-
 if [ "${1:-}" = "--pull" ]; then
     TAG="${2:-$DEPLOY_TAG}"
     echo "[INFO] Pulling $WEB_BLOB:$TAG"
@@ -36,7 +39,7 @@ fi
 SOURCE="$STG_DIR/$TARBALL"
 if [ ! -f "$SOURCE" ]; then
     echo "[ERROR] Tarball not found at $SOURCE"
-    echo "        Run the build, or re-run with --pull <tag>."
+    echo "        Re-run with --pull <tag>."
     exit 1
 fi
 

@@ -8,7 +8,10 @@ if [ "$(id -un)" != "$TARGET_USER" ]; then
 fi
 
 SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-DEPLOY_ENV="$SRV_ROOT/etc/uat-proto-deploy.env"
+# The app root is /srv/<env>-<slug>: every env, unit and script name comes
+# from it, so this file is the same on every host.
+APP_ENV="$(basename "$SRV_ROOT")"
+DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"
 [ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
 # shellcheck disable=SC1090
 source "$DEPLOY_ENV"
@@ -19,7 +22,7 @@ API_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-api"
 WEB_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-web"
 SRV_BIN=$SRV_ROOT/bin
 
-LOCK_FILE=/var/lock/uat-proto-build.lock
+LOCK_FILE="/var/lock/$APP_ENV-build.lock"
 exec 200>"$LOCK_FILE"
 flock -n 200 || { echo "[ERROR] Another build is already running (lock: $LOCK_FILE)"; exit 1; }
 
@@ -65,7 +68,7 @@ GIT_SHA=$(git rev-parse "origin/$BRANCH_TO_CHECKOUT")
 echo "[INFO] Building from commit $GIT_SHA ($BRANCH_TO_CHECKOUT)"
 
 # Tests gate the registry push: nothing below runs on a red suite.
-"$SRV_BIN/uat-proto-run-tests"
+"$SRV_BIN/$APP_ENV-run-tests"
 GO_TESTS=$(grep -c '^--- PASS' "$SRV_ROOT/stg/go-test.log" 2>/dev/null || echo "?")
 
 echo "[INFO] Building Go API"
@@ -128,8 +131,8 @@ popd > /dev/null
 popd > /dev/null
 
 echo "[INFO] Starting server deploy process"
-"$SRV_BIN/uat-proto-install-api"
-"$SRV_BIN/uat-proto-publish-web-client"
+"$SRV_BIN/$APP_ENV-install-api"
+"$SRV_BIN/$APP_ENV-publish-web-client"
 
 trap - EXIT
 

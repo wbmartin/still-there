@@ -52,7 +52,8 @@ To build and package the web app for deployment:
 
 The one command, on a laptop or a build host:
 ```
-./bin/300-run-tests            # all: go + govulncheck + unit + e2e + py (load is not part of all)
+./bin/300-run-tests            # all: infra + go + govulncheck + unit + e2e + py (load is not part of all)
+./bin/300-run-tests infra      # infra/<host>/bin: bash -n, shared copies identical across hosts
 ./bin/300-run-tests go         # gofmt, go vet, staticcheck, go test (run before every commit)
 ./bin/300-run-tests unit       # eslint, vitest (src/web-app)
 ./bin/300-run-tests e2e        # Playwright only

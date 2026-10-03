@@ -242,116 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B045 — infra scripts derive names from the app root; shared copies equal
-
-- **Priority:** P2  **Area:** infra, docs
-- **GRC:** `infra/uat-unified001/bin/uat-grc-install-api:21-30`; `uat-grc-build:16-24`; `uat-grc-publish-web-client:14-21`; `uat-grc-renew-web-certs:8-10`; `infra/prd-unified002/bin/prd-grc-promote-uat:1-19,44-48`; `prd-grc-promote-uat-and-deploy:13-47`; `prd-grc-backup-all:17-19`; `infra/README.md:21-25`   **PROTO:** `infra/uat/bin/*`, `infra/prd/bin/*` (e.g. `uat-proto-install-api:5`); `infra/prd/bin/prd-proto-promote-uat:1-61`; `prd-proto-promote-uat-and-deploy:1-52`; `infra/README.md:44-48`
-- **Ticket:** RG0013 / `3a3fc94`, `a57d6ad`
-- **What:** `APP_ENV=$(basename $SRV_ROOT)` names env, lock, scripts, so
-`install-api`, `publish-web-client`, `renew-web-certs` are byte-identical
-across hosts. Hook scripts re-exec as `shrmpl-hook`; PROTO's uat ones run as
-root and leave root-owned files.
-- **Port notes:** Fewer names for `bin/000-rebrand:88`. README: diff shared
-scripts after edits. Promote passes `$DEPLOY_TAG`.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Each host's scripts live in `infra/uat/bin/` and `infra/prd/bin/` and are
-copied verbatim to `/srv/<env>-proto/bin/` (`infra/README.md:44-48`). Every
-script already finds its app root from its own path, then hard-codes its
-environment in the names it builds from that root:
-
-```bash
-# infra/uat/bin/uat-proto-install-api:4-5, 29, 81
-SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-DEPLOY_ENV="$SRV_ROOT/etc/uat-proto-deploy.env"
-MIGRATE_ENV="$SRV_ROOT/etc/uat-proto-migrate.env"
-echo "          systemctl status uat-proto-restart.path"
-```
-
-So the uat and prd copies of one job are different files, and `diff`
-shows drift beyond the env name. `prd-proto-install-api:14-19` and
-`prd-proto-publish-web-client:18-24` refuse any user but `shrmpl-hook`;
-the uat copies have no user check. `publish-web-client:29` has a different
-hint per host. `renew-web-certs` differs only in the env name (`:6`). A
-fix to one copy must be retyped into the other, and nothing checks it.
-
-**Running as root leaves root-owned files.** The uat build re-execs itself
-as `shrmpl-hook` (`uat-proto-build:5-8`), but an operator who reinstalls a
-tag by hand runs `sudo /srv/uat-proto/bin/uat-proto-install-api <tag>` as
-root, and nothing stops it. The redirect at `uat-proto-install-api:57-60`
-then creates `libexec/proto-api.revision` as root, mode 0644. On the next
-webhook build, `shrmpl-hook` cannot open that file: `install-api` dies
-under `set -e` after the new binary is swapped in (`:55-56`) and before the
-restart request (`:65`). The new binary sits on disk unrestarted and Slack
-reports a failed build. A root-run `publish-web-client` likewise leaves a
-root-owned `web-pub/` that the hook's `rm -rf "$OLD_DIR"` (`:48`) cannot
-delete. This is a correctness bug on the deploy path, not a security hole.
-
-#### What GRC changed
-
-RG0013 / `3a3fc94` ("Scripts derive every name from their app root, so the
-shared uat/prd copies are byte-identical") and `a57d6ad` (README).
-
-1. One more line after `SRV_ROOT`: `APP_ENV="$(basename "$SRV_ROOT")"`,
-   and every name is built from it: `uat-grc-install-api:27-29`
-   (`DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"`), the restart-unit
-   hint (`:102`), the build lock (`uat-grc-build:49`), the scripts the
-   build calls (`:137`, `:139`), promote (`prd-grc-promote-uat:18-19`),
-   promote-and-deploy (`:20-21`, `:39-41`), backup (`prd-grc-backup-all:18-19`).
-2. Every hook-run script re-execs instead of refusing
-   (`uat-grc-install-api:21-24`): `exec sudo -u "$TARGET_USER" -H "$0" "$@"`.
-   Root can run it by hand and it still writes as `shrmpl-hook`.
-3. `install-api`, `publish-web-client` and `renew-web-certs` are
-   byte-identical across GRC's two host dirs (confirmed with `diff`).
-   `infra/README.md:21-25` states the rule and says to `diff` them after an
-   edit. No automated check enforces it.
-4. Promote-and-deploy passes the tag explicitly (`:40`,
-   `install-api "$DEPLOY_TAG"`). PROTO's call with no argument
-   (`prd-proto-promote-uat-and-deploy:37`) already defaults to `DEPLOY_TAG`,
-   so this is cosmetic.
-
-GRC still hard-codes the slug in blob names and in `*-start`/`*-stop`.
-
-#### Proposed fix for PROTO
-
-1. In every `infra/{uat,prd}/bin/*` script except `*-start`/`*-stop`, add
-   `APP_ENV="$(basename "$SRV_ROOT")"` and build every env file, lock,
-   unit and called-script name from it. Keep the literal slug in blob and
-   binary names (`proto-api`, `proto-web`, `proto-migrate`); rebrand
-   rewrites those.
-2. Put the `shrmpl-hook` re-exec first in `build`, `install-api`,
-   `publish-web-client`, `promote-uat`, `promote-uat-and-deploy`. Replace
-   the prd "Must run as" refusals with it. `renew-web-certs` and
-   `backup-all` stay root (cron).
-3. Make `install-api`, `publish-web-client`, `renew-web-certs` identical
-   across `infra/uat/bin` and `infra/prd/bin` (pick one error hint).
-4. Add a check that fails when a pair differs, e.g. a few lines in
-   `scripts/` beside B053's path check, run by the same gate.
-5. Drop `BACKUP_ENV` from `infra/prd/etc/prd-proto-backup.env` and derive
-   it. Coordinate with B020, which rewrites the same backup script.
-6. `infra/README.md:44-48`: state the basename rule, the constraint it
-   implies (the app root must be named `<env>-<slug>`), and the pair list.
-7. Correction to the item: `bin/000-rebrand:88` renames files, and the
-   filenames still carry the slug after this change. The gain for rebrand
-   is fewer in-file `uat-proto` tokens for step 1 (`:61`), which it already
-   handles. The real gain is one file per job.
-8. Order: B024 first (app root `root:shrmpl-hook 1775`), or a hook-run
-   publish cannot rename `web-pub/`. B046 and B047 edit the same scripts;
-   land them on top of this.
-
-Tests: the pair-diff check above. Shell syntax with `bash -n` on each.
-
-#### Open question for Brandon
-
-Keep two byte-identical copies per shared script plus a diff check (GRC's
-model, keeps `infra/<host>` a file-for-file mirror), or keep one copy under
-`infra/shared/bin/` that both hosts install? Recommendation: two copies
-plus the check, so each host dir stays a literal mirror of the server.
-
 ### B046 — install-api: run the incoming migrator before touching libexec
 
 - **Priority:** P2  **Area:** infra
@@ -8910,3 +8800,114 @@ None.
 
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). `tests/README.md` rewritten from the files as they are now: private test API on :8082 over the e2e scratch DB, started by `bin/300-run-tests py` (no manual mode; conftest exits 3 otherwise); the copied env (`tmp/test-logs/py-api-srv.env`) with the two rate limits from `etc/loc-api-srv.env` and `TRUSTED_PROXY_COUNT=1` (one proxy hop); guards; tenants 2/3 and seeded users; `TestClient`, fixtures, `api_env`, `create_throwaway_login`/`delete_user`, CSRF probe; forwarded-IP lockout hygiene and the rate case; every `test_*.py` (incl. `test_own_profile.py`, `test_user_block.py`, `test_user_invite.py`, `test_zz_mfa_totp.py`) with the `a`/`z`/`zz` ordering explained; reports/logs and the clean-tree rule. Requirements section kept (all four pins, pip-audit). No GRC-only names (`grc` fixture, `db`, bin/320). Every path and command named was checked to exist. Docs only. Tests: all green, `gofmt -l` empty: go=687 unit=82 e2e=13 py=102 (unchanged).
 
+### B045 — COMPLETED — infra scripts derive names from the app root; shared copies equal
+
+- **Priority:** P2  **Area:** infra, docs
+- **GRC:** `infra/uat-unified001/bin/uat-grc-install-api:21-30`; `uat-grc-build:16-24`; `uat-grc-publish-web-client:14-21`; `uat-grc-renew-web-certs:8-10`; `infra/prd-unified002/bin/prd-grc-promote-uat:1-19,44-48`; `prd-grc-promote-uat-and-deploy:13-47`; `prd-grc-backup-all:17-19`; `infra/README.md:21-25`   **PROTO:** `infra/uat/bin/*`, `infra/prd/bin/*` (e.g. `uat-proto-install-api:5`); `infra/prd/bin/prd-proto-promote-uat:1-61`; `prd-proto-promote-uat-and-deploy:1-52`; `infra/README.md:44-48`
+- **Ticket:** RG0013 / `3a3fc94`, `a57d6ad`
+- **What:** `APP_ENV=$(basename $SRV_ROOT)` names env, lock, scripts, so
+`install-api`, `publish-web-client`, `renew-web-certs` are byte-identical
+across hosts. Hook scripts re-exec as `shrmpl-hook`; PROTO's uat ones run as
+root and leave root-owned files.
+- **Port notes:** Fewer names for `bin/000-rebrand:88`. README: diff shared
+scripts after edits. Promote passes `$DEPLOY_TAG`.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Each host's scripts live in `infra/uat/bin/` and `infra/prd/bin/` and are
+copied verbatim to `/srv/<env>-proto/bin/` (`infra/README.md:44-48`). Every
+script already finds its app root from its own path, then hard-codes its
+environment in the names it builds from that root:
+
+```bash
+# infra/uat/bin/uat-proto-install-api:4-5, 29, 81
+SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+DEPLOY_ENV="$SRV_ROOT/etc/uat-proto-deploy.env"
+MIGRATE_ENV="$SRV_ROOT/etc/uat-proto-migrate.env"
+echo "          systemctl status uat-proto-restart.path"
+```
+
+So the uat and prd copies of one job are different files, and `diff`
+shows drift beyond the env name. `prd-proto-install-api:14-19` and
+`prd-proto-publish-web-client:18-24` refuse any user but `shrmpl-hook`;
+the uat copies have no user check. `publish-web-client:29` has a different
+hint per host. `renew-web-certs` differs only in the env name (`:6`). A
+fix to one copy must be retyped into the other, and nothing checks it.
+
+**Running as root leaves root-owned files.** The uat build re-execs itself
+as `shrmpl-hook` (`uat-proto-build:5-8`), but an operator who reinstalls a
+tag by hand runs `sudo /srv/uat-proto/bin/uat-proto-install-api <tag>` as
+root, and nothing stops it. The redirect at `uat-proto-install-api:57-60`
+then creates `libexec/proto-api.revision` as root, mode 0644. On the next
+webhook build, `shrmpl-hook` cannot open that file: `install-api` dies
+under `set -e` after the new binary is swapped in (`:55-56`) and before the
+restart request (`:65`). The new binary sits on disk unrestarted and Slack
+reports a failed build. A root-run `publish-web-client` likewise leaves a
+root-owned `web-pub/` that the hook's `rm -rf "$OLD_DIR"` (`:48`) cannot
+delete. This is a correctness bug on the deploy path, not a security hole.
+
+#### What GRC changed
+
+RG0013 / `3a3fc94` ("Scripts derive every name from their app root, so the
+shared uat/prd copies are byte-identical") and `a57d6ad` (README).
+
+1. One more line after `SRV_ROOT`: `APP_ENV="$(basename "$SRV_ROOT")"`,
+   and every name is built from it: `uat-grc-install-api:27-29`
+   (`DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"`), the restart-unit
+   hint (`:102`), the build lock (`uat-grc-build:49`), the scripts the
+   build calls (`:137`, `:139`), promote (`prd-grc-promote-uat:18-19`),
+   promote-and-deploy (`:20-21`, `:39-41`), backup (`prd-grc-backup-all:18-19`).
+2. Every hook-run script re-execs instead of refusing
+   (`uat-grc-install-api:21-24`): `exec sudo -u "$TARGET_USER" -H "$0" "$@"`.
+   Root can run it by hand and it still writes as `shrmpl-hook`.
+3. `install-api`, `publish-web-client` and `renew-web-certs` are
+   byte-identical across GRC's two host dirs (confirmed with `diff`).
+   `infra/README.md:21-25` states the rule and says to `diff` them after an
+   edit. No automated check enforces it.
+4. Promote-and-deploy passes the tag explicitly (`:40`,
+   `install-api "$DEPLOY_TAG"`). PROTO's call with no argument
+   (`prd-proto-promote-uat-and-deploy:37`) already defaults to `DEPLOY_TAG`,
+   so this is cosmetic.
+
+GRC still hard-codes the slug in blob names and in `*-start`/`*-stop`.
+
+#### Proposed fix for PROTO
+
+1. In every `infra/{uat,prd}/bin/*` script except `*-start`/`*-stop`, add
+   `APP_ENV="$(basename "$SRV_ROOT")"` and build every env file, lock,
+   unit and called-script name from it. Keep the literal slug in blob and
+   binary names (`proto-api`, `proto-web`, `proto-migrate`); rebrand
+   rewrites those.
+2. Put the `shrmpl-hook` re-exec first in `build`, `install-api`,
+   `publish-web-client`, `promote-uat`, `promote-uat-and-deploy`. Replace
+   the prd "Must run as" refusals with it. `renew-web-certs` and
+   `backup-all` stay root (cron).
+3. Make `install-api`, `publish-web-client`, `renew-web-certs` identical
+   across `infra/uat/bin` and `infra/prd/bin` (pick one error hint).
+4. Add a check that fails when a pair differs, e.g. a few lines in
+   `scripts/` beside B053's path check, run by the same gate.
+5. Drop `BACKUP_ENV` from `infra/prd/etc/prd-proto-backup.env` and derive
+   it. Coordinate with B020, which rewrites the same backup script.
+6. `infra/README.md:44-48`: state the basename rule, the constraint it
+   implies (the app root must be named `<env>-<slug>`), and the pair list.
+7. Correction to the item: `bin/000-rebrand:88` renames files, and the
+   filenames still carry the slug after this change. The gain for rebrand
+   is fewer in-file `uat-proto` tokens for step 1 (`:61`), which it already
+   handles. The real gain is one file per job.
+8. Order: B024 first (app root `root:shrmpl-hook 1775`), or a hook-run
+   publish cannot rename `web-pub/`. B046 and B047 edit the same scripts;
+   land them on top of this.
+
+Tests: the pair-diff check above. Shell syntax with `bash -n` on each.
+
+#### Open question for Brandon
+
+Keep two byte-identical copies per shared script plus a diff check (GRC's
+model, keeps `infra/<host>` a file-for-file mirror), or keep one copy under
+`infra/shared/bin/` that both hosts install? Recommendation: two copies
+plus the check, so each host dir stays a literal mirror of the server.
+
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: two byte-identical copies plus a check, no `infra/shared/`). Every `infra/{uat,prd}/bin/*` script except `*-start`/`*-stop` sets `APP_ENV="$(basename "$SRV_ROOT")"` and builds env files (`$APP_ENV-deploy.env`, `-migrate.env`, `-test.env`, `-backup.env`), the build lock (`/var/lock/$APP_ENV-build.lock`), the restart-unit hint and every called script from it; blob/binary names keep the literal slug. `build`, `install-api`, `publish-web-client`, `promote-uat`, `promote-uat-and-deploy` re-exec first as `shrmpl-hook` (`exec sudo -u ... -H "$0" "$@"`); the prd/uat "Must run as" refusals are gone. `renew-web-certs`, `backup-all` stay root. `install-api`, `publish-web-client`, `renew-web-certs` are now byte-identical across hosts (one hint: "Re-run with --pull <tag>."; nack-monitor comment says `<env>-proto-...`). Promote-and-deploy passes `"$TARGET_TAG"` to install-api; promote's hint prints it too. `backup-all` derives `BACKUP_SRC=$SRV_ROOT`, `BACKUP_DST=$BACKUP_ROOT/$APP_ENV`; `BACKUP_ENV` dropped from `infra/prd/etc/prd-proto-backup.env`, `infra/README.md` table and `doc/331` B2. Check: new `bin/300-run-tests infra` mode (also in `all`): `bash -n` on every `infra/*/bin/*` and `cmp` of each shared job's copies, globbed as `infra/*/bin/*-$APP_SLUG-<job>` so it survives rebrand and host-dir renames. Deviation: lives in bin/300, not a new `scripts/` file (B053 not landed; no `scripts/` dir exists). Docs: `infra/README.md` (basename rule, `<env>-<slug>` root constraint, pair list, re-exec rule), `CLAUDE.md` infra bullet, `doc/902`. Verified in ubuntu:24.04 with stubbed oras/systemctl/curl/certbot against fake `/srv/{uat,prd}-proto` (README ownership): old root-run `install-api` leaves `libexec/proto-api.revision` root:root and the next hook run dies `Permission denied`; new re-execs, files are `shrmpl-hook`, next hook run healthy. One `install-api` file in both roots pulls `reg.uat/...:uat` vs `reg.prd/...:prd` and hints `uat-`/`prd-proto-restart.path`; old uat copy in the prd root fails on `etc/uat-proto-deploy.env`. Old `publish-web-client`/`promote-uat-and-deploy` as root refuse; new publish as `shrmpl-hook` end to end. Build as root: lock `uat-proto-build.lock`, `TEST_ENV=.../uat-proto-test.env`, push, install, publish. Old backup fails `BACKUP_ENV not set` on the new env file; new writes `/backup/prd-proto` 0700. shellcheck 0.9.0: same findings before and after (pre-existing SC2317/SC2015 notes, SC2043 in run-tests), none new; `bin/300` clean. Gate on the old tree fails on the install-api diff, new passes. Host action (when post-sales hosts exist): recopy `bin/`; a leftover `BACKUP_ENV` line in the host backup env is ignored. B046/B047 land on top. Tests: all green, `gofmt -l` empty (no Go change): infra=15 go=687 unit=82 e2e=13 py=102.

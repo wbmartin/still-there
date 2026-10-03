@@ -4,9 +4,12 @@ set -euo pipefail
 # script that runs tests; none of them writes to the source tree, and the
 # run fails if `git status` at the end differs from the start.
 #
-#   bin/300-run-tests          # all: rebuild both scratch DBs, Go checks +
-#                              #      test, govulncheck, eslint, vitest,
+#   bin/300-run-tests          # all: infra script checks, rebuild both
+#                              #      scratch DBs, Go checks + test,
+#                              #      govulncheck, eslint, vitest,
 #                              #      playwright, pytest
+#   bin/300-run-tests infra    # infra/<host>/bin: bash -n, shared copies
+#                              #   byte-identical across hosts
 #   bin/300-run-tests go       # gofmt, go vet, staticcheck, go test
 #                              #   (seconds; run before every commit)
 #   bin/300-run-tests unit     # eslint, vitest (src/web-app), no database
@@ -32,7 +35,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 MODE="${1:-all}"
-case "$MODE" in all|go|unit|e2e|py|load) ;; *) echo "usage: $0 [all|go|unit|e2e|py|load]"; exit 2 ;; esac
+case "$MODE" in all|infra|go|unit|e2e|py|load) ;; *) echo "usage: $0 [all|infra|go|unit|e2e|py|load]"; exit 2 ;; esac
 
 # shellcheck disable=SC1091
 source "$PROJECT_ROOT/etc/app.env"
@@ -64,7 +67,7 @@ for tool in go npm; do
     command -v "$tool" >/dev/null 2>&1 || { echo "[ERROR] $tool not on PATH"; exit 1; }
 done
 
-GO_COUNT=0; UNIT_COUNT=0; E2E_COUNT=0; PY_COUNT=0
+INFRA_COUNT=0; GO_COUNT=0; UNIT_COUNT=0; E2E_COUNT=0; PY_COUNT=0
 SUMMARY=()
 
 # The tree as the run found it; compared again at the end. Start against
@@ -103,6 +106,41 @@ install_go_tool() {
         exit 1
     fi
 }
+
+# ------------------------------------------------------------------------------
+# infra/<host>/bin/<env>-<slug>-<job> ships verbatim to /srv/<env>-<slug>/bin
+# and takes every per-host name from that app root, so a job run on more
+# than one host is one file copied per host dir. A fix typed into one copy
+# and not the other fails here. Offline, no database.
+INFRA_SHARED_JOB_LIST=(install-api publish-web-client renew-web-certs)
+if [ "$MODE" = all ] || [ "$MODE" = infra ]; then
+    echo "[INFO] infra scripts: bash -n, shared copies identical"
+    for script in "$PROJECT_ROOT"/infra/*/bin/*; do
+        [ -f "$script" ] || continue
+        bash -n "$script" \
+            || { echo "[ERROR] bash -n: ${script#"$PROJECT_ROOT"/}"; exit 1; }
+        INFRA_COUNT=$((INFRA_COUNT + 1))
+    done
+    for job in "${INFRA_SHARED_JOB_LIST[@]}"; do
+        copy_list=("$PROJECT_ROOT"/infra/*/bin/*-"$APP_SLUG"-"$job")
+        if [ "${#copy_list[@]}" -lt 2 ] || [ ! -f "${copy_list[0]}" ]; then
+            echo "[ERROR] infra/<host>/bin/<env>-$APP_SLUG-$job: expected" \
+                "a copy on each host, found ${#copy_list[@]}"
+            exit 1
+        fi
+        for copy in "${copy_list[@]:1}"; do
+            if ! cmp -s "${copy_list[0]}" "$copy"; then
+                echo "[ERROR] shared infra script differs between hosts" \
+                    "(make the copies identical):"
+                diff -u "${copy_list[0]}" "$copy" | head -40
+                exit 1
+            fi
+        done
+    done
+    echo "[INFO] infra: $INFRA_COUNT scripts parse;" \
+        "${#INFRA_SHARED_JOB_LIST[@]} shared jobs identical"
+    SUMMARY+=("infra=$INFRA_COUNT")
+fi
 
 # ------------------------------------------------------------------------------
 if [ "$MODE" = all ] || [ "$MODE" = go ]; then

@@ -4,7 +4,7 @@
 # nackmon only on success.
 #
 #   database  pg_dump -Fc of DATABASE_NAME, pg_dumpall --globals-only (roles)
-#   files     tar of /srv/$BACKUP_ENV without backup/ and stg/; carries etc/
+#   files     tar of the app root without backup/ and stg/; carries etc/
 #             (secrets), so BACKUP_DST is root-only 0700
 #
 # Retention is the weekday name: seven rolling copies here and in REMOTE_DIR
@@ -12,19 +12,22 @@
 set -euo pipefail
 
 SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-ENV_FILE="$SRV_ROOT/etc/prd-proto-backup.env"
+# The app root is /srv/<env>-<slug>: every env, unit and script name comes
+# from it, so this file is the same on every host.
+APP_ENV="$(basename "$SRV_ROOT")"
+ENV_FILE="$SRV_ROOT/etc/$APP_ENV-backup.env"
 [ -r "$ENV_FILE" ] || { echo "[ERROR] $ENV_FILE missing or unreadable"; exit 1; }
 # shellcheck disable=SC1090
 source "$ENV_FILE"
-for var in BACKUP_ENV BACKUP_ROOT REMOTE_SERVER REMOTE_DIR DATABASE_NAME HEALTHCHECK_URL; do
+for var in BACKUP_ROOT REMOTE_SERVER REMOTE_DIR DATABASE_NAME HEALTHCHECK_URL; do
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $ENV_FILE"; exit 1; }
 done
 
-BACKUP_SRC=/srv/$BACKUP_ENV
-BACKUP_DST=$BACKUP_ROOT/$BACKUP_ENV
+BACKUP_SRC=$SRV_ROOT
+BACKUP_DST=$BACKUP_ROOT/$APP_ENV
 BACKUP_ID=$(date +%a)
 HOST_NAME=$(hostname)
-PREFIX="$BACKUP_DST/$(echo "$BACKUP_ENV" | tr "[:lower:]" "[:upper:]")-BACKUP"
+PREFIX="$BACKUP_DST/$(echo "$APP_ENV" | tr "[:lower:]" "[:upper:]")-BACKUP"
 DB_BACKUP_FILE="$PREFIX-PG-$HOST_NAME-$DATABASE_NAME-$BACKUP_ID.dump"
 DB_GLOBALS_FILE="$PREFIX-PG-$HOST_NAME-Globals-$BACKUP_ID.sql.gz"
 FS_BACKUP_FILE="$PREFIX-FS-$HOST_NAME-$BACKUP_ID.tar.gz"

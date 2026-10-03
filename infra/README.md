@@ -50,8 +50,25 @@ only on the host.**
 - `bin/` scripts are **deployed verbatim** — `cp` to the host, `chmod +x`,
   nothing edited there. They carry no secrets and no per-host values.
   Every script opens the same way: derive `$SRV_ROOT` from its own
-  location, `source` its `etc/*.env`, and die naming the key if any
-  required variable is unset. No `${VAR:-default}` fallbacks, ever.
+  location, take `APP_ENV="$(basename "$SRV_ROOT")"`, `source` its
+  `etc/$APP_ENV-*.env`, and die naming the key if any required variable
+  is unset. No `${VAR:-default}` fallbacks, ever.
+- **Names come from the app root.** Every env file, lock, unit and called
+  script is built from `APP_ENV`, so the app root must be named
+  `<env>-<slug>` (`/srv/uat-proto`, `/srv/prd-proto`) and the files in it
+  carry that prefix. Only the blob and binary names (`proto-api`,
+  `proto-web`, `proto-migrate`) and `*-start` / `*-stop` spell the slug
+  literally. A job run on both hosts is therefore **one file copied per
+  host dir**: `*-install-api`, `*-publish-web-client`, `*-renew-web-certs`
+  are byte-identical across `infra/uat/bin/` and `infra/prd/bin/`. Edit
+  one, copy it over the other; `bin/300-run-tests infra` (part of `all`)
+  fails when a pair differs.
+- **Hook scripts run as `shrmpl-hook`.** `*-build`, `*-install-api`,
+  `*-publish-web-client`, `*-promote-uat` and `*-promote-uat-and-deploy`
+  re-exec themselves with `sudo -u shrmpl-hook -H` when started as anyone
+  else, so an operator's `sudo .../uat-proto-install-api <tag>` writes
+  files the next webhook run can replace. `*-renew-web-certs` and
+  `*-backup-all` run as root from cron.
 - `etc/*.env` holds everything per-host or secret. The repo copy is
   **redacted**: every real value is spelled `SERVERONLY`, hostnames are
   `example.com`. After a PR that touches `infra/<host>/etc/`, diff the
@@ -100,7 +117,7 @@ only on the host.**
 | `*-install-api` → `proto-migrate` | `etc/<env>-proto-migrate.env` | the DDL role's `DATABASE_URL` |
 | `*-renew-web-certs` (root cron) | `etc/<env>-proto-deploy.env` | `SITE_NAME`, `CERTBOT_EMAIL`, `CERT_HEALTHCHECK_URL` |
 | `prd-proto-promote-uat`, `-promote-uat-and-deploy`, `-install-api`, `-publish-web-client` | `etc/prd-proto-deploy.env` | registry server + credentials, `SERVICE`, `HEALTH_URL`, `DEPLOY_TAG`, `PROMOTE_FROM_TAG`, `SLACK_WEBHOOK` |
-| `prd-proto-backup-all` (root cron) | `etc/prd-proto-backup.env` (root:root 0600) | `BACKUP_ENV`, `BACKUP_ROOT`, `REMOTE_SERVER`, `REMOTE_DIR`, `DATABASE_NAME`, `HEALTHCHECK_URL` |
+| `prd-proto-backup-all` (root cron) | `etc/prd-proto-backup.env` (root:root 0600) | `BACKUP_ROOT`, `REMOTE_SERVER`, `REMOTE_DIR`, `DATABASE_NAME`, `HEALTHCHECK_URL` |
 
 `*-start` / `*-stop` are operator tools that call `systemctl` directly; run
 them as root. The build never uses them.

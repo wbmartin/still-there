@@ -380,8 +380,8 @@ Then confirm what it wrote and shipped. The dump is listed by `pg_restore
 : "${APP_ROOT:?}"
 B=$APP_ROOT/etc/prd-proto-backup.env
 "$APP_ROOT/bin/prd-proto-backup-all"
-ls -l "$(getv "$B" BACKUP_ROOT)/$(getv "$B" BACKUP_ENV)"
-pg_restore --list "$(ls -t "$(getv "$B" BACKUP_ROOT)/$(getv "$B" BACKUP_ENV)"/*-PG-*.dump | head -1)" | head -20
+ls -l "$(getv "$B" BACKUP_ROOT)/prd-proto"
+pg_restore --list "$(ls -t "$(getv "$B" BACKUP_ROOT)/prd-proto"/*-PG-*.dump | head -1)" | head -20
 ssh "$(getv "$B" REMOTE_SERVER)" "ls -l $(getv "$B" REMOTE_DIR)" | grep -i prd-proto-backup
 ```
 

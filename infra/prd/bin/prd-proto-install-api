@@ -1,8 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 
+# Run by hand as root, it re-runs as the hook user, so the files it writes
+# stay writable by the next webhook build.
+TARGET_USER="shrmpl-hook"
+if [ "$(id -un)" != "$TARGET_USER" ]; then
+    exec sudo -u "$TARGET_USER" -H "$0" "$@"
+fi
+
 SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-DEPLOY_ENV="$SRV_ROOT/etc/prd-proto-deploy.env"
+# The app root is /srv/<env>-<slug>: every env, unit and script name comes
+# from it, so this file is the same on every host.
+APP_ENV="$(basename "$SRV_ROOT")"
+DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"
 [ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
 # shellcheck disable=SC1090
 source "$DEPLOY_ENV"
@@ -10,13 +20,6 @@ for var in CONTAINER_REGISTRY_SERVER CONTAINER_REGISTRY_USER CONTAINER_REGISTRY_
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $DEPLOY_ENV"; exit 1; }
 done
 API_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-api"
-
-TARGET_USER="shrmpl-hook"
-if [ "$(id -un)" != "$TARGET_USER" ]; then
-    echo "[ERROR] Must run as $TARGET_USER (currently $(id -un))."
-    echo "        sudo -u $TARGET_USER -H $0 $*"
-    exit 1
-fi
 
 TAG="${1:-$DEPLOY_TAG}"
 
@@ -33,7 +36,7 @@ oras pull "$API_BLOB:$TAG" --output "$PULL_DIR"
 
 mkdir -p "$SRV_ROOT/libexec"
 # Migrations run BEFORE the API binary is swapped; a failure leaves the old binary running.
-MIGRATE_ENV="$SRV_ROOT/etc/prd-proto-migrate.env"
+MIGRATE_ENV="$SRV_ROOT/etc/$APP_ENV-migrate.env"
 if [ -s "$PULL_DIR/proto-migrate" ]; then
     [ -r "$MIGRATE_ENV" ] || { echo "[ERROR] $MIGRATE_ENV missing or unreadable"; exit 1; }
     install -m 0755 "$PULL_DIR/proto-migrate" "$SRV_ROOT/libexec/proto-migrate.new"
@@ -85,7 +88,7 @@ if [ -z "$restarted" ]; then
     echo "[ERROR] $SERVICE did not restart within 30s."
     echo "        The trigger file is still at $RESTART_TRIGGER, which means the"
     echo "        path unit is not running. Check:"
-    echo "          systemctl status prd-proto-restart.path"
+    echo "          systemctl status $APP_ENV-restart.path"
     exit 1
 fi
 

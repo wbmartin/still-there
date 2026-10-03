@@ -1,8 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 
+# Run by hand as root, it re-runs as the hook user, so the files it writes
+# stay writable by the next webhook run.
+TARGET_USER="shrmpl-hook"
+if [ "$(id -un)" != "$TARGET_USER" ]; then
+    exec sudo -u "$TARGET_USER" -H "$0" "$@"
+fi
+
 SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-DEPLOY_ENV="$SRV_ROOT/etc/prd-proto-deploy.env"
+# The app root is /srv/<env>-<slug>: every env, unit and script name comes
+# from it, so this file is the same on every host.
+APP_ENV="$(basename "$SRV_ROOT")"
+DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"
 [ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
 # shellcheck disable=SC1090
 source "$DEPLOY_ENV"
@@ -15,13 +25,6 @@ WEB_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-web"
 SOURCE_TAG="${1:+sha-$1}"
 SOURCE_TAG="${SOURCE_TAG:-$PROMOTE_FROM_TAG}"
 TARGET_TAG="$DEPLOY_TAG"
-
-TARGET_USER="shrmpl-hook"
-if [ "$(id -un)" != "$TARGET_USER" ]; then
-    echo "[ERROR] Must run as $TARGET_USER (currently $(id -un))."
-    echo "        sudo -u $TARGET_USER -H $0 $*"
-    exit 1
-fi
 
 echo "[INFO] Logging in to $CONTAINER_REGISTRY_SERVER"
 echo "$CONTAINER_REGISTRY_PASSWORD" | oras login -u "$CONTAINER_REGISTRY_USER" --password-stdin "$CONTAINER_REGISTRY_SERVER"
@@ -57,5 +60,5 @@ oras tag "$WEB_BLOB@$WEB_DIGEST" "$TARGET_TAG"
 echo "[INFO] $TARGET_TAG now: api=$API_DIGEST web=$WEB_DIGEST"
 echo "[INFO] commit: $API_REV"
 echo "[INFO] Promoted. Install with:"
-echo "         $SRV_ROOT/bin/prd-proto-install-api"
-echo "         $SRV_ROOT/bin/prd-proto-publish-web-client --pull $TARGET_TAG"
+echo "         $SRV_ROOT/bin/$APP_ENV-install-api $TARGET_TAG"
+echo "         $SRV_ROOT/bin/$APP_ENV-publish-web-client --pull $TARGET_TAG"

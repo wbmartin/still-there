@@ -18,6 +18,8 @@ here.
 - `infra/<host>/` — mirror of `/srv/<env>-proto/{bin,etc}` on a server.
   Scripts deploy verbatim (no secrets, no per-host values); every value
   comes from `etc/*.env`, whose repo copies are redacted `SERVERONLY`.
+  Names derive from the app root's basename, so a job on both hosts is
+  one file copied per host dir (`bin/300-run-tests infra` checks).
   Placeholder until post-sales; presales uses `bin/600`/`610`.
 - `src/api-srv/sql/` — `migrations/NNNN_name.sql`, embedded in
   `cmd/migrate`. This is the **only** way a schema change reaches a
