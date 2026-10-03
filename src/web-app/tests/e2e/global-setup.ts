@@ -23,6 +23,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_PATH = resolve(HERE, ".auth/state.json");
 const SESSION_PATH = resolve(HERE, ".auth/session.json");
 
+// The tenant the fixture logins live in (sql/fixtures/test-seed.sql). Tenant
+// 1 is the first real tenant and does not exist in a test database.
+const TEST_TENANT = 2;
+
 export default async function globalSetup() {
   // Reset the database first, every run, without being asked. Resetting here
   // rather than in the wrapper script is what makes a bare
@@ -42,6 +46,15 @@ export default async function globalSetup() {
   }
 
   const session = await signIn(E2E_USER_NAME, E2E_PASSWORD);
+  // A login outside the test tenant means this API serves a database that
+  // is not a test database: stop before any spec writes to it.
+  if (session.securityContext !== TEST_TENANT) {
+    throw new Error(
+      `[e2e] ${E2E_USER_NAME} signed in to tenant ` +
+        `${session.securityContext}, not ${TEST_TENANT}: refusing to run ` +
+        `against a database that is not a test database`,
+    );
+  }
 
   mkdirSync(dirname(STATE_PATH), { recursive: true });
   writeFileSync(

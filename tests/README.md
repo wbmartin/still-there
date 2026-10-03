@@ -12,12 +12,9 @@ bin/300-run-tests py        # from the repo root; starts a private API
                              # http://127.0.0.1:8082, runs pytest, stops it
 ```
 
-or, by hand against a server you start yourself:
-
-```bash
-bin/215-run-api-srv                        # reads TEST_BASE_URL from etc/loc-api-srv.env
-TEST_BASE_URL=https://localhost:8080 tests/.venv/bin/python -m pytest tests/
-```
+There is no supported way to point the suite at a server you started
+yourself: it creates and deletes users and examples, so `conftest.py`
+refuses to start (exit 3) unless the target is the private test API.
 
 `bin/300-run-tests` bootstraps the venv at `tests/.venv` itself (creating
 it and installing `tests/requirements.txt` on first run, and rebuilding it
@@ -25,19 +22,33 @@ whenever `requirements.txt` changes), checks
 `GET /health`, then runs pytest with an HTML report written to
 `tmp/test-reports/` (gitignored).
 
-## Configuration
+## Configuration and guards
 
-`TEST_BASE_URL` is read from `etc/loc-api-srv.env` (or the file
-`$TEST_API_ENV` points at) by `bin/300-run-tests`, then exported
-as the `TEST_BASE_URL` environment variable that `conftest.py` fixtures
-read directly. Local default: `http://localhost:8080`.
+`bin/300-run-tests py` exports two variables:
+
+- `TEST_API_ENV` — the config file the private API was started from (a copy
+  of `etc/e2e-api-srv.env` in `tmp/test-logs/`).
+- `TEST_BASE_URL` — that file's `TEST_BASE_URL` (`http://127.0.0.1:8082`).
+
+Before any request, `conftest.py` exits the run with status 3 unless both
+are set, `TEST_BASE_URL` equals the one in `TEST_API_ENV`, and that file's
+`DATABASE_URL` names a scratch database (`*_test_db` / `*_e2e_db`).
+
+Tenants: the fixture logins live in `TEST_TENANT = 2`; seed groups 4 and 5
+in `OTHER_TENANT = 3`, the side the isolation tests aim at. Tenant 1 does
+not exist in a test database (`sql/fixtures/test-tenant-lock.sql`). Every
+login through `TestClient.authenticate` and the MFA test's `/mfaVerify`
+calls `require_test_tenant`, which exits the run (status 3) if the user
+landed in any tenant but 2. Request bodies carry no `securityContext` except
+where a test proves the handler ignores it for the JWT's.
 
 ## Test Client
 
 `conftest.py` defines `TestClient`: authenticates against `POST /auth`,
 captures the JWT from the `auth` cookie and the CSRF token from the
 response body, and attaches `X-CSRF-Token` to state-changing requests.
-The fixture users (`admin`, `basic`) are MFA-exempt, so the client
+The fixture users (`admin`, `basic`, seeded by
+`src/api-srv/sql/fixtures/test-seed.sql`) are MFA-exempt, so the client
 authenticates in one step. Fixtures:
 
 - `test_client` (class-scoped) — authenticated as `admin`
@@ -52,8 +63,8 @@ authenticates in one step. Fixtures:
 - `test_basic_user_authorization.py` — basic users denied admin-only ops
 - `test_bulk_operations.py` — bulk CRUD via `/exampleList`
 - `test_error_reporting.py` — client-side error reporting endpoint
-- `test_security_context_isolation.py` — security contexts isolate data
-  and permissions
+- `test_security_context_isolation.py` — tenant 2 cannot use or probe
+  tenant 3's groups; client-sent tenants are ignored
 - `test_session_revocation.py` — sign-out, an admin password change and a
   group grant edit end live sessions (old cookie gets 401)
 - `test_user_management.py` — user management operations (admin only)

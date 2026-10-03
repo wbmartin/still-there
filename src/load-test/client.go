@@ -123,7 +123,6 @@ func (c *APIClient) CreateExample() (int, float64, error) {
 		"exampleFloat":      3.14,
 		"exampleIntArray":   []int{1, 2, 3},
 		"exampleFloatArray": []float64{1.1, 2.2, 3.3},
-		"securityContext":   1,
 	}
 
 	// Make the request and capture response
@@ -190,7 +189,6 @@ func (c *APIClient) UpdateExample(exampleID int, updateTs float64) error {
 		"exampleIntArray":   []int{1, 2, 3},
 		"exampleFloatArray": []float64{1.1, 2.2, 3.3},
 		"updateTs":          updateTs,
-		"securityContext":   1,
 	}
 
 	return c.makeRequest("PUT", "/example", exampleData, nil)

@@ -240,145 +240,6 @@ published password off UAT hosts that already have it but makes the host
 env file the only source of truth? Recommendation: yes, and check the
 existing UAT host once by hand in the same ticket.
 
-### B018 — PS0022: enforce tenant 2 at every test harness
-
-- **Priority:** P1  **Area:** tests, bin, go-api, docs, tickets
-- **GRC:** `bin/lib/test-db-fixture-logins.sql:1-43`; `bin/lib/test-db-tenant-lock.sql:1-15`; `bin/510-reset-test-db:12-16,70-73`; `bin/310-test-repo-model:55-73`; `src/internal/testdb/testdb.go:1-49`; `src/internal/repository/testdb_test.go:1-22`; `tests/conftest.py:15-20,43-52,119,197,283-317`; `tests/requirements.txt:4`; `CLAUDE.md:124-128`; `tickets/03-done/RG0041-tests-own-databases-tenant-2/RG0041-tests-own-databases-tenant-2.md:35-42,49-55,62-70,121-122`; RG0043 md `:353-359`; `src/api-srv/README.md:216-220`   **PROTO:** `src/api-srv/sql/fixtures/local-seed.sql:23-26,31-125`; `bin/510-reset-test-db:41-46,100-101`; `bin/515-reseed-db:20-24`; `bin/300-run-tests:39-41,72,148-156,200`; `src/api-srv/internal/repository/testdb_test.go:1-48`; `tests/conftest.py:31-68,151-160`; `tests/test_auth_flow.py:25`; `tickets/01-open/PS0022-test-tenant-two.md:32-63`; `CLAUDE.md:38-43`; `CLAUDE.md:35-37`
-- **Ticket:** RG0041 / `31970ae`, `78be82d`, `8e05f63`; RG0043 1.1 / `5089ac0`; closes PS0022
-- **What:** PROTO seeds test logins in tenant 1 and trusts URLs. GRC: fixtures
-in tenant 2 (3 = other); scratch-only `CHECK (security_context_id <> 1)`; Go
-`CheckScratch` + gate `case`; conftest exits on a foreign tenant or
-non-`*_e2e_db`; load test refuses tenant != 2.
-- **Port notes:** Brandon's call: other tenant 3 (GRC) or one user kept in 1
-(PS0022 :35-38, which the lock forbids, as does `bin/515`)? Renumber in
-`local-seed.sql`; skip GRC grants; export `TEST_API_ENV`; close GRC 4.25 now;
-CLAUDE.md rule. bin/go-api P2.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-CLAUDE.md:38-43 says tenant 2 is the test tenant and every automated test
-runs there. Nothing in the code does that yet; PS0022 is still in
-`tickets/01-open/`. This is a correctness and safety gap in the test
-harness, not a hole in the shipped API.
-
-1. **Every test login is tenant 1.** One seed file feeds both scratch
-   databases (`bin/510-reset-test-db:100-101`) and the developer's own
-   `loc_proto_db` (`doc/050-dev-env-init.md:30`). It puts all three logins
-   in tenant 1 (`src/api-srv/sql/fixtures/local-seed.sql:85-125`):
-   ```sql
-   -- Users, all in context 1: admin (Admin group) and basic ...
-       1,   -- security_context_id, :103
-   ```
-   Tenant 2 holds only groups 4 and 5 (`:57-79`); examples are tenant 1
-   (`:127-161`). The header admits it (`:23-26`).
-2. **pytest trusts whatever URL it is handed.** `tests/conftest.py:151-153`
-   reads `TEST_BASE_URL` from the environment and `authenticate`
-   (`:31-68`) never checks where the login landed. `bin/300-run-tests:200`
-   sets a private API, but `TEST_BASE_URL=http://localhost:8080 pytest`
-   by hand runs the whole suite against the developer's API and database,
-   creating and deleting users and examples there. `tests/README.md:29-32`
-   still tells people the URL comes from `etc/loc-api-srv.env`, port 8080.
-3. **Go repository tests trust whatever DSN they are handed.**
-   `connectTestDB` (`src/api-srv/internal/repository/testdb_test.go:31-34`)
-   takes `TEST_DATABASE_URL` unchecked; only `migrate_test.go:92` checks.
-   The suites write tenant-1 rows (`user_repository_test.go:61`:
-   `SecurityContext: 1,`).
-4. **The load test acts as tenant-1 admin on the developer's API.**
-   `bin/330-test-load:17` takes `TEST_BASE_URL` from `etc/loc-api-srv.env`;
-   `src/load-test/client.go:126` posts examples with `"securityContext": 1`.
-5. **Assertions bake in tenant 1**, e.g. `tests/test_auth_flow.py:25`
-   (`assert user["securityContext"] == 1`). Tenant literals: 49 lines in
-   repository `_test.go`, 95 in handler `_test.go`, 48 in `tests/*.py`
-   (grep `ecurityContext|security_context`).
-
-Consequence: a mis-set variable turns a test run into silent writes to
-real data. In a derived app with real tenant-1 data, that is data loss.
-
-#### What GRC changed
-
-RG0041 (`31970ae`, merged `78be82d`; `api_env` in `8e05f63`) followed a
-real incident: tests had written into GRC's real database (469 logins,
-710 audit rows cleaned by hand; RG0041 md `:32-45`). RG0043 1.1
-(`5089ac0`) then moved the fixture logins out of migrations.
-
-1. **Fixture logins live in test setup only.**
-   `bin/lib/test-db-fixture-logins.sql:15-43` puts groups 1-3 and
-   admin/basic/mfa in tenant 2, groups 4-5 in tenant 3, ids unchanged so
-   the tests' group ids hold. `bin/510-reset-test-db:70-72` runs it.
-2. **Scratch databases refuse tenant 1.**
-   `bin/lib/test-db-tenant-lock.sql:7-15` raises if any tenant-1 row
-   exists, then adds `CHECK (security_context_id <> 1)` to every table
-   with that column. Test databases only; never a migration.
-3. **Go gate.** `src/internal/testdb/testdb.go:31-42` (`CheckScratch`)
-   fails any DSN not ending `_test_db`/`_e2e_db`; `URL` (`:18-29`) calls
-   it. `src/internal/repository/testdb_test.go:19-22` defines
-   `testTenant = 2`, `otherTenant = 3`. `bin/310-test-repo-model:65-68`
-   repeats the suffix check in shell. Pinned by
-   `src/internal/testdb/testdb_test.go:5-17` (`TestCheckScratch`).
-4. **pytest aborts.** `tests/conftest.py:43-52` (`require_test_tenant`)
-   calls `pytest.exit(..., returncode=3)` when a login reply names any
-   tenant but 2; wired at `:119` (`/auth`) and `:197` (`/mfaVerify`).
-   `db_url` (`:300-309`) exits on a non-`_e2e_db` database. `api_env`
-   (`:287-297`) reads the test API's own env file.
-5. **Load test** refuses a login outside tenant 2
-   (`src/load-test/client.go:123-129`).
-6. **Rule** in GRC `CLAUDE.md:124-128`.
-
-Open in GRC (RG0043 md `:353-359`, section 4 item 25): the tenant guard
-fires only after a login, so a hand-set `TEST_BASE_URL` still reaches the
-real API. Its fix (refuse any port but the test API's) is unimplemented.
-
-#### Proposed fix for PROTO
-
-1. **Split the seed.** Keep `sql/fixtures/local-seed.sql` as the dev
-   seed (tenant 1, `doc/050:30` uses it). Add
-   `sql/fixtures/test-seed.sql`: same three users, same hashes, PROTO's
-   grant arrays (`local-seed.sql:51-53,76-77`), groups 1-3 and users in
-   tenant 2, groups 4-5 in tenant 3, example rows in 2. Blind-copy traps:
-   GRC strips grants 1001-1004 and writes `account_status`; PROTO has
-   neither change (the column is B035). Ids stay fixed.
-2. **Lock.** Add `sql/fixtures/test-tenant-lock.sql` from GRC's file
-   unchanged. `bin/510:101` runs test-seed then lock. `bin/515-reseed-db`
-   loads test-seed instead of local-seed: TRUNCATE keeps the CHECK, so a
-   seed with tenant-1 rows would now fail there. Fix 515's stale "the two
-   users" (`:17`).
-3. **Go.** In `repository/testdb_test.go`, `t.Fatal` unless the DSN name
-   ends `_test_db`/`_e2e_db` (a `checkScratch` helper; no new package,
-   module path is `github.com/wbmartin/starter-api`). Add
-   `testTenant`/`otherTenant`; replace tenant literal `1` in repository
-   and handler tests. Add the suffix `case` to `bin/300:72`.
-4. **pytest.** `TEST_TENANT = 2`, `OTHER_TENANT = 3`; call
-   `require_test_tenant` after `conftest.py:38`. Before any request,
-   refuse unless `TEST_API_ENV` is set and `TEST_BASE_URL` equals that
-   file's `TEST_BASE_URL` (closes GRC 4.25 here). `bin/300` exports
-   `TEST_API_ENV="$PY_API_ENV"` (`:148`). Rewrite `tests/README.md:29-32`.
-   Drop request-body `"securityContext": 1`; flip assertions.
-   `test_security_context_isolation.py` becomes "tenant 2 cannot use
-   tenant 3's groups"; groups 4/5 keep their ids. No psycopg2: PROTO's
-   pytest has no `db` fixture.
-5. **Load test.** `src/load-test/client.go`: refuse a login outside 2,
-   drop the body's `securityContext`; retargeting `bin/330` is B042.
-6. **Docs.** Update `local-seed.sql:23-26`, `doc/050:16-17`, close
-   PS0022 (rewrite its `:34-39` and `:58-62` to the chosen shape).
-
-Depends on nothing; B019 reuses `TEST_API_ENV`. Tests: Go
-`TestCheckScratch` table (accept both suffixes, refuse `loc_<slug>_db`,
-`*_test_db_old`); negative runs: a tenant-1 seed row fails 510, pytest
-on 8080 exits 3, Go on the dev DSN fails.
-
-#### Open question for Brandon
-
-GRC's shape has no tenant 1 in test databases (CHECK `<> 1`, isolation
-proved between 2 and 3); PS0022 (`:36-38`) keeps one tenant-1 user so
-isolation is proved between 1 and 2. The two cannot coexist: the lock
-forbids that user. Which? Recommendation: GRC's shape, because a test
-database that can hold tenant 1 cannot catch a test that silently writes
-there, and 2-vs-3 proves the same isolation property.
-Brandon: accept reccomendation.
-
 ### B019 — MFA pytest harness: per-run XFF, throwaway lockout user
 
 - **Priority:** P1  **Area:** tests
@@ -8861,3 +8722,143 @@ Should `pip-audit` (and the matching `npm audit`) become a step in
 `bin/300`, failing on a new advisory, or stay a manual check at bump
 time? Recommendation: a manual check recorded in the ticket, since a
 test-only dependency advisory should not block an unrelated push.
+
+### B018 — COMPLETED — PS0022: enforce tenant 2 at every test harness
+- **Completed:** 2026-10-02. Seed split: `sql/fixtures/local-seed.sql` stays the developer seed (tenant 1); new `test-seed.sql` (logins and groups 1-3 in 2, groups 4-5 in 3, examples in 2) and `test-tenant-lock.sql` (catalog-driven `CHECK (security_context_id <> 1)`, idempotent) are run by `bin/510` and `bin/515`. Guards: `repository/testdb_test.go` `checkScratch` + `testTenant`/`otherTenant` (repository suites and B012 isolation tests now 2 vs 3), `bin/300` scratch-name check and `TEST_API_ENV` export, `conftest.py` exits 3 on a non-test target or a login outside tenant 2, Playwright global setup throws on a non-2 login; pytest bodies dropped `securityContext: 1`; docs in CLAUDE.md, doc/900, doc/050, doc/902, tests/README.md. Deviations: handler unit tests keep tenant 1 as a mock value (hermetic, no database); the load test only drops the body `securityContext` -- its tenant-2 refusal waits for B042, since `bin/330` still targets the developer API (tenant 1). Tests: all green, go=279 unit=42 e2e=10 py=79
+
+- **Priority:** P1  **Area:** tests, bin, go-api, docs, tickets
+- **GRC:** `bin/lib/test-db-fixture-logins.sql:1-43`; `bin/lib/test-db-tenant-lock.sql:1-15`; `bin/510-reset-test-db:12-16,70-73`; `bin/310-test-repo-model:55-73`; `src/internal/testdb/testdb.go:1-49`; `src/internal/repository/testdb_test.go:1-22`; `tests/conftest.py:15-20,43-52,119,197,283-317`; `tests/requirements.txt:4`; `CLAUDE.md:124-128`; `tickets/03-done/RG0041-tests-own-databases-tenant-2/RG0041-tests-own-databases-tenant-2.md:35-42,49-55,62-70,121-122`; RG0043 md `:353-359`; `src/api-srv/README.md:216-220`   **PROTO:** `src/api-srv/sql/fixtures/local-seed.sql:23-26,31-125`; `bin/510-reset-test-db:41-46,100-101`; `bin/515-reseed-db:20-24`; `bin/300-run-tests:39-41,72,148-156,200`; `src/api-srv/internal/repository/testdb_test.go:1-48`; `tests/conftest.py:31-68,151-160`; `tests/test_auth_flow.py:25`; `tickets/01-open/PS0022-test-tenant-two.md:32-63`; `CLAUDE.md:38-43`; `CLAUDE.md:35-37`
+- **Ticket:** RG0041 / `31970ae`, `78be82d`, `8e05f63`; RG0043 1.1 / `5089ac0`; closes PS0022
+- **What:** PROTO seeds test logins in tenant 1 and trusts URLs. GRC: fixtures
+in tenant 2 (3 = other); scratch-only `CHECK (security_context_id <> 1)`; Go
+`CheckScratch` + gate `case`; conftest exits on a foreign tenant or
+non-`*_e2e_db`; load test refuses tenant != 2.
+- **Port notes:** Brandon's call: other tenant 3 (GRC) or one user kept in 1
+(PS0022 :35-38, which the lock forbids, as does `bin/515`)? Renumber in
+`local-seed.sql`; skip GRC grants; export `TEST_API_ENV`; close GRC 4.25 now;
+CLAUDE.md rule. bin/go-api P2.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+CLAUDE.md:38-43 says tenant 2 is the test tenant and every automated test
+runs there. Nothing in the code does that yet; PS0022 is still in
+`tickets/01-open/`. This is a correctness and safety gap in the test
+harness, not a hole in the shipped API.
+
+1. **Every test login is tenant 1.** One seed file feeds both scratch
+   databases (`bin/510-reset-test-db:100-101`) and the developer's own
+   `loc_proto_db` (`doc/050-dev-env-init.md:30`). It puts all three logins
+   in tenant 1 (`src/api-srv/sql/fixtures/local-seed.sql:85-125`):
+   ```sql
+   -- Users, all in context 1: admin (Admin group) and basic ...
+       1,   -- security_context_id, :103
+   ```
+   Tenant 2 holds only groups 4 and 5 (`:57-79`); examples are tenant 1
+   (`:127-161`). The header admits it (`:23-26`).
+2. **pytest trusts whatever URL it is handed.** `tests/conftest.py:151-153`
+   reads `TEST_BASE_URL` from the environment and `authenticate`
+   (`:31-68`) never checks where the login landed. `bin/300-run-tests:200`
+   sets a private API, but `TEST_BASE_URL=http://localhost:8080 pytest`
+   by hand runs the whole suite against the developer's API and database,
+   creating and deleting users and examples there. `tests/README.md:29-32`
+   still tells people the URL comes from `etc/loc-api-srv.env`, port 8080.
+3. **Go repository tests trust whatever DSN they are handed.**
+   `connectTestDB` (`src/api-srv/internal/repository/testdb_test.go:31-34`)
+   takes `TEST_DATABASE_URL` unchecked; only `migrate_test.go:92` checks.
+   The suites write tenant-1 rows (`user_repository_test.go:61`:
+   `SecurityContext: 1,`).
+4. **The load test acts as tenant-1 admin on the developer's API.**
+   `bin/330-test-load:17` takes `TEST_BASE_URL` from `etc/loc-api-srv.env`;
+   `src/load-test/client.go:126` posts examples with `"securityContext": 1`.
+5. **Assertions bake in tenant 1**, e.g. `tests/test_auth_flow.py:25`
+   (`assert user["securityContext"] == 1`). Tenant literals: 49 lines in
+   repository `_test.go`, 95 in handler `_test.go`, 48 in `tests/*.py`
+   (grep `ecurityContext|security_context`).
+
+Consequence: a mis-set variable turns a test run into silent writes to
+real data. In a derived app with real tenant-1 data, that is data loss.
+
+#### What GRC changed
+
+RG0041 (`31970ae`, merged `78be82d`; `api_env` in `8e05f63`) followed a
+real incident: tests had written into GRC's real database (469 logins,
+710 audit rows cleaned by hand; RG0041 md `:32-45`). RG0043 1.1
+(`5089ac0`) then moved the fixture logins out of migrations.
+
+1. **Fixture logins live in test setup only.**
+   `bin/lib/test-db-fixture-logins.sql:15-43` puts groups 1-3 and
+   admin/basic/mfa in tenant 2, groups 4-5 in tenant 3, ids unchanged so
+   the tests' group ids hold. `bin/510-reset-test-db:70-72` runs it.
+2. **Scratch databases refuse tenant 1.**
+   `bin/lib/test-db-tenant-lock.sql:7-15` raises if any tenant-1 row
+   exists, then adds `CHECK (security_context_id <> 1)` to every table
+   with that column. Test databases only; never a migration.
+3. **Go gate.** `src/internal/testdb/testdb.go:31-42` (`CheckScratch`)
+   fails any DSN not ending `_test_db`/`_e2e_db`; `URL` (`:18-29`) calls
+   it. `src/internal/repository/testdb_test.go:19-22` defines
+   `testTenant = 2`, `otherTenant = 3`. `bin/310-test-repo-model:65-68`
+   repeats the suffix check in shell. Pinned by
+   `src/internal/testdb/testdb_test.go:5-17` (`TestCheckScratch`).
+4. **pytest aborts.** `tests/conftest.py:43-52` (`require_test_tenant`)
+   calls `pytest.exit(..., returncode=3)` when a login reply names any
+   tenant but 2; wired at `:119` (`/auth`) and `:197` (`/mfaVerify`).
+   `db_url` (`:300-309`) exits on a non-`_e2e_db` database. `api_env`
+   (`:287-297`) reads the test API's own env file.
+5. **Load test** refuses a login outside tenant 2
+   (`src/load-test/client.go:123-129`).
+6. **Rule** in GRC `CLAUDE.md:124-128`.
+
+Open in GRC (RG0043 md `:353-359`, section 4 item 25): the tenant guard
+fires only after a login, so a hand-set `TEST_BASE_URL` still reaches the
+real API. Its fix (refuse any port but the test API's) is unimplemented.
+
+#### Proposed fix for PROTO
+
+1. **Split the seed.** Keep `sql/fixtures/local-seed.sql` as the dev
+   seed (tenant 1, `doc/050:30` uses it). Add
+   `sql/fixtures/test-seed.sql`: same three users, same hashes, PROTO's
+   grant arrays (`local-seed.sql:51-53,76-77`), groups 1-3 and users in
+   tenant 2, groups 4-5 in tenant 3, example rows in 2. Blind-copy traps:
+   GRC strips grants 1001-1004 and writes `account_status`; PROTO has
+   neither change (the column is B035). Ids stay fixed.
+2. **Lock.** Add `sql/fixtures/test-tenant-lock.sql` from GRC's file
+   unchanged. `bin/510:101` runs test-seed then lock. `bin/515-reseed-db`
+   loads test-seed instead of local-seed: TRUNCATE keeps the CHECK, so a
+   seed with tenant-1 rows would now fail there. Fix 515's stale "the two
+   users" (`:17`).
+3. **Go.** In `repository/testdb_test.go`, `t.Fatal` unless the DSN name
+   ends `_test_db`/`_e2e_db` (a `checkScratch` helper; no new package,
+   module path is `github.com/wbmartin/starter-api`). Add
+   `testTenant`/`otherTenant`; replace tenant literal `1` in repository
+   and handler tests. Add the suffix `case` to `bin/300:72`.
+4. **pytest.** `TEST_TENANT = 2`, `OTHER_TENANT = 3`; call
+   `require_test_tenant` after `conftest.py:38`. Before any request,
+   refuse unless `TEST_API_ENV` is set and `TEST_BASE_URL` equals that
+   file's `TEST_BASE_URL` (closes GRC 4.25 here). `bin/300` exports
+   `TEST_API_ENV="$PY_API_ENV"` (`:148`). Rewrite `tests/README.md:29-32`.
+   Drop request-body `"securityContext": 1`; flip assertions.
+   `test_security_context_isolation.py` becomes "tenant 2 cannot use
+   tenant 3's groups"; groups 4/5 keep their ids. No psycopg2: PROTO's
+   pytest has no `db` fixture.
+5. **Load test.** `src/load-test/client.go`: refuse a login outside 2,
+   drop the body's `securityContext`; retargeting `bin/330` is B042.
+6. **Docs.** Update `local-seed.sql:23-26`, `doc/050:16-17`, close
+   PS0022 (rewrite its `:34-39` and `:58-62` to the chosen shape).
+
+Depends on nothing; B019 reuses `TEST_API_ENV`. Tests: Go
+`TestCheckScratch` table (accept both suffixes, refuse `loc_<slug>_db`,
+`*_test_db_old`); negative runs: a tenant-1 seed row fails 510, pytest
+on 8080 exits 3, Go on the dev DSN fails.
+
+#### Open question for Brandon
+
+GRC's shape has no tenant 1 in test databases (CHECK `<> 1`, isolation
+proved between 2 and 3); PS0022 (`:36-38`) keeps one tenant-1 user so
+isolation is proved between 1 and 2. The two cannot coexist: the lock
+forbids that user. Which? Recommendation: GRC's shape, because a test
+database that can hold tenant 1 cannot catch a test that silently writes
+there, and 2-vs-3 proves the same isolation property.
+Brandon: accept reccomendation.

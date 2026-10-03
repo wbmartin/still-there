@@ -5,10 +5,86 @@ import time
 import warnings
 import urllib3
 from typing import Dict, Optional, List, Tuple
+from urllib.parse import urlparse
 
 # Suppress SSL warnings for local development
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
+
+# The tenants the suite acts in. Tenant 1 is the first real tenant and does
+# not exist in a test database (sql/fixtures/test-tenant-lock.sql); the
+# fixture logins are in TEST_TENANT, seed groups 4 and 5 in OTHER_TENANT.
+TEST_TENANT = 2
+OTHER_TENANT = 3
+
+# pytest.exit status for "pointed at something that is not the test API".
+WRONG_TARGET_EXIT_CODE = 3
+
+
+def _read_env_file(path: str) -> Dict[str, str]:
+    """The flat KEY=VALUE config file the API server reads."""
+    values: Dict[str, str] = {}
+    with open(path, encoding="utf-8") as env_file:
+        for line in env_file:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
+def require_test_api() -> None:
+    """Refuse to start unless TEST_BASE_URL is the private test API.
+
+    TEST_API_ENV names the config the test API was started from
+    (bin/300-run-tests exports it). TEST_BASE_URL must equal that file's
+    TEST_BASE_URL, and its DATABASE_URL must name a scratch database, so a
+    hand-set URL can never aim the suite's writes at a developer's API.
+    """
+    api_env_path = os.environ.get("TEST_API_ENV")
+    base_url = os.environ.get("TEST_BASE_URL")
+    if not api_env_path or not base_url:
+        pytest.exit(
+            "TEST_API_ENV and TEST_BASE_URL must both be set; run "
+            "bin/300-run-tests py, which starts the private test API",
+            returncode=WRONG_TARGET_EXIT_CODE,
+        )
+    try:
+        api_env = _read_env_file(api_env_path)
+    except OSError as error:
+        pytest.exit(f"TEST_API_ENV {api_env_path} unreadable: {error}",
+                    returncode=WRONG_TARGET_EXIT_CODE)
+    expected_base_url = api_env.get("TEST_BASE_URL", "")
+    if base_url.rstrip("/") != expected_base_url.rstrip("/"):
+        pytest.exit(
+            f"TEST_BASE_URL {base_url} is not the test API's "
+            f"({expected_base_url!r} in {api_env_path}): refusing to run",
+            returncode=WRONG_TARGET_EXIT_CODE,
+        )
+    database_name = urlparse(api_env.get("DATABASE_URL", "")).path.lstrip("/")
+    if not database_name.endswith(("_test_db", "_e2e_db")):
+        pytest.exit(
+            f"{api_env_path} serves database {database_name!r}, not a "
+            "scratch database (*_test_db / *_e2e_db): refusing to run",
+            returncode=WRONG_TARGET_EXIT_CODE,
+        )
+
+
+def require_test_tenant(user: Dict, expected_tenant: int = TEST_TENANT) -> None:
+    """Stop the whole run when a fixture login lands outside the test tenant:
+    the API is then serving a database that is not a test database."""
+    tenant = user.get("securityContext")
+    if tenant != expected_tenant:
+        pytest.exit(
+            f"{user.get('userName')!r} signed in to tenant {tenant}, not "
+            f"{expected_tenant}: this API does not serve a test database",
+            returncode=WRONG_TARGET_EXIT_CODE,
+        )
+
+
+def pytest_sessionstart(session):
+    require_test_api()
 
 
 class TestClient:
@@ -60,6 +136,7 @@ class TestClient:
                 self.jwt_token = auth_part
 
         self.csrf_token = data.get("csrfToken")
+        require_test_tenant(data.get("user", {}))
 
         # Set the auth cookie in the session for future requests
         if self.jwt_token:

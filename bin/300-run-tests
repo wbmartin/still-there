@@ -39,6 +39,14 @@ source "$TEST_ENV"
 for var in TEST_PG_URL_BASE TEST_DB E2E_DB TEST_DATABASE_URL E2E_API_ENV; do
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $TEST_ENV"; exit 1; }
 done
+# The suites write; they may only ever reach a scratch database. bin/510 and
+# the Go harness (testdb_test.go) check the same names.
+for database in "$TEST_DB" "$E2E_DB" "${TEST_DATABASE_URL##*/}"; do
+    case "${database%%\?*}" in
+        *_test_db|*_e2e_db) ;;
+        *) echo "[ERROR] $database is not a scratch database (*_test_db / *_e2e_db)"; exit 1 ;;
+    esac
+done
 # Paths in the env file are relative to the project root.
 case "$E2E_API_ENV" in /*) ;; *) E2E_API_ENV="$PROJECT_ROOT/$E2E_API_ENV" ;; esac
 export E2E_API_ENV
@@ -259,7 +267,10 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     PY_LOG="$LOG_DIR/pytest.log"
     PY_REPORT="$REPORT_DIR/pytest_$(date +%Y%m%d_%H%M%S).html"
     echo "[INFO] pytest against $API_BASE_URL (report: $PY_REPORT)"
-    if ! (cd "$PROJECT_ROOT" && TEST_BASE_URL="$API_BASE_URL" "$VENV_PY" -m pytest tests \
+    # conftest.py refuses to start unless TEST_BASE_URL is the URL in
+    # TEST_API_ENV and that file serves a scratch database.
+    if ! (cd "$PROJECT_ROOT" && TEST_API_ENV="$PY_API_ENV" \
+            TEST_BASE_URL="$API_BASE_URL" "$VENV_PY" -m pytest tests \
             --maxfail=1 -v --tb=short --html="$PY_REPORT" --self-contained-html) 2>&1 | tee "$PY_LOG"; then
         echo "[ERROR] pytest failed -- full log: $PY_LOG, API log: $API_LOG"
         exit 1

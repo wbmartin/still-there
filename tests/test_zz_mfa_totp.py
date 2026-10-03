@@ -17,7 +17,7 @@ import pyotp
 import pytest
 import requests
 
-from conftest import TestClient
+from conftest import TestClient, require_test_tenant
 
 MFA_USER = "mfa"
 MFA_PASSWORD = "basic123!"
@@ -100,6 +100,7 @@ class TestMFATOTP:
         )
         assert response.status_code == 200, response.text
         body = response.json()
+        require_test_tenant(body["user"])
         assert body["csrfToken"]
         assert "auth" in session.cookies, "session cookie issued by /mfaVerify"
         assert body["user"]["userName"] == MFA_USER

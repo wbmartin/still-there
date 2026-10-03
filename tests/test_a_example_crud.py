@@ -22,7 +22,6 @@ class TestExampleCRUD:
             "exampleFloat": 3.14159,
             "exampleIntArray": [1, 2, 3],
             "exampleFloatArray": [1.1, 2.2, 3.3],
-            "securityContext": 1,
         }
 
         response = self.client.make_request("POST", "/example", json=example_data)
@@ -71,7 +70,6 @@ class TestExampleCRUD:
             "exampleIntArray": [1, 2, 3, 4],
             "exampleFloatArray": [1.1, 2.2, 3.3, 4.4],
             "updateTs": current_update_ts,
-            "securityContext": 1,
         }
 
         response = self.client.make_request("PUT", "/example", json=update_data)
@@ -95,7 +93,6 @@ class TestExampleCRUD:
             "exampleText": "Integration Test JSONB",
             "exampleUuid": "00000000-0000-4000-8000-000000000000",
             "exampleJsonb": {"colour": "teal", "count": 3, "tagList": ["a", "b"]},
-            "securityContext": 1,
         }
         response = self.client.make_request("POST", "/example", json=create_data)
         assert response.status_code == 201
@@ -122,7 +119,6 @@ class TestExampleCRUD:
             "exampleUuid": "11111111-1111-4111-8111-111111111111",
             "exampleJsonb": [1, "two", None],
             "updateTs": read["updateTs"],
-            "securityContext": 1,
         }
         response = self.client.make_request("PUT", "/example", json=update_data)
         assert response.status_code == 200
@@ -138,7 +134,6 @@ class TestExampleCRUD:
             "exampleId": created["exampleId"],
             "exampleText": "Integration Test JSONB",
             "updateTs": response.json()["data"]["updateTs"],
-            "securityContext": 1,
         }
         response = self.client.make_request("PUT", "/example", json=cleared_data)
         assert response.status_code == 200
@@ -184,12 +179,10 @@ class TestExampleCRUD:
             {
                 "exampleText": "Bulk Test Example 1",
                 "exampleInt": 100,
-                "securityContext": 1,
             },
             {
                 "exampleText": "Bulk Test Example 2",
                 "exampleInt": 200,
-                "securityContext": 1,
             },
         ]
 
@@ -213,14 +206,12 @@ class TestExampleCRUD:
                 "exampleText": "Updated Bulk Test Example 1",
                 "exampleInt": 101,
                 "updateTs": update_timestamps[0],
-                "securityContext": 1,
             },
             {
                 "exampleId": example_ids[1],
                 "exampleText": "Updated Bulk Test Example 2",
                 "exampleInt": 201,
                 "updateTs": update_timestamps[1],
-                "securityContext": 1,
             },
         ]
 
@@ -269,7 +260,6 @@ class TestExampleCRUD:
         update_data = {
             "exampleId": 2147483646,
             "exampleText": "This should fail",
-            "securityContext": 1,
         }
         response = self.client.make_request("PUT", "/example", json=update_data)
         assert response.status_code == 404
@@ -283,6 +273,6 @@ class TestExampleCRUD:
         assert response.status_code == 404
 
         # Try to create example with missing required field
-        invalid_data = {"exampleInt": 42, "securityContext": 1}
+        invalid_data = {"exampleInt": 42}
         response = self.client.make_request("POST", "/example", json=invalid_data)
         assert response.status_code == 400

@@ -37,8 +37,11 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
   the test tenant and is reserved — every automated test runs there and no
   real tenant is ever numbered 2.** A caller's tenant comes from the JWT, not
   from the request body (handlers overwrite what a client sends), so a test
-  chooses its tenant by which seeded user it signs in as. Fixtures, tests and
-  derived apps keep this numbering.
+  chooses its tenant by which seeded user it signs in as. Test databases hold
+  no tenant 1: `sql/fixtures/test-tenant-lock.sql` puts
+  `CHECK (security_context_id <> 1)` on every tenant table, and isolation is
+  proved between 2 and 3. Fixtures, tests and derived apps keep this
+  numbering.
 - Security checks are called explicitly in each handler (JWT → rate limit →
   CSRF → authorization → `CheckAllChecksComplete`); exceptions are written in
   the handler, not hidden in middleware. Non-negotiable.

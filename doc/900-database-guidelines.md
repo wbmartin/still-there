@@ -13,7 +13,14 @@ This section describes how I'd like an AI to think and respond for database desi
   from the authenticated caller's JWT claim, never from a client-supplied
   field; handlers overwrite `security_context_id` on the way in. Tests
   therefore select their tenant by the seeded user they authenticate as, and a
-  test that must prove isolation uses 1 and 2 as the two sides.
+  test that must prove isolation uses 2 and 3 as the two sides.
+- Test databases (`*_test_db`, `*_e2e_db`) hold no tenant 1. `bin/510`
+  seeds `sql/fixtures/test-seed.sql` (logins and groups 1-3 in 2, groups 4-5
+  in 3), then `sql/fixtures/test-tenant-lock.sql` adds
+  `CHECK (security_context_id <> 1)` to every table with that column, read
+  from the catalog so a new table is covered with no edit. A test that writes
+  tenant 1 fails at the database. A developer's own database takes
+  `local-seed.sql` (tenant 1) and is never locked.
 - Every UPDATE/DELETE matches on the caller's tenant as well as the id, and
   the follow-up check that explains a zero-row write ("absent" 404 vs
   "stale `update_ts`" 409) uses the same tenant predicate. A row in another

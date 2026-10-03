@@ -122,14 +122,17 @@ another):
 ./bin/515-reseed-db [dbname]       # default loc_proto_e2e_db; TRUNCATE + re-seed without dropping
 ```
 - `510`: DROP + CREATE, `sql/roles.sql`, schema through `cmd/migrate up`,
-  then `sql/fixtures/local-seed.sql`. Refuses any name not ending in
+  then `sql/fixtures/test-seed.sql` (tenants 2 and 3) and
+  `sql/fixtures/test-tenant-lock.sql` (`CHECK (security_context_id <> 1)`
+  on every tenant table). Refuses any name not ending in
   `_test_db` or `_e2e_db`. Uses psql inside the `loc-postgres` container
   when it is running (`PG_CONTAINER`), a native `psql` otherwise (`PSQL`
   overrides); the migrator connects with `TEST_PG_URL_BASE`. This also
   covers what used to be the e2e-only reset: `bin/510-reset-test-db
   loc_proto_e2e_db`.
 - `515` sources `etc/loc-test.env` when `TEST_PG_URL_BASE` is unset, and
-  falls back to `510` if the database doesn't exist yet.
+  falls back to `510` if the database doesn't exist yet. It re-runs
+  `test-seed.sql` and the lock after the TRUNCATE (which keeps the lock).
 - `515` is what Playwright's global setup calls: dropping the database
   under a running API leaves its pool pointing at nothing.
 - Users after a reset: `admin` / `admin123!`, `basic` / `basic123!`, and `mfa` / `basic123!` (the only one that is not MFA-exempt; it enrols a TOTP on first sign-in).

@@ -13,12 +13,16 @@ bin/510-reset-test-db loc_proto_e2e_db # any *_test_db / *_e2e_db name
 
 That runs, in order: `CREATE DATABASE`, `src/api-srv/sql/roles.sql` (cluster
 roles, idempotent), `go run ./cmd/migrate ... up` (the embedded
-`sql/migrations/`), then `sql/fixtures/local-seed.sql` (seed groups,
-`admin`/`admin123!`, `basic`/`basic123!`, `mfa`/`basic123!` (not MFA-exempt), two example rows). See the header of
-that script for `PG_CONTAINER` / `PSQL` / `PGPASSWORD` / `TEST_PG_URL_BASE`.
+`sql/migrations/`), then `sql/fixtures/test-seed.sql` (seed groups,
+`admin`/`admin123!`, `basic`/`basic123!`, `mfa`/`basic123!` (not MFA-exempt), two example rows) and
+`sql/fixtures/test-tenant-lock.sql`. A scratch database is in tenants 2 and 3
+only and refuses tenant 1 (doc/900), so it is for the test suites, not for
+browsing as a developer. See the header of that script for `PG_CONTAINER` /
+`PSQL` / `PGPASSWORD` / `TEST_PG_URL_BASE`.
 
 Manual path, for a database with a name of your choosing (e.g. the
-`loc_proto_db` that `etc/loc-api-srv.env`'s `DATABASE_URL` points at):
+`loc_proto_db` that `etc/loc-api-srv.env`'s `DATABASE_URL` points at). Its
+seed, `sql/fixtures/local-seed.sql`, puts the same logins in tenant 1:
 
 ```bash
 psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE loc_proto_db;"

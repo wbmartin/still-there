@@ -1,8 +1,7 @@
--- Initial seed data for the ProtoStack starter API server: default user
--- groups for two security contexts, an admin and a basic user, and two
--- example rows.
+-- Seed data for a developer's local database: default user groups for two
+-- security contexts, an admin, a basic and an MFA user, and two example rows.
 --
--- A FIXTURE, not a migration: it is local/test data, so it lives in
+-- A FIXTURE, not a migration: it is local dev data, so it lives in
 -- sql/fixtures/ and is not embedded in cmd/migrate. A deployed environment
 -- seeds its own groups and users.
 --
@@ -21,12 +20,13 @@
 -- the source of truth; the arrays below are its projection into SQL.
 --
 -- TENANTS (security_context_id): 1 is the first real tenant, 2 is the test
--- tenant and is reserved -- see CLAUDE.md and doc/900. Automated tests are
--- being moved into tenant 2; the users below still sit in 1 until
--- that lands.
+-- tenant and is reserved -- see CLAUDE.md and doc/900. This file seeds a
+-- DEVELOPER's database (doc/050), so its users sit in 1. The scratch
+-- databases the tests use take test-seed.sql (tenants 2 and 3) instead and
+-- refuse tenant 1 outright (test-tenant-lock.sql).
 --
 -- Passwords: admin / admin123!, basic / basic123!, mfa / basic123! (Argon2id). Local
--- scratch databases only -- change for any non-dev install.
+-- dev databases only -- change for any non-dev install.
 
 -- User groups for security context 1 (explicit ids: the users below refer
 -- to them by id)

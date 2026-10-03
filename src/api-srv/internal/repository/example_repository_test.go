@@ -43,7 +43,7 @@ func (s *ExampleRepositoryTestSuite) TearDownSuite() {
 func (s *ExampleRepositoryTestSuite) TestCreateExample() {
 	example := &model.ExampleModel{
 		ExampleText:     "RepoTest Example",
-		SecurityContext: 1,
+		SecurityContext: testTenant,
 		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
@@ -51,7 +51,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExample() {
 		UpdateUserID:    1,
 	}
 
-	created, err := s.repo.CreateExample(context.Background(), example, 1)
+	created, err := s.repo.CreateExample(context.Background(), example, testTenant)
 	s.NoError(err)
 	s.NotNil(created)
 	s.NotZero(created.ExampleID)
@@ -62,7 +62,7 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExample() {
 	// Create test data first
 	example := &model.ExampleModel{
 		ExampleText:     "RepoTest Read Example",
-		SecurityContext: 1,
+		SecurityContext: testTenant,
 		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
@@ -70,13 +70,13 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExample() {
 		UpdateUserID:    1,
 	}
 
-	created, _ := s.repo.CreateExample(context.Background(), example, 1)
+	created, _ := s.repo.CreateExample(context.Background(), example, testTenant)
 
 	// Test retrieval
 	retrieved, err := s.repo.RetrieveExample(
 		context.Background(),
 		created.ExampleID,
-		1,
+		testTenant,
 	)
 	s.NoError(err)
 	s.Equal(created.ExampleID, retrieved.ExampleID)
@@ -87,7 +87,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExample() {
 	// Create test data
 	example := &model.ExampleModel{
 		ExampleText:     "RepoTest Update Example",
-		SecurityContext: 1,
+		SecurityContext: testTenant,
 		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
@@ -95,7 +95,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExample() {
 		UpdateUserID:    1,
 	}
 
-	created, _ := s.repo.CreateExample(context.Background(), example, 1)
+	created, _ := s.repo.CreateExample(context.Background(), example, testTenant)
 
 	// Update it
 	created.ExampleText = "RepoTest Updated Example"
@@ -109,7 +109,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExample() {
 	updated, _ := s.repo.RetrieveExample(
 		context.Background(),
 		created.ExampleID,
-		1,
+		testTenant,
 	)
 	s.Equal("RepoTest Updated Example", updated.ExampleText)
 }
@@ -118,7 +118,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExample() {
 	// Create test data
 	example := &model.ExampleModel{
 		ExampleText:     "RepoTest Delete Example",
-		SecurityContext: 1,
+		SecurityContext: testTenant,
 		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
@@ -126,13 +126,13 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExample() {
 		UpdateUserID:    1,
 	}
 
-	created, _ := s.repo.CreateExample(context.Background(), example, 1)
+	created, _ := s.repo.CreateExample(context.Background(), example, testTenant)
 
 	// Delete it
 	deletedID, err := s.repo.DeleteExample(
 		context.Background(),
 		created.ExampleID,
-		1,
+		testTenant,
 		1234567890.123,
 		1234567892.789,
 		2,
@@ -141,7 +141,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExample() {
 	s.Equal(created.ExampleID, deletedID)
 
 	// Verify deletion (soft delete) - should return ErrDeleted
-	_, err = s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
+	_, err = s.repo.RetrieveExample(context.Background(), created.ExampleID, testTenant)
 	s.Error(err)
 	s.True(errors.Is(err, ErrDeleted))
 }
@@ -150,7 +150,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExampleList() {
 	examples := []*model.ExampleModel{
 		{
 			ExampleText:     "RepoTest List Example 1",
-			SecurityContext: 1,
+			SecurityContext: testTenant,
 			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
@@ -159,7 +159,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExampleList() {
 		},
 		{
 			ExampleText:     "RepoTest List Example 2",
-			SecurityContext: 1,
+			SecurityContext: testTenant,
 			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
@@ -168,7 +168,7 @@ func (s *ExampleRepositoryTestSuite) TestCreateExampleList() {
 		},
 	}
 
-	created, err := s.repo.CreateExampleList(context.Background(), examples, 1)
+	created, err := s.repo.CreateExampleList(context.Background(), examples, testTenant)
 	s.NoError(err)
 	s.Len(created, 2)
 	s.NotZero(created[0].ExampleID)
@@ -179,7 +179,7 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExampleList() {
 	// Create test data
 	example1 := &model.ExampleModel{
 		ExampleText:     "RepoTest List Get 1",
-		SecurityContext: 1,
+		SecurityContext: testTenant,
 		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
@@ -188,7 +188,7 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExampleList() {
 	}
 	example2 := &model.ExampleModel{
 		ExampleText:     "RepoTest List Get 2",
-		SecurityContext: 1,
+		SecurityContext: testTenant,
 		ExampleUUID:     model.NewUUID(),
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
@@ -196,15 +196,15 @@ func (s *ExampleRepositoryTestSuite) TestRetrieveExampleList() {
 		UpdateUserID:    1,
 	}
 
-	created1, _ := s.repo.CreateExample(context.Background(), example1, 1)
-	created2, _ := s.repo.CreateExample(context.Background(), example2, 1)
+	created1, _ := s.repo.CreateExample(context.Background(), example1, testTenant)
+	created2, _ := s.repo.CreateExample(context.Background(), example2, testTenant)
 
 	// Test list retrieval
 	ids := []int{created1.ExampleID, created2.ExampleID}
 	retrieved, err := s.repo.RetrieveExampleList(
 		context.Background(),
 		ids,
-		1,
+		testTenant,
 		0,
 	)
 	s.NoError(err)
@@ -216,7 +216,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExampleList() {
 	examples := []*model.ExampleModel{
 		{
 			ExampleText:     "RepoTest Update List 1",
-			SecurityContext: 1,
+			SecurityContext: testTenant,
 			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
@@ -225,7 +225,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExampleList() {
 		},
 		{
 			ExampleText:     "RepoTest Update List 2",
-			SecurityContext: 1,
+			SecurityContext: testTenant,
 			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
@@ -234,7 +234,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExampleList() {
 		},
 	}
 
-	created, _ := s.repo.CreateExampleList(context.Background(), examples, 1)
+	created, _ := s.repo.CreateExampleList(context.Background(), examples, testTenant)
 
 	// Update them
 	created[0].ExampleText = "RepoTest Updated List 1"
@@ -249,7 +249,7 @@ func (s *ExampleRepositoryTestSuite) TestUpdateExampleList() {
 		context.Background(),
 		created,
 		originalUpdateTSList,
-		1,
+		testTenant,
 	)
 	s.NoError(err)
 }
@@ -259,7 +259,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExampleList() {
 	examples := []*model.ExampleModel{
 		{
 			ExampleText:     "RepoTest Delete List 1",
-			SecurityContext: 1,
+			SecurityContext: testTenant,
 			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
@@ -268,7 +268,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExampleList() {
 		},
 		{
 			ExampleText:     "RepoTest Delete List 2",
-			SecurityContext: 1,
+			SecurityContext: testTenant,
 			ExampleUUID:     model.NewUUID(),
 			CreateTS:        1234567890.123,
 			CreateUserID:    1,
@@ -277,7 +277,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExampleList() {
 		},
 	}
 
-	created, _ := s.repo.CreateExampleList(context.Background(), examples, 1)
+	created, _ := s.repo.CreateExampleList(context.Background(), examples, testTenant)
 	ids := []int{created[0].ExampleID, created[1].ExampleID}
 	updateTs := []float64{1234567890.123, 1234567890.123}
 
@@ -286,7 +286,7 @@ func (s *ExampleRepositoryTestSuite) TestDeleteExampleList() {
 		context.Background(),
 		ids,
 		updateTs,
-		1,
+		testTenant,
 		1234567892.789,
 		2,
 	)
@@ -303,16 +303,16 @@ func (s *ExampleRepositoryTestSuite) TestJSONBAndUUIDRoundTrip() {
 		ExampleText:     "RepoTest JSONB UUID",
 		ExampleUUID:     uuid,
 		ExampleJSONB:    json.RawMessage(`{"colour": "teal", "count": 3, "tagList": ["a", "b"]}`),
-		SecurityContext: 1,
+		SecurityContext: testTenant,
 		CreateTS:        1234567890.123,
 		CreateUserID:    1,
 		UpdateTS:        1234567890.123,
 		UpdateUserID:    1,
 	}
-	created, err := s.repo.CreateExample(context.Background(), example, 1)
+	created, err := s.repo.CreateExample(context.Background(), example, testTenant)
 	s.NoError(err)
 
-	retrieved, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
+	retrieved, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, testTenant)
 	s.NoError(err)
 	s.Equal(uuid, retrieved.ExampleUUID)
 	s.JSONEq(`{"colour": "teal", "count": 3, "tagList": ["a", "b"]}`, string(retrieved.ExampleJSONB))
@@ -325,7 +325,7 @@ func (s *ExampleRepositoryTestSuite) TestJSONBAndUUIDRoundTrip() {
 	s.NoError(s.repo.UpdateExample(context.Background(), retrieved, 1234567890.123))
 	s.Equal(uuid, retrieved.ExampleUUID)
 
-	updated, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
+	updated, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, testTenant)
 	s.NoError(err)
 	s.Equal(uuid, updated.ExampleUUID)
 	s.JSONEq(`[1, 2, 3]`, string(updated.ExampleJSONB))
@@ -334,15 +334,15 @@ func (s *ExampleRepositoryTestSuite) TestJSONBAndUUIDRoundTrip() {
 	updated.ExampleJSONB = nil
 	updated.UpdateTS = 1234567892.789
 	s.NoError(s.repo.UpdateExample(context.Background(), updated, 1234567891.456))
-	cleared, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, 1)
+	cleared, err := s.repo.RetrieveExample(context.Background(), created.ExampleID, testTenant)
 	s.NoError(err)
 	s.Nil(cleared.ExampleJSONB)
 
 	// The uuid is unique across rows.
 	dup := &model.ExampleModel{
-		ExampleText: "RepoTest dup uuid", ExampleUUID: uuid, SecurityContext: 1,
+		ExampleText: "RepoTest dup uuid", ExampleUUID: uuid, SecurityContext: testTenant,
 		CreateTS: 1, CreateUserID: 1, UpdateTS: 1, UpdateUserID: 1,
 	}
-	_, err = s.repo.CreateExample(context.Background(), dup, 1)
+	_, err = s.repo.CreateExample(context.Background(), dup, testTenant)
 	s.Error(err)
 }

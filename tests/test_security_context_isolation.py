@@ -1,16 +1,19 @@
 import pytest
 
+from conftest import OTHER_TENANT, TEST_TENANT
+
 
 class TestSecurityContextIsolation:
     """Test that security contexts properly isolate data and permissions"""
 
     def test_security_context_consistency(self, test_client):
         """Test that all examples are created in the user's security context"""
-        # Create example in security context 1 (user's context)
+        # Claims the other tenant; the handler takes the JWT's (the test
+        # tenant) instead.
         example_data_1 = {
-            "exampleText": "Context 1 Example",
+            "exampleText": "Test Tenant Example",
             "exampleInt": 100,
-            "securityContext": 1,
+            "securityContext": OTHER_TENANT,
         }
 
         response = test_client.make_request("POST", "/example", json=example_data_1)
@@ -28,8 +31,9 @@ class TestSecurityContextIsolation:
         response = test_client.make_request("POST", "/example", json=example_data_2)
         assert response.status_code == 201
 
-        # Verify both examples are in the user's security context (1)
-        assert example_1["securityContext"] == 1
+        # Verify both examples are in the user's security context
+        assert example_1["securityContext"] == TEST_TENANT
+        assert response.json()["data"]["securityContext"] == TEST_TENANT
 
         # Verify examples are accessible
         response = test_client.make_request(
@@ -49,7 +53,6 @@ class TestSecurityContextIsolation:
                 json={
                     "exampleText": f"Bulk Test {i}",
                     "exampleInt": i,
-                    "securityContext": 1,  # User's context
                 },
             )
             assert response.status_code == 201
@@ -57,9 +60,9 @@ class TestSecurityContextIsolation:
             examples.append(example)
             test_client.track_example(example["exampleId"], example["updateTs"])
 
-        # Verify all examples are in context 1
+        # Verify all examples are in the test tenant
         for example in examples:
-            assert example["securityContext"] == 1
+            assert example["securityContext"] == TEST_TENANT
 
         # Bulk retrieve all examples
         example_ids = [str(ex["exampleId"]) for ex in examples]
@@ -70,7 +73,7 @@ class TestSecurityContextIsolation:
         retrieved = response.json()["data"]
         assert len(retrieved) == 5
         for example in retrieved:
-            assert example["securityContext"] == 1
+            assert example["securityContext"] == TEST_TENANT
             assert "Bulk Test" in example["exampleText"]
 
         # Bulk update examples
@@ -81,7 +84,6 @@ class TestSecurityContextIsolation:
                 json={
                     "exampleId": example["exampleId"],
                     "exampleText": f"Updated {example['exampleText']}",
-                    "securityContext": 1,
                     "updateTs": example["updateTs"],
                 },
             )
@@ -122,10 +124,10 @@ class TestSecurityContextIsolation:
             "email": f"cross{suffix}@example.com",
             "pwHash": "testpass123!",
             "mfaExempt": False,
-            "appUserGroupMembershipList": [4, 5],  # Groups from security context 2
+            "appUserGroupMembershipList": [4, 5],  # Groups of OTHER_TENANT
         }
 
-        # Admin is in security context 1, should not be able to assign groups from context 2
+        # Admin is in TEST_TENANT, so cannot assign OTHER_TENANT's groups
         response = test_client.make_request("POST", "/user", json=user_data)
         assert response.status_code == 403
         assert "security context" in response.json()["error"].lower()
@@ -134,7 +136,7 @@ class TestSecurityContextIsolation:
         """Test that updating a user with groups from different security contexts fails"""
         import uuid
 
-        # First create a valid user in context 1
+        # First create a valid user in the test tenant
         suffix = uuid.uuid4().hex
         create_data = {
             "userName": f"updateuser{suffix}",
@@ -143,7 +145,7 @@ class TestSecurityContextIsolation:
             "email": f"update{suffix}@example.com",
             "pwHash": "testpass123!",
             "mfaExempt": False,
-            "appUserGroupMembershipList": [1],  # Valid group from context 1
+            "appUserGroupMembershipList": [1],  # TEST_TENANT's group
         }
 
         create_response = test_client.make_request("POST", "/user", json=create_data)
@@ -153,7 +155,7 @@ class TestSecurityContextIsolation:
         update_ts = user_data["updateTs"]
         test_client.track_user(app_user_id, update_ts)
 
-        # Now try to update with groups from context 2 (should fail)
+        # Now try to update with OTHER_TENANT's groups (should fail)
         update_data = {
             "appUserId": app_user_id,
             "userName": f"updateuser{suffix}",
@@ -161,7 +163,7 @@ class TestSecurityContextIsolation:
             "lastName": "Test",
             "email": f"updated{suffix}@example.com",
             "mfaExempt": False,
-            "appUserGroupMembershipList": [4, 5],  # Groups from security context 2
+            "appUserGroupMembershipList": [4, 5],  # Groups of OTHER_TENANT
             "updateTs": update_ts,
         }
 
@@ -171,7 +173,7 @@ class TestSecurityContextIsolation:
 
     def test_add_users_cross_security_context_group(self, test_client):
         """Test that adding users from different security contexts to a group fails"""
-        # Create a user in context 1 first
+        # Create a user in the test tenant first
         import uuid
 
         suffix = uuid.uuid4().hex
@@ -191,10 +193,10 @@ class TestSecurityContextIsolation:
         user_id = created_user["appUserId"]
         test_client.track_user(user_id, created_user["updateTs"])
 
-        # Try to add this user to a group from context 2 (should fail)
+        # Try to add this user to OTHER_TENANT's group (should fail)
         add_data = {
             "userIds": [user_id],
-            "groupId": 4,  # Group from security context 2
+            "groupId": 4,  # Group of OTHER_TENANT
             "updateTsList": [created_user["updateTs"]],
         }
 
@@ -206,7 +208,7 @@ class TestSecurityContextIsolation:
 
     def test_add_users_to_cross_security_context_group(self, test_client):
         """Test that adding users to a group from different security context fails"""
-        # Create a user in context 1 first
+        # Create a user in the test tenant first
         import uuid
 
         suffix = uuid.uuid4().hex
@@ -226,10 +228,10 @@ class TestSecurityContextIsolation:
         user_id = created_user["appUserId"]
         test_client.track_user(user_id, created_user["updateTs"])
 
-        # Try to add user from context 1 to group from context 2 (should fail)
+        # Try to add a TEST_TENANT user to OTHER_TENANT's group (should fail)
         add_data = {
             "userIds": [user_id],
-            "groupId": 5,  # Group from security context 2
+            "groupId": 5,  # Group of OTHER_TENANT
             "updateTsList": [created_user["updateTs"]],
         }
 
@@ -269,7 +271,7 @@ class TestSecurityContextIsolation:
             "lastName": "Valid",
             "email": f"updated{suffix}@example.com",
             "mfaExempt": True,
-            "appUserGroupMembershipList": [1],  # Valid group from context 1
+            "appUserGroupMembershipList": [1],  # TEST_TENANT's group
             "updateTs": created_user["updateTs"],
         }
 
@@ -287,7 +289,7 @@ class TestSecurityContextIsolation:
         # Add user to another valid group within context
         add_data = {
             "userIds": [user_id],
-            "groupId": 3,  # Group from security context 1
+            "groupId": 3,  # TEST_TENANT's group
             "updateTsList": [current_update_ts],
         }
 
@@ -299,7 +301,8 @@ class TestSecurityContextIsolation:
     def test_cross_security_context_group_is_404_not_409(self, test_client):
         """Another tenant's group id reads as absent (404), never as a
         stale write (409): the answer must not reveal that the id exists.
-        Seed groups 4 and 5 live in tenant 2; the admin is in tenant 1."""
+        Seed groups 4 and 5 live in OTHER_TENANT; the admin is in
+        TEST_TENANT."""
         for group_id in (4, 5):
             response = test_client.make_request(
                 "PUT",

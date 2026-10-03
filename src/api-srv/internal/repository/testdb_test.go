@@ -2,11 +2,23 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// The tenants the database-backed tests act in: never 1, which the scratch
+// databases refuse (sql/fixtures/test-tenant-lock.sql). test-seed.sql puts
+// the fixture logins and groups 1-3 in testTenant and groups 4-5 in
+// otherTenant.
+const (
+	testTenant  = 2
+	otherTenant = 3
 )
 
 // connectTestDB returns a pool for the integration database, or skips.
@@ -22,6 +34,7 @@ import (
 // `go test ./...` meaningful in both places: full coverage where the scratch
 // database exists, and the hermetic packages still gating the build where it
 // does not. The test runner greps for that skip so it cannot pass silently.
+// A URL naming anything but a scratch database fails the test outright.
 // pgxpool.New connects lazily, so the reachability check has to be an
 // explicit Ping -- without it the failure surfaces later, inside a test, as
 // a query error.
@@ -31,6 +44,9 @@ func connectTestDB(t *testing.T) *pgxpool.Pool {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("skipping integration tests: TEST_DATABASE_URL unset (run bin/300-run-tests go)")
+	}
+	if err := checkScratch(databaseURL); err != nil {
+		t.Fatal(err)
 	}
 	db, err := pgxpool.New(context.Background(), databaseURL)
 	if err != nil {
@@ -45,4 +61,37 @@ func connectTestDB(t *testing.T) *pgxpool.Pool {
 	}
 
 	return db
+}
+
+// checkScratch refuses a URL whose database name does not end in _test_db
+// or _e2e_db, the names bin/510-reset-test-db builds and locks.
+func checkScratch(databaseURL string) error {
+	parsed, err := url.Parse(databaseURL)
+	if err != nil {
+		return fmt.Errorf("TEST_DATABASE_URL does not parse: refusing to run")
+	}
+	databaseName := strings.TrimPrefix(parsed.Path, "/")
+	if strings.HasSuffix(databaseName, "_test_db") ||
+		strings.HasSuffix(databaseName, "_e2e_db") {
+		return nil
+	}
+	return fmt.Errorf("TEST_DATABASE_URL names database %q, not a scratch "+
+		"database (*_test_db / *_e2e_db): refusing to run", databaseName)
+}
+
+func TestCheckScratch(t *testing.T) {
+	for databaseURL, accepted := range map[string]bool{
+		"postgres://u:p@127.0.0.1:5432/loc_proto_test_db?sslmode=disable": true,
+		"postgres://u:p@127.0.0.1:5432/loc_proto_e2e_db":                  true,
+		"postgres://u:p@127.0.0.1:5432/loc_proto_db":                      false,
+		"postgres://u:p@127.0.0.1:5432/uat_proto_db?sslmode=disable":      false,
+		"postgres://u:p@127.0.0.1:5432/loc_proto_test_db_old":             false,
+		"postgres://u:p@127.0.0.1:5432/":                                  false,
+		"://not a url":                                                    false,
+	} {
+		if got := checkScratch(databaseURL) == nil; got != accepted {
+			t.Errorf("checkScratch(%q) accepted=%v, want %v",
+				databaseURL, got, accepted)
+		}
+	}
 }

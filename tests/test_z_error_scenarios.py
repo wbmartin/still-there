@@ -31,7 +31,7 @@ class TestErrorScenarios:
         test_client.csrf_token = None
 
         response = test_client.make_request(
-            "POST", "/example", json={"exampleText": "Test", "securityContext": 1}
+            "POST", "/example", json={"exampleText": "Test"}
         )
         assert response.status_code == 403
 
@@ -45,7 +45,7 @@ class TestErrorScenarios:
         test_client.csrf_token = "invalid-csrf-token"
 
         response = test_client.make_request(
-            "POST", "/example", json={"exampleText": "Test", "securityContext": 1}
+            "POST", "/example", json={"exampleText": "Test"}
         )
         assert response.status_code == 403
 
@@ -56,7 +56,7 @@ class TestErrorScenarios:
         """Test that concurrent updates with stale timestamps return 409"""
         # Create an example
         response = test_client.make_request(
-            "POST", "/example", json={"exampleText": "Test", "securityContext": 1}
+            "POST", "/example", json={"exampleText": "Test"}
         )
         assert response.status_code == 201
         example = response.json()["data"]
@@ -71,7 +71,6 @@ class TestErrorScenarios:
             json={
                 "exampleId": example["exampleId"],
                 "exampleText": "Updated Text",
-                "securityContext": 1,
                 "updateTs": stale_timestamp,
             },
         )
@@ -90,7 +89,7 @@ class TestErrorScenarios:
         response = test_client.make_request(
             "POST",
             "/example",
-            json={"exampleText": "Delete Test", "securityContext": 1},
+            json={"exampleText": "Delete Test"},
         )
         assert response.status_code == 201
         example = response.json()["data"]
@@ -128,7 +127,7 @@ class TestErrorScenarios:
         """Test that requests missing required fields return 400"""
         # Missing example_text
         response = test_client.make_request(
-            "POST", "/example", json={"example_int": 42, "security_context": 1}
+            "POST", "/example", json={"example_int": 42}
         )
         assert response.status_code == 400
 
@@ -156,7 +155,7 @@ class TestErrorScenarios:
             response = test_client.make_request(
                 "POST",
                 "/example",
-                json={"exampleText": f"Bulk Delete Test {i}", "securityContext": 1},
+                json={"exampleText": f"Bulk Delete Test {i}"},
             )
             assert response.status_code == 201
             example = response.json()["data"]

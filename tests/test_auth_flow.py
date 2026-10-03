@@ -26,7 +26,7 @@ class TestAuthentication:
         assert user["userName"] == "admin"
         assert user["firstName"] == "System"
         assert user["lastName"] == "Administrator"
-        assert user["securityContext"] == 1
+        assert user["securityContext"] == TEST_TENANT
 
     def test_invalid_credentials(self):
         """Test authentication with invalid credentials"""
@@ -40,14 +40,14 @@ class TestAuthentication:
         # Try request without CSRF token
         response = test_client.session.post(
             f"{test_client.base_url}/example",
-            json={"exampleText": "Test", "securityContext": 1},
+            json={"exampleText": "Test"},
         )
         assert response.status_code == 403  # Should be forbidden
 
         # Try request with invalid CSRF token
         response = test_client.session.post(
             f"{test_client.base_url}/example",
-            json={"exampleText": "Test", "securityContext": 1},
+            json={"exampleText": "Test"},
             headers={"X-CSRF-Token": "invalid"},
         )
         assert response.status_code == 403
@@ -57,7 +57,7 @@ class TestAuthentication:
         # This should fail even with valid JWT because CSRF is required for POST
         response = test_client.session.post(
             f"{test_client.base_url}/example",
-            json={"exampleText": "Test", "securityContext": 1},
+            json={"exampleText": "Test"},
             cookies={"auth": test_client.jwt_token},
         )
         assert response.status_code == 403
@@ -305,4 +305,4 @@ class TestBodyLimits:
 
 
 # Import TestClient for use in this module
-from conftest import TestClient
+from conftest import TEST_TENANT, TestClient
