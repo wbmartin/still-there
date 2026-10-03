@@ -153,8 +153,24 @@ House pattern inside a page, in this order:
 
 ## Dependency cadence
 
-Caret ranges. Any change that touches the web app runs `npm update
---legacy-peer-deps` (in-range bumps; plain `npm update` trips an arborist
-bug in npm 10 on this peer set) and `npx depcheck` (no unused or undeclared
-packages). Major versions
-(Mantine, ESLint, Vitest, Vite plugins) are their own change, one at a time.
+Caret ranges. Every change that touches the web app runs `npx depcheck`
+(no unused or undeclared packages); it is cheap and never bumps anything.
+No change runs a blanket `npm update`: an in-range bump of the linter
+plugins ships new lint rules, so an unrelated diff picks up lint fallout
+and lockfile churn its reviewer did not ask for.
+
+A change with a security reason to touch dependencies works in this order:
+
+1. `npx depcheck`; remove unused packages first. Deleting a dead
+   dependency is often the whole fix.
+2. `npm audit --omit=dev`; production advisories are the target.
+3. `npm update --legacy-peer-deps <advised package>` for the packages the
+   advisories name, nothing else (plain `npm update` trips an arborist bug
+   in npm 10 on this peer set). Commit `package-lock.json` with it.
+4. Dev-only advisories and toolchain bumps (ESLint, typescript-eslint,
+   Vite, Vitest) are their own change, with the lint fallout in the same
+   diff. Major versions (Mantine, ESLint, Vitest, Vite plugins) are their
+   own change too, one at a time.
+
+The Go side follows the same order (`src/api-srv/README.md`,
+"Dependencies").

@@ -454,109 +454,6 @@ repository and a prod repository that promote copies into, or accept that
 UAT's credential can move `:prd`? Recommendation: split; it is the only
 way a UAT compromise cannot ship to prod.
 
-### B055 — `npm update` is not a security fix
-
-- **Priority:** P2  **Area:** docs, web-app
-- **GRC:** `tickets/03-done/RG0007-web-hygiene-deps-errors-console/260922_0215-TKT-RG0007-web-hygiene-deps-errors-console.md:15-38`; `RG0007-web-hygiene-deps-errors-console.md:126-136,392-401`   **PROTO:** `src/web-app/README.md:112-118`
-- **Ticket:** RG0007
-- **What:** PROTO's README has every web ticket run `npm update`. In GRC that
-bumped the linter (4 -&gt; 34 findings); seven of nine advisories were in unused
-deps.
-- **Port notes:** Order: depcheck, `npm audit --omit=dev`, `npm update <advised>`, toolchain as its own ticket. Same for `go get -u`.
-- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (per recommendation, minus the standing ticket (B091), 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-A process/DX gap in the written rule, not a code bug. `src/web-app/README.md`
-tells every web ticket to bump every package:
-
-```
-// src/web-app/README.md:114-118
-Caret ranges. Any ticket that touches the web app runs `npm update
---legacy-peer-deps` (in-range bumps; plain `npm update` trips an arborist
-bug in npm 10 on this peer set) and `npx depcheck` (no unused or undeclared
-packages). Major versions
-(Mantine, ESLint, Vitest, Vite plugins) are their own ticket, one at a time.
-```
-
-The rule came from PS0013 ("Rules that survived",
-`tickets/04-archive/PS0013-web-hygiene-deps-schemas-constants.md:71-72`).
-It has three consequences.
-
-1. An unrelated web ticket drags in toolchain changes. An in-range bump of
-   `typescript-eslint` or `eslint-plugin-react-hooks` ships new lint rules.
-   The ticket's diff then carries lint fallout and lockfile churn its
-   reviewer did not ask for, and the "lint clean" gate can go red for
-   reasons outside the change.
-2. It treats "bump everything" as the security step. It never says to run
-   `npm audit`, and it never separates production from dev advisories.
-3. It runs `depcheck` after the bump, so the cheapest fix (deleting an
-   unused package) is not the first one tried.
-
-The same gap exists for Go: nothing in `CLAUDE.md`, `README.md`, `doc/` or
-`bin/` mentions `go get -u`, `govulncheck` or how a Go advisory is handled.
-
-Current state, checked 2026-10-02: PROTO's lock already resolves
-`react-router-dom` 7.18.4, `typescript-eslint` 8.70.1 and
-`eslint-plugin-react-hooks` 7.1.1, and `npm audit --omit=dev` reports 0. So
-there is no open advisory today; the problem is the rule's next run.
-
-#### What GRC changed
-
-GRC's web README never carried PROTO's cadence section (no match for
-"Dependency cadence" in its history). The lesson lives only in ticket
-RG0007, which followed the same "npm update" ruling.
-
-The engineering log
-(`tickets/03-done/RG0007-web-hygiene-deps-errors-console/260922_0215-TKT-RG0007-web-hygiene-deps-errors-console.md:17-38`)
-records what the bare update did:
-
-```
-moved **every** package to the top of its range. Nine advisories
-went to zero and `npm run lint` went from 4 non-`max-len` findings to **34**,
-```
-
-22 of those were auto-fixable, which would have broken the "eslint would
-rewrite nothing" gate built a day earlier (RG0006). GRC reverted the lock
-and re-ran the update for one package, `react-router-dom` 7.9.6 to 7.18.4,
-the only one the advisories named. And `:36-38`: "seven of the nine
-production advisories were in packages nothing imported. Removing dead
-dependencies was the security fix." The ticket body (`:126-134`) states the
-narrowed update; `:392-401` files the toolchain bump (19 dev advisories,
-~30 new findings) as its own ticket. No test pins this; it is procedure.
-
-#### Proposed fix for PROTO
-
-1. Rewrite `src/web-app/README.md:112-118` ("Dependency cadence") as an
-   ordered procedure for a ticket that has a security reason to touch deps:
-   (a) `npx depcheck`; remove unused packages first.
-   (b) `npm audit --omit=dev`; production advisories are the target.
-   (c) `npm update --legacy-peer-deps <advised package>` only; keep the
-   arborist note.
-   (d) Dev-only advisories and toolchain bumps (eslint, typescript-eslint,
-   vite, vitest) are their own ticket with the lint fallout in the same
-   change.
-2. Drop "any ticket that touches the web app runs `npm update`". Keep
-   `npx depcheck` on every web ticket; it is cheap and never bumps.
-3. Add the Go equivalent where Go conventions live (`src/api-srv/README.md`
-   or `doc/902`): `govulncheck ./...` first; `go get <module>@<fixed>`
-   for the named module; no blanket `go get -u ./...` inside a feature
-   ticket. B014 (Go dependency bumps) is the first ticket to follow it.
-4. Related: B041 (eslint as a clean-tree check) is the gate a blanket bump
-   breaks; B069 (depcheck config, zod pin) touches the same section. Land
-   B055's text with or before them.
-5. Tests: none. Optional `bin/` helper that runs depcheck + `npm audit
-   --omit=dev` and prints both is B069/B070 territory, not this item.
-
-#### Open question for Brandon
-
-Should PROTO keep a periodic toolchain-bump ticket (for example, monthly)
-so dev advisories do not pile up once feature tickets stop bumping?
-Recommendation: yes, a standing ticket raised by `ticket-triage` when
-`npm audit` (dev included) is non-zero, since nothing else will trigger it.
-
 ### B056 — Review checklist skill (RG0043 method + "checked and clean")
 
 - **Priority:** P2  **Area:** skills
@@ -8925,3 +8822,107 @@ routes the web never calls? Recommendation: no; `/health` and test-only
 routes are legitimately web-unused, so one direction is enough.
 
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: routes checked one direction only, web paths must exist in Go). Go: `src/api-srv/internal/model/grants_fixture_test.go` `TestGrantsFixtureIsCurrent` compares `json.MarshalIndent(AllKnownGrants)` (keys sorted) with committed `internal/model/testdata/grants.json`, floor 18; `-update-grants` rewrites it, passed only by new `bin/305-update-grants-fixture` (3xx = tests; shellcheck clean). No reverse-map test added: `user_grant_model_test.go` already checks `GrantIDToShortCodeMap` against `AllKnownGrants` both ways. Web: `src/web-app/tests/contract.test.ts` reads the fixture and `cmd/server/main.go` with `node:fs` (not `?raw`: no reliance on Vite fs access outside the web root), compares grant ids with `constants/grants.ts` both ways plus a floor of 18, and asserts every `API_ENDPOINTS` path (incl. B034 block/unblock, B035 invite) is registered; route regex handles a pattern on the line after `mux.HandleFunc(`, canary >= 25 routes. 9020 already resolved by B010 (`GrantResetUserMFA`), so the test landed green; planted drift (changed id, extra grant, renamed path, emptied fixture) each fail. Docs: `CLAUDE.md` conventions bullet; `src/web-app/README.md` names `model/grants.go` (not `roles.sql`) and the test; `doc/902` new mirror-fixture section; `doc/810` grant step runs bin/305; `grants.ts`/`api.ts` headers name the test (grants.ts already named grants.go since B037; its stray 3-space indents fixed). Tests: all green, infra=15 docs=494 go=688 unit=87 e2e=13 py=102, govulncheck clean, gofmt clean.
+
+### B055 — COMPLETED — `npm update` is not a security fix
+
+- **Priority:** P2  **Area:** docs, web-app
+- **GRC:** `tickets/03-done/RG0007-web-hygiene-deps-errors-console/260922_0215-TKT-RG0007-web-hygiene-deps-errors-console.md:15-38`; `RG0007-web-hygiene-deps-errors-console.md:126-136,392-401`   **PROTO:** `src/web-app/README.md:112-118`
+- **Ticket:** RG0007
+- **What:** PROTO's README has every web ticket run `npm update`. In GRC that
+bumped the linter (4 -&gt; 34 findings); seven of nine advisories were in unused
+deps.
+- **Port notes:** Order: depcheck, `npm audit --omit=dev`, `npm update <advised>`, toolchain as its own ticket. Same for `go get -u`.
+- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (per recommendation, minus the standing ticket (B091), 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+A process/DX gap in the written rule, not a code bug. `src/web-app/README.md`
+tells every web ticket to bump every package:
+
+```
+// src/web-app/README.md:114-118
+Caret ranges. Any ticket that touches the web app runs `npm update
+--legacy-peer-deps` (in-range bumps; plain `npm update` trips an arborist
+bug in npm 10 on this peer set) and `npx depcheck` (no unused or undeclared
+packages). Major versions
+(Mantine, ESLint, Vitest, Vite plugins) are their own ticket, one at a time.
+```
+
+The rule came from PS0013 ("Rules that survived",
+`tickets/04-archive/PS0013-web-hygiene-deps-schemas-constants.md:71-72`).
+It has three consequences.
+
+1. An unrelated web ticket drags in toolchain changes. An in-range bump of
+   `typescript-eslint` or `eslint-plugin-react-hooks` ships new lint rules.
+   The ticket's diff then carries lint fallout and lockfile churn its
+   reviewer did not ask for, and the "lint clean" gate can go red for
+   reasons outside the change.
+2. It treats "bump everything" as the security step. It never says to run
+   `npm audit`, and it never separates production from dev advisories.
+3. It runs `depcheck` after the bump, so the cheapest fix (deleting an
+   unused package) is not the first one tried.
+
+The same gap exists for Go: nothing in `CLAUDE.md`, `README.md`, `doc/` or
+`bin/` mentions `go get -u`, `govulncheck` or how a Go advisory is handled.
+
+Current state, checked 2026-10-02: PROTO's lock already resolves
+`react-router-dom` 7.18.4, `typescript-eslint` 8.70.1 and
+`eslint-plugin-react-hooks` 7.1.1, and `npm audit --omit=dev` reports 0. So
+there is no open advisory today; the problem is the rule's next run.
+
+#### What GRC changed
+
+GRC's web README never carried PROTO's cadence section (no match for
+"Dependency cadence" in its history). The lesson lives only in ticket
+RG0007, which followed the same "npm update" ruling.
+
+The engineering log
+(`tickets/03-done/RG0007-web-hygiene-deps-errors-console/260922_0215-TKT-RG0007-web-hygiene-deps-errors-console.md:17-38`)
+records what the bare update did:
+
+```
+moved **every** package to the top of its range. Nine advisories
+went to zero and `npm run lint` went from 4 non-`max-len` findings to **34**,
+```
+
+22 of those were auto-fixable, which would have broken the "eslint would
+rewrite nothing" gate built a day earlier (RG0006). GRC reverted the lock
+and re-ran the update for one package, `react-router-dom` 7.9.6 to 7.18.4,
+the only one the advisories named. And `:36-38`: "seven of the nine
+production advisories were in packages nothing imported. Removing dead
+dependencies was the security fix." The ticket body (`:126-134`) states the
+narrowed update; `:392-401` files the toolchain bump (19 dev advisories,
+~30 new findings) as its own ticket. No test pins this; it is procedure.
+
+#### Proposed fix for PROTO
+
+1. Rewrite `src/web-app/README.md:112-118` ("Dependency cadence") as an
+   ordered procedure for a ticket that has a security reason to touch deps:
+   (a) `npx depcheck`; remove unused packages first.
+   (b) `npm audit --omit=dev`; production advisories are the target.
+   (c) `npm update --legacy-peer-deps <advised package>` only; keep the
+   arborist note.
+   (d) Dev-only advisories and toolchain bumps (eslint, typescript-eslint,
+   vite, vitest) are their own ticket with the lint fallout in the same
+   change.
+2. Drop "any ticket that touches the web app runs `npm update`". Keep
+   `npx depcheck` on every web ticket; it is cheap and never bumps.
+3. Add the Go equivalent where Go conventions live (`src/api-srv/README.md`
+   or `doc/902`): `govulncheck ./...` first; `go get <module>@<fixed>`
+   for the named module; no blanket `go get -u ./...` inside a feature
+   ticket. B014 (Go dependency bumps) is the first ticket to follow it.
+4. Related: B041 (eslint as a clean-tree check) is the gate a blanket bump
+   breaks; B069 (depcheck config, zod pin) touches the same section. Land
+   B055's text with or before them.
+5. Tests: none. Optional `bin/` helper that runs depcheck + `npm audit
+   --omit=dev` and prints both is B069/B070 territory, not this item.
+
+#### Open question for Brandon
+
+Should PROTO keep a periodic toolchain-bump ticket (for example, monthly)
+so dev advisories do not pile up once feature tickets stop bumping?
+Recommendation: yes, a standing ticket raised by `ticket-triage` when
+`npm audit` (dev included) is non-zero, since nothing else will trigger it.
+- **Completed:** 2026-10-03. Adapted per the decision (recommendation minus the standing toolchain-bump ticket, B091 removed the ticket system; the open question is closed by that). `src/web-app/README.md` "Dependency cadence" rewritten: every web change runs `npx depcheck` only; no blanket `npm update`; a change with a security reason works depcheck (remove unused first) -> `npm audit --omit=dev` -> `npm update --legacy-peer-deps <advised package>` (arborist note kept, lock committed) -> dev-only advisories and toolchain/major bumps as their own change with the lint fallout. `src/api-srv/README.md` new "Dependencies" section: `govulncheck ./...` (bin/300 all already runs and fails on it) -> `go get <module>@<fixed>` + `go mod tidy` -> toolchain/other upgrades their own change, for both `src/api-srv` and `src/load-test`; the two sections cross-reference. No dependency changed: at 12ccdc9 `npm audit --omit=dev` and full `npm audit` both report 0 and `npx depcheck` reports no issue, so `package-lock.json` is untouched. Step 3/4 ordering: B014 and B041 landed earlier (B041 is the eslint gate a blanket bump would break); B069 is still open and lands after this. No tests per step 5. Tests: all green, infra=15 docs=499 go=688 unit=87 e2e=13 py=102 (docs +5: new backticked paths in the two READMEs), govulncheck clean, gofmt clean.

@@ -179,6 +179,21 @@ Go 1.25 (see `go.mod`). Schema changes are migrations only:
 never hand-run DDL. Also `sql/roles.sql` (the role the migrator and app
 connect as) and `sql/fixtures/` (seed data, e.g. `local-seed.sql`).
 
+## Dependencies
+
+No change runs a blanket `go get -u ./...`. A change with a security
+reason to touch modules works in this order, in each module
+(`src/api-srv`, `src/load-test`):
+
+1. `govulncheck ./...`; a called vulnerability is the target
+   (`bin/300-run-tests all` runs it and fails on one).
+2. `go get <module>@<fixed version>` for the module it names, then
+   `go mod tidy`; commit `go.mod` and `go.sum` with it.
+3. Go toolchain and other module upgrades are their own change.
+
+The web app follows the same order (`src/web-app/README.md`,
+"Dependency cadence").
+
 ## In-Process Infrastructure
 
 No external services: `DATABASE_URL`, `JWT_SECRET`, and
