@@ -75,3 +75,19 @@ func TestClientIP(t *testing.T) {
 		})
 	}
 }
+
+// The anonymous rate-limit bucket is per client address, and its prefix keeps
+// it out of the authenticated key space (which is keyed by JWT subject).
+func TestAnonRateIdentifierIsPerAddress(t *testing.T) {
+	first := httptest.NewRequest(http.MethodPost, "/auth", nil)
+	first.RemoteAddr = "203.0.113.7:1111"
+	second := httptest.NewRequest(http.MethodPost, "/auth", nil)
+	second.RemoteAddr = "198.51.100.4:2222"
+
+	if anonRateIdentifier(first, 0) == anonRateIdentifier(second, 0) {
+		t.Fatal("two addresses share one anonymous bucket")
+	}
+	if got := anonRateIdentifier(first, 0); got != "ip:203.0.113.7" {
+		t.Fatalf("anonRateIdentifier = %q, want %q", got, "ip:203.0.113.7")
+	}
+}

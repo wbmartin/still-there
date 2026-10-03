@@ -125,11 +125,13 @@ explicitly, in order, via the `AppHelper` in
 `internal/security/app_helper.go`:
 
 1. `CheckJWT` — parse and validate the cookie
-2. `CheckRateLimitAndUserBlock` — per-minute rate limit (per user name, or
-   per client IP when anonymous) and the `BLOCKED*` flag that
+2. `CheckRateLimitAndUserBlock` — per-minute rate limit (key
+   `RPM*<user name>*<minute>`, or `RPM*ip:<client IP>*<minute>` when
+   anonymous) and the `BLOCKED*` flag that
    `/admin/blockUser` sets, backed by the in-process KV
 3. `CheckCSRF` — `X-CSRF-Token` header must match the last 3 characters of
-   the session ID; skipped for GET/HEAD/OPTIONS/TRACE
+   the session ID; skipped for GET/HEAD/OPTIONS/TRACE. A mismatch is logged
+   without either token
 4. `CheckAuthorization(grant)` — caller must hold the named grant for
    their current security context
 5. `CheckAllChecksComplete` — every handler calls this before doing any

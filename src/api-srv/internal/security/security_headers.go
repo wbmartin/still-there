@@ -3,25 +3,19 @@ package security
 import (
 	"net/http"
 	"strconv"
-	"strings"
 )
 
 // HeadersMiddleware adds essential security headers to all responses
 func HeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Content Security Policy - restrict resource loading
+		// Content Security Policy. The API answers JSON only and serves no
+		// page, script or asset (nginx serves the web bundle), so nothing
+		// may load, frame, or submit from a response.
 		w.Header().Set("Content-Security-Policy",
-			"default-src 'self'; "+
-				"script-src 'self'; "+
-				"style-src 'self' 'unsafe-inline'; "+ // Allow inline styles for simplicity
-				"img-src 'self' data: https:; "+ // Allow data URLs and HTTPS images
-				"font-src 'self'; "+
-				"connect-src 'self'; "+
-				"media-src 'none'; "+
-				"object-src 'none'; "+
-				"frame-src 'none'; "+
-				"base-uri 'self'; "+
-				"form-action 'self';")
+			"default-src 'none'; "+
+				"frame-ancestors 'none'; "+
+				"base-uri 'none'; "+
+				"form-action 'none'")
 
 		// HTTP Strict Transport Security - force HTTPS
 		w.Header().Set("Strict-Transport-Security",
@@ -29,10 +23,8 @@ func HeadersMiddleware(next http.Handler) http.Handler {
 				"includeSubDomains; "+
 				"preload")
 
-		// X-Frame-Options - prevent clickjacking (skip for assets)
-		if !strings.HasPrefix(r.URL.Path, "/assets/") {
-			w.Header().Set("X-Frame-Options", "DENY")
-		}
+		// X-Frame-Options - prevent clickjacking
+		w.Header().Set("X-Frame-Options", "DENY")
 
 		// X-Content-Type-Options - prevent MIME type sniffing
 		w.Header().Set("X-Content-Type-Options", "nosniff")

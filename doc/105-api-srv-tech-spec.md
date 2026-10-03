@@ -401,7 +401,9 @@ the only one when the API is reached without nginx (local dev).
    - Signed in: `MAX_USER_REQ_PER_MIN` per user name; key
      `RPM*<user name>*<minute>`
    - Anonymous: `MAX_UNAUTH_REQ_PER_MIN` per address; key
-     `RPM*<client IP>*<minute>`. Both share one key namespace
+     `RPM*ip:<client IP>*<minute>` (`anonRateIdentifier`). The `ip:`
+     prefix keeps anonymous buckets apart from user names, so a user named
+     like an address never shares that address's bucket
    - Over the limit is 429 "Rate limit exceeded"
    - "IP" here and in the login lockout is `security.ClientIP`. With
      `TRUSTED_PROXY_COUNT=0` (local dev) it is `RemoteAddr` and
@@ -417,7 +419,8 @@ the only one when the API is reached without nginx (local dev).
    Blocking
 4. **CSRF Protection**: Compare `X-CSRF-Token` header with last 3 chars of
    session ID (safe methods — GET, HEAD, OPTIONS, TRACE — are exempt);
-   missing or wrong is 403 with `"code": "CSRF"`
+   missing or wrong is 403 with `"code": "CSRF"`. A mismatch is logged
+   (`CSM0`) without either token: both are slices of a session ID
 5. **RBAC**: Verify user has required grant for the JWT's security
    context; 403 `Permission denied (grant "<SHORT_CODE>" required)`
 
@@ -490,9 +493,13 @@ anything not here runs all five.
   error is 500 (`TestAuthHandler_LockoutReadErrorIs500`).
 
 ### Security Headers (All Responses)
-- **Content-Security-Policy**: Restricts resource loading to prevent XSS
+- **Content-Security-Policy**: `default-src 'none'; frame-ancestors
+  'none'; base-uri 'none'; form-action 'none'`. The API answers JSON only
+  and serves no page, script or asset (nginx serves the web bundle), so
+  nothing may load from a response. A derived app's page policy belongs in
+  nginx, not here
 - **Strict-Transport-Security**: Forces HTTPS connections (1 year + subdomains + preload)
-- **X-Frame-Options**: Prevents clickjacking attacks
+- **X-Frame-Options**: `DENY` on every path
 - **X-Content-Type-Options**: Prevents MIME type sniffing
 - **Referrer-Policy**: Controls referrer information leakage
 - **Permissions-Policy**: Restricts browser features (camera, microphone, geolocation, etc.)

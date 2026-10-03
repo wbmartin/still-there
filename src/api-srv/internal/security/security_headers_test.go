@@ -36,14 +36,24 @@ func TestHeadersMiddleware_SetsSecurityHeaders(t *testing.T) {
 	}
 }
 
-func TestHeadersMiddleware_SkipsFrameOptionsForAssets(t *testing.T) {
+// The API serves no page or asset, so the policy forbids everything and
+// framing is denied on every path, /assets/ included.
+func TestHeadersMiddleware_ExactCSPAndFrameDenyEverywhere(t *testing.T) {
+	const wantCSP = "default-src 'none'; frame-ancestors 'none'; " +
+		"base-uri 'none'; form-action 'none'"
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
-	req := httptest.NewRequest(http.MethodGet, "/assets/app.js", nil)
-	rec := httptest.NewRecorder()
-	HeadersMiddleware(next).ServeHTTP(rec, req)
+	for _, path := range []string{"/example", "/assets/app.js"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		HeadersMiddleware(next).ServeHTTP(rec, req)
 
-	if got := rec.Header().Get("X-Frame-Options"); got != "" {
-		t.Errorf("X-Frame-Options for /assets/ path = %q, want empty", got)
+		got := rec.Header().Get("Content-Security-Policy")
+		if got != wantCSP {
+			t.Errorf("%s CSP = %q, want %q", path, got, wantCSP)
+		}
+		if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
+			t.Errorf("%s X-Frame-Options = %q, want DENY", path, got)
+		}
 	}
 }
 

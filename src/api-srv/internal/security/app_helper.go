@@ -360,6 +360,14 @@ func ClientIP(r *http.Request, trustedProxyCount int) string {
 	return r.RemoteAddr
 }
 
+// anonRateIdentifier is the rate-limit key identifier for an anonymous
+// caller: "ip:" plus ClientIP. The prefix keeps anonymous buckets out of the
+// signed-in key space, where the identifier is the user name, so a user
+// named "10.0.0.5" never shares a bucket with that address.
+func anonRateIdentifier(r *http.Request, trustedProxyCount int) string {
+	return "ip:" + ClientIP(r, trustedProxyCount)
+}
+
 // parseHostIP returns the IP in "ip", "ip:port", "[v6]" or "[v6]:port", in
 // canonical form, or "" when there is none.
 func parseHostIP(value string) string {
@@ -411,7 +419,7 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 		keyIdentifier = sh.claims.Subject
 	} else {
 		limit = sh.appServices.Config.MaxUnauthReqPerMin
-		keyIdentifier = ClientIP(
+		keyIdentifier = anonRateIdentifier(
 			sh.r, sh.appServices.Config.TrustedProxyCount,
 		)
 	}
@@ -465,8 +473,10 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 		rateKey = fmt.Sprintf("RPM*%s*%d", sh.claims.Subject, currentMinute)
 		limit = sh.appServices.Config.MaxUserReqPerMin
 	} else {
-		clientIP := ClientIP(sh.r, sh.appServices.Config.TrustedProxyCount)
-		rateKey = fmt.Sprintf("RPM*%s*%d", clientIP, currentMinute)
+		anonIdentifier := anonRateIdentifier(
+			sh.r, sh.appServices.Config.TrustedProxyCount,
+		)
+		rateKey = fmt.Sprintf("RPM*%s*%d", anonIdentifier, currentMinute)
 		limit = sh.appServices.Config.MaxUnauthReqPerMin
 	}
 
@@ -545,14 +555,11 @@ func (sh *AppHelper) CheckCSRF() *AppHelper {
 
 	expectedToken := sh.claims.SessionID[len(sh.claims.SessionID)-3:]
 	if csrfToken != expectedToken {
-		// The expected value is deliberately NOT logged. It is a slice of the
-		// session ID, so logging it hands anyone with read access to the logs
-		// both the answer to this check and a piece of the session itself.
-		// The received value is enough to tell a stale tab from an attack.
-		sh.appServices.Logger.Warn(
-			"CSM0",
-			"CSRF token mismatch - received: "+csrfToken,
-		)
+		// Neither token is logged. Both are slices of a session ID (the
+		// received one from a stale tab is an earlier session's), so logging
+		// either hands anyone with read access to the logs a piece of a
+		// session.
+		sh.appServices.Logger.Warn("CSM0", "CSRF token mismatch")
 		sh.refuseCSRF("CSRF validation failed")
 		return sh
 	}

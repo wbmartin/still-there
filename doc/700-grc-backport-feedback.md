@@ -564,73 +564,6 @@ moves on a deliberate release; GRC left this open too.
 
 # P3: nice to have
 
-### B059 — API: CSP trimmed; `ip:` rate bucket; CSRF log without token
-
-- **Priority:** P3  **Area:** go-api
-- **GRC:** `src/internal/security/headers.go:11-31`; `src/internal/security/app_helper.go:320-329,368,424,543-550`   **PROTO:** `src/api-srv/internal/security/security_headers.go:12-35`; `security_headers_test.go:39-48`; `security/app_helper.go:360,412,521-527`
-- **Ticket:** RG0043 item 32 / `720f5e1`; RG0002 / `be58262`
-- **What:** PROTO's API CSP allows scripts, inline styles, images and exempts
-`/assets/` for a JSON-only server; GRC: `default-src 'none'`, XFO DENY always.
-Anonymous buckets get `ip:`; CSRF mismatch logs no token.
-- **Port notes:** Confirm no bundle served; update the header test.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Three small hardening gaps, all under `src/api-srv/internal/security/`. None
-is an exploitable hole today.
-
-**(1) CSP written for an HTML page.** Every response gets a page-shaped
-policy (`security_headers.go:14-17`: `script-src 'self'`, `style-src 'self'
-'unsafe-inline'`, `img-src 'self' data: https:`), and `:33-35` skips
-`X-Frame-Options: DENY` for `/assets/`. The API serves no bundle: no
-`FileServer` or `/assets` route exists in `src/api-srv`; nginx serves
-`web-pub/` (`infra/uat/etc/nginx_uat-proto.example.com:30,59`). The
-allowances are dead weight, pinned by `security_headers_test.go:39-48`, and
-a derived app copying the policy to nginx inherits `'unsafe-inline'`.
-
-**(2) Anonymous rate buckets share the user key space.** An anonymous key is
-`RPM*<ip>*<minute>` (`app_helper.go:360,364` and `:412`); a signed-in key is
-`RPM*<username>*<minute>` (`:357,409`; `Subject` is the username,
-`auth/jwt.go:45`). A user named `10.0.0.5` would share a bucket with
-anonymous traffic from that address. Unlikely, but the fix is one prefix.
-
-**(3) CSRF log keeps the received token.** `app_helper.go:523-526` logs
-`"CSRF token mismatch - received: "+csrfToken`. The expected value is
-already omitted (`:519-522`). The received value from a stale tab is the
-last three characters of an earlier session id, so it is still a credential
-fragment in the log.
-
-#### What GRC changed
-
-RG0002 (`be58262`) added `anonRateIdentifier`, returning `"ip:"+ClientIP(r)`
-(`src/internal/security/app_helper.go:328-329`), used at `:368` and `:424`,
-and cut the CSRF log to `"CSRF token mismatch"` (`:546-549`). GRC started
-from one shared `anon` bucket; PROTO is already per-address, so only the
-prefix is new here. RG0043 item 32 (`720f5e1`) set
-`default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action
-'none'` and unconditional XFO DENY (`headers.go:19-21,31`). Test:
-`TestAnonRateIdentifierIsPerAddress` (`client_ip_test.go:70-82`). No CSP
-test.
-
-#### Proposed fix for PROTO
-
-1. `security_headers.go:13-24,32-35`: GRC's four-directive CSP; always set
-   XFO DENY; drop the `strings` import. Leave out GRC's document-route
-   relaxation (RG0026); PROTO has no file routes.
-2. `security_headers_test.go`: delete `:39-48`; assert the exact CSP and
-   XFO DENY on an `/assets/` path.
-3. `app_helper.go`: add `anonRateIdentifier`, use it at `:360` and `:412`.
-   Land with or after B007's `ClientIP` / `TRUSTED_PROXY_COUNT` change.
-4. `app_helper.go:519-526`: log `"CSRF token mismatch"` only.
-5. Go test: port `TestAnonRateIdentifierIsPerAddress` verbatim.
-
-#### Open question for Brandon
-
-None.
-
 ### B060 — Go hygiene: one `model.Now()`; RG0015 small fixes
 
 - **Priority:** P3  **Area:** go-api
@@ -8928,3 +8861,71 @@ prd; Brandon marked it "by design" (2026-10-02). No tests pin this.
 Should `prd-proto-promote-uat` refuse when `run-tests.result` says FAILED?
 Recommend yes: deploy-then-test is safe only if promote cannot ship red.
 - **Completed:** 2026-10-03. Pulled per the decision (no Brandon line; open question "should promote refuse a red build?" taken as recommended: yes). `infra/uat/bin/uat-proto-build` now builds, pushes (`sha-<commit>`, `:uat`), installs, publishes, Slacks *deployed* ("tests: running now; not promotable until they pass"; the hard-coded "playwright green" and the broken `GO_TESTS` count, which read `^--- PASS` from a log path and always printed `?`, are gone), then runs `uat-proto-run-tests` (still `all`, not GRC's Go + vitest) on the deployed commit. Green: `oras tag` both blobs `sha-<commit>-passed`, Slack *tests passed* with the result line, exit 0. Red: Slack *tests FAILED on the deployed commit* with the result line, "the deploy stands. Don't promote", exit 0. B047 semantics kept: the EXIT trap covers lock through web publish with the same "still on the previous build" (before install) / "may already run this commit" (install, web publish) text and exit 1; a new `tests`/`passed tag` case says the service is on this commit and it is NOT promotable (only reachable if the `-passed` tag fails). Deviation from the port notes: GRC's `stg/run-tests.result` is not readable from prod, so the promotable mark lives in the registry: `infra/prd/bin/prd-proto-promote-uat` refuses unless `sha-<API_REV>-passed` resolves to the same api and web digests it is about to promote (a rebuild of the same commit that went red moves `sha-<commit>` off the passed digests and is refused too). No override flag; a build from before this change has no `-passed` tag, so it cannot be promoted by sha (none exists: post-sales hosts are not up). `bin/300-run-tests` writes `$LOG_DIR/run-tests.result` from one EXIT trap (`write_result`, which also stops pytest's private API, replacing the py section's own trap): `passed (<mode>): <counts>` or `FAILED (<mode>) at <step> (exit N); passed: <counts so far>; failing: <up to 5 go/vitest/playwright/pytest names>; log: <step log>`; `STEP` per section. UAT's `TEST_LOG_DIR` makes it `/srv/uat-proto/stg/run-tests.result`. The flock wait (fix step 4) already landed with B047. Docs: `infra/README.md` promotion flow + why, `doc/330` A7 (pending note dropped), `doc/331` (first deploy, B6 hook, every-later-release). Verified in ubuntu:24.04 with fake `/srv/uat-proto` and `/srv/prd-proto`, local bare origin, stubbed go/npm/systemctl/psql/pg_dump, a stub checkout `bin/300-run-tests`, a file-backed fake registry `oras` (push/tag/manifest fetch by tag or digest) and a payload-capturing curl, old vs new: happy path old tests -> build -> push -> install -> publish -> Slack "go ? passed, playwright green"; new build -> push -> install -> publish -> deployed -> tests -> `-passed` tags -> Slack passed. Tests red: old FAILED at *tests*, nothing deployed, exit 1; new deployed, Slack FAILED with the result line, no `-passed` tag, exit 0. Install fails: both FAILED at *install ...* "may already run this commit", new never runs the tests. `-passed` tag fails: new FAILED at *passed tag*, "NOT promotable". Promote after a red UAT build: old promotes `:uat`, new refuses (`-passed -> none`); after green both promote (default and by full sha); same commit rebuilt red: old promotes by sha, new refuses (digest mismatch). Laptop: a deliberately red pytest test gives `FAILED (py) at py ...; failing: tests/...::test_...; log: .../pytest.log`, :8082 freed, no orphan API; parser checked on sample go/vitest/playwright/pytest logs (bash 3.2 and C locale). shellcheck 0.9.0 `-S warning`: clean old and new; only SC2317 (trap functions) / pre-existing SC2015 notes. Host action (when post-sales hosts exist): recopy `bin/uat-proto-build` on UAT and `bin/prd-proto-promote-uat` on prod together (new promote refuses everything until UAT has run the new build once). Fix step 6's deliberately red real UAT run waits for that host. Tests: all green, `gofmt -l` empty (no Go change), govulncheck clean: infra=15 docs=499 go=688 unit=87 e2e=13 py=102.
+
+### B059 — COMPLETED — API: CSP trimmed; `ip:` rate bucket; CSRF log without token
+
+- **Priority:** P3  **Area:** go-api
+- **GRC:** `src/internal/security/headers.go:11-31`; `src/internal/security/app_helper.go:320-329,368,424,543-550`   **PROTO:** `src/api-srv/internal/security/security_headers.go:12-35`; `security_headers_test.go:39-48`; `security/app_helper.go:360,412,521-527`
+- **Ticket:** RG0043 item 32 / `720f5e1`; RG0002 / `be58262`
+- **What:** PROTO's API CSP allows scripts, inline styles, images and exempts
+`/assets/` for a JSON-only server; GRC: `default-src 'none'`, XFO DENY always.
+Anonymous buckets get `ip:`; CSRF mismatch logs no token.
+- **Port notes:** Confirm no bundle served; update the header test.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Three small hardening gaps, all under `src/api-srv/internal/security/`. None
+is an exploitable hole today.
+
+**(1) CSP written for an HTML page.** Every response gets a page-shaped
+policy (`security_headers.go:14-17`: `script-src 'self'`, `style-src 'self'
+'unsafe-inline'`, `img-src 'self' data: https:`), and `:33-35` skips
+`X-Frame-Options: DENY` for `/assets/`. The API serves no bundle: no
+`FileServer` or `/assets` route exists in `src/api-srv`; nginx serves
+`web-pub/` (`infra/uat/etc/nginx_uat-proto.example.com:30,59`). The
+allowances are dead weight, pinned by `security_headers_test.go:39-48`, and
+a derived app copying the policy to nginx inherits `'unsafe-inline'`.
+
+**(2) Anonymous rate buckets share the user key space.** An anonymous key is
+`RPM*<ip>*<minute>` (`app_helper.go:360,364` and `:412`); a signed-in key is
+`RPM*<username>*<minute>` (`:357,409`; `Subject` is the username,
+`auth/jwt.go:45`). A user named `10.0.0.5` would share a bucket with
+anonymous traffic from that address. Unlikely, but the fix is one prefix.
+
+**(3) CSRF log keeps the received token.** `app_helper.go:523-526` logs
+`"CSRF token mismatch - received: "+csrfToken`. The expected value is
+already omitted (`:519-522`). The received value from a stale tab is the
+last three characters of an earlier session id, so it is still a credential
+fragment in the log.
+
+#### What GRC changed
+
+RG0002 (`be58262`) added `anonRateIdentifier`, returning `"ip:"+ClientIP(r)`
+(`src/internal/security/app_helper.go:328-329`), used at `:368` and `:424`,
+and cut the CSRF log to `"CSRF token mismatch"` (`:546-549`). GRC started
+from one shared `anon` bucket; PROTO is already per-address, so only the
+prefix is new here. RG0043 item 32 (`720f5e1`) set
+`default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action
+'none'` and unconditional XFO DENY (`headers.go:19-21,31`). Test:
+`TestAnonRateIdentifierIsPerAddress` (`client_ip_test.go:70-82`). No CSP
+test.
+
+#### Proposed fix for PROTO
+
+1. `security_headers.go:13-24,32-35`: GRC's four-directive CSP; always set
+   XFO DENY; drop the `strings` import. Leave out GRC's document-route
+   relaxation (RG0026); PROTO has no file routes.
+2. `security_headers_test.go`: delete `:39-48`; assert the exact CSP and
+   XFO DENY on an `/assets/` path.
+3. `app_helper.go`: add `anonRateIdentifier`, use it at `:360` and `:412`.
+   Land with or after B007's `ClientIP` / `TRUSTED_PROXY_COUNT` change.
+4. `app_helper.go:519-526`: log `"CSRF token mismatch"` only.
+5. Go test: port `TestAnonRateIdentifierIsPerAddress` verbatim.
+
+#### Open question for Brandon
+
+None.
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). Confirmed no bundle is served: no `FileServer` or `/assets` route in `src/api-srv`. `security_headers.go`: CSP is GRC's four directives (`default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`), `X-Frame-Options: DENY` on every path, `strings` import dropped; no document-route relaxation. `app_helper.go`: `anonRateIdentifier` returns `"ip:"+ClientIP` and keys the anonymous bucket in both `CheckRateLimit` and `CheckRateLimitAndUserBlock` (anonymous key now `RPM*ip:<client IP>*<minute>`; signed-in key and the `admin` exemption unchanged); the CSRF mismatch logs `"CSRF token mismatch"` only. Tests: `TestHeadersMiddleware_SkipsFrameOptionsForAssets` replaced by `TestHeadersMiddleware_ExactCSPAndFrameDenyEverywhere` (exact CSP and DENY on `/example` and `/assets/app.js`); `TestAnonRateIdentifierIsPerAddress` ported (with the `trustedProxyCount` argument PROTO's `ClientIP` takes); added `TestCheckCSRF_MismatchLogsNoToken` (beyond the fix steps). Docs: doc/105 rate keys, CSRF log note and the header list (exact CSP, DENY everywhere); `src/api-srv/README.md` check list gives both key shapes and the CSRF log rule. B039 route contract unchanged and green (it does not pin the key); B043 pytest unaffected (signed-in key). Tests: all green, infra=15 docs=499 go=690 unit=87 e2e=13 py=102 (go +2: one test replaced, two added), govulncheck clean, gofmt clean.
