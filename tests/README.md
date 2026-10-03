@@ -20,7 +20,8 @@ TEST_BASE_URL=https://localhost:8080 tests/.venv/bin/python -m pytest tests/
 ```
 
 `bin/300-run-tests` bootstraps the venv at `tests/.venv` itself (creating
-it and installing `tests/requirements.txt` on first run), checks
+it and installing `tests/requirements.txt` on first run, and rebuilding it
+whenever `requirements.txt` changes), checks
 `GET /health`, then runs pytest with an HTML report written to
 `tmp/test-reports/` (gitignored).
 
@@ -60,4 +61,25 @@ authenticates in one step. Fixtures:
 
 ## Requirements
 
-`requirements.txt`: pytest, requests, pytest-html.
+`requirements.txt` pins every package the venv holds, transitives included,
+so a bump replaces the whole set:
+
+- `pytest==9.0.3` — 8.4.2 carries PYSEC-2026-1845 (predictable
+  `/tmp/pytest-of-{user}` directories; a local user on a shared host such
+  as UAT can hijack them). Fixed in 9.0.3.
+- `requests==2.34.2` — 2.32.5 carries PYSEC-2026-2275 (predictable temp
+  file in `extract_zipped_paths`). Fixed in 2.33.0.
+- `pytest-html==4.1.1` (HTML report, works with pytest 9), `pyotp==2.9.0`
+  (TOTP codes for `test_zz_mfa_totp.py`).
+- The rest are their dependencies, from `pip freeze` of a fresh venv;
+  three apply only below Python 3.11.
+
+Audit by hand on every bump (not a `bin/300` gate: a test-only advisory
+should not block an unrelated push):
+
+```bash
+python3 -m venv tmp/audit-venv && tmp/audit-venv/bin/pip install -q pip-audit
+tmp/audit-venv/bin/pip-audit -r tests/requirements.txt
+```
+
+2026-10-02, pip-audit 2.10.1: "No known vulnerabilities found".

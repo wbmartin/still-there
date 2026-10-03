@@ -240,15 +240,21 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     # The venv's binaries are called by path rather than through `activate`:
     # activate bakes in the absolute path the venv was created at, so a moved
     # checkout would silently fall through to the system python. A venv whose
-    # python no longer runs is rebuilt.
+    # python no longer runs, or that was built from a different
+    # requirements.txt, is rebuilt so no stale package outlives a bump.
     VENV_DIR="$PROJECT_ROOT/tests/.venv"
     VENV_PY="$VENV_DIR/bin/python3"
-    if [ ! -x "$VENV_PY" ] || ! "$VENV_PY" -c 'import sys' >/dev/null 2>&1; then
+    REQUIREMENTS="$PROJECT_ROOT/tests/requirements.txt"
+    VENV_STAMP="$VENV_DIR/installed-requirements.txt"
+    if [ ! -x "$VENV_PY" ] || ! "$VENV_PY" -c 'import sys' >/dev/null 2>&1 \
+            || ! cmp -s "$REQUIREMENTS" "$VENV_STAMP"; then
         echo "[INFO] Creating $VENV_DIR"
         rm -rf "$VENV_DIR"
         python3 -m venv "$VENV_DIR"
+        "$VENV_PY" -m pip install -q --disable-pip-version-check \
+            -r "$REQUIREMENTS"
+        cp "$REQUIREMENTS" "$VENV_STAMP"
     fi
-    "$VENV_PY" -m pip install -q -r "$PROJECT_ROOT/tests/requirements.txt"
 
     PY_LOG="$LOG_DIR/pytest.log"
     PY_REPORT="$REPORT_DIR/pytest_$(date +%Y%m%d_%H%M%S).html"

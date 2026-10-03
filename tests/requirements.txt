@@ -1,4 +1,23 @@
-pytest==8.4.2
-requests==2.32.5
+# Direct dependencies. Audit with pip-audit (tests/README.md) on every bump.
+pytest==9.0.3  # 8.4.2 carries PYSEC-2026-1845 (predictable /tmp/pytest-of-{user})
+requests==2.34.2  # 2.32.5 carries PYSEC-2026-2275 (predictable zip temp file)
 pytest-html==4.1.1
 pyotp==2.9.0
+
+# Transitive, pinned so an existing venv cannot hold an old, flagged copy
+# (urllib3 2.5.0 and idna 3.11 were). Regenerate from `pip freeze` of a
+# fresh venv after a bump.
+certifi==2026.7.22
+charset-normalizer==3.5.2
+idna==3.20
+iniconfig==2.3.0
+Jinja2==3.1.6
+MarkupSafe==3.0.4
+packaging==26.3
+pluggy==1.6.0
+Pygments==2.21.0
+pytest-metadata==3.1.1
+urllib3==2.8.0
+exceptiongroup==1.3.1 ; python_version < "3.11"
+tomli==2.4.1 ; python_version < "3.11"
+typing_extensions==4.16.0 ; python_version < "3.11"

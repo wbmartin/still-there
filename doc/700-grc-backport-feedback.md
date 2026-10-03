@@ -240,115 +240,6 @@ published password off UAT hosts that already have it but makes the host
 env file the only source of truth? Recommendation: yes, and check the
 existing UAT host once by hand in the same ticket.
 
-### B017 — pytest/requests pins carry advisories
-
-- **Priority:** P1  **Area:** tests
-- **GRC:** `tests/requirements.txt:1-5`; `tests/README.md:5-9`   **PROTO:** `tests/requirements.txt:1-4`
-- **Ticket:** RG0006 / `818f592`, `ad2c1dc`
-- **What:** pytest 8.4.2 carries PYSEC-2026-1845; requests 2.32.5 predates the
-CVE-2024-35195 bump. GRC pins 9.0.3/2.34.2 with reasons; pip-audit clean.
-- **Port notes:** Re-run pip-audit at port time; psycopg2 only with B018. Tests
-P1, docs P2.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-The pytest suite pins its Python dependencies in one file:
-
-```
-# tests/requirements.txt:1-4
-pytest==8.4.2
-requests==2.32.5
-pytest-html==4.1.1
-pyotp==2.9.0
-```
-
-`bin/300-run-tests:188-195` creates `tests/.venv` once and runs
-`pip install -q -r tests/requirements.txt` on every `py` run. The UAT host
-runs the same script (`infra/uat/bin/uat-proto-run-tests:14` execs
-`bin/300-run-tests`), so these pins are installed on a shared server too.
-
-**(1) pytest 8.4.2, PYSEC-2026-1845. Real, low severity.** Per GRC's
-`ad2c1dc` commit text: pytest through 9.0.2 on UNIX uses predictable
-`/tmp/pytest-of-{user}` directories, so another local user can cause a
-denial of service or possibly gain privileges; fixed in 9.0.3. On a
-single-user laptop this is noise. On the UAT host, where `bin/300` runs
-as the build user next to other service accounts, it is a local
-privilege-escalation path. Kind: security hygiene (local attacker only).
-
-**(2) requests 2.32.5. The doc overstates this.** doc/700 says 2.32.5
-"predates the CVE-2024-35195 bump". It does not. CVE-2024-35195 (once a
-`Session` sends a request with `verify=False`, later requests on it also
-skip verification) was fixed in the 2.32 line, and GRC's own commit
-`818f592` calls 2.34.2 "well past the 2.32.5 fix". GRC bumped from 2.31.0;
-PROTO is already past it. PROTO does set `self.session.verify = False`
-(`tests/conftest.py:22`), so the CVE would matter if PROTO were below the
-fix, but it is not. Bumping requests is hygiene, not a fix.
-
-**(3) Unpinned transitives.** `urllib3` is not pinned; the current venv
-holds `urllib3 2.5.0`. Because the venv is reused and `pip install -r`
-does not upgrade a satisfied dependency, transitives freeze at whatever
-the first install picked. Whether 2.5.0 carries an advisory is not
-verified here.
-
-**Not verified here.** `pip-audit` is not installed on this machine, so
-PYSEC-2026-1845 is taken from GRC's commit message, not re-run.
-
-#### What GRC changed
-
-RG0006 ("test gate, no source mutation", `tickets/03-done/RG0006-...`)
-raised the pins in two commits:
-
-- `818f592`: pytest 7.4.3 to 8.4.2, requests 2.31.0 to 2.34.2 for
-  CVE-2024-35195.
-- `ad2c1dc`: `pip-audit` flagged 8.4.2 itself, so pytest went to 9.0.3.
-  pytest-html 4.1.1 was checked against pytest 9 (71 tests collected,
-  report written) and kept. "`pip-audit -r tests/requirements.txt`: No
-  known vulnerabilities found."
-
-Result, `tests/requirements.txt:1-5` with a reason on each non-obvious pin:
-
-```
-pytest==9.0.3
-requests==2.34.2  # RG0006: 2.31.0 carries CVE-2024-35195 ...
-psycopg2-binary>=2.9.10  # conftest's `db` fixture; ...
-pyotp==2.9.0  # RG0003: TOTP codes for the MFA integration tests
-```
-
-`tests/README.md:5-9` names each pin and why, and records the clean
-`pip-audit`. No test pins this; it is a gate input.
-
-#### Proposed fix for PROTO
-
-1. `tests/requirements.txt`: `pytest==9.0.3`, `requests==2.34.2` (or
-   whatever is current at port time), keep `pytest-html==4.1.1` and
-   `pyotp==2.9.0`. Add a reason comment only where a pin is held for a
-   cause. Do not copy GRC's requests comment as is: it blames 2.31.0,
-   which PROTO never had.
-2. Leave out `psycopg2-binary`. Only GRC's `db` fixture imports it, and
-   PROTO's conftest has none. B018's write-up confirms B018 does not need
-   it either, which retires the doc's "psycopg2 only with B018" note.
-3. Run `pip-audit -r tests/requirements.txt` at port time and paste the
-   result in the ticket; re-check PYSEC-2026-1845 and `urllib3` then.
-4. `bin/300-run-tests:195`: add `--upgrade` (or `--upgrade-strategy
-   eager`) so an existing venv picks up new transitive fixes, or rebuild
-   the venv when `requirements.txt` is newer than it.
-5. Docs (P2): `tests/README.md:59-61` ("pytest, requests, pytest-html")
-   lists three of four packages and no versions; mirror GRC's short pin
-   paragraph. B044 rewrites that README; fold this in there if B044 is
-   pulled.
-6. Tests: one full `bin/300 py` run on the new pins; confirm the pytest-
-   html report still renders.
-
-#### Open question for Brandon
-
-Should `pip-audit` (and the matching `npm audit`) become a step in
-`bin/300`, failing on a new advisory, or stay a manual check at bump
-time? Recommendation: a manual check recorded in the ticket, since a
-test-only dependency advisory should not block an unrelated push.
-
 ### B018 — PS0022: enforce tenant 2 at every test harness
 
 - **Priority:** P1  **Area:** tests, bin, go-api, docs, tickets
@@ -8859,3 +8750,114 @@ file: `etc/uat-api-srv.env.example:26`, `infra/uat/etc/uat-proto-api.env:12`,
 token lives; `GET /refresh` (`auth_handler.go:383`) issues a new one, so
 it bounds a stolen cookie and an idle tab, not an active user.
 Recommendation: 12 h for UAT and prd templates, keep 72 h for local dev.
+
+### B017 — COMPLETED — pytest/requests pins carry advisories
+
+- **Completed:** 2026-10-02. `tests/requirements.txt`: pytest 8.4.2 -> 9.0.3 (PYSEC-2026-1845, the `/tmp/pytest-of-{user}` issue), requests 2.32.5 -> 2.34.2, pytest-html 4.1.1 and pyotp 2.9.0 kept, and every transitive now pinned (urllib3 2.8.0, idna 3.20, ...; exceptiongroup/tomli/typing_extensions only below Python 3.11); psycopg2-binary left out. Deviation from the expansion: pip-audit 2.10.1 shows requests 2.32.5 **is** flagged, by PYSEC-2026-2275 / CVE-2026-25645 (predictable temp file in `extract_zipped_paths`, fixed 2.33.0), not by CVE-2024-35195, so the requests bump is a fix; the stale venv also held urllib3 2.5.0 (PYSEC-2026-141/1994/1996/1998/4175/4177) and idna 3.11 (PYSEC-2026-215). `bin/300-run-tests` rebuilds `tests/.venv` when `requirements.txt` differs from the copy saved in the venv at install time (and skips pip otherwise), so no stale package outlives a bump; the existing venv was rebuilt on Python 3.14.6 and the 3.10 install was checked too. Open question took the recommendation: pip-audit stays manual; `tests/README.md` documents each pin, the venv rebuild and how to run pip-audit. pip-audit before: "Found 4 known vulnerabilities in 2 packages" (pytest 8.4.2 PYSEC-2026-1845, requests 2.32.5 PYSEC-2026-2275); after, on `-r tests/requirements.txt` and on the rebuilt venv's freeze: "No known vulnerabilities found"; pytest-html report renders (79 Passed). Tests: all green, go=278 unit=42 e2e=10 py=79
+
+- **Priority:** P1  **Area:** tests
+- **GRC:** `tests/requirements.txt:1-5`; `tests/README.md:5-9`   **PROTO:** `tests/requirements.txt:1-4`
+- **Ticket:** RG0006 / `818f592`, `ad2c1dc`
+- **What:** pytest 8.4.2 carries PYSEC-2026-1845; requests 2.32.5 predates the
+CVE-2024-35195 bump. GRC pins 9.0.3/2.34.2 with reasons; pip-audit clean.
+- **Port notes:** Re-run pip-audit at port time; psycopg2 only with B018. Tests
+P1, docs P2.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+The pytest suite pins its Python dependencies in one file:
+
+```
+# tests/requirements.txt:1-4
+pytest==8.4.2
+requests==2.32.5
+pytest-html==4.1.1
+pyotp==2.9.0
+```
+
+`bin/300-run-tests:188-195` creates `tests/.venv` once and runs
+`pip install -q -r tests/requirements.txt` on every `py` run. The UAT host
+runs the same script (`infra/uat/bin/uat-proto-run-tests:14` execs
+`bin/300-run-tests`), so these pins are installed on a shared server too.
+
+**(1) pytest 8.4.2, PYSEC-2026-1845. Real, low severity.** Per GRC's
+`ad2c1dc` commit text: pytest through 9.0.2 on UNIX uses predictable
+`/tmp/pytest-of-{user}` directories, so another local user can cause a
+denial of service or possibly gain privileges; fixed in 9.0.3. On a
+single-user laptop this is noise. On the UAT host, where `bin/300` runs
+as the build user next to other service accounts, it is a local
+privilege-escalation path. Kind: security hygiene (local attacker only).
+
+**(2) requests 2.32.5. The doc overstates this.** doc/700 says 2.32.5
+"predates the CVE-2024-35195 bump". It does not. CVE-2024-35195 (once a
+`Session` sends a request with `verify=False`, later requests on it also
+skip verification) was fixed in the 2.32 line, and GRC's own commit
+`818f592` calls 2.34.2 "well past the 2.32.5 fix". GRC bumped from 2.31.0;
+PROTO is already past it. PROTO does set `self.session.verify = False`
+(`tests/conftest.py:22`), so the CVE would matter if PROTO were below the
+fix, but it is not. Bumping requests is hygiene, not a fix.
+
+**(3) Unpinned transitives.** `urllib3` is not pinned; the current venv
+holds `urllib3 2.5.0`. Because the venv is reused and `pip install -r`
+does not upgrade a satisfied dependency, transitives freeze at whatever
+the first install picked. Whether 2.5.0 carries an advisory is not
+verified here.
+
+**Not verified here.** `pip-audit` is not installed on this machine, so
+PYSEC-2026-1845 is taken from GRC's commit message, not re-run.
+
+#### What GRC changed
+
+RG0006 ("test gate, no source mutation", `tickets/03-done/RG0006-...`)
+raised the pins in two commits:
+
+- `818f592`: pytest 7.4.3 to 8.4.2, requests 2.31.0 to 2.34.2 for
+  CVE-2024-35195.
+- `ad2c1dc`: `pip-audit` flagged 8.4.2 itself, so pytest went to 9.0.3.
+  pytest-html 4.1.1 was checked against pytest 9 (71 tests collected,
+  report written) and kept. "`pip-audit -r tests/requirements.txt`: No
+  known vulnerabilities found."
+
+Result, `tests/requirements.txt:1-5` with a reason on each non-obvious pin:
+
+```
+pytest==9.0.3
+requests==2.34.2  # RG0006: 2.31.0 carries CVE-2024-35195 ...
+psycopg2-binary>=2.9.10  # conftest's `db` fixture; ...
+pyotp==2.9.0  # RG0003: TOTP codes for the MFA integration tests
+```
+
+`tests/README.md:5-9` names each pin and why, and records the clean
+`pip-audit`. No test pins this; it is a gate input.
+
+#### Proposed fix for PROTO
+
+1. `tests/requirements.txt`: `pytest==9.0.3`, `requests==2.34.2` (or
+   whatever is current at port time), keep `pytest-html==4.1.1` and
+   `pyotp==2.9.0`. Add a reason comment only where a pin is held for a
+   cause. Do not copy GRC's requests comment as is: it blames 2.31.0,
+   which PROTO never had.
+2. Leave out `psycopg2-binary`. Only GRC's `db` fixture imports it, and
+   PROTO's conftest has none. B018's write-up confirms B018 does not need
+   it either, which retires the doc's "psycopg2 only with B018" note.
+3. Run `pip-audit -r tests/requirements.txt` at port time and paste the
+   result in the ticket; re-check PYSEC-2026-1845 and `urllib3` then.
+4. `bin/300-run-tests:195`: add `--upgrade` (or `--upgrade-strategy
+   eager`) so an existing venv picks up new transitive fixes, or rebuild
+   the venv when `requirements.txt` is newer than it.
+5. Docs (P2): `tests/README.md:59-61` ("pytest, requests, pytest-html")
+   lists three of four packages and no versions; mirror GRC's short pin
+   paragraph. B044 rewrites that README; fold this in there if B044 is
+   pulled.
+6. Tests: one full `bin/300 py` run on the new pins; confirm the pytest-
+   html report still renders.
+
+#### Open question for Brandon
+
+Should `pip-audit` (and the matching `npm audit`) become a step in
+`bin/300`, failing on a new advisory, or stay a manual check at bump
+time? Recommendation: a manual check recorded in the ticket, since a
+test-only dependency advisory should not block an unrelated push.
