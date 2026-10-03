@@ -156,4 +156,12 @@ sql/roles.sql       # database roles
 sql/fixtures/       # seed data
 ```
 
+Repository errors are sentinels (`internal/repository/errors.go`:
+`ErrNotFound`, `ErrDeleted`, `ErrConflict`, `ErrDuplicate`, `ErrInUse`,
+`ErrValidation`, `ErrExpectationFailed`), returned bare or wrapped with
+`%w`. Handlers answer them with `mapRepoError` (`internal/handler/common.go`):
+400 / 404 / 409 / 417, anything else 500 with the error text logged only. A
+soft-deleted row answers 404. Repositories call pgx once; there is no retry
+wrapper (pgxpool reconnects on its own).
+
 See `doc/105-api-srv-tech-spec.md` for more depth.

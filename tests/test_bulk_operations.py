@@ -155,7 +155,7 @@ class TestBulkOperations:
             response = test_client.make_request(
                 "GET", "/example", params={"exampleId": example["exampleId"]}
             )
-            assert response.status_code == 410  # Gone
+            assert response.status_code == 404  # soft-deleted reads as missing
 
     def test_empty_bulk_operations(self, test_client):
         """Test bulk operations with empty or invalid inputs"""
@@ -202,7 +202,7 @@ class TestBulkOperations:
 
         # Should either fail completely or handle partial failures
         # The exact behavior depends on implementation
-        assert response.status_code in [200, 400, 409, 410]
+        assert response.status_code in [200, 400, 404, 409]
 
     def test_bulk_performance_under_load(self, test_client):
         """Test bulk operations performance with larger datasets"""

@@ -2,13 +2,11 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
 )
 
@@ -108,36 +106,10 @@ func (h *ExampleHandler) RetrieveExample(
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			app.WriteError(
-				w,
-				http.StatusNotFound,
-				fmt.Sprintf("Example not found: example_id=%d", exampleID),
-				"NOT_FOUND_EX",
-				err,
-			)
-			return
-		}
-		if errors.Is(err, repository.ErrDeleted) {
-			app.WriteError(
-				w,
-				http.StatusGone,
-				fmt.Sprintf(
-					"Example has been deleted: example_id=%d",
-					exampleID,
-				),
-				"EXAMPLE_GONE",
-				err,
-			)
-			return
-		}
-		app.WriteError(
-			w,
-			http.StatusInternalServerError,
-			fmt.Sprintf("Failed to retrieve example: example_id=%d", exampleID),
-			"GET_EX_FAIL",
-			err,
-		)
+		mapRepoError(app, w, err,
+			fmt.Sprintf("Failed to retrieve example: example_id=%d",
+				exampleID),
+			"GET_EX_FAIL")
 		return
 	}
 
@@ -303,52 +275,10 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	// Update example with optimistic locking
 	err := h.exampleRepo.UpdateExample(r.Context(), &example, clientUpdateTS)
 	if err != nil {
-		switch {
-		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(
-				w,
-				http.StatusConflict,
-				fmt.Sprintf(
-					"Example was modified by another user: example_id=%d",
-					example.ExampleID,
-				),
-				"CONFLICT_ERROR",
-				err,
-			)
-		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(
-				w,
-				http.StatusNotFound,
-				fmt.Sprintf(
-					"Example not found: example_id=%d",
-					example.ExampleID,
-				),
-				"NOT_FOUND_EX",
-				err,
-			)
-		case errors.Is(err, repository.ErrDeleted):
-			app.WriteError(
-				w,
-				http.StatusGone,
-				fmt.Sprintf(
-					"Example has been deleted: example_id=%d",
-					example.ExampleID,
-				),
-				"EXAMPLE_GONE",
-				err,
-			)
-		default:
-			app.WriteError(
-				w,
-				http.StatusInternalServerError,
-				fmt.Sprintf(
-					"Failed to update example: example_id=%d",
-					example.ExampleID,
-				),
-				"UPDATE_EX_FAIL",
-				err,
-			)
-		}
+		mapRepoError(app, w, err,
+			fmt.Sprintf("Failed to update example: example_id=%d",
+				example.ExampleID),
+			"UPDATE_EX_FAIL")
 		return
 	}
 
@@ -424,49 +354,10 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		jwtClaims.UserID,
 	)
 	if err != nil {
-		switch {
-		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(
-				w,
-				http.StatusConflict,
-				fmt.Sprintf(
-					"Example was modified by another user: example_id=%d",
-					exampleID,
-				),
-				"CONFLICT_ERROR",
-				err,
-			)
-		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(
-				w,
-				http.StatusNotFound,
-				fmt.Sprintf("Example not found: example_id=%d", exampleID),
-				"NOT_FOUND_EX",
-				err,
-			)
-		case errors.Is(err, repository.ErrDeleted):
-			app.WriteError(
-				w,
-				http.StatusGone,
-				fmt.Sprintf(
-					"Example has been deleted: example_id=%d",
-					exampleID,
-				),
-				"EXAMPLE_GONE",
-				err,
-			)
-		default:
-			app.WriteError(
-				w,
-				http.StatusInternalServerError,
-				fmt.Sprintf(
-					"Failed to delete example: example_id=%d",
-					exampleID,
-				),
-				"DELETE_EX_FAIL",
-				err,
-			)
-		}
+		mapRepoError(app, w, err,
+			fmt.Sprintf("Failed to delete example: example_id=%d",
+				exampleID),
+			"DELETE_EX_FAIL")
 		return
 	}
 
@@ -746,29 +637,10 @@ func (h *ExampleHandler) UpdateExampleList(
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrExpectationFailed) {
-			app.WriteError(
-				w,
-				http.StatusExpectationFailed,
-				fmt.Sprintf(
-					"One or more examples could not be updated due to concurrent modifications: count=%d",
-					len(examplePtrList),
-				),
-				"EXPECTATION_FAIL",
-				err,
-			)
-			return
-		}
-		app.WriteError(
-			w,
-			http.StatusInternalServerError,
-			fmt.Sprintf(
-				"Failed to update examples: count=%d",
-				len(examplePtrList),
-			),
-			"BULK_UPDATE_FAIL",
-			err,
-		)
+		mapRepoError(app, w, err,
+			fmt.Sprintf("Failed to update examples: count=%d",
+				len(examplePtrList)),
+			"BULK_UPDATE_FAIL")
 		return
 	}
 

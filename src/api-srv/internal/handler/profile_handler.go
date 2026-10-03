@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/mail"
 	"strings"
 
 	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
 )
 
@@ -73,13 +71,7 @@ func (h *ProfileHandler) RetrieveOwnProfile(
 		r.Context(), jwtClaims.UserID, jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			app.WriteError(w, http.StatusNotFound, "User not found",
-				"NOT_FOUND", nil)
-			return
-		}
-		app.WriteError(w, http.StatusInternalServerError,
-			"Failed to retrieve profile", "ME_RD_FAIL", err)
+		mapRepoError(app, w, err, "Failed to retrieve profile", "ME_RD_FAIL")
 		return
 	}
 
@@ -146,18 +138,7 @@ func (h *ProfileHandler) UpdateOwnProfile(
 		req.UpdateTS,
 	)
 	if err != nil {
-		switch {
-		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict,
-				"Profile was modified by another request; reload and retry",
-				"CONFLICT", nil)
-		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, "User not found",
-				"NOT_FOUND", nil)
-		default:
-			app.WriteError(w, http.StatusInternalServerError,
-				"Failed to update profile", "ME_UP_FAIL", err)
-		}
+		mapRepoError(app, w, err, "Failed to update profile", "ME_UP_FAIL")
 		return
 	}
 

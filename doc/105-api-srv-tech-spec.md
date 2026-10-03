@@ -46,10 +46,9 @@ src/api-srv/
 │   │   ├── user_grant_model_test.go # User grant model tests
 │   │   └── app_user_group_model.go     # User group entities
 │   └── repository/                 # Data access layer
-│       ├── errors.go               # Repository errors
+│       ├── errors.go               # Sentinel errors, ClientMessageError
 │       ├── example_repository.go   # Example data operations
 │       ├── example_repository_test.go # Example repository tests
-│       ├── retry.go                # Database retry logic
 │       ├── app_user_group_repository.go # User group data operations
 │       ├── app_user_group_repository_test.go # User group repository tests
 │       ├── user_repository.go      # User data operations
@@ -371,17 +370,43 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
 - **400**: Bad Request (validation errors)
 - **401**: Unauthorized (invalid/missing auth)
 - **403**: Forbidden (insufficient permissions)
-- **404**: Not Found
-- **409**: Conflict (optimistic locking)
-- **410**: Gone (soft deleted)
+- **404**: Not Found (missing, soft-deleted, or another tenant's row)
+- **409**: Conflict (stale `updateTs`, duplicate name, row still in use)
 - **413**: Request body over the route's cap (see Request Body Limits)
+- **417**: Expectation Failed (a bulk update whose rows did not all match)
 - **429**: Too Many Requests (rate limited)
 - **500**: Internal Server Error
+
+### Repository Errors
+A repository answers a failure the caller can act on with a sentinel from
+`internal/repository/errors.go`, bare or wrapped with `%w`; never with a
+bare `fmt.Errorf` whose text a handler would match. A handler passes any
+repository error to `mapRepoError(app, w, err, failMsg, failCode)`
+(`internal/handler/common.go`), which picks the status:
+
+| Sentinel | Status | Client message |
+|---|---|---|
+| `ErrValidation` | 400 | "The request is not valid" |
+| `ErrNotFound`, `ErrDeleted` | 404 | "Not found" |
+| `ErrConflict` | 409 | "The record was modified by another user" |
+| `ErrDuplicate` | 409 | "A record with that name already exists" |
+| `ErrInUse` | 409 | "The record is still in use" |
+| `ErrExpectationFailed` | 417 | "One or more records could not be updated due to concurrent modifications" |
+| anything else | 500 | the handler's `failMsg`; the error text is logged only |
+
+A soft-deleted row answers 404 like a missing one, so a caller cannot tell
+that an id once existed. Where the detail is the useful half of the answer
+(which rule a user name broke, how many members hold a group open) the
+repository returns `clientMessage(sentinel, ...)`, a `ClientMessageError`:
+`errors.Is` finds the sentinel and the message replaces the generic one.
+Handlers that branch on an error for control flow (login's not-found, the
+self-signup name check) use `errors.Is`, never the error's text.
 
 ### Optimistic Locking
 - Client sends `updateTs` in requests
 - Server compares with database value in WHERE clause
-- On conflict: Query to distinguish between modified (409) and deleted (410)
+- On a zero-row write: query to tell a stale lock (`ErrConflict`, 409)
+  from a missing or soft-deleted row (`ErrNotFound`/`ErrDeleted`, 404)
 - Every write carries the tenant (`security_context_id`) in its WHERE
   clause, and so does the check that explains a zero-row write. An id that
   lives in another tenant therefore answers 404, never 409: a 409 would
@@ -392,8 +417,11 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
   is how it gets a second security context).
 
 ### Database Resilience
-- **Retry Logic**: Exponential backoff for transient connection errors
-- **Error Classification**: Retryable vs permanent errors
+- **No application retry**: a repository calls pgx once and returns its
+  error. pgxpool drops a broken connection and dials a new one for the
+  next request; a failed request answers 500 and the client retries.
+  `pgconn.SafeToRetry` was considered and left out: a retry would sit on
+  the request path for errors the pool already recovers from.
 - **Timeout Handling**: Context-based cancellation
 
 ## Code Conventions
@@ -426,7 +454,7 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
 - **Python-based**: pytest with requests
 - **Coverage**: Comprehensive API testing including:
   - Security context isolation and multi-tenancy
-  - Error scenarios (401, 403, 404, 409, 410, 429, 400)
+  - Error scenarios (401, 403, 404, 409, 429, 400)
   - Bulk operations performance and correctness
   - Authentication and authorization flows
   - Optimistic locking and conflict resolution

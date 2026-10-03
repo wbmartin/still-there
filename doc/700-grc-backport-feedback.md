@@ -242,112 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B028 — PS0010: one sentinel set + `mapRepoError`; delete `retry.go`
-
-- **Priority:** P2  **Area:** go-api, tests, docs
-- **GRC:** `src/internal/repository/errors.go:10-75`; `src/internal/handler/common.go:94-160`; `user_repository.go:66-68`; `handler/map_repo_error_test.go:16-125`; `repository/errors_test.go:16-91`; `doc/105-api-srv-tech-spec.md:196-198,470-501,522-531`; RG0014 md `:175`   **PROTO:** `src/api-srv/internal/repository/errors.go:1-27`; `strings.Contains` at `handler/user_handler.go:459-470`, `app_user_group_handler.go:341-359`, `user_mfa_handler.go:91-97`; `user_handler.go:587-620,689-714`; `app_user_group_handler.go:237-265`; `repository/retry.go:1-68`; `go.mod:6`; `doc/105-api-srv-tech-spec.md:114-119,259-281`; `doc/810-create-new-entity-type-notes.md:57`
-- **Ticket:** RG0014 / `4796119`, `fe914fc`, `9ce276b`; PS0010
-- **What:** PROTO picks statuses by error text; `ErrConflict` never fires. GRC:
-sentinels, one mapper, `ClientMessageError`. `retry.go` never retries anything
-pgx returns (31 call lines); GRC deleted it.
-- **Port notes:** Prereq for B007; apply to the example handler. Fix
-doc/105:279, doc/810:57. `pgconn.SafeToRetry` skipped on purpose.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-All PROTO paths are under `src/api-srv/internal/`. Three correctness and
-quality gaps, none a security hole.
-
-**(1) Text, not sentinels.** `repository/errors.go:14-20` defines
-`ErrNotFound`, `ErrConflict`, `ErrDeleted`, `ErrDuplicate`. The user
-repository skips them at `user_repository.go:62,207`
-(`fmt.Errorf("user not found")`) and `:236,265,294` ("user not found or
-concurrent modification").
-
-Handlers match strings at `handler/user_mfa_handler.go:94`,
-`handler/user_handler.go:460` and `handler/app_user_group_handler.go:342`
-(text from `app_user_group_repository.go:237`). Rewording a message
-silently changes a status code.
-
-**(2) Membership writes answer a stale lock with 500.** The doc's
-"`ErrConflict` never fires" overstates it: user, group, profile and example
-updates return it and get 409 (`user_repository.go:420`,
-`user_handler.go:589`). The gap is narrower: `AddUserListToGroup` and
-`RemoveUserListFromGroup` return text on zero rows
-(`user_repository.go:518-521,579-580`, "user %d not found, already has
-group, or concurrent update"). Their handlers test `errors.Is(err,
-repository.ErrConflict)` (`user_handler.go:822,939`), never true, so a
-stale `updateTs` on a membership change answers 500, not 409.
-
-**(3) The retry helper never retries.** `ExecuteWithRetry` wraps 31 calls
-(15 user, 8 group, 8 example). `isRetryableError`
-(`repository/retry.go:36-45`) matches `database/sql` sentinels pgx never
-produces and compares `err.Error()` to four exact strings pgx always
-wraps, so every error is `backoff.Permanent` on the first try. Had it
-matched, a 1 s first wait (`:23`) would sit on a request path.
-`doc/105-api-srv-tech-spec.md:278-281` and
-`doc/810-create-new-entity-type-notes.md:57` tell readers to use it.
-
-Each handler also repeats a 3-4 arm `errors.Is` switch
-(`user_handler.go:587-620,689-714`, `app_user_group_handler.go:237-265`).
-`tickets/01-open/PS0010-api-entity-template.md` lists all of this; Brandon
-deferred it (`:128-133`).
-
-#### What GRC changed
-
-RG0014 (`4796119`, `9ce276b`) and RG0015 (`fe914fc`):
-
-1. `src/internal/repository/errors.go:15-38` adds `ErrInUse`,
-   `ErrValidation`; `ClientMessageError` (`:46-63`) pairs a sentinel with
-   a wire-safe message. Membership zero rows wrap `ErrConflict`.
-2. `src/internal/handler/common.go:111-148`: `mapRepoError(err)` returns
-   (status, code, msg): 400 validation, 409 duplicate / in-use /
-   conflict, 404 for `ErrNotFound` and `ErrDeleted`, else 500, where the
-   caller keeps its own wording and log code
-   (`app_user_group_handler.go:153-160`).
-3. No `strings.Contains` left; `user_repository.go:66-68` returns
-   `ErrNotFound`; RG0015 routed eight MFA sites through the mapper.
-4. `retry.go` and `cenkalti/backoff/v4` deleted. `pgconn.SafeToRetry`
-   rejected on purpose: pgxpool reconnects. Documented at
-   `doc/105-api-srv-tech-spec.md:470-501,522-531`.
-
-Tests: `handler/map_repo_error_test.go:16,91` (`TestMapRepoError`, the
-message case); `repository/errors_test.go:40,57`.
-
-#### Proposed fix for PROTO
-
-1. **`repository/errors.go`**: add `ErrInUse`, `ErrValidation`,
-   `ClientMessageError`, `clientMessage`; not GRC's `ErrNoAnchor`.
-2. **`repository/user_repository.go`**: `:62,207` return `ErrNotFound`
-   (B007 may wrap `:62` first). `:236,265,294`: existence check, then
-   `ErrNotFound` or `ErrConflict`. `:518-521,579-580`: wrap `ErrConflict`.
-   `CreateUser`'s name rule: `clientMessage(ErrValidation, ...)`.
-3. **`app_user_group_repository.go:237`**: `clientMessage(ErrInUse, ...)`.
-4. **`handler/common.go`**: add `mapRepoError`. Use it in user, group,
-   MFA and profile handlers; delete the three `strings.Contains`.
-5. **Example handler** answers `ErrDeleted` with 410
-   (`example_handler.go:117-120,339-342,457-460`; doc/105:269,276). GRC
-   maps it to 404. See the question below before copying that row.
-6. **Delete `repository/retry.go`**; unwrap the 31 calls; drop
-   `cenkalti/backoff/v4` from `go.mod:6`; `go mod tidy`.
-7. **Docs**: rewrite doc/105 `:278-281` (no app retry) and add the
-   sentinel table; fix doc/810 `:57`.
-8. Traps: module is `github.com/wbmartin/starter-api`; helper is `app`,
-   not `appHelper`; GRC's A-002 refs and `writeRepoError` do not apply.
-9. Tests. Go: port both GRC test files; a repository test that a stale
-   membership `updateTs` is `ErrConflict`. pytest: that case answers 409.
-   Reopens a slice of PS0010; B007 needs step 2's `:62` change.
-
-#### Open question for Brandon
-
-Soft-deleted row: 410 Gone (PROTO example and doc/105 today) or 404 like
-a missing row (GRC)? Recommendation: 404; 410 tells a caller the id once
-existed, and no web code acts on 410.
-Brandon: 404
-
 ### B029 — RG0004: one JSON writer; session cookie without `Max-Age`
 
 - **Priority:** P2  **Area:** go-api, tests, docs
@@ -8872,3 +8766,110 @@ password unless its operator changed it. Rotate by hand once (`ALTER
 ROLE` plus the env file), or leave such hosts until cutover?
 Recommendation: rotate now via a short step in doc/320; the literal is
 public.
+
+### B028 — COMPLETED — PS0010: one sentinel set + `mapRepoError`; delete `retry.go`
+- **Completed:** 2026-10-02. `repository/errors.go` adds `ErrInUse`, `ErrValidation` and `ClientMessageError`/`clientMessage`; `CreateUser`'s name rule returns `ErrValidation` and `DeleteAppUserGroup` with members `ErrInUse`. `handler/common.go` `mapRepoError(app, w, err, failMsg, failCode)` (table in `repoErrorAnswer`) replaces the per-handler switches in the user, group, example, profile and MFA handlers; the three `strings.Contains` are gone (self-signup uses `errors.Is(ErrNotFound)`). Per Brandon, `ErrDeleted` now answers 404 (was 410 in the example handler; three pytests updated); `ErrExpectationFailed` stays 417 through the mapper. `retry.go` deleted, its 29 call sites (incl. B012's `zeroRowOutcome`) unwrapped, `cenkalti/backoff/v4` dropped; doc/105, doc/810 and the api-srv README updated. Tests: all green, go=298 unit=42 e2e=12 py=79
+
+- **Priority:** P2  **Area:** go-api, tests, docs
+- **GRC:** `src/internal/repository/errors.go:10-75`; `src/internal/handler/common.go:94-160`; `user_repository.go:66-68`; `handler/map_repo_error_test.go:16-125`; `repository/errors_test.go:16-91`; `doc/105-api-srv-tech-spec.md:196-198,470-501,522-531`; RG0014 md `:175`   **PROTO:** `src/api-srv/internal/repository/errors.go:1-27`; `strings.Contains` at `handler/user_handler.go:459-470`, `app_user_group_handler.go:341-359`, `user_mfa_handler.go:91-97`; `user_handler.go:587-620,689-714`; `app_user_group_handler.go:237-265`; `repository/retry.go:1-68`; `go.mod:6`; `doc/105-api-srv-tech-spec.md:114-119,259-281`; `doc/810-create-new-entity-type-notes.md:57`
+- **Ticket:** RG0014 / `4796119`, `fe914fc`, `9ce276b`; PS0010
+- **What:** PROTO picks statuses by error text; `ErrConflict` never fires. GRC:
+sentinels, one mapper, `ClientMessageError`. `retry.go` never retries anything
+pgx returns (31 call lines); GRC deleted it.
+- **Port notes:** Prereq for B007; apply to the example handler. Fix
+doc/105:279, doc/810:57. `pgconn.SafeToRetry` skipped on purpose.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+All PROTO paths are under `src/api-srv/internal/`. Three correctness and
+quality gaps, none a security hole.
+
+**(1) Text, not sentinels.** `repository/errors.go:14-20` defines
+`ErrNotFound`, `ErrConflict`, `ErrDeleted`, `ErrDuplicate`. The user
+repository skips them at `user_repository.go:62,207`
+(`fmt.Errorf("user not found")`) and `:236,265,294` ("user not found or
+concurrent modification").
+
+Handlers match strings at `handler/user_mfa_handler.go:94`,
+`handler/user_handler.go:460` and `handler/app_user_group_handler.go:342`
+(text from `app_user_group_repository.go:237`). Rewording a message
+silently changes a status code.
+
+**(2) Membership writes answer a stale lock with 500.** The doc's
+"`ErrConflict` never fires" overstates it: user, group, profile and example
+updates return it and get 409 (`user_repository.go:420`,
+`user_handler.go:589`). The gap is narrower: `AddUserListToGroup` and
+`RemoveUserListFromGroup` return text on zero rows
+(`user_repository.go:518-521,579-580`, "user %d not found, already has
+group, or concurrent update"). Their handlers test `errors.Is(err,
+repository.ErrConflict)` (`user_handler.go:822,939`), never true, so a
+stale `updateTs` on a membership change answers 500, not 409.
+
+**(3) The retry helper never retries.** `ExecuteWithRetry` wraps 31 calls
+(15 user, 8 group, 8 example). `isRetryableError`
+(`repository/retry.go:36-45`) matches `database/sql` sentinels pgx never
+produces and compares `err.Error()` to four exact strings pgx always
+wraps, so every error is `backoff.Permanent` on the first try. Had it
+matched, a 1 s first wait (`:23`) would sit on a request path.
+`doc/105-api-srv-tech-spec.md:278-281` and
+`doc/810-create-new-entity-type-notes.md:57` tell readers to use it.
+
+Each handler also repeats a 3-4 arm `errors.Is` switch
+(`user_handler.go:587-620,689-714`, `app_user_group_handler.go:237-265`).
+`tickets/01-open/PS0010-api-entity-template.md` lists all of this; Brandon
+deferred it (`:128-133`).
+
+#### What GRC changed
+
+RG0014 (`4796119`, `9ce276b`) and RG0015 (`fe914fc`):
+
+1. `src/internal/repository/errors.go:15-38` adds `ErrInUse`,
+   `ErrValidation`; `ClientMessageError` (`:46-63`) pairs a sentinel with
+   a wire-safe message. Membership zero rows wrap `ErrConflict`.
+2. `src/internal/handler/common.go:111-148`: `mapRepoError(err)` returns
+   (status, code, msg): 400 validation, 409 duplicate / in-use /
+   conflict, 404 for `ErrNotFound` and `ErrDeleted`, else 500, where the
+   caller keeps its own wording and log code
+   (`app_user_group_handler.go:153-160`).
+3. No `strings.Contains` left; `user_repository.go:66-68` returns
+   `ErrNotFound`; RG0015 routed eight MFA sites through the mapper.
+4. `retry.go` and `cenkalti/backoff/v4` deleted. `pgconn.SafeToRetry`
+   rejected on purpose: pgxpool reconnects. Documented at
+   `doc/105-api-srv-tech-spec.md:470-501,522-531`.
+
+Tests: `handler/map_repo_error_test.go:16,91` (`TestMapRepoError`, the
+message case); `repository/errors_test.go:40,57`.
+
+#### Proposed fix for PROTO
+
+1. **`repository/errors.go`**: add `ErrInUse`, `ErrValidation`,
+   `ClientMessageError`, `clientMessage`; not GRC's `ErrNoAnchor`.
+2. **`repository/user_repository.go`**: `:62,207` return `ErrNotFound`
+   (B007 may wrap `:62` first). `:236,265,294`: existence check, then
+   `ErrNotFound` or `ErrConflict`. `:518-521,579-580`: wrap `ErrConflict`.
+   `CreateUser`'s name rule: `clientMessage(ErrValidation, ...)`.
+3. **`app_user_group_repository.go:237`**: `clientMessage(ErrInUse, ...)`.
+4. **`handler/common.go`**: add `mapRepoError`. Use it in user, group,
+   MFA and profile handlers; delete the three `strings.Contains`.
+5. **Example handler** answers `ErrDeleted` with 410
+   (`example_handler.go:117-120,339-342,457-460`; doc/105:269,276). GRC
+   maps it to 404. See the question below before copying that row.
+6. **Delete `repository/retry.go`**; unwrap the 31 calls; drop
+   `cenkalti/backoff/v4` from `go.mod:6`; `go mod tidy`.
+7. **Docs**: rewrite doc/105 `:278-281` (no app retry) and add the
+   sentinel table; fix doc/810 `:57`.
+8. Traps: module is `github.com/wbmartin/starter-api`; helper is `app`,
+   not `appHelper`; GRC's A-002 refs and `writeRepoError` do not apply.
+9. Tests. Go: port both GRC test files; a repository test that a stale
+   membership `updateTs` is `ErrConflict`. pytest: that case answers 409.
+   Reopens a slice of PS0010; B007 needs step 2's `:62` change.
+
+#### Open question for Brandon
+
+Soft-deleted row: 410 Gone (PROTO example and doc/105 today) or 404 like
+a missing row (GRC)? Recommendation: 404; 410 tells a caller the id once
+existed, and no web code acts on 410.
+Brandon: 404

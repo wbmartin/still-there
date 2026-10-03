@@ -35,9 +35,7 @@ func zeroRowOutcome(
 			  AND delete_user_id IS NULL)`, table, pk)
 
 	var exists bool
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return db.QueryRow(ctx, query, id, securityContext).Scan(&exists)
-	})
+	err := db.QueryRow(ctx, query, id, securityContext).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("failed to check %s existence: %w", table, err)
 	}

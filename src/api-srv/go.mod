@@ -5,7 +5,6 @@ go 1.25.4
 toolchain go1.25.14
 
 require (
-	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pquerna/otp v1.5.0

@@ -13,6 +13,7 @@ import (
 	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/logging"
 	"github.com/wbmartin/starter-api/internal/model"
+	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
 )
 
@@ -84,6 +85,63 @@ func writeJSON(w http.ResponseWriter, status int, data interface{},
 		logger.Error("JEN0", "Failed to encode JSON response: "+err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+// mapRepoError answers a failed repository call. A sentinel decides the
+// status and a generic message, or the repository's ClientMessageError text
+// when it carries one; anything else is the server's fault and answers 500
+// with failMsg and failCode, the error's text going to the log only.
+// Handlers never pick a status by matching an error's text.
+func mapRepoError(
+	app *security.AppHelper,
+	w http.ResponseWriter,
+	err error,
+	failMsg string,
+	failCode string,
+) {
+	status, code, msg := repoErrorAnswer(err)
+	if status == http.StatusInternalServerError {
+		code, msg = failCode, failMsg
+	}
+	app.WriteError(w, status, msg, code, err)
+}
+
+// repoErrorAnswer is mapRepoError's table: status, log code and client
+// message for err. A soft-deleted row is answered like a missing one, so the
+// caller cannot tell that the id once existed.
+func repoErrorAnswer(err error) (status int, code string, msg string) {
+	var clientErr *repository.ClientMessageError
+	detailed := errors.As(err, &clientErr) && clientErr.Message != ""
+	withDetail := func(generic string) string {
+		if detailed {
+			return clientErr.Message
+		}
+		return generic
+	}
+
+	switch {
+	case errors.Is(err, repository.ErrValidation):
+		return http.StatusBadRequest, "VALIDATION_ERROR",
+			withDetail("The request is not valid")
+	case errors.Is(err, repository.ErrDuplicate):
+		return http.StatusConflict, "DUPLICATE_ERROR",
+			withDetail("A record with that name already exists")
+	case errors.Is(err, repository.ErrInUse):
+		return http.StatusConflict, "IN_USE_ERROR",
+			withDetail("The record is still in use")
+	case errors.Is(err, repository.ErrConflict):
+		return http.StatusConflict, "CONFLICT_ERROR",
+			withDetail("The record was modified by another user")
+	case errors.Is(err, repository.ErrNotFound),
+		errors.Is(err, repository.ErrDeleted):
+		return http.StatusNotFound, "NOT_FOUND_ERROR", withDetail("Not found")
+	case errors.Is(err, repository.ErrExpectationFailed):
+		return http.StatusExpectationFailed, "EXPECTATION_FAILED",
+			withDetail("One or more records could not be updated " +
+				"due to concurrent modifications")
+	}
+	return http.StatusInternalServerError, "INTERNAL_ERROR",
+		"The request could not be completed"
 }
 
 // ParseCommaSeparatedInts parses a comma-separated string of integers

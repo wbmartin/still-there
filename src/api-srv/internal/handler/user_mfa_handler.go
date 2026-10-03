@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/auth"
 	"github.com/wbmartin/starter-api/internal/model"
+	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
 )
 
@@ -77,13 +79,10 @@ func UserSelfCreateHandler(
 			r.Context(),
 			req.Username,
 		)
-		if err != nil {
-			if strings.Contains(err.Error(), "user not found") {
-				// Username is available
-			} else {
-				app.WriteError(w, http.StatusInternalServerError, "Error checking username availability", "ISE0", err)
-				return
-			}
+		if err != nil && !errors.Is(err, repository.ErrNotFound) {
+			app.WriteError(w, http.StatusInternalServerError,
+				"Error checking username availability", "ISE0", err)
+			return
 		}
 		if existingUser != nil {
 			app.WriteError(
@@ -137,13 +136,7 @@ func UserSelfCreateHandler(
 			1,
 		) // Self-created users go in security context 1
 		if err != nil {
-			app.WriteError(
-				w,
-				http.StatusInternalServerError,
-				"Failed to create user",
-				"UCF0",
-				err,
-			)
+			mapRepoError(app, w, err, "Failed to create user", "UCF0")
 			return
 		}
 
@@ -232,13 +225,7 @@ func MFASetupHandler(
 		// Get current user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
 		if err != nil {
-			app.WriteError(
-				w,
-				http.StatusInternalServerError,
-				"Failed to retrieve user",
-				"USF0",
-				err,
-			)
+			mapRepoError(app, w, err, "Failed to retrieve user", "USF0")
 			return
 		}
 
@@ -315,7 +302,7 @@ func MFASetupHandler(
 				user.AppUserID, user.SecurityContext,
 			)
 			if err != nil {
-				app.WriteError(w, http.StatusInternalServerError, "Failed to save TOTP secret", "TSS0", err)
+				mapRepoError(app, w, err, "Failed to save TOTP secret", "TSS0")
 				return
 			}
 		}
@@ -428,13 +415,7 @@ func MFAVerifyHandler(
 		// Get user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
 		if err != nil {
-			app.WriteError(
-				w,
-				http.StatusInternalServerError,
-				"Failed to retrieve user",
-				"USF0",
-				err,
-			)
+			mapRepoError(app, w, err, "Failed to retrieve user", "USF0")
 			return
 		}
 
@@ -751,13 +732,7 @@ func AdminResetUserMFAHandler(
 			targetUser.SecurityContext,
 		)
 		if err != nil {
-			app.WriteError(
-				w,
-				http.StatusInternalServerError,
-				"Failed to reset MFA",
-				"MFRE",
-				err,
-			)
+			mapRepoError(app, w, err, "Failed to reset MFA", "MFRE")
 			return
 		}
 

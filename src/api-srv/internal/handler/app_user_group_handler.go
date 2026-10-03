@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/model"
@@ -139,14 +137,8 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrDuplicate) {
-			app.WriteError(w, http.StatusConflict,
-				"User group name already exists in this security context",
-				"DUPLICATE_ERROR", err)
-			return
-		}
-		app.WriteError(w, http.StatusInternalServerError,
-			"Failed to create user group", "CREATE_USER_GROUP_FAIL", err)
+		mapRepoError(app, w, err,
+			"Failed to create user group", "CREATE_USER_GROUP_FAIL")
 		return
 	}
 
@@ -220,35 +212,8 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		switch {
-		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(
-				w,
-				http.StatusConflict,
-				"User group was modified by another user",
-				"CONFLICT_ERROR",
-				nil,
-			)
-		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(
-				w,
-				http.StatusNotFound,
-				"User group not found",
-				"NOT_FOUND_ERROR",
-				nil,
-			)
-		case errors.Is(err, repository.ErrDuplicate):
-			app.WriteError(
-				w,
-				http.StatusConflict,
-				"User group name already exists in this security context",
-				"DUPLICATE_ERROR",
-				err,
-			)
-		default:
-			app.WriteError(w, http.StatusInternalServerError,
-				"Failed to update user group", "USER_GROUP_UPDATE_FAIL", err)
-		}
+		mapRepoError(app, w, err,
+			"Failed to update user group", "USER_GROUP_UPDATE_FAIL")
 		return
 	}
 
@@ -341,24 +306,8 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 		jwtClaims.UserID,
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "cannot delete group") {
-			app.WriteError(
-				w,
-				http.StatusConflict,
-				err.Error(),
-				"GENERAL_ERROR",
-				err,
-			)
-		} else {
-			switch {
-			case errors.Is(err, repository.ErrConflict):
-				app.WriteError(w, http.StatusConflict, "User group was modified by another user", "CONFLICT_ERROR", err)
-			case errors.Is(err, repository.ErrNotFound):
-				app.WriteError(w, http.StatusNotFound, "User group not found", "GENERAL_ERROR", err)
-			default:
-				app.WriteError(w, http.StatusInternalServerError, "Failed to delete user group", "DEL_UGRP_FAIL", err)
-			}
-		}
+		mapRepoError(app, w, err,
+			"Failed to delete user group", "DEL_UGRP_FAIL")
 		return
 	}
 

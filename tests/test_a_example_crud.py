@@ -163,11 +163,11 @@ class TestExampleCRUD:
         )
         assert response.status_code == 200
 
-        # Verify deletion (soft delete returns 410)
+        # A soft-deleted row reads as missing (404), like an unknown id
         response = self.client.make_request(
             "GET", "/example", params={"exampleId": self.example_id}
         )
-        assert response.status_code == 410
+        assert response.status_code == 404
 
         # Reset class variable
         self.__class__.example_id = None

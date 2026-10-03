@@ -83,8 +83,9 @@ class TestErrorScenarios:
         )
         assert response.status_code == 404
 
-    def test_soft_deleted_returns_410(self, test_client):
-        """Test that accessing soft-deleted resources returns 410"""
+    def test_soft_deleted_returns_404(self, test_client):
+        """A soft-deleted resource answers 404 like a missing one, so the
+        caller cannot tell the id once existed"""
         # Create and then delete an example
         response = test_client.make_request(
             "POST",
@@ -109,7 +110,7 @@ class TestErrorScenarios:
         response = test_client.make_request(
             "GET", "/example", params={"exampleId": example["exampleId"]}
         )
-        assert response.status_code == 410
+        assert response.status_code == 404
 
     def test_invalid_request_body_returns_400(self, test_client):
         """Test that malformed JSON returns 400"""

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/wbmartin/starter-api/internal/model"
@@ -45,18 +44,15 @@ func (r *UserRepository) RetrieveUserByUserName(
 		WHERE user_name = $1 AND delete_user_id IS NULL`
 
 	var user model.AppUserModel
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		row := r.db.QueryRow(ctx, query, username)
-		return row.Scan(
-			&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName,
-			&user.LastName, &user.Email, &user.SecurityContext,
-			&user.AppUserGroupMembershipList, &user.MFAExempt, &user.TOTPSeed,
-			&user.MFASetup,
-			&user.PreferenceJSONB,
-			&user.CreateTS, &user.CreateUserID, &user.UpdateTS,
-			&user.UpdateUserID, &user.DeleteTS, &user.DeleteUserID,
-		)
-	})
+	err := r.db.QueryRow(ctx, query, username).Scan(
+		&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName,
+		&user.LastName, &user.Email, &user.SecurityContext,
+		&user.AppUserGroupMembershipList, &user.MFAExempt, &user.TOTPSeed,
+		&user.MFASetup,
+		&user.PreferenceJSONB,
+		&user.CreateTS, &user.CreateUserID, &user.UpdateTS,
+		&user.UpdateUserID, &user.DeleteTS, &user.DeleteUserID,
+	)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -83,44 +79,35 @@ func (r *UserRepository) GetGrantsForGroups(
 		FROM app_user_group ug
 		WHERE ug.app_user_group_id = ANY($1) AND ug.delete_user_id IS NULL`
 
-	var grants map[int][]int
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		rowList, err := r.db.Query(ctx, query, groupIDs)
-		if err != nil {
-			return fmt.Errorf("failed to get grants for groups: %w", err)
-		}
-		defer rowList.Close()
-
-		grants = make(map[int][]int)
-		for rowList.Next() {
-			var securityContext int
-			var grantList []int
-			err := rowList.Scan(&securityContext, &grantList)
-			if err != nil {
-				return fmt.Errorf("failed to scan grant list: %w", err)
-			}
-
-			if existing, exists := grants[securityContext]; exists {
-				// Merge grant lists
-				grants[securityContext] = append(existing, grantList...)
-			} else {
-				grants[securityContext] = grantList
-			}
-		}
-		if err := rowList.Err(); err != nil {
-			return fmt.Errorf("failed to read grant list: %w", err)
-		}
-
-		// Remove duplicates from grant lists
-		for context, grantList := range grants {
-			grants[context] = removeDuplicates(grantList)
-		}
-
-		return nil
-	})
-
+	rowList, err := r.db.Query(ctx, query, groupIDs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get grants for groups: %w", err)
+	}
+	defer rowList.Close()
+
+	grants := make(map[int][]int)
+	for rowList.Next() {
+		var securityContext int
+		var grantList []int
+		err := rowList.Scan(&securityContext, &grantList)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan grant list: %w", err)
+		}
+
+		if existing, exists := grants[securityContext]; exists {
+			// Merge grant lists
+			grants[securityContext] = append(existing, grantList...)
+		} else {
+			grants[securityContext] = grantList
+		}
+	}
+	if err := rowList.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read grant list: %w", err)
+	}
+
+	// Remove duplicates from grant lists
+	for context, grantList := range grants {
+		grants[context] = removeDuplicates(grantList)
 	}
 
 	return grants, nil
@@ -138,9 +125,9 @@ func (r *UserRepository) CreateUser(
 	}
 
 	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(user.UserName) {
-		return nil, fmt.Errorf(
-			"username must contain only alphanumeric characters, hyphens, and underscores",
-		)
+		return nil, clientMessage(ErrValidation,
+			"username must contain only alphanumeric characters, "+
+				"hyphens, and underscores")
 	}
 
 	query := `
@@ -151,29 +138,27 @@ func (r *UserRepository) CreateUser(
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING app_user_id`
 
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(
-			ctx,
-			query,
-			user.UserName,
-			user.PwHash,
-			user.FirstName,
-			user.LastName,
-			user.Email,
-			user.SecurityContext,
-			user.AppUserGroupMembershipList,
-			user.MFAExempt,
-			// totp_seed/mfa_setup are NOT NULL with no default; a new user has no TOTP yet, so
-			// seed empty + mfa_setup false (populated when the user completes MFA setup). Without
-			// this, CreateUser fails: null value in column "totp_seed" violates not-null constraint.
-			"",
-			false,
-			user.CreateTS,
-			user.CreateUserID,
-			user.UpdateTS,
-			user.UpdateUserID,
-		).Scan(&user.AppUserID)
-	})
+	err := r.db.QueryRow(
+		ctx,
+		query,
+		user.UserName,
+		user.PwHash,
+		user.FirstName,
+		user.LastName,
+		user.Email,
+		user.SecurityContext,
+		user.AppUserGroupMembershipList,
+		user.MFAExempt,
+		// totp_seed/mfa_setup are NOT NULL with no default; a new user has no TOTP yet, so
+		// seed empty + mfa_setup false (populated when the user completes MFA setup). Without
+		// this, CreateUser fails: null value in column "totp_seed" violates not-null constraint.
+		"",
+		false,
+		user.CreateTS,
+		user.CreateUserID,
+		user.UpdateTS,
+		user.UpdateUserID,
+	).Scan(&user.AppUserID)
 
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -198,14 +183,9 @@ func (r *UserRepository) UpdateUserPassword(
 		WHERE app_user_id = $4 AND security_context_id = $5
 		  AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var err error
-		result, err = r.db.Exec(ctx, query,
-			newPasswordHash, updateTS, updateUserID, userID,
-			securityContext)
-		return err
-	})
+	result, err := r.db.Exec(ctx, query,
+		newPasswordHash, updateTS, updateUserID, userID,
+		securityContext)
 	if err != nil {
 		return fmt.Errorf("failed to update user password: %w", err)
 	}
@@ -229,14 +209,9 @@ func (r *UserRepository) UpdateUserTOTPSeed(
 		WHERE app_user_id = $4 AND update_ts = $5
 		  AND security_context_id = $6 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			totpSeed, newUpdateTS, updateUserID, userID, expectedUpdateTS,
-			securityContext)
-		return execErr
-	})
+	result, err := r.db.Exec(ctx, query,
+		totpSeed, newUpdateTS, updateUserID, userID, expectedUpdateTS,
+		securityContext)
 	if err != nil {
 		return 0, fmt.Errorf("failed to update user TOTP seed: %w", err)
 	}
@@ -261,14 +236,9 @@ func (r *UserRepository) UpdateUserMFASetup(
 		WHERE app_user_id = $4 AND update_ts = $5
 		  AND security_context_id = $6 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			mfaSetup, newUpdateTS, updateUserID, userID, expectedUpdateTS,
-			securityContext)
-		return execErr
-	})
+	result, err := r.db.Exec(ctx, query,
+		mfaSetup, newUpdateTS, updateUserID, userID, expectedUpdateTS,
+		securityContext)
 	if err != nil {
 		return 0, fmt.Errorf("failed to update user MFA setup: %w", err)
 	}
@@ -293,14 +263,9 @@ func (r *UserRepository) UpdateUserMFAExempt(
 		WHERE app_user_id = $4 AND update_ts = $5
 		  AND security_context_id = $6 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			mfaExempt, newUpdateTS, updateUserID, userID, expectedUpdateTS,
-			securityContext)
-		return execErr
-	})
+	result, err := r.db.Exec(ctx, query,
+		mfaExempt, newUpdateTS, updateUserID, userID, expectedUpdateTS,
+		securityContext)
 	if err != nil {
 		return 0, fmt.Errorf("failed to update user MFA exempt: %w", err)
 	}
@@ -342,45 +307,40 @@ func (r *UserRepository) RetrieveUserList(
 
 	query += ` ORDER BY user_name`
 
-	var users []*model.AppUserModel
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		rows, err := r.db.Query(ctx, query, args...)
-		if err != nil {
-			return fmt.Errorf("failed to get users: %w", err)
-		}
-		defer rows.Close()
-
-		users = []*model.AppUserModel{}
-		for rows.Next() {
-			var user model.AppUserModel
-			err := rows.Scan(
-				&user.AppUserID,
-				&user.UserName,
-				&user.FirstName,
-				&user.LastName,
-				&user.Email,
-				&user.SecurityContext,
-				&user.AppUserGroupMembershipList,
-				&user.MFAExempt,
-				&user.TOTPSeed,
-				&user.MFASetup,
-				&user.PreferenceJSONB,
-				&user.CreateTS,
-				&user.CreateUserID,
-				&user.UpdateTS,
-				&user.UpdateUserID,
-				&user.DeleteTS,
-				&user.DeleteUserID,
-			)
-			if err != nil {
-				return fmt.Errorf("failed to scan user: %w", err)
-			}
-			users = append(users, &user)
-		}
-		return rows.Err()
-	})
-
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
+		return nil, fmt.Errorf("failed to get users: %w", err)
+	}
+	defer rows.Close()
+
+	users := []*model.AppUserModel{}
+	for rows.Next() {
+		var user model.AppUserModel
+		err := rows.Scan(
+			&user.AppUserID,
+			&user.UserName,
+			&user.FirstName,
+			&user.LastName,
+			&user.Email,
+			&user.SecurityContext,
+			&user.AppUserGroupMembershipList,
+			&user.MFAExempt,
+			&user.TOTPSeed,
+			&user.MFASetup,
+			&user.PreferenceJSONB,
+			&user.CreateTS,
+			&user.CreateUserID,
+			&user.UpdateTS,
+			&user.UpdateUserID,
+			&user.DeleteTS,
+			&user.DeleteUserID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, &user)
+	}
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -401,16 +361,11 @@ func (r *UserRepository) UpdateUser(
 		    update_ts = $7, update_user_id = $8
 		WHERE app_user_id = $9 AND security_context_id = $10 AND update_ts = $11 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			user.UserName, user.FirstName, user.LastName, user.Email,
-			user.AppUserGroupMembershipList, user.MFAExempt,
-			user.UpdateTS, user.UpdateUserID,
-			user.AppUserID, securityContext, clientUpdateTS)
-		return execErr
-	})
+	result, err := r.db.Exec(ctx, query,
+		user.UserName, user.FirstName, user.LastName, user.Email,
+		user.AppUserGroupMembershipList, user.MFAExempt,
+		user.UpdateTS, user.UpdateUserID,
+		user.AppUserID, securityContext, clientUpdateTS)
 	if err != nil {
 		if isUniqueViolation(err) {
 			// app_user.user_name is UNIQUE.
@@ -441,20 +396,15 @@ func (r *UserRepository) DeleteUser(
 		SET delete_ts = $1, delete_user_id = $2
 		WHERE app_user_id = $3 AND security_context_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(
-			ctx,
-			query,
-			deleteTS,
-			deleteUserID,
-			userID,
-			securityContext,
-			clientUpdateTS,
-		)
-		return execErr
-	})
+	result, err := r.db.Exec(
+		ctx,
+		query,
+		deleteTS,
+		deleteUserID,
+		userID,
+		securityContext,
+		clientUpdateTS,
+	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete user: %w", err)
 	}
@@ -626,28 +576,26 @@ func (r *UserRepository) RetrieveUserByID(
 		WHERE app_user_id = $1 AND security_context_id = $2 AND delete_user_id IS NULL`
 
 	var user model.AppUserModel
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, query, userID, securityContext).Scan(
-			&user.AppUserID,
-			&user.UserName,
-			&user.PwHash,
-			&user.FirstName,
-			&user.LastName,
-			&user.Email,
-			&user.SecurityContext,
-			&user.AppUserGroupMembershipList,
-			&user.MFAExempt,
-			&user.TOTPSeed,
-			&user.MFASetup,
-			&user.PreferenceJSONB,
-			&user.CreateTS,
-			&user.CreateUserID,
-			&user.UpdateTS,
-			&user.UpdateUserID,
-			&user.DeleteTS,
-			&user.DeleteUserID,
-		)
-	})
+	err := r.db.QueryRow(ctx, query, userID, securityContext).Scan(
+		&user.AppUserID,
+		&user.UserName,
+		&user.PwHash,
+		&user.FirstName,
+		&user.LastName,
+		&user.Email,
+		&user.SecurityContext,
+		&user.AppUserGroupMembershipList,
+		&user.MFAExempt,
+		&user.TOTPSeed,
+		&user.MFASetup,
+		&user.PreferenceJSONB,
+		&user.CreateTS,
+		&user.CreateUserID,
+		&user.UpdateTS,
+		&user.UpdateUserID,
+		&user.DeleteTS,
+		&user.DeleteUserID,
+	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
@@ -678,25 +626,18 @@ func (r *UserRepository) UpdateOwnProfile(
 		WHERE app_user_id = $6 AND security_context_id = $7 AND update_ts = $8
 		      AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			firstName, lastName, email, jsonbParam(preference),
-			newUpdateTS, userID, securityContext, expectedUpdateTS)
-		return execErr
-	})
+	result, err := r.db.Exec(ctx, query,
+		firstName, lastName, email, jsonbParam(preference),
+		newUpdateTS, userID, securityContext, expectedUpdateTS)
 	if err != nil {
 		return 0, fmt.Errorf("failed to update own profile: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		var exists bool
-		checkErr := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx,
-				`SELECT EXISTS(SELECT 1 FROM app_user
-				 WHERE app_user_id = $1 AND security_context_id = $2 AND delete_user_id IS NULL)`,
-				userID, securityContext).Scan(&exists)
-		})
+		checkErr := r.db.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM app_user
+			 WHERE app_user_id = $1 AND security_context_id = $2 AND delete_user_id IS NULL)`,
+			userID, securityContext).Scan(&exists)
 		if checkErr != nil {
 			return 0, fmt.Errorf("failed to assess user state: %w", checkErr)
 		}

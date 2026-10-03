@@ -2,15 +2,12 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/auth"
 	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
 )
 
@@ -452,34 +449,10 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		// Check if it's a validation error
-		if strings.Contains(err.Error(), "username must contain only") {
-			app.WriteError(
-				w,
-				http.StatusBadRequest,
-				fmt.Sprintf("Invalid username: %s", err.Error()),
-				"BRQ0",
-				nil,
-			)
-			return
-		}
-		if errors.Is(err, repository.ErrDuplicate) {
-			app.WriteError(
-				w,
-				http.StatusConflict,
-				fmt.Sprintf("Username already exists: username=%s", req.UserName),
-				"DUPLICATE_ERROR",
-				err,
-			)
-			return
-		}
-		app.WriteError(
-			w,
-			http.StatusInternalServerError,
-			fmt.Sprintf("Failed to create user: username=%s", req.UserName),
-			"UCF0",
-			err,
-		)
+		mapRepoError(app, w, err,
+			fmt.Sprintf("Failed to create user: username=%s",
+				req.UserName),
+			"UCF0")
 		return
 	}
 
@@ -589,46 +562,10 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		switch {
-		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(
-				w,
-				http.StatusConflict,
-				fmt.Sprintf(
-					"User was modified by another user: app_user_id=%d",
-					user.AppUserID,
-				),
-				"CONFLICT_ERROR",
-				err,
-			)
-		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(
-				w,
-				http.StatusNotFound,
-				fmt.Sprintf("User not found: app_user_id=%d", user.AppUserID),
-				"NOT_FOUND_ERROR",
-				err,
-			)
-		case errors.Is(err, repository.ErrDuplicate):
-			app.WriteError(
-				w,
-				http.StatusConflict,
-				fmt.Sprintf("Username already exists: username=%s", user.UserName),
-				"DUPLICATE_ERROR",
-				err,
-			)
-		default:
-			app.WriteError(
-				w,
-				http.StatusInternalServerError,
-				fmt.Sprintf(
-					"Failed to update user: app_user_id=%d",
-					user.AppUserID,
-				),
-				"USR_UPD_FAIL",
-				err,
-			)
-		}
+		mapRepoError(app, w, err,
+			fmt.Sprintf("Failed to update user: app_user_id=%d",
+				user.AppUserID),
+			"USR_UPD_FAIL")
 		return
 	}
 
@@ -711,35 +648,10 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		jwtClaims.UserID,
 	)
 	if err != nil {
-		switch {
-		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(
-				w,
-				http.StatusConflict,
-				fmt.Sprintf(
-					"User was modified by another user: app_user_id=%d",
-					userID,
-				),
-				"CNF0",
-				nil,
-			)
-		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(
-				w,
-				http.StatusNotFound,
-				fmt.Sprintf("User not found: app_user_id=%d", userID),
-				"NFN0",
-				nil,
-			)
-		default:
-			app.WriteError(
-				w,
-				http.StatusInternalServerError,
-				fmt.Sprintf("Failed to delete user: app_user_id=%d", userID),
-				"UDF0",
-				err,
-			)
-		}
+		mapRepoError(app, w, err,
+			fmt.Sprintf("Failed to delete user: app_user_id=%d",
+				userID),
+			"UDF0")
 		return
 	}
 
@@ -839,31 +751,11 @@ func (h *UserHandler) AddUserListToGroupHandler(
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrConflict) {
-			app.WriteError(
-				w,
-				http.StatusConflict,
-				fmt.Sprintf(
-					"Concurrent update detected for add to group: group_id=%d, app_user_ids=%v",
-					req.GroupId,
-					req.UserIds,
-				),
-				"CONFLICT_ERROR",
-				err,
-			)
-			return
-		}
-		app.WriteError(
-			w,
-			http.StatusInternalServerError,
+		mapRepoError(app, w, err,
 			fmt.Sprintf(
 				"Failed to add users to group: group_id=%d, user_count=%d",
-				req.GroupId,
-				len(req.UserIds),
-			),
-			"ADD_GRP_FAIL",
-			err,
-		)
+				req.GroupId, len(req.UserIds)),
+			"ADD_GRP_FAIL")
 		return
 	}
 
@@ -955,23 +847,8 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrConflict) {
-			app.WriteError(
-				w,
-				http.StatusConflict,
-				"Concurrent update detected",
-				"CONFLICT_ERROR",
-				err,
-			)
-			return
-		}
-		app.WriteError(
-			w,
-			http.StatusInternalServerError,
-			"Failed to remove users from group",
-			"REM_GRP_FAIL",
-			err,
-		)
+		mapRepoError(app, w, err,
+			"Failed to remove users from group", "REM_GRP_FAIL")
 		return
 	}
 

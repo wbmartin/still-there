@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/wbmartin/starter-api/internal/model"
@@ -35,32 +34,27 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupListByIDList(
 		FROM app_user_group
 		WHERE app_user_group_id = ANY($1) AND security_context_id = $2 AND delete_user_id IS NULL`
 
-	var groupList []*model.AppUserGroupModel
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		rowList, err := r.db.Query(ctx, query, groupIDs, securityContext)
-		if err != nil {
-			return err
-		}
-		defer rowList.Close()
-
-		groupList = []*model.AppUserGroupModel{}
-		for rowList.Next() {
-			var group model.AppUserGroupModel
-			err := rowList.Scan(
-				&group.AppUserGroupID, &group.GroupName, &group.UserGrantList,
-				&group.SecurityContext, &group.CreateTS, &group.CreateUserID,
-				&group.UpdateTS, &group.UpdateUserID, &group.DeleteTS,
-				&group.DeleteUserID,
-			)
-			if err != nil {
-				return err
-			}
-			groupList = append(groupList, &group)
-		}
-		return rowList.Err()
-	})
-
+	rowList, err := r.db.Query(ctx, query, groupIDs, securityContext)
 	if err != nil {
+		return nil, err
+	}
+	defer rowList.Close()
+
+	groupList := []*model.AppUserGroupModel{}
+	for rowList.Next() {
+		var group model.AppUserGroupModel
+		err := rowList.Scan(
+			&group.AppUserGroupID, &group.GroupName, &group.UserGrantList,
+			&group.SecurityContext, &group.CreateTS, &group.CreateUserID,
+			&group.UpdateTS, &group.UpdateUserID, &group.DeleteTS,
+			&group.DeleteUserID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		groupList = append(groupList, &group)
+	}
+	if err := rowList.Err(); err != nil {
 		return nil, err
 	}
 
@@ -86,38 +80,33 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupList(
 
 	query := selectClause + whereClause + orderBy
 
-	var groups []*model.AppUserGroupModel
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		rows, err := r.db.Query(ctx, query, argList...)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-
-		groups = []*model.AppUserGroupModel{}
-		for rows.Next() {
-			var group model.AppUserGroupModel
-			err := rows.Scan(
-				&group.AppUserGroupID,
-				&group.GroupName,
-				&group.UserGrantList,
-				&group.SecurityContext,
-				&group.CreateTS,
-				&group.CreateUserID,
-				&group.UpdateTS,
-				&group.UpdateUserID,
-				&group.DeleteTS,
-				&group.DeleteUserID,
-			)
-			if err != nil {
-				return err
-			}
-			groups = append(groups, &group)
-		}
-		return rows.Err()
-	})
-
+	rows, err := r.db.Query(ctx, query, argList...)
 	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	groups := []*model.AppUserGroupModel{}
+	for rows.Next() {
+		var group model.AppUserGroupModel
+		err := rows.Scan(
+			&group.AppUserGroupID,
+			&group.GroupName,
+			&group.UserGrantList,
+			&group.SecurityContext,
+			&group.CreateTS,
+			&group.CreateUserID,
+			&group.UpdateTS,
+			&group.UpdateUserID,
+			&group.DeleteTS,
+			&group.DeleteUserID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		groups = append(groups, &group)
+	}
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -142,12 +131,10 @@ func (r *AppUserGroupRepository) CreateAppUserGroup(
 		RETURNING app_user_group_id`
 
 	var newID int
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, query,
-			group.GroupName, group.UserGrantList, group.SecurityContext,
-			group.CreateTS, group.CreateUserID, group.UpdateTS,
-			group.UpdateUserID).Scan(&newID)
-	})
+	err := r.db.QueryRow(ctx, query,
+		group.GroupName, group.UserGrantList, group.SecurityContext,
+		group.CreateTS, group.CreateUserID, group.UpdateTS,
+		group.UpdateUserID).Scan(&newID)
 	if err != nil {
 		if isUniqueViolation(err) {
 			// (group_name, security_context_id) is UNIQUE.
@@ -173,15 +160,10 @@ func (r *AppUserGroupRepository) UpdateAppUserGroup(
 		    update_ts = $3, update_user_id = $4
 		WHERE app_user_group_id = $5 AND security_context_id = $6 AND update_ts = $7 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			group.GroupName, group.UserGrantList,
-			group.UpdateTS, group.UpdateUserID,
-			group.AppUserGroupID, securityContext, clientUpdateTS)
-		return execErr
-	})
+	result, err := r.db.Exec(ctx, query,
+		group.GroupName, group.UserGrantList,
+		group.UpdateTS, group.UpdateUserID,
+		group.AppUserGroupID, securityContext, clientUpdateTS)
 	if err != nil {
 		if isUniqueViolation(err) {
 			// (group_name, security_context_id) is UNIQUE.
@@ -217,23 +199,19 @@ func (r *AppUserGroupRepository) RetrieveMemberUserNameList(
 		                AND g.security_context_id = $2)`
 
 	var userNameList []string
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		userNameList = nil
-		rowList, err := r.db.Query(ctx, query, groupID, securityContext)
-		if err != nil {
-			return fmt.Errorf("failed to read group members: %w", err)
-		}
-		defer rowList.Close()
-		for rowList.Next() {
-			var userName string
-			if err := rowList.Scan(&userName); err != nil {
-				return fmt.Errorf("failed to scan group member: %w", err)
-			}
-			userNameList = append(userNameList, userName)
-		}
-		return rowList.Err()
-	})
+	rowList, err := r.db.Query(ctx, query, groupID, securityContext)
 	if err != nil {
+		return nil, fmt.Errorf("failed to read group members: %w", err)
+	}
+	defer rowList.Close()
+	for rowList.Next() {
+		var userName string
+		if err := rowList.Scan(&userName); err != nil {
+			return nil, fmt.Errorf("failed to scan group member: %w", err)
+		}
+		userNameList = append(userNameList, userName)
+	}
+	if err := rowList.Err(); err != nil {
 		return nil, err
 	}
 	return userNameList, nil
@@ -257,18 +235,14 @@ func (r *AppUserGroupRepository) DeleteAppUserGroup(
 		WHERE $1 = ANY(app_user_group_membership_list)
 		  AND security_context_id = $2 AND delete_user_id IS NULL`
 	var count int
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, checkQuery, groupID, securityContext).
-			Scan(&count)
-	})
+	err := r.db.QueryRow(ctx, checkQuery, groupID, securityContext).
+		Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to check user assignments: %w", err)
 	}
 	if count > 0 {
-		return 0, fmt.Errorf(
-			"cannot delete group: %d users are assigned to it",
-			count,
-		)
+		return 0, clientMessage(ErrInUse,
+			"cannot delete group: %d users are assigned to it", count)
 	}
 
 	// Delete the group
@@ -277,20 +251,15 @@ func (r *AppUserGroupRepository) DeleteAppUserGroup(
 		SET delete_ts = $1, delete_user_id = $2
 		WHERE app_user_group_id = $3 AND security_context_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(
-			ctx,
-			query,
-			deleteTS,
-			deleteUserID,
-			groupID,
-			securityContext,
-			clientUpdateTS,
-		)
-		return execErr
-	})
+	result, err := r.db.Exec(
+		ctx,
+		query,
+		deleteTS,
+		deleteUserID,
+		groupID,
+		securityContext,
+		clientUpdateTS,
+	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete user group: %w", err)
 	}

@@ -97,7 +97,6 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserByUserNameNotFound() {
 	)
 	s.Error(err)
 	s.Nil(user)
-	s.Contains(err.Error(), "user not found")
 	s.ErrorIs(err, ErrNotFound, "/auth tells not-found from an outage")
 }
 
@@ -208,9 +207,13 @@ func (s *UserRepositoryTestSuite) TestCreateUserInvalidUsername() {
 	created, err := s.repo.CreateUser(context.Background(), user, testTenant)
 	s.Error(err)
 	s.Nil(created)
-	s.Contains(
-		err.Error(),
-		"username must contain only alphanumeric characters, hyphens, and underscores",
+	s.ErrorIs(err, ErrValidation)
+	var clientErr *ClientMessageError
+	s.Require().ErrorAs(err, &clientErr)
+	s.Equal(
+		"username must contain only alphanumeric characters, "+
+			"hyphens, and underscores",
+		clientErr.Message,
 	)
 }
 
@@ -264,7 +267,6 @@ func (s *UserRepositoryTestSuite) TestUpdateUserPasswordNotFound() {
 		testTenant,
 	)
 	s.ErrorIs(err, ErrNotFound)
-	s.Contains(err.Error(), "user not found")
 }
 
 func (s *UserRepositoryTestSuite) TestRemoveDuplicates() {

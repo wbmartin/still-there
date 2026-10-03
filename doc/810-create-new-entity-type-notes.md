@@ -54,14 +54,25 @@ This document outlines the steps and key points for creating a new entity type i
 
 2. **Repository** (`internal/repository/entity_repository.go`):
    - Methods: `RetrieveEntityList`, `CreateEntity`, `UpdateEntity`, `DeleteEntity`.
-   - Use `ExecuteWithRetry` for queries.
-   - Optimistic locking: Check `update_ts` on update/delete.
+   - Call pgx directly (`r.db.QueryRow`, `Exec`, `Query`); there is no
+     retry wrapper.
+   - Errors: return the sentinels in `errors.go`, bare or wrapped with
+     `%w` (`ErrNotFound`, `ErrDeleted`, `ErrConflict`, `ErrDuplicate` for
+     a unique violation via `isUniqueViolation`, `ErrInUse`,
+     `ErrValidation`); use `clientMessage(sentinel, ...)` only when the
+     caller needs the detail. Never a bare `fmt.Errorf` a handler must
+     read; wrap anything else with `%w` and it answers 500.
+   - Optimistic locking: Check `update_ts` on update/delete; on zero rows,
+     check the row (same tenant predicate) and return `ErrNotFound`,
+     `ErrDeleted` or `ErrConflict`.
    - Example: `ExampleRepository` in `example_repository.go`.
 
 3. **Handler** (`internal/handler/entity_handler.go`):
    - Struct with `appsrv`, `entityRepo`.
    - Methods: `RetrieveEntityList`, `CreateEntity`, `UpdateEntity`, `DeleteEntity`.
    - Security: JWT, rate limit, CSRF, grants.
+   - Repository errors: `mapRepoError(app, w, err, failMsg, failCode)`;
+     no per-handler `errors.Is` switch, never match error text.
    - JSON encoding/decoding.
    - Example: `ExampleHandler` in `example_handler.go`.
 

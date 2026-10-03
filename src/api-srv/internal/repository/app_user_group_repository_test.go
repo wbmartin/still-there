@@ -403,7 +403,8 @@ func (s *AppUserGroupRepositoryTestSuite) TestDeleteAppUserGroupCountsOwnTenantM
 	_, err := s.repo.DeleteAppUserGroup(ctx, group.AppUserGroupID, testTenant,
 		group.UpdateTS, CurrentTimestamp(), 1)
 	s.Require().Error(err)
-	s.Contains(err.Error(), "cannot delete group: 1 users are assigned")
+	s.ErrorIs(err, ErrInUse)
+	s.Equal("cannot delete group: 1 users are assigned to it", err.Error())
 
 	_, err = s.db.Exec(ctx,
 		"DELETE FROM app_user WHERE user_name = 'RepoTestOwnMember'")
