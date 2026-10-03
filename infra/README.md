@@ -90,7 +90,7 @@ only on the host.**
 | `*-install-api` → `proto-migrate` | `etc/<env>-proto-migrate.env` | the DDL role's `DATABASE_URL` |
 | `*-renew-web-certs` (root cron) | `etc/<env>-proto-deploy.env` | `SITE_NAME`, `CERTBOT_EMAIL`, `CERT_HEALTHCHECK_URL` |
 | `prd-proto-promote-uat`, `-promote-uat-and-deploy`, `-install-api`, `-publish-web-client` | `etc/prd-proto-deploy.env` | registry server + credentials, `SERVICE`, `HEALTH_URL`, `DEPLOY_TAG`, `PROMOTE_FROM_TAG`, `SLACK_WEBHOOK` |
-| `prd-proto-backup-all` (root cron) | `etc/prd-proto-backup.env` (root:root 0600) | `BACKUP_ENV`, `BACKUP_ROOT`, `REMOTE_SERVER`, `DATABASE_NAME`, `HEALTHCHECK_URL` |
+| `prd-proto-backup-all` (root cron) | `etc/prd-proto-backup.env` (root:root 0600) | `BACKUP_ENV`, `BACKUP_ROOT`, `REMOTE_SERVER`, `REMOTE_DIR`, `DATABASE_NAME`, `HEALTHCHECK_URL` |
 
 `*-start` / `*-stop` are operator tools that call `systemctl` directly; run
 them as root. The build never uses them.
@@ -184,7 +184,10 @@ full runbook belongs.
    back here.
 9. **Prod extras.** `prd-proto-backup-all` from root's cron with
    `etc/prd-proto-backup.env` (root:root 0600); `REMOTE_SERVER` is an ssh
-   alias in root's `~/.ssh/config`.
+   alias in root's `~/.ssh/config` and `REMOTE_DIR` must exist there. The
+   script keeps `BACKUP_ROOT/prd-proto` root-only 0700 (the tarball holds
+   `etc/`). Run it once by hand; `pg_restore --list <file>.dump` must list
+   the schema.
 
 ## Deriving an app from this
 

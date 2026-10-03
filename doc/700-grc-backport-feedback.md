@@ -240,142 +240,6 @@ published password off UAT hosts that already have it but makes the host
 env file the only source of truth? Recommendation: yes, and check the
 existing UAT host once by hand in the same ticket.
 
-### B020 — Nightly backup cannot write its dump
-
-- **Priority:** P1  **Area:** infra
-- **GRC:** `infra/prd-unified002/bin/prd-grc-backup-all:6-8,27-49`; `infra/prd-unified002/etc/prd-grc-backup.env:1-8`   **PROTO:** `infra/prd/bin/prd-proto-backup-all:13-40` (:22, :33-34); `infra/prd/etc/prd-proto-backup.env:1-8`; `infra/README.md:93,185-187`
-- **Ticket:** RG0013 / `3a3fc94`, `a57d6ad`
-- **What:** `su - postgres -c "pg_dump | gzip > FILE"` writes as postgres into a
-root-made dir: permission denied. GRC: root writes `sudo -u postgres pg_dump -Fc`, dir 0700, DB first, excludes `backup`/`stg`, `REMOTE_DIR`.
-- **Port notes:** `APP_ENV` from app root (B045); drop blob wording; encryption
-in B050.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-`infra/prd/bin/prd-proto-backup-all` runs as root from cron every night
-(`infra/README.md:93,185-187`; `NACK_CRON=30 7 * * *` in
-`infra/prd/shrmpl-etc/nack-monitors/prd-proto-backup-all_NACKID.env`). It
-creates its output directory as root and then asks the `postgres` user to
-write into it.
-
-1. `infra/prd/bin/prd-proto-backup-all:14,22`: root makes the directory.
-
-       BACKUP_DST=$BACKUP_ROOT/$BACKUP_ENV
-       mkdir -p "$BACKUP_DST"
-
-   With `BACKUP_ROOT=/backup` and `BACKUP_ENV=prd-proto`
-   (`infra/prd/etc/prd-proto-backup.env:4-5`) that is `/backup/prd-proto`,
-   owned `root:root`, mode 0755 under root's default umask 022.
-2. `:24-30`: the filesystem tarball is written (as root, so it works) and
-   already shipped with `scp` to `REMOTE_SERVER`.
-3. `:33-34`: the database dumps.
-
-       su - postgres -c "pg_dump -Fc $DATABASE_NAME | gzip > $DB_BACKUP_FILE"
-       su - postgres -c "pg_dumpall --globals-only | gzip > $DB_GLOBALS_FILE"
-
-   The whole quoted string, redirect included, runs in a shell owned by
-   `postgres`. That shell must create `$DB_BACKUP_FILE` inside the
-   root-owned 0755 directory and cannot: it prints `Permission denied` for
-   the `.dump.gz` path, `gzip` never starts, `pg_dump` dies on a broken
-   pipe, and the pipeline exits 1. `su` passes the 1 back, and
-   `set -euo pipefail` (`:2`) stops the script on line 33.
-
-What the operator sees: no database dump, ever, on a host built from the
-README. The curl to `HEALTHCHECK_URL` (`:39`) is never reached, so nackmon
-alerts every morning. Only the filesystem tarball leaves the box. Nothing
-in `infra/README.md` step 9 or `doc/` chowns `/backup` to postgres, so the
-failure is deterministic. Correctness bug: prod has no database backup.
-
-Smaller problems in the same script:
-
-- `:25,28`: `cd /srv/prd-proto; tar -czf ... .` tars the whole app root,
-  including `stg/` (registry pulls, build output) and `backup/`
-  (pre-migrate dumps, `prd-proto-install-api:47-48`), large and not needed
-  to rebuild the host.
-- The tarball holds `etc/` (every filled env file: DB passwords, JWT key,
-  registry credentials). It lands world-readable (0644 in a 0755 dir) in
-  `/backup/prd-proto`. That is a local-disclosure gap (B050 owns
-  encryption; the directory mode belongs here).
-- `:19,33`: `pg_dump -Fc` is already compressed; piping it through `gzip`
-  makes a `.dump.gz` that `pg_restore` cannot open until it is gunzipped.
-- `scp` lands in the remote user's home (`"$REMOTE_SERVER:~/"`,
-  `:30,36-37`); there is no directory key.
-
-#### What GRC changed
-
-GRC's script runs as root and does every write as root; only `pg_dump`
-itself runs as postgres, streaming to root's stdout.
-
-- `infra/prd-unified002/bin/prd-grc-backup-all:17-19` derives the env name
-  from the app root (`APP_ENV="$(basename "$SRV_ROOT")"`) and the env file
-  from that; `:23` requires `REMOTE_DIR` and no `BACKUP_ENV`.
-- `:33`: `mkdir -p "$DST"; chmod 0700 "$DST"`. Only root reads them.
-- `:36-37`, the actual fix:
-
-      sudo -u postgres pg_dump -Fc "$DATABASE_NAME" > "$DB_FILE"
-      sudo -u postgres pg_dumpall --globals-only | gzip > "$GLOBALS_FILE"
-
-  The redirect is parsed by root's shell, so root opens the file. The
-  custom-format dump is written as plain `.dump` (no second gzip); the
-  globals, which are SQL text, are gzipped.
-- `:35-43`: database first, then files, so every blob a dumped row names
-  is in the tarball (`:12-13`). PROTO has no blobs; the order is harmless.
-- `:42`: `tar -C "$SRV_ROOT" --exclude=./backup --exclude=./stg -czf ...`.
-  The excludes are the in-root `backup/` and `stg/`, not `BACKUP_ROOT`.
-- `:46`: one `scp` of all three files to `"$REMOTE_SERVER:$REMOTE_DIR/"`.
-- `VACUUM` (PROTO `:35`) is gone. `prd-grc-backup.env:1-8` adds
-  `REMOTE_DIR` and drops `BACKUP_ENV`.
-
-Why: commit `3a3fc94` (RG0013) built the GRC mirrors from PROTO's. The
-RG0013 ticket does not list the backup among its "Corrections to
-ProtoStack's version" (`RG0013 md:50-58`); the intent is in the script
-header (`:1-13`). It has run on a real host: GRC
-`doc/331-prd-postsales-cutover.md:283-288` runs it once by hand and checks
-the three files arrived; `RG0043 md:615` marks the prod backup done on
-2026-10-02. No automated test covers it.
-
-#### Proposed fix for PROTO
-
-1. `infra/prd/bin/prd-proto-backup-all:33-34`: replace the two `su - postgres
-   -c "..."` lines with `sudo -u postgres pg_dump -Fc "$DATABASE_NAME" >
-   "$DB_BACKUP_FILE"` and `sudo -u postgres pg_dumpall --globals-only | gzip
-   > "$DB_GLOBALS_FILE"`. Rename the dump suffix `.dump.gz` to `.dump`
-   (`:19`) and the globals to `.sql.gz` (`:20`).
-2. `:22`: add `chmod 0700 "$BACKUP_DST"` after the `mkdir`.
-3. Move the database block (`:32-35`) above the files; drop `VACUUM`.
-4. `:28`: `tar -C "$BACKUP_SRC" --exclude=./backup --exclude=./stg -czf ...`
-   and remove the `cd` at `:25`.
-5. Add `REMOTE_DIR` to the required list (`:9`), to
-   `infra/prd/etc/prd-proto-backup.env` (as `SERVERONLY`) and to the README
-   table row (`infra/README.md:93`); ship the three files in one `scp` to
-   `"$REMOTE_SERVER:$REMOTE_DIR/"`.
-6. If B045 is taken: derive `APP_ENV` from `basename "$SRV_ROOT"`, drop
-   `BACKUP_ENV` from the env file, the required list and README `:93`.
-   Without B045, keep `BACKUP_ENV`; the fix in steps 1-2 stands alone.
-
-Blind-copy traps: drop GRC's header (`:1-13`: blob store,
-`TOTP_ENCRYPTION_KEY`, A-004/A-007; none exist in PROTO) and its database
-and file names; PROTO's derive from `etc/app.env` via `bin/000-rebrand`.
-`sudo` must be installed (Ubuntu default); root needs no sudoers entry.
-
-Depends on nothing. Related: B045 (names), B050 (`umask 077`, encrypt the
-tarball), B026 (runbook: cron line, remote directory).
-
-Tests: no harness covers `infra/`. `shellcheck` the script; on a prd host
-run it once as root, then `pg_restore -l <file>.dump` must list the schema
-and `/backup/prd-proto` must be root-owned 0700.
-
-#### Open question for Brandon
-
-Should the nightly tarball keep shipping `etc/` (secrets) in clear to
-`REMOTE_SERVER` until B050's encryption lands? Recommendation: yes, ship
-this fix now with the 0700 directory, because today there is no database
-backup at all and the secrets already travel in clear.
-Brandon: yes
-
 ### B021 — Cert renewal: non-interactive; key not owned by www-data
 
 - **Priority:** P1  **Area:** infra
@@ -8863,3 +8727,140 @@ supported (which forces `TRUSTED_PROXY_COUNT=1` into `etc/loc-api-srv.env`
 too), or does pytest run only through `bin/300`? Recommendation: `bin/300`
 only, so no developer config ever trusts a forged header.
 Brandon: Bin/300
+
+### B020 — COMPLETED — Nightly backup cannot write its dump
+- **Completed:** 2026-10-02. `infra/prd/bin/prd-proto-backup-all` now dumps first with `sudo -u postgres pg_dump -Fc ... > file` (root's shell opens the file, no second gzip, a failed dump exits non-zero), gzips the globals as `.sql.gz`, makes `BACKUP_ROOT/prd-proto` 0700, drops VACUUM, tars the app root without `backup/` and `stg/`, and ships all three files in one `scp` to `REMOTE_SERVER:REMOTE_DIR/`. `REMOTE_DIR` added to `infra/prd/etc/prd-proto-backup.env` and `infra/README.md` (table row, step 9); `etc/` still ships in clear per Brandon. B045 is not done yet, so `BACKUP_ENV` stays; no UAT copy exists. Verified in ubuntu:24.04 with postgresql 16: old script fails `Permission denied` on the dump; new script writes a dump that `pg_restore --list` reads, dir `root:root 700`, and a missing database exits 1 with no scp or check-in. Tests: all green, go=279 unit=42 e2e=10 py=79
+
+- **Priority:** P1  **Area:** infra
+- **GRC:** `infra/prd-unified002/bin/prd-grc-backup-all:6-8,27-49`; `infra/prd-unified002/etc/prd-grc-backup.env:1-8`   **PROTO:** `infra/prd/bin/prd-proto-backup-all:13-40` (:22, :33-34); `infra/prd/etc/prd-proto-backup.env:1-8`; `infra/README.md:93,185-187`
+- **Ticket:** RG0013 / `3a3fc94`, `a57d6ad`
+- **What:** `su - postgres -c "pg_dump | gzip > FILE"` writes as postgres into a
+root-made dir: permission denied. GRC: root writes `sudo -u postgres pg_dump -Fc`, dir 0700, DB first, excludes `backup`/`stg`, `REMOTE_DIR`.
+- **Port notes:** `APP_ENV` from app root (B045); drop blob wording; encryption
+in B050.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+`infra/prd/bin/prd-proto-backup-all` runs as root from cron every night
+(`infra/README.md:93,185-187`; `NACK_CRON=30 7 * * *` in
+`infra/prd/shrmpl-etc/nack-monitors/prd-proto-backup-all_NACKID.env`). It
+creates its output directory as root and then asks the `postgres` user to
+write into it.
+
+1. `infra/prd/bin/prd-proto-backup-all:14,22`: root makes the directory.
+
+       BACKUP_DST=$BACKUP_ROOT/$BACKUP_ENV
+       mkdir -p "$BACKUP_DST"
+
+   With `BACKUP_ROOT=/backup` and `BACKUP_ENV=prd-proto`
+   (`infra/prd/etc/prd-proto-backup.env:4-5`) that is `/backup/prd-proto`,
+   owned `root:root`, mode 0755 under root's default umask 022.
+2. `:24-30`: the filesystem tarball is written (as root, so it works) and
+   already shipped with `scp` to `REMOTE_SERVER`.
+3. `:33-34`: the database dumps.
+
+       su - postgres -c "pg_dump -Fc $DATABASE_NAME | gzip > $DB_BACKUP_FILE"
+       su - postgres -c "pg_dumpall --globals-only | gzip > $DB_GLOBALS_FILE"
+
+   The whole quoted string, redirect included, runs in a shell owned by
+   `postgres`. That shell must create `$DB_BACKUP_FILE` inside the
+   root-owned 0755 directory and cannot: it prints `Permission denied` for
+   the `.dump.gz` path, `gzip` never starts, `pg_dump` dies on a broken
+   pipe, and the pipeline exits 1. `su` passes the 1 back, and
+   `set -euo pipefail` (`:2`) stops the script on line 33.
+
+What the operator sees: no database dump, ever, on a host built from the
+README. The curl to `HEALTHCHECK_URL` (`:39`) is never reached, so nackmon
+alerts every morning. Only the filesystem tarball leaves the box. Nothing
+in `infra/README.md` step 9 or `doc/` chowns `/backup` to postgres, so the
+failure is deterministic. Correctness bug: prod has no database backup.
+
+Smaller problems in the same script:
+
+- `:25,28`: `cd /srv/prd-proto; tar -czf ... .` tars the whole app root,
+  including `stg/` (registry pulls, build output) and `backup/`
+  (pre-migrate dumps, `prd-proto-install-api:47-48`), large and not needed
+  to rebuild the host.
+- The tarball holds `etc/` (every filled env file: DB passwords, JWT key,
+  registry credentials). It lands world-readable (0644 in a 0755 dir) in
+  `/backup/prd-proto`. That is a local-disclosure gap (B050 owns
+  encryption; the directory mode belongs here).
+- `:19,33`: `pg_dump -Fc` is already compressed; piping it through `gzip`
+  makes a `.dump.gz` that `pg_restore` cannot open until it is gunzipped.
+- `scp` lands in the remote user's home (`"$REMOTE_SERVER:~/"`,
+  `:30,36-37`); there is no directory key.
+
+#### What GRC changed
+
+GRC's script runs as root and does every write as root; only `pg_dump`
+itself runs as postgres, streaming to root's stdout.
+
+- `infra/prd-unified002/bin/prd-grc-backup-all:17-19` derives the env name
+  from the app root (`APP_ENV="$(basename "$SRV_ROOT")"`) and the env file
+  from that; `:23` requires `REMOTE_DIR` and no `BACKUP_ENV`.
+- `:33`: `mkdir -p "$DST"; chmod 0700 "$DST"`. Only root reads them.
+- `:36-37`, the actual fix:
+
+      sudo -u postgres pg_dump -Fc "$DATABASE_NAME" > "$DB_FILE"
+      sudo -u postgres pg_dumpall --globals-only | gzip > "$GLOBALS_FILE"
+
+  The redirect is parsed by root's shell, so root opens the file. The
+  custom-format dump is written as plain `.dump` (no second gzip); the
+  globals, which are SQL text, are gzipped.
+- `:35-43`: database first, then files, so every blob a dumped row names
+  is in the tarball (`:12-13`). PROTO has no blobs; the order is harmless.
+- `:42`: `tar -C "$SRV_ROOT" --exclude=./backup --exclude=./stg -czf ...`.
+  The excludes are the in-root `backup/` and `stg/`, not `BACKUP_ROOT`.
+- `:46`: one `scp` of all three files to `"$REMOTE_SERVER:$REMOTE_DIR/"`.
+- `VACUUM` (PROTO `:35`) is gone. `prd-grc-backup.env:1-8` adds
+  `REMOTE_DIR` and drops `BACKUP_ENV`.
+
+Why: commit `3a3fc94` (RG0013) built the GRC mirrors from PROTO's. The
+RG0013 ticket does not list the backup among its "Corrections to
+ProtoStack's version" (`RG0013 md:50-58`); the intent is in the script
+header (`:1-13`). It has run on a real host: GRC
+`doc/331-prd-postsales-cutover.md:283-288` runs it once by hand and checks
+the three files arrived; `RG0043 md:615` marks the prod backup done on
+2026-10-02. No automated test covers it.
+
+#### Proposed fix for PROTO
+
+1. `infra/prd/bin/prd-proto-backup-all:33-34`: replace the two `su - postgres
+   -c "..."` lines with `sudo -u postgres pg_dump -Fc "$DATABASE_NAME" >
+   "$DB_BACKUP_FILE"` and `sudo -u postgres pg_dumpall --globals-only | gzip
+   > "$DB_GLOBALS_FILE"`. Rename the dump suffix `.dump.gz` to `.dump`
+   (`:19`) and the globals to `.sql.gz` (`:20`).
+2. `:22`: add `chmod 0700 "$BACKUP_DST"` after the `mkdir`.
+3. Move the database block (`:32-35`) above the files; drop `VACUUM`.
+4. `:28`: `tar -C "$BACKUP_SRC" --exclude=./backup --exclude=./stg -czf ...`
+   and remove the `cd` at `:25`.
+5. Add `REMOTE_DIR` to the required list (`:9`), to
+   `infra/prd/etc/prd-proto-backup.env` (as `SERVERONLY`) and to the README
+   table row (`infra/README.md:93`); ship the three files in one `scp` to
+   `"$REMOTE_SERVER:$REMOTE_DIR/"`.
+6. If B045 is taken: derive `APP_ENV` from `basename "$SRV_ROOT"`, drop
+   `BACKUP_ENV` from the env file, the required list and README `:93`.
+   Without B045, keep `BACKUP_ENV`; the fix in steps 1-2 stands alone.
+
+Blind-copy traps: drop GRC's header (`:1-13`: blob store,
+`TOTP_ENCRYPTION_KEY`, A-004/A-007; none exist in PROTO) and its database
+and file names; PROTO's derive from `etc/app.env` via `bin/000-rebrand`.
+`sudo` must be installed (Ubuntu default); root needs no sudoers entry.
+
+Depends on nothing. Related: B045 (names), B050 (`umask 077`, encrypt the
+tarball), B026 (runbook: cron line, remote directory).
+
+Tests: no harness covers `infra/`. `shellcheck` the script; on a prd host
+run it once as root, then `pg_restore -l <file>.dump` must list the schema
+and `/backup/prd-proto` must be root-owned 0700.
+
+#### Open question for Brandon
+
+Should the nightly tarball keep shipping `etc/` (secrets) in clear to
+`REMOTE_SERVER` until B050's encryption lands? Recommendation: yes, ship
+this fix now with the 0700 directory, because today there is no database
+backup at all and the secrets already travel in clear.
+Brandon: yes
