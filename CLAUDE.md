@@ -32,7 +32,8 @@ here.
   `bin/205-migrate-db`.
 - `doc/` — reference docs. Runbooks: `doc/320-presales-uat-deploy.md`,
   `doc/330-uat-postsales-cutover.md`, `doc/331-prd-postsales-install.md`,
-  `doc/340-db-host-setup.md`, `doc/310-api-srv-cert-renewal.md`.
+  `doc/340-db-host-setup.md`, `doc/350-repository-reset.md`,
+  `doc/310-api-srv-cert-renewal.md`.
 - `scripts/` — repo checks the gate calls: `check-doc-paths.sh` (every
   backticked repo path in a doc exists; `bin/300-run-tests docs`).
 

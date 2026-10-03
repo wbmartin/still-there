@@ -51,8 +51,9 @@ named by a key in the app's env file. The key is the derived app's to add;
 ProtoStack has no import path. Fixtures, seeds and mock data are synthetic.
 Deleting a committed file does not remove it: the first derived app
 committed a tenant's export and needed a new repository, new webhooks, a
-new deploy key and a re-clone of every checkout to get it out of history.
-The rule has to hold before the first commit of real data.
+new deploy key and a re-clone of every checkout to get it out of history
+(`doc/350-repository-reset.md`). The rule has to hold before the first
+commit of real data.
 
 ## 3. Hosts
 

@@ -100,6 +100,7 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 | [doc/330-uat-postsales-cutover.md](doc/330-uat-postsales-cutover.md) | UAT cutover: from the presales bundle to the `infra/` pipeline |
 | [doc/331-prd-postsales-install.md](doc/331-prd-postsales-install.md) | Prod install on a fresh host, loaded from the same local dump |
 | [doc/340-db-host-setup.md](doc/340-db-host-setup.md) | The three Postgres roles (app, ddl, ci): `infra/sql/proto-host-db.sql` |
+| [doc/350-repository-reset.md](doc/350-repository-reset.md) | Repository reset: the tree as one root commit in a new repo, webhooks and deploy key re-created |
 | [infra/README.md](infra/README.md) | Post-sales deploy pipeline (placeholder) |
 
 Project history lives in `git log`.

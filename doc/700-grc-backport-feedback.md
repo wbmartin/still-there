@@ -786,71 +786,6 @@ Adopt batched testing in the template, or keep `bin/300-run-tests all`
 per ticket? Recommendation: keep per ticket in the template, since PROTO
 has no 440-check smoke to make it slow; a derived app can batch.
 
-### B082 — Later post-sales docs: repository reset; release checklist
-
-- **Priority:** P3  **Area:** docs, skills
-- **GRC:** `tickets/01-open/RG0044-fresh-repo-webhooks-deploy-keys.md:32-51,53-82,84-90` (:66-68); RG0043 md `:549-564,566-620,632-665,687-739,771-782`   **PROTO:** new `doc/350-repository-reset.md` or `infra/README.md:138-188`; `DERIVING.md:46-55`; new `.claude/skills/release/SKILL.md` or `infra/README.md` after `:122`
-- **Ticket:** RG0044 (open, not run); RG0043 §10 (shipped 2026-10-02)
-- **What:** What hangs off a GitHub repo and how to re-root it. A release record
-(pre-flight, approvals, UAT, prod, rollback, hash-checked host edits) as a
-checklist.
-- **Port notes:** Wait for RG0044's run; strip hosts and hashes; after B057.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Docs gap: two post-sales procedures a derived app will need are unwritten.
-1. **Repository reset.** Several things hang off a GitHub repository and do
-   not move with it: the UAT build checkout's read-only deploy key, the
-   UAT build webhook (payload URL plus `HOOK_SECRET`), the prod promote
-   webhook, collaborators and branch protection. PROTO documents setting
-   them up piecemeal (`infra/README.md:138-187`, step 7 is hooks), but not
-   how to re-root a repo (one fresh root commit, to purge data that leaked
-   into history) without breaking deploys; `DERIVING.md:46-55` is silent.
-2. **Release checklist.** `infra/README.md:119-122` describes the restart
-   mechanics and `doc/320-presales-uat-deploy.md:111` has a presales
-   rollback, but there is no post-sales release record: pre-flight,
-   approvals, UAT, prod, rollback targets, and how to move a hand-edited
-   host file safely.
-
-#### What GRC changed
-
-- **RG0044** (`tickets/01-open/RG0044-fresh-repo-webhooks-deploy-keys.md`,
-  status `ready`, not yet run). `:32-51` lists what must be re-created
-  (deploy key, two webhooks, settings). `:53-82` is the procedure: record
-  hooks and key, `git checkout --orphan` a single root commit naming the
-  old sha, rename the old repo and recreate the same name (keeps `REPO_URL`
-  valid), re-create hooks before the first push, re-clone everywhere,
-  delete the old repo after one release. `:84-90` are the checks.
-- **RG0043 §10** (shipped 2026-10-02) is the release record: what ships by
-  layer (`:549-564`), pre-flight with literal paths and recorded rollback
-  shas (`:566-620`), UAT steps (`:632-665`), prod steps where a host file
-  is moved with `shasum -a 256` locally, `sha256sum` and `diff` on the
-  host, `.before` copy, `nginx -t`, reload, `curl` (`:687-739`); rollback
-  per host (`:771-782`).
-- Correction: RG0044 `:66-68` says a `main` push builds UAT and `uat`
-  promotes; GRC `CLAUDE.md:23-24`, RG0043 P1 `:578-590` say the reverse.
-
-#### Proposed fix for PROTO
-
-1. Wait for RG0044 to run; copy what it proved, not what it planned.
-2. New `doc/350-repository-reset.md`: GRC's list and steps with every host
-   name, hook id, sha and org path replaced by `<env>-<slug>` names from
-   `etc/app.env`. Link from `DERIVING.md` §3 and `infra/README.md` step 7.
-3. Release checklist: a template section in `infra/README.md` after `:122`
-   (or a `release` skill): P/A/U/R/rollback skeleton, hash-checked
-   host-file move, none of RG0043's content.
-4. Traps: GRC's branch model is B057 (documented, not adopted). Drop hook
-   ids and real hostnames.
-5. Tests: none; B053 linter checks the new paths. Depends on B057.
-
-#### Open question for Brandon
-
-Release checklist as a doc section or a skill? Recommend a doc section
-first; make it a skill once two derived apps have used it.
-
 ### B083 — Serving user-uploaded files: header override, sniff by bytes
 
 - **Priority:** P3  **Area:** docs
@@ -9004,3 +8939,69 @@ Should `bin/000-rebrand` print the derive sha and pre-filled lineage block
 in its "Left for a human" list? Recommend yes: the sha is known at that
 moment and nowhere else so cheaply.
 - **Completed:** 2026-10-03. `DERIVING.md` §1 records the template commit after the rebrand commit (`git rev-parse --short HEAD~1`); §5 lists "Template lineage" among the `CLAUDE.md` sections to add before `DERIVING.md` goes; §8 now holds one fenced paste-ready block (placeholders `<template-remote>`, `<derive-sha>`, `<derive-date>`, `<last-sync>`, the three `git` commands, pull/adapt/skip rule) and the duplicate command list was dropped. `<last-sync>` is a `template-YYYY-MM-DD` tag or the derive sha before the first sync (the log range takes either). No ticket ids (B091), no GRC ids or sha; placeholders only, so the rebrand and the §7 grep leave it alone. Open question taken as recommended: `bin/000-rebrand` now prints the template commit sha and date in its "Left for a human" list (HEAD at that moment, tree clean). Verified in a throwaway clone: `git remote add template`, `fetch --tags`, `git log <tag-or-sha>..template/main`, `HEAD~1` after a commit. Tests: none new; all green, infra=15 docs=677 go=708 unit=105 e2e=70 py=103 (docs +4: new backticked paths).
+
+### B082 — COMPLETED — Later post-sales docs: repository reset; release checklist
+
+- **Priority:** P3  **Area:** docs, skills
+- **GRC:** `tickets/01-open/RG0044-fresh-repo-webhooks-deploy-keys.md:32-51,53-82,84-90` (:66-68); RG0043 md `:549-564,566-620,632-665,687-739,771-782`   **PROTO:** new `doc/350-repository-reset.md` or `infra/README.md:138-188`; `DERIVING.md:46-55`; new `.claude/skills/release/SKILL.md` or `infra/README.md` after `:122`
+- **Ticket:** RG0044 (open, not run); RG0043 §10 (shipped 2026-10-02)
+- **What:** What hangs off a GitHub repo and how to re-root it. A release record
+(pre-flight, approvals, UAT, prod, rollback, hash-checked host edits) as a
+checklist.
+- **Port notes:** Wait for RG0044's run; strip hosts and hashes; after B057.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Docs gap: two post-sales procedures a derived app will need are unwritten.
+1. **Repository reset.** Several things hang off a GitHub repository and do
+   not move with it: the UAT build checkout's read-only deploy key, the
+   UAT build webhook (payload URL plus `HOOK_SECRET`), the prod promote
+   webhook, collaborators and branch protection. PROTO documents setting
+   them up piecemeal (`infra/README.md:138-187`, step 7 is hooks), but not
+   how to re-root a repo (one fresh root commit, to purge data that leaked
+   into history) without breaking deploys; `DERIVING.md:46-55` is silent.
+2. **Release checklist.** `infra/README.md:119-122` describes the restart
+   mechanics and `doc/320-presales-uat-deploy.md:111` has a presales
+   rollback, but there is no post-sales release record: pre-flight,
+   approvals, UAT, prod, rollback targets, and how to move a hand-edited
+   host file safely.
+
+#### What GRC changed
+
+- **RG0044** (`tickets/01-open/RG0044-fresh-repo-webhooks-deploy-keys.md`,
+  status `ready`, not yet run). `:32-51` lists what must be re-created
+  (deploy key, two webhooks, settings). `:53-82` is the procedure: record
+  hooks and key, `git checkout --orphan` a single root commit naming the
+  old sha, rename the old repo and recreate the same name (keeps `REPO_URL`
+  valid), re-create hooks before the first push, re-clone everywhere,
+  delete the old repo after one release. `:84-90` are the checks.
+- **RG0043 §10** (shipped 2026-10-02) is the release record: what ships by
+  layer (`:549-564`), pre-flight with literal paths and recorded rollback
+  shas (`:566-620`), UAT steps (`:632-665`), prod steps where a host file
+  is moved with `shasum -a 256` locally, `sha256sum` and `diff` on the
+  host, `.before` copy, `nginx -t`, reload, `curl` (`:687-739`); rollback
+  per host (`:771-782`).
+- Correction: RG0044 `:66-68` says a `main` push builds UAT and `uat`
+  promotes; GRC `CLAUDE.md:23-24`, RG0043 P1 `:578-590` say the reverse.
+
+#### Proposed fix for PROTO
+
+1. Wait for RG0044 to run; copy what it proved, not what it planned.
+2. New `doc/350-repository-reset.md`: GRC's list and steps with every host
+   name, hook id, sha and org path replaced by `<env>-<slug>` names from
+   `etc/app.env`. Link from `DERIVING.md` §3 and `infra/README.md` step 7.
+3. Release checklist: a template section in `infra/README.md` after `:122`
+   (or a `release` skill): P/A/U/R/rollback skeleton, hash-checked
+   host-file move, none of RG0043's content.
+4. Traps: GRC's branch model is B057 (documented, not adopted). Drop hook
+   ids and real hostnames.
+5. Tests: none; B053 linter checks the new paths. Depends on B057.
+
+#### Open question for Brandon
+
+Release checklist as a doc section or a skill? Recommend a doc section
+first; make it a skill once two derived apps have used it.
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: a doc section, not a skill). New `doc/350-repository-reset.md`: what hangs off a GitHub repo (deploy key, UAT build webhook, prod promote webhook, collaborators/protection/Actions secrets, every clone), then 0 before (data out of the released tree, freeze, record settings and each host's `proto-api.revision`), 1 orphan root commit (tree checked equal), 2 rename old aside (webhooks deleted, archived) and recreate same owner/name so `REPO_URL` and the `github-proto` alias stay valid, deploy key and hooks re-added before the first push (secret read from the host hook file), `git ls-remote` as `shrmpl-hook`, 3 push `fresh:main` only, then the root commit to prod (release-branch push or by-hand promote by full sha; same-branch prod hook re-promotes or refuses, per doc/331 B6), 4 re-clone UAT's `BUILD_STG` (old moved aside, deleted after the clone checks) and every laptop, 5 checks, rollback, empty Lessons. ProtoStack's branch model, not GRC's (B057 skipped under B091): UAT builds `BRANCH_TO_CHECKOUT` (`main`), the prod hook branch is the app's choice. Linked from `DERIVING.md` section 2 (the B052 leak paragraph, rather than section 3 as the item said: that is where the leak is now described), `infra/README.md` header and step 7, `README.md` doc table, `CLAUDE.md` Layout runbooks. `infra/README.md` gains "Release checklist" after Promotion flow: when a release needs a record, P (what ships by layer, rollback shas from `proto-api.revision`, freeze, prod backup before a migration) / A (approvals) / U / R (promote by full sha) / rollback per host (re-promote; restore `backup/` across a migration; UAT revert; `.before` copy), and a hash-checked one-file move to prod (`git show origin/main:` + `shasum -a 256`, host `sha256sum` + `diff` + `.before` + `cp` keeping owner/mode; env files, the nginx site and `jail.local` excluded with pointers). None of RG0043's content, no hosts or hashes; framed as a skeleton per Brandon's "every project will be different". Deviation: written before RG0044 ran (the item said wait). doc/350 says so up front ("Not yet run": git commands checked on a scratch repo, GitHub and host steps not) per B052; reconcile it with RG0044 once that runs. Verified: the root-commit block in `zsh -f` and a scratch repo (same tree, 1 commit, fresh clone has no trace of the removed file; an old clone fetching the new root still holds the old objects, hence the re-clone); `git ls-remote` on an empty repo exits 0; the UAT re-clone block and the host-file move in ubuntu:24.04 (owner/mode kept, hash equal). Tests: none new (docs); all green, infra=15 docs=700 go=708 unit=105 e2e=70 py=103 (docs +23: new backticked paths).

@@ -10,7 +10,8 @@
 > The runbooks: `doc/330-uat-postsales-cutover.md` moves the presales UAT
 > host onto this pipeline; `doc/331-prd-postsales-install.md` installs prod
 > fresh, from the same local dump; `doc/340-db-host-setup.md` is the
-> database setup both use.
+> database setup both use; `doc/350-repository-reset.md` moves the repo
+> they deploy from to a new one.
 
 ## Which path am I on?
 
@@ -175,6 +176,100 @@ by a root-owned systemd **path unit** (`<env>-proto-restart.path`) that
 watches `stg/restart.request`; `install-api` touches the file and waits
 for `MainPID` to change before polling `/health`.
 
+## Release checklist
+
+Most releases are the flow above: a push, *tests passed*, a promote. A
+release that also carries a migration, a host-file change or anything
+else worth a planned rollback gets a written record: copy this skeleton
+to wherever the app tracks the work (the pull request description, say),
+fill it before starting, and tick it as it runs. Every project will be
+different; the letters are the shape, not a fixed list. Host blocks name
+literal paths, or open with `: "${VAR:?}"` for each variable they use.
+
+**P. Pre-flight**
+
+- [ ] What ships, by layer: code (the registry build), schema
+      (`git diff --stat <prod-commit>..<release-commit> --
+      src/api-srv/sql/migrations`), host files (the same over `infra/`),
+      data (normally none).
+- [ ] Rollback targets, full shas: on each host
+      `cat /srv/<env>-proto/libexec/proto-api.revision`.
+- [ ] Freeze: no other push to `BRANCH_TO_CHECKOUT` (or the prod release
+      branch) until R.
+- [ ] A migration ships: a prod backup by hand first
+      (`/srv/prd-proto/bin/prd-proto-backup-all` as root, `doc/331` B2);
+      `install-api` also dumps to `backup/` before `up`.
+
+**A. Approvals**: who signs off the merge, the UAT look and the promote,
+with the date, recorded beside each step.
+
+**U. UAT**
+
+- [ ] Merge to `BRANCH_TO_CHECKOUT`. Slack *started*, *deployed*, *tests
+      passed*, each with the release commit's full sha.
+- [ ] `curl -fsS https://<uat-site>/api/health`; `proto-api.revision`
+      names the release commit.
+- [ ] Host files under `infra/uat/`: moved as below, the source being the
+      build checkout (`BUILD_STG`), already at the deployed commit.
+- [ ] The release's own checks, in a browser.
+
+**R. Prod**
+
+- [ ] Promote by full sha (`doc/331` Every later release):
+      `sudo -u shrmpl-hook -H
+      /srv/prd-proto/bin/prd-proto-promote-uat-and-deploy <full sha>`.
+- [ ] Health and `proto-api.revision` as on UAT (`installed_tag=prd`).
+- [ ] Host files under `infra/prd/`: the `git archive` in `doc/331` Every
+      later release, or one file moved as below.
+- [ ] The release's own checks; lift the freeze.
+
+**Rollback, per host**
+
+- Code, no migration between: promote the recorded prod sha again; its
+  `sha-<commit>-passed` tag still stands. A failed health check right
+  after an install prints the `.prev` swap to run.
+- Code across a migration: restore the pre-migrate dump in `backup/`;
+  `proto-migrate verify` refuses an older binary on a newer schema, so a
+  re-promote is not a rollback.
+- UAT: push a revert; a by-hand install is replaced by the next push.
+- A host file: its `.before` copy back, then the same test and reload.
+
+**Moving one host file, hash-checked.** Prod has no checkout, so a file
+goes over by itself, from a pushed commit, never the working tree. `F` is
+its path under `infra/prd/` (`bin/...` or a unit in `etc/`); on the host
+it is the same path under `/srv/prd-proto/`. Locally:
+
+```bash
+: "${PRD_SSH:?}" "${F:?}"
+N=${F##*/}
+git fetch origin
+git show "origin/main:infra/prd/$F" > "/tmp/$N"
+shasum -a 256 "/tmp/$N"
+scp "/tmp/$N" "$PRD_SSH:/tmp/" && rm "/tmp/$N"
+```
+
+On prod as root, with `F` set again:
+
+```bash
+: "${F:?}"
+N=${F##*/}; T=/srv/prd-proto/$F
+sha256sum "/tmp/$N"
+diff "$T" "/tmp/$N"
+cp -p "$T" "/root/$N.before"
+cp "/tmp/$N" "$T" && rm "/tmp/$N"
+```
+
+The hash matches the local one and `diff` shows only the intended change.
+`cp` onto the existing file keeps its owner and mode. A unit then needs
+`systemctl daemon-reload` (a changed API unit takes effect at the next
+`systemctl restart prd-proto-api`). If it goes wrong,
+`cp -p "/root/$N.before" "$T"` and reload again. Three files do not move
+this way: an env file (a new key is added to the host's file by hand),
+the nginx site (rendered with the real site name, `doc/331` Every later
+release, then `nginx -t` before the reload) and `jail.local` (merged with
+the other apps' jails, step 8, then `fail2ban-client -t`). Each keeps the
+`.before` copy and the test before the reload.
+
 ## Layout on the host
 
 ```
@@ -252,7 +347,9 @@ what they do.
    code the monitor is registered under and put
    the matching `https://<nackmon-host>/checkin?code=<nackid>` in
    `HEALTHCHECK_URL` / `CERT_HEALTHCHECK_URL`. Pulsecheck: `PULSE_URL` takes
-   the real `SITE_NAME`.
+   the real `SITE_NAME`. The webhooks and the build checkout's deploy key
+   belong to the GitHub repository: a new repository needs them again
+   (`doc/350-repository-reset.md`).
 8. **fail2ban.** If `/etc/fail2ban/jail.local` is still a real file rather
    than a symlink, run `fail2ban/bin/migrate-to-srv-config` as root once.
    Then copy `fail2ban/etc/*` to `/srv/fail2ban/etc/`, fill `ignoreip`, and
