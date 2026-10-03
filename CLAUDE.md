@@ -53,6 +53,10 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
 - Go gate (`bin/300-run-tests go`, every module): `gofmt -l` empty,
   `go vet` and pinned `staticcheck` with zero findings. Fix the code;
   `//lint:ignore <check> <reason>` only where the finding is wrong.
+- Web gate (`bin/300-run-tests unit`): `eslint . --max-warnings 0` before
+  vitest; check only, never `--fix`.
+- A gate run leaves `git status` as it found it (checked at the end):
+  test output goes under `tmp/` or is gitignored.
 - Web: call the API only through `apiJson` (`utils/api.ts`); `console.*`
   only in `utils/report-error.ts`; file names kebab-case; a file that
   mirrors a Go file names it in its header (`constants/api.ts`,

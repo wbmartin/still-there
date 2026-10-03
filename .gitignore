@@ -4,6 +4,8 @@ dist
 etc/crt/*.pem
 tmp/
 src/api-srv/server
+# A bare `go build` in src/load-test; bin/330 builds to dist/.
+src/load-test/load-test
 tests/.venv/
 tests/__pycache__/
 
@@ -20,7 +22,7 @@ tests/__pycache__/
 __pycache__/
 .pytest_cache/
 
-# Logs and scratch (bin/200-run-tests writes tmp/test-logs/)
+# Logs (bin/300-run-tests writes its own under tmp/, ignored above)
 logs/
 *.log
 

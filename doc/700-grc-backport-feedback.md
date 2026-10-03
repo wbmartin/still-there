@@ -242,112 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B041 — Clean-tree gate: eslint as a check; `git status` stays empty
-
-- **Priority:** P2  **Area:** bin, docs, skills, etc, web-app
-- **GRC:** `bin/320-test-web-service:7-12,45-56`; `bin/lib/eslint-report.py:1-67`; `CLAUDE.md:89-92`; `README.md:80-82`; `src/api-srv/README.md:227-229`; `tests/README.md:50-56,123`; `.claude/skills/ticket-workflow/SKILL.md:109,113-116`; `src/web-app/.gitignore:14`; `.gitignore:17-20`; RG0006 md `:30-34,238`; RG0007 md `:122-124`; `bin/320:8-9,46-55`   **PROTO:** `bin/300-run-tests:3-4,91-104`; `CLAUDE.md:51-54`; `README.md:28-29`; `.claude/skills/ticket-workflow/SKILL.md:99-103`; `doc/902-project-commands.md:79-81`; `src/web-app/.gitignore`; `src/web-app/package.json:16`; `.gitignore:6-13`
-- **Ticket:** RG0006 / `0cf57f7`, `719739b`, `3db3bd1`, `67b8700`, `8f1c530`; RG0007 / `d7750dc`
-- **What:** PROTO never enforces lint; `test:coverage` dirties the tree. GRC
-fails if `eslint --fix-dry-run` would rewrite and requires empty `git status --short` after a run; ignores root `package*.json`, load-test binary.
-- **Port notes:** Add `coverage` to `src/web-app/.gitignore`. Fail on
-`errorCount > 0` too? Brandon's call: max-len carve-out (:9-12)? Typo B088.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Quality/DX gap: two promises in the docs are not enforced.
-
-**(1) Nothing runs eslint.** The web app defines a lint script and a
-config with one house rule:
-
-```js
-// src/web-app/eslint.config.js:27-28
-// Errors go through utils/report-error.ts, never straight to the console.
-'no-console': 'error',
-```
-
-`src/web-app/package.json:11` has `"lint": "eslint ."`, but no `bin/`
-script calls it (`grep -rn lint bin/` finds only ticket-lint lines in
-`bin/000-rebrand`). `bin/300-run-tests` unit mode runs vitest only
-(`:91-104`). CLAUDE.md, `.claude/skills/ticket-workflow/SKILL.md:99-103`
-and `doc/902-project-commands.md` list no lint step. A `console.log` or an
-unhandled promise ships green. Read-only check for this write-up:
-`npx eslint . -f json --fix-dry-run` today reports 0 errors, 0 warnings,
-0 files it would rewrite. So the gate can start strict at no cost.
-
-**(2) "No test script writes to the tree" has one hole and one leak.**
-`bin/300-run-tests:3-4` says none writes to the source tree, and
-`doc/902-project-commands.md:79-81` repeats it. But:
-
-- `src/web-app/package.json:16` `"test:coverage": "vitest run --coverage"`
-  writes `src/web-app/coverage/` (vitest's default report dir;
-  `vitest.config.ts:12-17` sets none). Neither `src/web-app/.gitignore`
-  nor the root `.gitignore` lists `coverage`, so the run dirties
-  `git status`.
-- Correction to the doc: the "load-test binary" is worse than unignored.
-  `src/load-test/load-test` (11 MB) is **tracked** in git
-  (`git ls-files`), added by `6b0ecf0`. `bin/330-test-load:25` now builds
-  to `dist/load-test`, so the tracked file is a stale binary nobody uses.
-- `.gitignore:23` names `bin/200-run-tests`, a retired script (B088).
-
-Nothing checks `git status --short` after a run, so a regression in
-either direction goes unseen.
-
-#### What GRC changed
-
-RG0006 (`0cf57f7`, docs in `719739b`, merged `3db3bd1`) made eslint a
-check in `bin/320-test-web-service`, run before vitest and pytest:
-
-```bash
-# bin/320-test-web-service:50, 55
-(cd src/web-app && npx eslint . -f json --fix-dry-run > "$ESLINT_JSON") || true
-python3 "$SCRIPT_DIR/lib/eslint-report.py" "$ESLINT_JSON"
-```
-
-`bin/lib/eslint-report.py:25,45-57` fails only when eslint *would rewrite*
-a file (`output` present in the JSON). Errors and warnings are printed,
-not fatal (`:26-43`), because GRC carries a `max-len` backlog at 200
-columns (`:9-12`; `src/web-app/eslint.config.js:37`). The report goes to
-`tmp/test-reports/`. GRC added `coverage` to `src/web-app/.gitignore:14`,
-`src/load-test/load-test` to `.gitignore:14`, and `/package.json`,
-`/package-lock.json` to `.gitignore:19-20` (RG0002 `67b8700` untracked
-them). The rule "`git status --short` MUST be empty after a run" is in
-`CLAUDE.md:89-92` and `.claude/skills/ticket-workflow/SKILL.md:109,113-116`.
-No test pins it; it is a manual check.
-
-#### Proposed fix for PROTO
-
-1. `bin/300-run-tests` unit block (`:91-104`): before vitest, run
-   `npx eslint . --max-warnings 0` from `src/web-app`; fail on non-zero.
-   PROTO has no `max-len` backlog, so the plain exit code is enough and
-   `bin/lib/eslint-report.py` is not needed. `eslint` never gets `--fix`.
-2. `src/web-app/.gitignore`: add `coverage`.
-3. `git rm --cached src/load-test/load-test`; add
-   `src/load-test/load-test` to `.gitignore`. Skip GRC's root
-   `package*.json` lines: PROTO has none and `.gitignore:12-13` already
-   covers a stray root `node_modules`.
-4. End of `bin/300-run-tests`: if `git status --porcelain` differs from
-   its value at start, print it and fail. Comparing start to end lets a
-   developer run the gate on a dirty tree.
-5. Docs: CLAUDE.md one bullet; skill `:99-103` add `git status --short`
-   must be empty; `doc/902-project-commands.md:56,79-81` name the lint
-   step. Fix `.gitignore:23` (B088).
-
-Traps: GRC's step is in `bin/320`; PROTO has one gate, `bin/300`. Do not
-copy the max-len carve-out or GRC's `--skip-lint` flag.
-
-Tests: none new; prove once by adding a `console.log` (gate red) and by
-running `npm run test:coverage` (tree stays clean).
-
-#### Open question for Brandon
-
-Fail on any eslint error or warning (`--max-warnings 0`), or only on
-auto-fixable rewrites as GRC does? Recommend: any error or warning,
-since PROTO is at zero today and the GRC carve-out exists only for a
-backlog PROTO does not have.
-
 ### B042 — Load test: fake metrics, broken cycle, dev target, argv password
 
 - **Priority:** P2  **Area:** tests, bin, etc, skills
@@ -8904,3 +8798,110 @@ Run govulncheck in the same gate (network on every run, can go red on a
 new advisory with no code change), or keep it a manual step? Recommend:
 gate it in `bin/300 all` only, not `go`, so the per-commit run stays fast
 and offline.
+
+### B041 — COMPLETED — Clean-tree gate: eslint as a check; `git status` stays empty
+- **Completed:** 2026-10-03. Pulled per the recommendation (any error or warning fails; no max-len carve-out, no `--skip-lint`, no `eslint-report.py`). `bin/300-run-tests` unit block runs `npx eslint . --max-warnings 0` in `src/web-app` before vitest (check only, log `tmp/test-logs/eslint.log`); `package.json` `lint` gained the same `--max-warnings 0`. Every mode records `git status --porcelain --untracked-files=all` at start and fails at the end if it differs (skipped outside a git checkout); built on B040's structure, `tmp/tools/` already covered by `tmp/`. `coverage` added to `src/web-app/.gitignore` and to eslint `globalIgnores`; `src/load-test/load-test` untracked (`git rm --cached`, the stale 11 MB binary stays on disk ignored) and gitignored; `.gitignore` logs comment no longer names `bin/200` (B088's `.gitignore` part). Docs: CLAUDE.md two bullets; doc/902 unit step and clean-tree paragraph (also drops the nonexistent `npm run test:unit`, a B075 line). Skill step skipped: `.claude/skills/ticket-workflow/` is gone (B091). Proved: a `console.log` in `utils/api.ts` turns `unit` red; `npm run test:coverage` leaves `git status` unchanged; an injected `touch src/web-app/stray.txt` fails the end check. shellcheck clean in ubuntu:24.04. Tests: all green, go=676 unit=82 e2e=13 py=96 (unchanged; no new tests, per the item).
+
+- **Priority:** P2  **Area:** bin, docs, skills, etc, web-app
+- **GRC:** `bin/320-test-web-service:7-12,45-56`; `bin/lib/eslint-report.py:1-67`; `CLAUDE.md:89-92`; `README.md:80-82`; `src/api-srv/README.md:227-229`; `tests/README.md:50-56,123`; `.claude/skills/ticket-workflow/SKILL.md:109,113-116`; `src/web-app/.gitignore:14`; `.gitignore:17-20`; RG0006 md `:30-34,238`; RG0007 md `:122-124`; `bin/320:8-9,46-55`   **PROTO:** `bin/300-run-tests:3-4,91-104`; `CLAUDE.md:51-54`; `README.md:28-29`; `.claude/skills/ticket-workflow/SKILL.md:99-103`; `doc/902-project-commands.md:79-81`; `src/web-app/.gitignore`; `src/web-app/package.json:16`; `.gitignore:6-13`
+- **Ticket:** RG0006 / `0cf57f7`, `719739b`, `3db3bd1`, `67b8700`, `8f1c530`; RG0007 / `d7750dc`
+- **What:** PROTO never enforces lint; `test:coverage` dirties the tree. GRC
+fails if `eslint --fix-dry-run` would rewrite and requires empty `git status --short` after a run; ignores root `package*.json`, load-test binary.
+- **Port notes:** Add `coverage` to `src/web-app/.gitignore`. Fail on
+`errorCount > 0` too? Brandon's call: max-len carve-out (:9-12)? Typo B088.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Quality/DX gap: two promises in the docs are not enforced.
+
+**(1) Nothing runs eslint.** The web app defines a lint script and a
+config with one house rule:
+
+```js
+// src/web-app/eslint.config.js:27-28
+// Errors go through utils/report-error.ts, never straight to the console.
+'no-console': 'error',
+```
+
+`src/web-app/package.json:11` has `"lint": "eslint ."`, but no `bin/`
+script calls it (`grep -rn lint bin/` finds only ticket-lint lines in
+`bin/000-rebrand`). `bin/300-run-tests` unit mode runs vitest only
+(`:91-104`). CLAUDE.md, `.claude/skills/ticket-workflow/SKILL.md:99-103`
+and `doc/902-project-commands.md` list no lint step. A `console.log` or an
+unhandled promise ships green. Read-only check for this write-up:
+`npx eslint . -f json --fix-dry-run` today reports 0 errors, 0 warnings,
+0 files it would rewrite. So the gate can start strict at no cost.
+
+**(2) "No test script writes to the tree" has one hole and one leak.**
+`bin/300-run-tests:3-4` says none writes to the source tree, and
+`doc/902-project-commands.md:79-81` repeats it. But:
+
+- `src/web-app/package.json:16` `"test:coverage": "vitest run --coverage"`
+  writes `src/web-app/coverage/` (vitest's default report dir;
+  `vitest.config.ts:12-17` sets none). Neither `src/web-app/.gitignore`
+  nor the root `.gitignore` lists `coverage`, so the run dirties
+  `git status`.
+- Correction to the doc: the "load-test binary" is worse than unignored.
+  `src/load-test/load-test` (11 MB) is **tracked** in git
+  (`git ls-files`), added by `6b0ecf0`. `bin/330-test-load:25` now builds
+  to `dist/load-test`, so the tracked file is a stale binary nobody uses.
+- `.gitignore:23` names `bin/200-run-tests`, a retired script (B088).
+
+Nothing checks `git status --short` after a run, so a regression in
+either direction goes unseen.
+
+#### What GRC changed
+
+RG0006 (`0cf57f7`, docs in `719739b`, merged `3db3bd1`) made eslint a
+check in `bin/320-test-web-service`, run before vitest and pytest:
+
+```bash
+# bin/320-test-web-service:50, 55
+(cd src/web-app && npx eslint . -f json --fix-dry-run > "$ESLINT_JSON") || true
+python3 "$SCRIPT_DIR/lib/eslint-report.py" "$ESLINT_JSON"
+```
+
+`bin/lib/eslint-report.py:25,45-57` fails only when eslint *would rewrite*
+a file (`output` present in the JSON). Errors and warnings are printed,
+not fatal (`:26-43`), because GRC carries a `max-len` backlog at 200
+columns (`:9-12`; `src/web-app/eslint.config.js:37`). The report goes to
+`tmp/test-reports/`. GRC added `coverage` to `src/web-app/.gitignore:14`,
+`src/load-test/load-test` to `.gitignore:14`, and `/package.json`,
+`/package-lock.json` to `.gitignore:19-20` (RG0002 `67b8700` untracked
+them). The rule "`git status --short` MUST be empty after a run" is in
+`CLAUDE.md:89-92` and `.claude/skills/ticket-workflow/SKILL.md:109,113-116`.
+No test pins it; it is a manual check.
+
+#### Proposed fix for PROTO
+
+1. `bin/300-run-tests` unit block (`:91-104`): before vitest, run
+   `npx eslint . --max-warnings 0` from `src/web-app`; fail on non-zero.
+   PROTO has no `max-len` backlog, so the plain exit code is enough and
+   `bin/lib/eslint-report.py` is not needed. `eslint` never gets `--fix`.
+2. `src/web-app/.gitignore`: add `coverage`.
+3. `git rm --cached src/load-test/load-test`; add
+   `src/load-test/load-test` to `.gitignore`. Skip GRC's root
+   `package*.json` lines: PROTO has none and `.gitignore:12-13` already
+   covers a stray root `node_modules`.
+4. End of `bin/300-run-tests`: if `git status --porcelain` differs from
+   its value at start, print it and fail. Comparing start to end lets a
+   developer run the gate on a dirty tree.
+5. Docs: CLAUDE.md one bullet; skill `:99-103` add `git status --short`
+   must be empty; `doc/902-project-commands.md:56,79-81` name the lint
+   step. Fix `.gitignore:23` (B088).
+
+Traps: GRC's step is in `bin/320`; PROTO has one gate, `bin/300`. Do not
+copy the max-len carve-out or GRC's `--skip-lint` flag.
+
+Tests: none new; prove once by adding a `console.log` (gate red) and by
+running `npm run test:coverage` (tree stays clean).
+
+#### Open question for Brandon
+
+Fail on any eslint error or warning (`--max-warnings 0`), or only on
+auto-fixable rewrites as GRC does? Recommend: any error or warning,
+since PROTO is at zero today and the GRC carve-out exists only for a
+backlog PROTO does not have.

@@ -54,7 +54,7 @@ The one command, on a laptop or a build host:
 ```
 ./bin/300-run-tests            # all: go + govulncheck + unit + e2e + py (load is not part of all)
 ./bin/300-run-tests go         # gofmt, go vet, staticcheck, go test (run before every commit)
-./bin/300-run-tests unit       # vitest (src/web-app/tests)
+./bin/300-run-tests unit       # eslint, vitest (src/web-app)
 ./bin/300-run-tests e2e        # Playwright only
 ./bin/300-run-tests py         # pytest HTTP suite against a private API instance
 ./bin/300-run-tests load       # load test against a running API (see below); not part of `all`
@@ -84,7 +84,9 @@ The one command, on a laptop or a build host:
   `go.mod` selects (its `toolchain` line), fails the run; so does being
   unable to install it or reach vuln.go.dev. Not in `go` mode, which
   stays offline. Logs: `govulncheck-<module>.log`.
-- `unit`: `npm run test:unit` (vitest) against `src/web-app/tests`.
+- `unit`: `npx eslint . --max-warnings 0` in `src/web-app` (same as
+  `npm run lint`; check only, any error or warning fails; log
+  `eslint.log`), then `vitest run` against `src/web-app/tests`.
 - `e2e`: rebuilds `loc_proto_e2e_db` via `bin/510`, installs Chromium if
   needed, runs `bin/230-run-web-app-e2e`.
 - `py`: rebuilds `loc_proto_e2e_db`, builds the API and starts it on
@@ -92,9 +94,14 @@ The one command, on a laptop or a build host:
   rate limits (the pytest suite asserts a 429), bootstraps the pytest venv
   at `tests/.venv` itself, runs the suite, stops the API.
 - `load`: delegates to `bin/330-test-load` (see below).
-- No test script writes to the source tree any more: pytest's HTML report
-  goes to `tmp/test-reports/`; logs land in `tmp/test-logs/` (`go-test.log`,
-  `playwright.log`, `pytest.log`, `py-api.log`). Ends with a summary line,
+- No test script writes to the source tree: pytest's HTML report goes to
+  `tmp/test-reports/`; logs land in `tmp/test-logs/` (`go-test.log`,
+  `playwright.log`, `pytest.log`, `py-api.log`); pinned tools in
+  `tmp/tools/bin/`. Every mode ends by comparing
+  `git status --porcelain --untracked-files=all` with its value at the
+  start and fails on any difference, so a dirty tree may still run the
+  gate but a run may not dirty it. `npm run test:coverage` writes
+  `src/web-app/coverage/`, which is gitignored. Ends with a summary line,
   e.g. `[INFO] tests passed (all): go=105 unit=42 e2e=3 py=63`.
 - Requires the `loc-postgres` container (doc/060-dev-env-start.md); nothing
   else -- the e2e API config has `DATABASE_URL` inline.

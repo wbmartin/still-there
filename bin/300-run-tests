@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # The test gate -- the same one on a laptop and on a build host. The only
-# script that runs tests; none of them writes to the source tree.
+# script that runs tests; none of them writes to the source tree, and the
+# run fails if `git status` at the end differs from the start.
 #
 #   bin/300-run-tests          # all: rebuild both scratch DBs, Go checks +
-#                              #      test, govulncheck, vitest, playwright,
-#                              #      pytest
+#                              #      test, govulncheck, eslint, vitest,
+#                              #      playwright, pytest
 #   bin/300-run-tests go       # gofmt, go vet, staticcheck, go test
 #                              #   (seconds; run before every commit)
-#   bin/300-run-tests unit     # vitest (src/web-app/tests), no database
+#   bin/300-run-tests unit     # eslint, vitest (src/web-app), no database
 #   bin/300-run-tests e2e      # Playwright only (bin/230-run-web-app-e2e)
 #   bin/300-run-tests py       # pytest HTTP suite (tests/) against a private
 #                              #   API instance this script starts and stops
@@ -64,6 +65,17 @@ done
 
 GO_COUNT=0; UNIT_COUNT=0; E2E_COUNT=0; PY_COUNT=0
 SUMMARY=()
+
+# The tree as the run found it; compared again at the end. Start against
+# end rather than "must be empty", so the gate also runs on a dirty tree.
+# Not a git checkout (an unpacked bundle): nothing to compare.
+GIT_STATUS_START=""
+IS_GIT_CHECKOUT=0
+if git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    IS_GIT_CHECKOUT=1
+    GIT_STATUS_START="$(git -C "$PROJECT_ROOT" status --porcelain \
+        --untracked-files=all)"
+fi
 
 # Go analysers are pinned and installed once under tmp/ (go install, no
 # go.mod entry), so every machine runs the same version and a later run
@@ -182,6 +194,15 @@ fi
 # ------------------------------------------------------------------------------
 if [ "$MODE" = all ] || [ "$MODE" = unit ]; then
     pushd "$PROJECT_ROOT/src/web-app" > /dev/null
+    # Check only, never --fix. Any error or warning fails: the app is at zero,
+    # so there is no backlog to carve out.
+    echo "[INFO] eslint"
+    LINT_LOG="$LOG_DIR/eslint.log"
+    if ! npx eslint . --max-warnings 0 > "$LINT_LOG" 2>&1; then
+        echo "[ERROR] eslint failed -- full log: $LINT_LOG"
+        head -40 "$LINT_LOG"
+        exit 1
+    fi
     echo "[INFO] vitest"
     UNIT_LOG="$LOG_DIR/vitest.log"
     if ! NO_COLOR=1 npx vitest run > "$UNIT_LOG" 2>&1; then
@@ -323,6 +344,22 @@ if [ "$MODE" = load ]; then
     # a minute by design.
     "$SCRIPT_DIR/330-test-load"
     SUMMARY+=("load=done")
+fi
+
+# ------------------------------------------------------------------------------
+# A test that writes into the tree (an unignored report, a stray binary) or
+# rewrites a tracked file fails the run here, whichever suite did it.
+if [ "$IS_GIT_CHECKOUT" = 1 ]; then
+    GIT_STATUS_END="$(git -C "$PROJECT_ROOT" status --porcelain \
+        --untracked-files=all)"
+    if [ "$GIT_STATUS_END" != "$GIT_STATUS_START" ]; then
+        echo "[ERROR] the run changed git status (write under tmp/ or" \
+            "gitignore it). Before:"
+        echo "${GIT_STATUS_START:-    (clean)}"
+        echo "After:"
+        echo "$GIT_STATUS_END"
+        exit 1
+    fi
 fi
 
 echo "[INFO] tests passed ($MODE): ${SUMMARY[*]}"
