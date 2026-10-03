@@ -929,6 +929,55 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
   change.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
 
+### B096 — Grant ids follow no one numbering convention
+- **Priority:** P3  **Area:** go-api, web-app, docs
+- **GRC:** not checked   **PROTO:** `src/api-srv/internal/model/grants.go:9-12` (Example 1001-1004, Read first), `:15` (8001), `:18-19` (User `CREATE` 9001 then `READ` 9002), `:26-29` (User group `READ` 9010 then `CREATE` 9011), `:22-23` (9008, 9009), `:35` (9020)
+- **Ticket:** found while writing doc/810 for B090 (2026-10-03)
+- **What:** Ids are grouped by entity but not ordered the same way: Example
+  and user groups run READ, CREATE, UPDATE, DELETE, while User runs CREATE,
+  READ, UPDATE, DELETE. Gaps (9005-9007, 9016-9019) are unexplained, and
+  the "admin user" and "user group" blocks share the 9xxx range. doc/810
+  now describes this as it is. Ids are stored in group rows and pinned by
+  `src/api-srv/internal/model/testdata/grants.json` (B054) and
+  `src/web-app/constants/grants.ts`, so a renumber is a data migration.
+- **Port notes:** Recommend a convention for new ids only: one block of ten
+  per entity, order READ, CREATE, UPDATE, DELETE, then extras; write it in
+  doc/810 and leave every shipped id alone. Renumber only with a migration
+  that rewrites stored grant ids plus a fixture refresh
+  (`-update-grants` in `grants_fixture_test.go:20`); not recommended.
+- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
+
+### B097 — `mfa_exempt` is policy-only: the API accepts it from any user admin
+- **Priority:** P2  **Area:** go-api, docs
+- **GRC:** not checked   **PROTO:** `src/api-srv/internal/handler/user_handler.go:434` (create copies `req.MFAExempt`, grant check `:361`), `:493` (update, grant check), `src/api-srv/internal/handler/user_invite_handler.go:170`, `src/api-srv/internal/handler/auth_handler.go:248` (login skips TOTP when exempt), `doc/110-threat-model.md` rows 1.6 and 3.5 (policy, status open)
+- **Ticket:** found while writing doc/110 for B077 (2026-10-03)
+- **What:** doc/110 sets the policy "never on a human account in
+  production", but anyone holding `CREATE_USER` or `UPDATE_USER` can set
+  the flag through `POST`/`PUT /user` and switch a login to password-only.
+  Only B071's export scrub (`src/api-srv/sql/export-scrub.sql`) clears it,
+  and only for a post-sales export, not for a live host.
+- **Port notes:** Option A: refuse `mfaExempt: true` in the API unless the
+  caller's tenant is the test tenant (2) or a config key allows it; test
+  logins in pytest would sign in as a tenant-2 user, which already holds.
+  Option B: keep the API open and add a check that reports exempt logins on
+  a host (a `bin/` query or a startup log line). A is stronger; B costs no
+  behaviour change. Either way, update doc/110 rows 1.6 and 3.5.
+- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
+
+### B098 — `example` has no cross-tenant repository test
+- **Priority:** P3  **Area:** go-api, tests
+- **GRC:** not checked   **PROTO:** `src/api-srv/internal/repository/example_repository_test.go` (every call uses `testTenant`, lines 46-79), `doc/110-threat-model.md` (tenant table row `example`: "none", status partial; row 2.1)
+- **Ticket:** found while writing doc/110 for B077 (2026-10-03)
+- **What:** doc/110 requires one cross-tenant negative test per tenant
+  table. `app_user`, `app_user_group` and `user_invite` have one;
+  `example` is the only table without, though the repository scopes every
+  query.
+- **Port notes:** Add a test in `example_repository_test.go`: create an
+  example in tenant 2, then read, update and delete it as tenant 3 and
+  expect not-found; the reverse for a tenant-3 row. Tenants 2 and 3 only
+  (the test database holds no tenant 1). Flip the doc/110 row to met.
+- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
+
 # SKIP / Brandon-veto list (tick to override)
 
 **Recommendations against porting**
