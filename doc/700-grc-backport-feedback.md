@@ -866,28 +866,6 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
   returns the new status and the session cookie still works.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ X\] skip  (new, not yet decided)
 
-### B095 — Six bash scripts run without `set -o pipefail`
-- **Priority:** P3  **Area:** bin
-- **GRC:** not checked   **PROTO:** `bin/100-build-api-server:6` (`set -e`), `bin/215-run-api-srv:3` (`set -e`), `bin/216-stop-local-stack:3` (`set -e`), `bin/220-run-web-app` (no `set` line at all), `bin/510-reset-test-db:39` (`set -e`), `bin/515-reseed-db:27` (`set -e`)
-- **Ticket:** reported during the B034-B061 batch, list verified 2026-10-03
-- **What:** Every other tracked bash script (23) starts `set -euo pipefail`;
-  these six do not, so a failing command on the left of a pipe is ignored
-  and, in `bin/220`, any failure is. Only `bin/510` and `bin/515` have
-  pipes today: `bin/510-reset-test-db:60` and `bin/515-reseed-db:47`
-  (`docker ps | grep -qx`), `bin/510-reset-test-db:75,78` (`grep | head |
-  sed`, `printf | sed`), `bin/515-reseed-db:55` (`psql -lqt | cut | grep
-  -qw`, where a failed `psql` reads as "database missing"). The four POSIX
-  `sh` start/stop scripts (`infra/uat/bin/uat-proto-start`,
-  `infra/uat/bin/uat-proto-stop` and the `prd` pair) are two `systemctl`
-  lines each with no pipe and are not counted here.
-- **Port notes:** Add `set -euo pipefail` to all six to match the house
-  line; check each for `-u` (unset `$1` and optional variables) and for
-  `| grep -q` pipelines, which can fail under `pipefail` when `grep` exits
-  early (small outputs here, but test each). Run shellcheck on the six.
-  Tests: run each script once (bin/100, 215/216, 220, 510, 515) after the
-  change.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
-
 ### B096 — Grant ids follow no one numbering convention
 - **Priority:** P3  **Area:** go-api, web-app, docs
 - **GRC:** not checked   **PROTO:** `src/api-srv/internal/model/grants.go:9-12` (Example 1001-1004, Read first), `:15` (8001), `:18-19` (User `CREATE` 9001 then `READ` 9002), `:26-29` (User group `READ` 9010 then `CREATE` 9011), `:22-23` (9008, 9009), `:35` (9020)
@@ -9062,3 +9040,26 @@ None.
   ahead of every check (it chooses the path) and stays bounded.
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip  (Brandon: as recommended, 2026-10-03)
 - **Completed:** 2026-10-03. `src/api-srv/internal/handler/user_mfa_handler.go`: both handlers drop the up-front `CheckRateLimitAndUserBlock`; after the bounded body read the temp-token path runs `SkipJWT`, `CheckRateLimit` (per address), `SkipUserBlock`, and the session path runs `CheckJWT` then `CheckRateLimitAndUserBlock` (per user, `BLOCKED*` read). `route_check_contract_test.go`: both rows now `block: true`, skip reasons rewritten. New `TestMFAHandlers_SessionPathReadsTheBlockFlag` (both routes): a valid pre-block token with the flag set and no revocation (the post-restart state) answers 403 before the repository; the session path counts in the per-user bucket (passes with `MaxUnauthReqPerMin=0`); the temp-token path stays per address (second request from one address 429, another address still served). On the old handler the two contract rows and four of the six new subtests fail (the two temp-token subtests pass on both, as intended). doc/105 route table and exception row updated; doc/110 row 1.9 drops the B094 open note (stays partial: the `admin` subject skips the flag, row 1.10). Note: `CheckRateLimit` adopts a validly signed auth cookie if one is sent, as on the other public routes, so a temp-token request carrying one counts per user. Tests: all green, infra=15 docs=705 go=715 unit=105 e2e=70 py=103 (go +7: the new test and its six subtests), govulncheck clean, gofmt clean.
+
+### B095 — COMPLETED — Six bash scripts run without `set -o pipefail`
+- **Priority:** P3  **Area:** bin
+- **GRC:** not checked   **PROTO:** `bin/100-build-api-server:6` (`set -e`), `bin/215-run-api-srv:3` (`set -e`), `bin/216-stop-local-stack:3` (`set -e`), `bin/220-run-web-app` (no `set` line at all), `bin/510-reset-test-db:39` (`set -e`), `bin/515-reseed-db:27` (`set -e`)
+- **Ticket:** reported during the B034-B061 batch, list verified 2026-10-03
+- **What:** Every other tracked bash script (23) starts `set -euo pipefail`;
+  these six do not, so a failing command on the left of a pipe is ignored
+  and, in `bin/220`, any failure is. Only `bin/510` and `bin/515` have
+  pipes today: `bin/510-reset-test-db:60` and `bin/515-reseed-db:47`
+  (`docker ps | grep -qx`), `bin/510-reset-test-db:75,78` (`grep | head |
+  sed`, `printf | sed`), `bin/515-reseed-db:55` (`psql -lqt | cut | grep
+  -qw`, where a failed `psql` reads as "database missing"). The four POSIX
+  `sh` start/stop scripts (`infra/uat/bin/uat-proto-start`,
+  `infra/uat/bin/uat-proto-stop` and the `prd` pair) are two `systemctl`
+  lines each with no pipe and are not counted here.
+- **Port notes:** Add `set -euo pipefail` to all six to match the house
+  line; check each for `-u` (unset `$1` and optional variables) and for
+  `| grep -q` pipelines, which can fail under `pipefail` when `grep` exits
+  early (small outputs here, but test each). Run shellcheck on the six.
+  Tests: run each script once (bin/100, 215/216, 220, 510, 515) after the
+  change.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip  (Brandon: as recommended, 2026-10-03)
+- **Completed:** 2026-10-03. `set -euo pipefail` in `bin/100`, `215`, `216`, `220` (had none), `510`, `515`. `-u`: `bin/215` `$1` -> `${1:-}`; the rest already used `${VAR:-}` for optionals. `-e` paths that may fail already had `|| true`. Pipelines: `docker ps | grep -qx` (510, 515) now `grep -qx ... <<< "$(docker ps ... || true)"` so `grep -q` closing early cannot SIGPIPE the left side; `bin/515` `psql -lqt | cut | grep -qw` now captures `psql -lqt` first, so a failed psql stops the script instead of reading as "database missing" and exec'ing the DROP-and-rebuild `bin/510`. shellcheck and `bash -n` clean on all six in `ubuntu:24.04`. Hand runs: `bin/100` builds, `bin/216` stops nothing cleanly, `bin/515` reseeds the e2e db, `bin/220` starts vite (timeout-killed), `bin/215 -d` starts and the API exits at once on the dev DB (`account_status` column missing: 0004/0005 not applied; not this item), `bin/510` runs in the gate. Tests: all green, infra=15 docs=705 go=715 unit=105 e2e=70 py=103 (unchanged).

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
 echo "Building the API server..."
 
@@ -65,10 +65,10 @@ fi
 
 # Detect execution mode
 # Check for explicit flags first
-if [ "$1" = "--daemon" ] || [ "$1" = "-d" ]; then
+if [ "${1:-}" = "--daemon" ] || [ "${1:-}" = "-d" ]; then
     INTERACTIVE=false
     echo "Running in daemon mode (background execution)..."
-elif [ "$1" = "--interactive" ] || [ "$1" = "-i" ]; then
+elif [ "${1:-}" = "--interactive" ] || [ "${1:-}" = "-i" ]; then
     INTERACTIVE=true
     echo "Running in interactive mode (explicit flag)..."
 elif [ -t 1 ]; then

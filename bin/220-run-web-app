@@ -3,6 +3,8 @@
 # Vite dev server for the React app on :5173, proxying /api to the Go API on
 # :8080 (VITE_API_PROXY_URL overrides the target; see vite.config.ts).
 
+set -euo pipefail
+
 pushd "$(dirname "$0")/../src/web-app" > /dev/null
 npm run dev
 popd > /dev/null

@@ -24,7 +24,7 @@
 # Falls back to the full rebuild (bin/510) when the database is not there yet,
 # so a fresh checkout needs no separate setup step.
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -44,7 +44,8 @@ FIXTURES_DIR="$PROJECT_ROOT/src/api-srv/sql/fixtures"
 PG_CONTAINER="${PG_CONTAINER:-loc-postgres}"
 if [ -z "${PSQL:-}" ]; then
   if command -v docker >/dev/null 2>&1 \
-     && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$PG_CONTAINER"; then
+     && grep -qx "$PG_CONTAINER" \
+        <<< "$(docker ps --format '{{.Names}}' 2>/dev/null || true)"; then
     PSQL="docker exec -i $PG_CONTAINER psql -U postgres"
   else
     PSQL="psql -h 127.0.0.1 -U postgres"
@@ -52,7 +53,10 @@ if [ -z "${PSQL:-}" ]; then
 fi
 export PGPASSWORD
 
-if ! $PSQL -d postgres -lqt | cut -d \| -f 1 | grep -qw "$DB"; then
+# Listed first, not piped: a failed psql must stop the script, not read as
+# "database missing" and trigger a DROP and rebuild.
+DB_LIST="$($PSQL -d postgres -lqt)"
+if ! grep -qw "$DB" <<< "$(cut -d \| -f 1 <<< "$DB_LIST")"; then
   echo "[INFO] $DB does not exist yet; building it"
   exec "$SCRIPT_DIR/510-reset-test-db" "$DB"
 fi

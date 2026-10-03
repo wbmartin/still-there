@@ -46,7 +46,7 @@
 # Users after a run (tenant 2): admin / admin123!, basic / basic123!,
 # mfa / basic123! (not MFA-exempt).
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -72,7 +72,8 @@ esac
 PG_CONTAINER="${PG_CONTAINER:-loc-postgres}"
 if [ -z "${PSQL:-}" ]; then
   if command -v docker >/dev/null 2>&1 \
-     && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$PG_CONTAINER"; then
+     && grep -qx "$PG_CONTAINER" \
+        <<< "$(docker ps --format '{{.Names}}' 2>/dev/null || true)"; then
     PSQL="docker exec -i $PG_CONTAINER psql -U postgres"
     if [ -z "${PGPASSWORD:-}" ]; then
       PGPASSWORD="$(docker exec "$PG_CONTAINER" printenv POSTGRES_PASSWORD 2>/dev/null || true)"

@@ -3,7 +3,7 @@
 # Build the API server and migrator binaries
 # Output: dist/<slug>-api, dist/<slug>-migrate (slug from etc/app.env)
 
-set -e
+set -euo pipefail
 
 # Get the directory of this script (BASH_SOURCE[0])
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

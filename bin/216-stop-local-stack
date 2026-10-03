@@ -2,7 +2,7 @@
 # Stop the local stack: the API server (bin/215) and the vite dev server (bin/220).
 # Only this checkout's: another checkout's (or another project's) API and
 # vite keep running. pgrep -f patterns are extended regexes over the argv.
-set -e
+set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # shellcheck disable=SC1091
