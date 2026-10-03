@@ -16,11 +16,6 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 - **Before a real export (B071):** the export scrub refuses a live login
   named `admin`: rename or delete the seeded dev admin first. (The A9
   first-login link is now `proto-migrate invite`, B099.)
-- **Optional reviews:** B062 rows-per-page [10,15,25,50,100] default 15 vs
-  GRC [10,20,25,50,100] default 25; B063 added unused
-  `components/sticky-filters.tsx` (delete it and its test to defer); B066
-  changed shared `use-auth-guard` to return DENIED; B069 zod 4.1.13 not
-  bumped to 4.6.5 (no advisory).
 - **After GRC RG0044 (repo reset) runs:** update doc/350 (B082, marked
   "Not yet run").
 - **Attribution note:** commits 8dd505f..388c0ae (B085-B090) say "Claude
@@ -38,13 +33,15 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 - **Grant 9020 (reset another user's MFA) by hand** on every real tenant's
   admin group (B010). No migration seeds groups, so a deployed admin loses
   MFA reset until it is added.
-- **Confirm B046 scope:** Brandon's "yes" was taken to also cover renaming
-  post-sales `libexec/proto-api` -> `libexec/api-srv` (revertable on its
-  own).
-- **Confirm B058:** prd promote refuses unless the `sha-<rev>-passed` tag
-  matches, with no override.
-- **Optional, B054:** the route drift check is one-way (web paths must exist
-  in Go), per the recommendation. Say if it should be two-way.
+- **2026-10-03:** Brandon agreed with every recommendation: B046 rename
+  and B058 no-override confirmed; B054 one-way, B062 15 default, B066
+  DENIED, B069 no zod bump kept; B063 StickyFilters removed; B093-B099
+  done.
+- **Confirm B097 deviation:** `PUT /user` refuses only turning mfaExempt
+  on; keeping an already-exempt login exempt or clearing it still works
+  (seeded admin/basic stay editable).
+- **Optional, B097 follow-up:** the user edit page still shows the
+  MFA-exempt checkbox; on a `false` server ticking it shows the 403.
 - **Post-sales host steps, when hosts exist:** recopy infra `bin/` and
   `*-proto-api.service`, `daemon-reload` (B045/B046); `HOOK_TIMEOUT=3600`
   and postgresql-client on the UAT build host (B047); recopy the nginx
@@ -62,9 +59,9 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 
 ## 1. Queue (doc/700 items not done, not skipped), in order
 
-The decided queue is empty: B062-B066, B069-B078, B080-B083, B085-B088, B090,
-B093, B094, B095, B096, B097, B098 and B099 are done (B089 folded into B038, B091 removed the ticket
-system). No items await Brandon's decision except those in §0.
+The queue is empty: all decided items are done through B099 (B089 folded
+into B038, B091 removed the ticket system). No items await Brandon's
+decision except those in §0.
 Skipped, do not do: B002, B005, B015, B049, B050, B057, B067, B068, B079,
 B084, B092. B067 (audit log) is skipped, so B035 stripped GRC's audit
 calls; keep audit writes out of later items too.
@@ -77,8 +74,8 @@ calls; keep audit writes out of later items too.
    edit an existing migration, ~80 columns, `fooList` names).
 3. Add the tests the fix steps name; update tests that pinned the bug.
 4. `bin/300-run-tests all` fully green before completing; counts must not
-   drop without an explanation. Last full run at `388c0ae`:
-   infra=15 docs=705 go=708 unit=105 e2e=70 py=103, govulncheck clean,
+   drop without an explanation. Last full run at `add8189`:
+   infra=15 docs=713 go=748 unit=104 e2e=70 py=103, govulncheck clean,
    `gofmt -l` empty. The gate has `infra` and `docs` modes, skip-fails,
    and a clean-tree check: the run fails if it changes `git status`; do
    not edit files while it runs.
