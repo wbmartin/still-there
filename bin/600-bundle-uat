@@ -7,6 +7,8 @@
 #   5. src/api-srv/sql/roles.sql + server-side deploy script
 #   6. etc/uat-api-srv.env.template, names filled  -> api-srv.env.template
 #      (no secrets: 610 generates them on the host, once)
+#   7. etc/uat-nginx-site.conf.template         -> nginx-site.conf.template
+#      (610 fills and installs it once, for UAT_DOMAIN)
 # Output: dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz, scp'd to $UAT_HOST:/tmp/
 #
 # This is the presales (pre-agreement) quick-deploy path: local build + local DB dump
@@ -30,9 +32,12 @@ PRESALES_ENV="${PRESALES_ENV:-$PROJECT_ROOT/etc/uat-deploy.env}"
 [ -r "$PRESALES_ENV" ] || { echo "[ERROR] $PRESALES_ENV missing or unreadable"; exit 1; }
 # shellcheck disable=SC1090
 source "$PRESALES_ENV"
-for var in APP_NAME UAT_HOST PG_CONTAINER LOCAL_ENV_FILE APP_ROOT SERVICE SVC_USER DB_APP_ROLE DB_NAME; do
+for var in APP_NAME UAT_HOST PG_CONTAINER LOCAL_ENV_FILE APP_ROOT SERVICE SVC_USER DB_APP_ROLE DB_NAME UAT_DOMAIN; do
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $PRESALES_ENV"; exit 1; }
 done
+# goes into an nginx server_name and a file name on the host: no room for more
+[[ "$UAT_DOMAIN" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] \
+  || { echo "[ERROR] UAT_DOMAIN=$UAT_DOMAIN is not a lower-case hostname"; exit 1; }
 [ -n "${APP_DISPLAY_NAME:-}" ] || { echo "[ERROR] APP_DISPLAY_NAME not set by etc/app.env"; exit 1; }
 case "$LOCAL_ENV_FILE" in /*) ;; *) LOCAL_ENV_FILE="$PROJECT_ROOT/$LOCAL_ENV_FILE" ;; esac
 [ -r "$LOCAL_ENV_FILE" ] || { echo "[ERROR] LOCAL_ENV_FILE not readable: $LOCAL_ENV_FILE"; exit 1; }
@@ -49,6 +54,8 @@ done
 ROLES_SQL="$PROJECT_ROOT/src/api-srv/sql/roles.sql"
 ENV_TEMPLATE="$PROJECT_ROOT/etc/uat-api-srv.env.template"
 [ -f "$ENV_TEMPLATE" ] || { echo "[ERROR] $ENV_TEMPLATE missing"; exit 1; }
+NGINX_TEMPLATE="$PROJECT_ROOT/etc/uat-nginx-site.conf.template"
+[ -f "$NGINX_TEMPLATE" ] || { echo "[ERROR] $NGINX_TEMPLATE missing"; exit 1; }
 LOCAL_DB=""
 if [ "$DO_DB" = 1 ]; then
   LOCAL_DB="$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$LOCAL_ENV_FILE" | head -1)"
@@ -113,8 +120,12 @@ fi
 echo "[5/5] pack"
 cp "$SCRIPT_DIR/610-deploy-uat" "$STAGE/deploy.sh"; chmod +x "$STAGE/deploy.sh"
 # server-side settings for deploy.sh; $APP_ROOT/etc/deploy.env on the host overrides
-printf 'APP_NAME=%s\nAPP_ROOT=%s\nSERVICE=%s\nSVC_USER=%s\nDB_APP_ROLE=%s\n' \
-    "$APP_NAME" "$APP_ROOT" "$SERVICE" "$SVC_USER" "$DB_APP_ROLE" > "$STAGE/deploy.env"
+printf 'APP_NAME=%s\nAPP_ROOT=%s\nSERVICE=%s\nSVC_USER=%s\nDB_APP_ROLE=%s\nUAT_DOMAIN=%s\n' \
+    "$APP_NAME" "$APP_ROOT" "$SERVICE" "$SVC_USER" "$DB_APP_ROLE" "$UAT_DOMAIN" \
+    > "$STAGE/deploy.env"
+# placeholders only; 610 fills them on the host, where APP_ROOT may be
+# overridden and SERVER_PORT is read from api-srv.env
+cp "$NGINX_TEMPLATE" "$STAGE/nginx-site.conf.template"
 # names only; the __DB_PASSWORD__/__JWT_SECRET__/__TOTP_KEY__ placeholders
 # stay for 610 to fill on the host (literal replace: no regex, no & expansion)
 DB_APP_ROLE="$DB_APP_ROLE" DB_NAME="$DB_NAME" SERVER_NAME="$SERVICE" \
@@ -134,6 +145,7 @@ APP_DISPLAY_NAME="$APP_DISPLAY_NAME" awk '
   echo "git=$COMMIT $DIRTY"
   echo "go=$(go version | awk '{print $3}')  node=$(node --version)"
   echo "db=${LOCAL_DB:-skipped}"
+  echo "domain=$UAT_DOMAIN"
   [ -f "$STAGE/$APP_SLUG-migrate" ] && echo "migrate=included" || echo "migrate=not-built"
 } > "$STAGE/MANIFEST"
 COPYFILE_DISABLE=1 tar --no-xattrs -C "$PROJECT_ROOT/dist" -czf "$TARBALL" "$NAME"

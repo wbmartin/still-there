@@ -10,14 +10,15 @@ Two scripts do the work; this skill is the procedure around them.
 | | |
 |---|---|
 | `bin/600-bundle-uat` | local: build `api-srv` (static linux/amd64) + `proto-migrate` (if `src/api-srv/cmd/migrate` exists) + `web-pub.tar.gz` + `db.sql` (pg_dump run *inside* the `$PG_CONTAINER` container) + `deploy.env` + `api-srv.env.template` (names filled, no secrets) → `dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz` → scp to `$UAT_HOST:/tmp/` |
-| `bin/610-deploy-uat` | server, shipped in the bundle as `deploy.sh`: refuse a post-sales host → first run only, write `etc/api-srv.env` with secrets generated on the host → stop `$SERVICE` → drop/recreate the UAT DB from `db.sql` → set the role password from `api-srv.env` → replace `$APP_ROOT/libexec/api-srv` (+ `proto-migrate`) → replace `$APP_ROOT/web-pub` → start → poll `/health` |
+| `bin/610-deploy-uat` | server, shipped in the bundle as `deploy.sh`: refuse a post-sales host → first run only, write `etc/api-srv.env` with secrets generated on the host, the systemd unit, and the nginx site for `UAT_DOMAIN` (`nginx -t` + reload; prints the `certbot --nginx` line) → stop `$SERVICE` → drop/recreate the UAT DB from `db.sql` → set the role password from `api-srv.env` → replace `$APP_ROOT/libexec/api-srv` (+ `proto-migrate`) → replace `$APP_ROOT/web-pub` → start → poll `/health` |
 
 **All settings come from `etc/uat-deploy.env`** (committed, no secrets), with the
 app's identity from `etc/app.env` (`APP_SLUG=proto`, sourced first): `APP_NAME=$APP_SLUG`,
 `UAT_HOST=uat-server` (ssh alias), `PG_CONTAINER=loc-postgres`,
 `LOCAL_ENV_FILE=etc/loc-api-srv.env`, and the server-side `APP_ROOT=/srv/uat-$APP_SLUG`,
 `SERVICE=uat-$APP_SLUG-api`, `SVC_USER=www-data`, `DB_APP_ROLE=${APP_SLUG}_app`, and
-`DB_NAME=uat_${APP_SLUG}_db` (first deploy only). `600` sources it (`PRESALES_ENV=<file>`
+`DB_NAME=uat_${APP_SLUG}_db` (first deploy only), and `UAT_DOMAIN` (first deploy
+only; an `example.com` name is a placeholder and installs no nginx site). `600` sources it (`PRESALES_ENV=<file>`
 to use another) and dies naming any missing key; there are no inline defaults and no
 per-variable env overrides. `600` writes the server-side keys into the bundle as
 `deploy.env`; `610` sources that, then `$APP_ROOT/etc/deploy.env` if the host keeps one

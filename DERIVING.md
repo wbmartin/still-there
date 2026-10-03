@@ -56,8 +56,9 @@ The rule has to hold before the first commit of real data.
 ## 3. Hosts
 
 - **Presales** (`bin/600`/`610`): `etc/uat-deploy.env` — `UAT_HOST` (ssh
-  alias), `PG_CONTAINER`. Service and paths are already derived from the
-  slug. Host prep: `doc/320-presales-uat-deploy.md`.
+  alias), `PG_CONTAINER`, `UAT_DOMAIN` (the site's hostname; the repo's
+  `example.com` one is a placeholder and installs no nginx site). Service
+  and paths are already derived from the slug. Host prep: `doc/320-presales-uat-deploy.md`.
 - **Post-sales** (`infra/`): rename `infra/uat/` → `infra/<real-uat-host>/`
   and `infra/prd/` → `infra/<real-prd-host>/`, then fill the `SERVERONLY`
   values on the host per `infra/README.md`. Moving the presales UAT host

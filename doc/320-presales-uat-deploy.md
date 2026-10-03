@@ -42,6 +42,8 @@ post-agreement upgrade adds a webhook/registry-driven deploy and a real migrator
     api-srv.env        # written by 610 on the first deploy, secrets generated on the host;
                        # never overwritten, never in the bundle
     uat-<app>-api.service
+    nginx-presales_<domain>  # written by 610 on the first deploy, linked as
+                       # /etc/nginx/sites-enabled/<domain>; never overwritten
   log/                 # nginx only; API logs to journald
 ```
 
@@ -62,11 +64,12 @@ written in terms of `$APP_SLUG`:
 | `SVC_USER` | server | `www-data` |
 | `DB_APP_ROLE` | server | `${APP_SLUG}_app`; owns the restored DB and is the API's login. Must be a role `src/api-srv/sql/roles.sql` creates (`600` checks) |
 | `DB_NAME` | server, first deploy | `uat_${APP_SLUG}_db`; goes into the generated `api-srv.env`, read back from its `DATABASE_URL` after that |
+| `UAT_DOMAIN` | server, first deploy | public hostname of the site (`uat-$APP_SLUG.example.com` in the repo: a placeholder, see below); lower-case letters, digits, dots, hyphens (`600` and `610` check) |
 
 `600` sources it (`PRESALES_ENV=<file>` to use another) and stops, naming the key, if
 anything is missing — there are no inline defaults — and checks the local database,
 `roles.sql` and `DB_APP_ROLE` before the first `go build`, so a bad env fails in under
-a second rather than after a minute of building. It writes the five server-side keys
+a second rather than after a minute of building. It writes the six server-side keys
 into the bundle as `deploy.env`; `610` (`deploy.sh`) sources that and then
 `$APP_ROOT/etc/deploy.env` if the host keeps one, which wins. Same rule: missing key,
 no run. This is the same "scripts carry no per-host values" model the post-sales
@@ -86,15 +89,40 @@ and `__TOTP_KEY__` stay placeholders until `610` fills them on the host.
    `TOTP_ENCRYPTION_KEY` each 32 bytes from `/dev/urandom` (64 hex). They reach
    the file through `awk`'s environment, never a command line. Later deploys
    never touch the file; edit it on the host to change a setting.
-3. Point nginx at `web-pub/` for static files and proxy `/api/` to
-   `127.0.0.1:$SERVER_PORT/`, stripping the `/api` prefix.
+3. Install nginx (Debian layout, `/etc/nginx/sites-enabled/`) and set
+   `UAT_DOMAIN`. The first deploy installs the site (below); once DNS for
+   the domain points at the host, run the `certbot --nginx -d <domain>`
+   line it prints, once, to add TLS and the port-80 redirect.
 4. Install Postgres on the host, listening on `127.0.0.1:5432`.
    `bin/610-deploy-uat` creates the role and database itself (`000-roles.sql` in
    the bundle), then on every run sets `$DB_APP_ROLE`'s password to the one in
    `DATABASE_URL`, fed to `psql` on stdin. The repo literal in `roles.sql` never
    survives a deploy.
 5. Optional: `/srv/uat-<app>/etc/deploy.env` with any of `APP_NAME`, `APP_ROOT`,
-   `SERVICE`, `SVC_USER`, `DB_APP_ROLE` to override what the bundle carries.
+   `SERVICE`, `SVC_USER`, `DB_APP_ROLE`, `UAT_DOMAIN` to override what the
+   bundle carries.
+
+### The nginx site
+
+`600` ships `etc/uat-nginx-site.conf.template` in the bundle. On the first
+deploy `610` fills `__UAT_DOMAIN__`, `__APP_ROOT__` and `__PORT__` (`SERVER_PORT`
+from the host's `api-srv.env`), writes `$APP_ROOT/etc/nginx-presales_<domain>`
+(root 0644), links it as `/etc/nginx/sites-enabled/<domain>`, runs `nginx -t`
+and reloads nginx. The site is HTTP only: `root` is `web-pub/`, `/api/` is
+proxied to `127.0.0.1:$SERVER_PORT/` (the trailing `/` strips the prefix),
+`X-Forwarded-For` is appended to (one hop, `TRUSTED_PROXY_COUNT=1`), the body
+cap is 20M, logs go to `log/`, and the security headers sit on the web
+locations only, as in the post-sales sites. `certbot --nginx` then edits the
+file through the link to add the 443 block and the redirect.
+
+It never overwrites the site file: later deploys print "left alone", so edit
+it on the host. It installs nothing, with a note, when `UAT_DOMAIN` is under
+`example.com` (the repo's placeholder), when nginx or `sites-enabled` is
+missing, or when an enabled site already has `server_name` for the domain (a
+host whose site was written by hand keeps it). If `nginx -t` fails with the
+new site, `610` unlinks and removes it and stops before touching the service
+or the database; fix the cause (a missing `log/` is the usual one) and deploy
+again.
 
 ### A host set up before 610 generated secrets
 
@@ -142,7 +170,8 @@ sudo ./<app>_bundle_YYYYMMDD_hhmm/deploy.sh --no-db      # keep the server's cur
 ```
 
 `610-deploy-uat` first refuses a post-sales host (below), writes `api-srv.env` if
-it is missing, then stops the service, optionally drops/recreates/restores the DB
+it is missing, installs the systemd unit and the nginx site if they are missing,
+then stops the service, optionally drops/recreates/restores the DB
 from `db.sql`, sets the role password from `api-srv.env`, installs `api-srv` (and
 `proto-migrate`, if it was built into the bundle) into `libexec/`, replaces
 `web-pub/`, starts the service, and polls `/health` for 15s.

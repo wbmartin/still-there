@@ -7,15 +7,17 @@
 # stop api -> replace DB -> set the role password -> replace libexec/api-srv (+ <slug>-migrate)
 # -> replace web-pub -> start api -> health
 # First run also writes etc/api-srv.env from the bundle's api-srv.env.template with secrets
-# generated here, installs the systemd unit ($SERVICE.service) and retires any hand-started
-# api-srv. It refuses a host on the post-sales pipeline (etc/*-<app>-deploy.env present).
+# generated here, installs the systemd unit ($SERVICE.service), writes and links the nginx
+# site for $UAT_DOMAIN from nginx-site.conf.template (then nginx -t + reload, and prints the
+# certbot line) and retires any hand-started api-srv. It refuses a host on the post-sales
+# pipeline (etc/*-<app>-deploy.env present).
 #
 # This is the presales (pre-agreement) quick-deploy path — see doc/320-presales-uat-deploy.md
-# for the one-time host prep this expects (directories, Postgres, nginx).
+# for the one-time host prep this expects (directories, Postgres, nginx installed).
 #
 # Settings: deploy.env beside this script (written by 600 from etc/uat-deploy.env:
-# APP_NAME, APP_ROOT, SERVICE, SVC_USER, DB_APP_ROLE), then $APP_ROOT/etc/deploy.env if the host
-# keeps one, which wins. Every key is required; there are no inline defaults.
+# APP_NAME, APP_ROOT, SERVICE, SVC_USER, DB_APP_ROLE, UAT_DOMAIN), then
+# $APP_ROOT/etc/deploy.env if the host keeps one, which wins. Every key is required; there are no inline defaults.
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -31,7 +33,7 @@ if [ -r "$HOST_ENV" ]; then
   # shellcheck disable=SC1090
   source "$HOST_ENV"
 fi
-for var in APP_NAME APP_ROOT SERVICE SVC_USER DB_APP_ROLE; do
+for var in APP_NAME APP_ROOT SERVICE SVC_USER DB_APP_ROLE UAT_DOMAIN; do
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $BUNDLE_ENV / $HOST_ENV"; exit 1; }
 done
 BIN_DST="$APP_ROOT/libexec/api-srv"
@@ -40,6 +42,12 @@ WEB_DST="$APP_ROOT/web-pub"
 ENV_FILE="$APP_ROOT/etc/api-srv.env"
 UNIT_SRC="$APP_ROOT/etc/$SERVICE.service"
 UNIT_DST="/etc/systemd/system/$SERVICE.service"
+# goes into server_name and these paths: same check as 600
+[[ "$UAT_DOMAIN" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] \
+  || { echo "[ERROR] UAT_DOMAIN=$UAT_DOMAIN is not a lower-case hostname"; exit 1; }
+SITE_FILE="$APP_ROOT/etc/nginx-presales_$UAT_DOMAIN"
+SITE_LINK_DIR=/etc/nginx/sites-enabled
+SITE_LINK="$SITE_LINK_DIR/$UAT_DOMAIN"
 DO_DB=1; DO_RESTART=1
 for a in "$@"; do
   case "$a" in
@@ -136,6 +144,51 @@ UNIT
   ln -sf "$UNIT_SRC" "$UNIT_DST"
   systemctl daemon-reload
   systemctl enable "$SERVICE" >/dev/null 2>&1 || true
+fi
+
+# --- nginx site (first run only; never overwritten) ---------------------------
+# HTTP only; `certbot --nginx` adds TLS. Skipped, with a note, when the domain is
+# a placeholder, the site file exists, or another enabled site already answers
+# for the domain (a hand-written presales site is left alone). A site that
+# fails nginx -t is unlinked and removed, so nginx is never left unloadable.
+# server_name lists names across spaces and lines; whitespace is folded first.
+site_taken_re="(^|[ ;{])server_name ([^;]* )?${UAT_DOMAIN//./\\.}[ ;]"
+if [[ "$UAT_DOMAIN" == example.com || "$UAT_DOMAIN" == *.example.com ]]; then
+  echo "[nginx] UAT_DOMAIN=$UAT_DOMAIN is a placeholder; site not installed (set it in etc/uat-deploy.env)"
+elif [ -e "$SITE_FILE" ]; then
+  echo "[nginx] $SITE_FILE exists; left alone"
+elif ! command -v nginx >/dev/null || [ ! -d "$SITE_LINK_DIR" ]; then
+  echo "[nginx] WARNING: nginx (with $SITE_LINK_DIR) not installed; site not installed (doc/320)"
+elif [[ "$(nginx -T 2>/dev/null | tr -s '[:space:]' ' ')" =~ $site_taken_re ]]; then
+  echo "[nginx] an enabled site already has server_name $UAT_DOMAIN; not installing $SITE_FILE"
+else
+  [ -f nginx-site.conf.template ] || { echo "[ERROR] nginx-site.conf.template not in bundle"; exit 1; }
+  [ ! -e "$SITE_LINK" ] || { echo "[ERROR] $SITE_LINK exists but is not $SITE_FILE; move it aside"; exit 1; }
+  echo "[nginx] writing $SITE_FILE, linking $SITE_LINK"
+  site_tmp="$(mktemp "$SITE_FILE.XXXXXX")"
+  UAT_DOMAIN="$UAT_DOMAIN" APP_ROOT="$APP_ROOT" PORT="$PORT" awk '
+    function put(key,   token, i) {
+      token = "__" key "__"
+      while ((i = index($0, token)) > 0)
+        $0 = substr($0, 1, i - 1) ENVIRON[key] substr($0, i + length(token))
+    }
+    { put("UAT_DOMAIN"); put("APP_ROOT"); put("PORT"); print }' \
+    nginx-site.conf.template > "$site_tmp"
+  if grep -q '__[A-Z_]*__' "$site_tmp"; then
+    rm -f "$site_tmp"; echo "[ERROR] nginx-site.conf.template has unfilled __PLACEHOLDERS__"; exit 1
+  fi
+  chown root:root "$site_tmp"; chmod 0644 "$site_tmp"
+  mv "$site_tmp" "$SITE_FILE"
+  ln -s "$SITE_FILE" "$SITE_LINK"
+  if ! nginx_check="$(nginx -t 2>&1)"; then
+    rm -f "$SITE_LINK" "$SITE_FILE"
+    echo "  ${nginx_check//$'\n'/$'\n'  }"
+    echo "[ERROR] nginx -t failed with the new site; it was unlinked and removed. Fix and redeploy."
+    exit 1
+  fi
+  systemctl reload nginx
+  echo "[nginx] reloaded. Once DNS for $UAT_DOMAIN points here, once:"
+  echo "        sudo certbot --nginx -d $UAT_DOMAIN"
 fi
 
 # --- stop --------------------------------------------------------------------

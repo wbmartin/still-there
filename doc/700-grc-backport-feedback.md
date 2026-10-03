@@ -710,77 +710,6 @@ given it moves authorization differences into a matrix? Recommend an ADR
 that permits it only for derived apps past ~10 entities, never the
 template.
 
-### B072 — Presales: install the nginx site from a template
-
-- **Priority:** P3  **Area:** bin, etc
-- **GRC:** `bin/610-deploy-uat:43-44,119-129`; `etc/uat-nginx-site.conf.template:1-34`; `bin/600-bundle-uat:93,102`   **PROTO:** `doc/320-presales-uat-deploy.md:79`; `etc/uat-deploy.env`
-- **Ticket:** RG0012 / `2890e8a`, `d9eb2d2`
-- **What:** First run writes and links the site, `nginx -t && reload`, prints
-the certbot line.
-- **Port notes:** GRC's template lacks security headers (add B022's); PROTO body
-cap; `UAT_DOMAIN` in `etc/uat-deploy.env`.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-The presales path leaves nginx to the operator. `doc/320-presales-uat-deploy.md:79-80`,
-one-time host prep step 3:
-
-    3. Point nginx at `web-pub/` for static files and proxy `/api/` to
-       `127.0.0.1:$SERVER_PORT/`, stripping the `/api` prefix.
-
-`bin/610-deploy-uat:11` assumes it is done ("nginx configured"). There is
-no file to start from: the only nginx sites in the repo are the
-post-sales ones (`infra/uat/etc/nginx_uat-proto.example.com`, TLS,
-upstream block), which do not match the presales layout. So each presales
-host gets a hand-written site, with whatever headers, body cap and
-forwarding headers the operator remembers. The `/api` strip is easy to
-get wrong (a missing trailing `/` on `proxy_pass` sends `/api/auth` to an
-API that has no `/api` prefix). DX gap with a security edge: a hand
-site may omit the security headers and the `X-Forwarded-For` shape that
-B007's `ClientIP` fix relies on.
-
-#### What GRC changed
-
-RG0012 (`2890e8a`, `d9eb2d2`). `etc/uat-nginx-site.conf.template:1-34` is
-an HTTP-only site with `__UAT_DOMAIN__` and `__PORT__` placeholders:
-`root /srv/uat-grc/web-pub` (`:12`), logs under the app root (`:15-16`),
-`client_max_body_size 50m` (`:19`), `location /api/` with
-`proxy_pass http://127.0.0.1:__PORT__/;` plus `Host`, `X-Real-IP`,
-`X-Forwarded-For $proxy_add_x_forwarded_for`, `X-Forwarded-Proto`
-(`:21-28`), and the SPA fallback (`:31-33`). `bin/600-bundle-uat:93`
-ships it; `:102` writes `domain=$UAT_DOMAIN` into MANIFEST.
-`bin/610-deploy-uat:43-44` reads the domain back and refuses a bundle
-without one. On first run only (`:119-129`) it writes
-`$APP_ROOT/etc/nginx_<domain>`, symlinks it into `sites-enabled`, runs
-`nginx -t && systemctl reload nginx`, and prints the `certbot --nginx -d`
-line. The template carries no security headers. No tests.
-
-#### Proposed fix for PROTO
-
-1. New `etc/uat-nginx-site.conf.template`. Derive paths from
-   `__APP_ROOT__`, not GRC's literal `/srv/uat-grc`. Use PROTO's 20M body
-   cap (post-sales site `:32`), not 50m. Put B022's headers inside
-   `location /` only, so they do not stack on the API's own headers in
-   `/api/`. Keep `X-Forwarded-For $proxy_add_x_forwarded_for` (B007).
-2. `etc/uat-deploy.env`: add `UAT_DOMAIN` (no default; 600 stops if
-   missing, per the file's header `:3-4`).
-3. `bin/600-bundle-uat`: copy the template into the stage; write
-   `domain=` into MANIFEST next to the existing keys (`:108-115`).
-4. `bin/610-deploy-uat`: after the unit step, the GRC first-run block,
-   with the port it already reads (`:56-57`). Never overwrite an existing
-   site file.
-5. `doc/320:79-80`: replace step 3 with "first deploy installs the site;
-   run the printed certbot line once DNS points here".
-6. Tests: none automated; `nginx -t` on the host is the check. Order:
-   after B022 (header placement) and with B027 if both touch 610.
-
-#### Open question for Brandon
-
-None.
-
 ### B073 — Generated schema reference (doc/003) and dev migrate script
 
 - **Priority:** P3  **Area:** docs, bin, go-api
@@ -8995,3 +8924,75 @@ Should presales UAT itself stop shipping laptop credentials (scrub in
 bin/600), or only the post-sales load? Recommendation: post-sales only
 for now, since presales UAT is demo data and the scrub needs B035.
 - **Completed:** 2026-10-03. Adapted per Brandon (post-sales only: presales `bin/600` still ships the laptop dump unscrubbed, as the open question recommended). New `bin/605-survey-host <ssh-host>`: GRC's one-sudo read-only probe over `ssh -t`, teed to `tmp/survey/<host>-<stamp>.txt`; names from `etc/app.env` (`APP_SLUG`) and `etc/uat-deploy.env` (`SVC_USER`, `DB_NAME`) passed in as quoted assignments; looks for both `/srv/{uat,prd}-<slug>`, units `<env>-<slug>-api` / `-restart(.path)`, databases `uat_`/`prd_<slug>_db` and the `_presales` copy, users `www-data`, `<slug>`, `svc-<slug>`, `shrmpl-hook`; `schema_migration` replaces `goose_db_version`; per-tenant login counts and statuses; GRC's `pwsh`, worker units, blob counts dropped. Env files as key names only; `mask` now covers units, nginx sites, hba and crontab (password/passwd/secret/token/api key/credential keys, `Authorization` values, URL credentials; `proxy_pass` not masked), header says best-effort. New `bin/620-export-tenant-data <out-dir> [api-env]`: source DB from `LOCAL_ENV_FILE` (`etc/uat-deploy.env`) or the given env file; preflight compares `schema_migration` (version, checksum) to the checkout's migration files exactly, no migrator build or DB password needed; copies to a throwaway `<db>_export` (dropped on exit, `WITH (FORCE)`), runs the scrub with `psql --single-transaction`, `pg_dump -Fc --no-owner --no-privileges`; writes `<slug>-data-<stamp>.dump` + `.dump.sha256` + `.manifest` (commit with dirty flag, `pg_dump` version, schema version, live rows per tenant table per tenant, logins with status per tenant, sha256). `<out-dir>` must resolve outside the checkout (B052); no tarball (the host steps keep `sha256sum -c`). Scrub at `src/api-srv/sql/export-scrub.sql` (deviation: not `bin/lib/`, so SQL stays under `sql/` and the Go test reads it in place; not embedded): refuses any tenant-2 row (catalog loop over every tenant table) and live fixture logins `admin`, `basic`, `mfa`, `switcher`; revokes open invites; empties every `pw_hash`/`totp_seed`, clears `mfa_setup`/`mfa_exempt` on all rows; live non-blocked logins become `invited`, blocked stay blocked (deviation from GRC, which invited everyone), deleted keep their status. Audit-chain steps (B067), blob tarball, GRC table list dropped. First sign-in: PROTO has no migrator `invite` command, so doc/330 A9 issues the first link on the host with `openssl rand -hex 32`, its `sha256sum` and one `INSERT INTO user_invite` via psql variables, TTL from `INVITE_TTL_HOURS`, link `https://<SITE_NAME>/invite#<token>`; doc/331 A9 reuses it. Docs: doc/330 0 (`EXPORT_DIR` alongside `UAT_SSH`), 0.1 survey bullet, 0.4 rewritten around 620, A5 MFA reset replaced by a no-credential check, A9, C cleanup; doc/331 intro, 0.1, 0.3, A6, A9, C cleanup; doc/902 new section; CLAUDE.md layout, DERIVING.md fixture row, `sql/embed.go` comment. Tests: new `src/api-srv/sql/export_scrub_test.go` (own migrated `<test db>_scrub_test_db`, no tenant lock so tenant 1 holds rows; credentials gone and statuses/invites/data rows as above; tenant-2 refusal names `example(1)`; fixture refusal names live `admin, switcher`, not a deleted `basic`); mutation check (scrub without the `totp_seed` clear and with the tenant check aimed at 99) fails both cases. Hand checks: 620 against a scratch `loc_proto_b071src_test_db` (bin/510): refused tenant 2 as seeded; after deleting tenant-2 rows and adding synthetic tenant-3 logins, exported; dump restored into a second scratch DB: no credential, statuses as expected, invite revoked, source untouched; edited and missing `schema_migration` rows refused; out-dir inside the repo refused before any mkdir; the A9 SQL then issued a link that `/inviteCheck`, `/inviteRedeem` and `/auth` accepted on a private API (MFA enrolment next). 605 in `ubuntu:24.04` with postgres, nginx, a unit, crontab and env files seeded with a secret value, ssh shimmed: value appears 0 times, key names and DB facts present. shellcheck 0.9.0 clean on 605 and 620. Scratch DBs dropped. Tests: all green, infra=15 docs=524 (+13 path tokens) go=704 (+4: TestExportScrub and 3 subtests) unit=101 e2e=68 py=103, govulncheck clean, gofmt clean.
+
+### B072 — COMPLETED — Presales: install the nginx site from a template
+
+- **Priority:** P3  **Area:** bin, etc
+- **GRC:** `bin/610-deploy-uat:43-44,119-129`; `etc/uat-nginx-site.conf.template:1-34`; `bin/600-bundle-uat:93,102`   **PROTO:** `doc/320-presales-uat-deploy.md:79`; `etc/uat-deploy.env`
+- **Ticket:** RG0012 / `2890e8a`, `d9eb2d2`
+- **What:** First run writes and links the site, `nginx -t && reload`, prints
+the certbot line.
+- **Port notes:** GRC's template lacks security headers (add B022's); PROTO body
+cap; `UAT_DOMAIN` in `etc/uat-deploy.env`.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+The presales path leaves nginx to the operator. `doc/320-presales-uat-deploy.md:79-80`,
+one-time host prep step 3:
+
+    3. Point nginx at `web-pub/` for static files and proxy `/api/` to
+       `127.0.0.1:$SERVER_PORT/`, stripping the `/api` prefix.
+
+`bin/610-deploy-uat:11` assumes it is done ("nginx configured"). There is
+no file to start from: the only nginx sites in the repo are the
+post-sales ones (`infra/uat/etc/nginx_uat-proto.example.com`, TLS,
+upstream block), which do not match the presales layout. So each presales
+host gets a hand-written site, with whatever headers, body cap and
+forwarding headers the operator remembers. The `/api` strip is easy to
+get wrong (a missing trailing `/` on `proxy_pass` sends `/api/auth` to an
+API that has no `/api` prefix). DX gap with a security edge: a hand
+site may omit the security headers and the `X-Forwarded-For` shape that
+B007's `ClientIP` fix relies on.
+
+#### What GRC changed
+
+RG0012 (`2890e8a`, `d9eb2d2`). `etc/uat-nginx-site.conf.template:1-34` is
+an HTTP-only site with `__UAT_DOMAIN__` and `__PORT__` placeholders:
+`root /srv/uat-grc/web-pub` (`:12`), logs under the app root (`:15-16`),
+`client_max_body_size 50m` (`:19`), `location /api/` with
+`proxy_pass http://127.0.0.1:__PORT__/;` plus `Host`, `X-Real-IP`,
+`X-Forwarded-For $proxy_add_x_forwarded_for`, `X-Forwarded-Proto`
+(`:21-28`), and the SPA fallback (`:31-33`). `bin/600-bundle-uat:93`
+ships it; `:102` writes `domain=$UAT_DOMAIN` into MANIFEST.
+`bin/610-deploy-uat:43-44` reads the domain back and refuses a bundle
+without one. On first run only (`:119-129`) it writes
+`$APP_ROOT/etc/nginx_<domain>`, symlinks it into `sites-enabled`, runs
+`nginx -t && systemctl reload nginx`, and prints the `certbot --nginx -d`
+line. The template carries no security headers. No tests.
+
+#### Proposed fix for PROTO
+
+1. New `etc/uat-nginx-site.conf.template`. Derive paths from
+   `__APP_ROOT__`, not GRC's literal `/srv/uat-grc`. Use PROTO's 20M body
+   cap (post-sales site `:32`), not 50m. Put B022's headers inside
+   `location /` only, so they do not stack on the API's own headers in
+   `/api/`. Keep `X-Forwarded-For $proxy_add_x_forwarded_for` (B007).
+2. `etc/uat-deploy.env`: add `UAT_DOMAIN` (no default; 600 stops if
+   missing, per the file's header `:3-4`).
+3. `bin/600-bundle-uat`: copy the template into the stage; write
+   `domain=` into MANIFEST next to the existing keys (`:108-115`).
+4. `bin/610-deploy-uat`: after the unit step, the GRC first-run block,
+   with the port it already reads (`:56-57`). Never overwrite an existing
+   site file.
+5. `doc/320:79-80`: replace step 3 with "first deploy installs the site;
+   run the printed certbot line once DNS points here".
+6. Tests: none automated; `nginx -t` on the host is the check. Order:
+   after B022 (header placement) and with B027 if both touch 610.
+
+#### Open question for Brandon
+
+None.
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). New `etc/uat-nginx-site.conf.template`: HTTP-only (80 + [::]:80), `__UAT_DOMAIN__`/`__APP_ROOT__`/`__PORT__` placeholders, `root` web-pub, logs under `log/`, 20M body cap, `/api/` to `127.0.0.1:__PORT__/` with Host, `X-Forwarded-For $proxy_add_x_forwarded_for`, X-Forwarded-Proto (no X-Real-IP), B022's headers on `/assets/`, `/` and `= /index.html` only, same cache rules as the post-sales site; no upstream block (names are global per host). `etc/uat-deploy.env`: `UAT_DOMAIN=uat-$APP_SLUG.example.com`. `bin/600`: requires `UAT_DOMAIN`, checks it is a lower-case hostname, ships the template as `nginx-site.conf.template`, writes `domain=` to MANIFEST. `bin/610`: after the unit step, first run only, fills the template on the host (APP_ROOT after the host override, SERVER_PORT from api-srv.env), writes `$APP_ROOT/etc/nginx-presales_<domain>` root 0644, links `/etc/nginx/sites-enabled/<domain>`, `nginx -t`, `systemctl reload nginx`, prints `sudo certbot --nginx -d <domain>`. Deviations: (1) the domain reaches 610 through `deploy.env` (a required key, host-overridable like the others), not read back from MANIFEST; MANIFEST records it. (2) Safety skips, each with a note: placeholder `*.example.com` (the committed value, so an existing presales host is untouched until the domain is set); site file exists (never overwritten); nginx or sites-enabled missing; any enabled site already has `server_name <domain>` (whitespace-folded `nginx -T`, so a hand-written site is left alone); link name taken by another file stops the deploy. (3) `nginx -t` failure unlinks and removes the new site and exits 1 before the service or DB is touched (GRC left the broken link). (4) File named `nginx-presales_<domain>`, not GRC's `nginx_<domain>`, because doc/330 A8 writes the post-sales site to `$APP_ROOT/etc/nginx_$SITE` and would overwrite the presales one it later restores on rollback. Docs: doc/320 (layout, key table, host prep step 3, new "The nginx site" section, flow), doc/902, DERIVING.md §3, presales-deploy skill. Verified in ubuntu:24.04 (nginx 1.24.0, a real bundle from `bin/600 --no-scp --no-db`, stub systemctl/sudo, Python stub API on 8088, `deploy.sh --no-db --no-restart`): shellcheck clean on 600 and 610. Old 610: no site, `/api/health` 404 from the default site. New: placeholder domain skipped; real domain installed, `nginx -t` ok, `/` 200 with the four headers, `/api/health` reaches the stub as `/health` with `X-Forwarded-For: 127.0.0.1`, no nginx security headers on `/api/`, hashed asset `public, immutable`, missing asset 404, SPA route serves index.html, index.html `no-store`, 22MB POST 413, IPv6 `[::1]` works; rerun says left alone and keeps a hand edit; existing site naming the domain (one line, multi-line, names on continuation lines) skipped, suffix-only and dot-as-wildcard names not mistaken; missing `log/` fails `nginx -t`, site removed, rc=1, nginx still valid; bad domain refused by 600 and 610; taken link name refused. `certbot install --nginx --redirect` (2.9.0, self-signed) edits the file through the link, keeps the link, 80 returns 301 and 443 serves with HSTS. Found, not fixed: `npm run build` fails at HEAD (`VITE_API_PROXY_URL is not set`, vite.config.ts since PS0014 throws in production mode too), so `bin/600` and `bin/110` cannot build the web app without that variable in the environment; the verification bundle was built with `VITE_API_PROXY_URL=http://unused`. Tests: all green, infra=15 docs=527 go=704 unit=101 e2e=68 py=103 (docs +3: new paths named), govulncheck clean, gofmt clean.

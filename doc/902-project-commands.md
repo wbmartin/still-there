@@ -206,8 +206,11 @@ To load test the API (starts and stops its own private instance, like
 sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside the bundle
 ```
 - Settings come from `etc/uat-deploy.env` (`APP_NAME`, `UAT_HOST`, `PG_CONTAINER`,
-  `LOCAL_ENV_FILE`, `APP_ROOT`, `SERVICE`, `SVC_USER`); `PRESALES_ENV=<file>`
-  swaps the file. No inline defaults -- a missing key stops the run.
+  `LOCAL_ENV_FILE`, `APP_ROOT`, `SERVICE`, `SVC_USER`, `DB_APP_ROLE`, `DB_NAME`,
+  `UAT_DOMAIN`); `PRESALES_ENV=<file>` swaps the file. No inline defaults -- a
+  missing key stops the run.
+- The first deploy installs the nginx site from `etc/uat-nginx-site.conf.template`
+  for `UAT_DOMAIN` and prints the `certbot --nginx` line (doc/320).
 - See doc/320-presales-uat-deploy.md. Run `./bin/300-run-tests` first.
 - Post-sales pipeline placeholders: `infra/{uat,prd}/` (see `infra/README.md`).
 
