@@ -146,6 +146,7 @@ func TestProfileHandler_CheckSequence(t *testing.T) {
 			repo.AssertExpectations(t)
 			if tt.wantStatus == http.StatusOK {
 				assert.NotContains(t, w.Body.String(), "pwHash")
+				assert.NotContains(t, w.Body.String(), "password")
 				assert.NotContains(t, w.Body.String(), "secret")
 			}
 		})

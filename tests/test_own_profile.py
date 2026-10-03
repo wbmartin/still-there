@@ -19,6 +19,7 @@ class TestOwnProfile:
         me = response.json()["data"]
         assert me["userName"] == "basic"
         assert "pwHash" not in me and "totpSeed" not in me
+        assert "password" not in me
         assert "preferenceJsonb" not in me  # fixture user has never saved any
         original = {k: me[k] for k in ("firstName", "lastName", "email")}
 

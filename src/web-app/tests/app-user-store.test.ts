@@ -111,4 +111,33 @@ describe("app user store request bodies", () => {
     expect(init?.method).toBe("POST");
     expect(JSON.parse(init?.body as string)).toEqual({ appUserId: 51 });
   });
+
+  it.each([
+    ["addUserListToGroup", "/api/addUserListToGroup"],
+    ["removeUserListFromGroup", "/api/removeUserListFromGroup"],
+  ] as const)("%s posts userIdList and appUserGroupId to %s",
+    async (action, path) => {
+      const fetchMock = vi.fn<
+        (input: string, init?: RequestInit) => Promise<Response>
+      >(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ data: [] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      await useAppUserStore.getState()[action]([51, 52], 7, [1.5, 2.5]);
+
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe(path);
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(init?.body as string)).toEqual({
+        userIdList: [51, 52],
+        appUserGroupId: 7,
+        updateTsList: [1.5, 2.5],
+      });
+    });
 });

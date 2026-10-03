@@ -139,7 +139,7 @@ class TestLoginEnumeration:
             "firstName": "Timing",
             "lastName": "Test",
             "email": f"timing{suffix}@example.com",
-            "pwHash": "timingpass123!",
+            "password": "timingpass123!",
             "mfaExempt": True,
             "appUserGroupMembershipList": [],
         })
@@ -222,7 +222,7 @@ class TestLoginCounterReset:
             "firstName": "Typo",
             "lastName": "Test",
             "email": f"typo{suffix}@example.com",
-            "pwHash": password,
+            "password": password,
             "mfaExempt": True,
             "appUserGroupMembershipList": [],
         })

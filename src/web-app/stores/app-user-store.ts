@@ -14,13 +14,13 @@ interface AppUserExtras {
   // is returned instead.
   readUserById: (id: number) => Promise<User | null>;
   addUserListToGroup: (
-    userIds: number[],
-    groupId: number,
+    userIdList: number[],
+    appUserGroupId: number,
     updateTsList: number[],
   ) => Promise<void>;
   removeUserListFromGroup: (
-    userIds: number[],
-    groupId: number,
+    userIdList: number[],
+    appUserGroupId: number,
     updateTsList: number[],
   ) => Promise<void>;
   changeOtherUserPassword: (
@@ -76,7 +76,12 @@ export const useAppUserStore = createEntityStore<User, AppUserExtras>(
 
     const postUserListGroupChange = async (
       endpoint: string,
-      body: { userIds: number[]; groupId: number; updateTsList: number[] },
+      // Keys are the handler's json tags (userIdList, appUserGroupId).
+      body: {
+        userIdList: number[];
+        appUserGroupId: number;
+        updateTsList: number[];
+      },
     ) => {
       set({ error: null });
       const data = await apiJson<ApiResponse<User[]>>(endpoint, {
@@ -111,17 +116,17 @@ export const useAppUserStore = createEntityStore<User, AppUserExtras>(
         return get().itemList.find((u) => u.appUserId === id) ?? null;
       },
 
-      addUserListToGroup: (userIds, groupId, updateTsList) =>
+      addUserListToGroup: (userIdList, appUserGroupId, updateTsList) =>
         postUserListGroupChange(API_ENDPOINTS.ADD_USER_LIST_TO_GROUP, {
-          userIds,
-          groupId,
+          userIdList,
+          appUserGroupId,
           updateTsList,
         }),
 
-      removeUserListFromGroup: (userIds, groupId, updateTsList) =>
+      removeUserListFromGroup: (userIdList, appUserGroupId, updateTsList) =>
         postUserListGroupChange(API_ENDPOINTS.REMOVE_USER_LIST_FROM_GROUP, {
-          userIds,
-          groupId,
+          userIdList,
+          appUserGroupId,
           updateTsList,
         }),
 

@@ -242,7 +242,7 @@ class TestMFATOTP:
             "firstName": "Editor",
             "lastName": "NoReset",
             "email": f"editor{suffix}@example.com",
-            "pwHash": password,
+            "password": password,
             "mfaExempt": True,
             "appUserGroupMembershipList": [group["appUserGroupId"]],
         })
@@ -287,7 +287,7 @@ class TestMFATOTP:
             "firstName": "Mfa",
             "lastName": "Lockout",
             "email": f"{user_name}@example.com",
-            "pwHash": password,
+            "password": password,
             "mfaExempt": False,
             "appUserGroupMembershipList": [],
         })

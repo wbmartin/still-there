@@ -19,7 +19,7 @@ class TestUserManagement:
             "firstName": "Test",
             "lastName": "User",
             "email": f"testuser{suffix}@example.com",
-            "pwHash": "securepass123!",
+            "password": "securepass123!",
             "mfaExempt": False,
             "appUserGroupMembershipList": [],  # No groups initially
         }
@@ -44,7 +44,7 @@ class TestUserManagement:
             "firstName": "Test",
             "lastName": "User3",
             "email": f"testuser{suffix}@example.com",
-            "pwHash": "securepass123!",
+            "password": "securepass123!",
             "mfaExempt": False,
             "appUserGroupMembershipList": [1],
         }
@@ -97,7 +97,7 @@ class TestUserManagement:
             "firstName": "Password",
             "lastName": "Test",
             "email": f"passwordtest{suffix}@example.com",
-            "pwHash": "oldpass123!",
+            "password": "oldpass123!",
             "mfaExempt": False,
             "appUserGroupMembershipList": [1],
         }
@@ -131,7 +131,7 @@ class TestUserManagement:
             "firstName": "Delete",
             "lastName": "Test",
             "email": f"deletetest{suffix}@example.com",
-            "pwHash": "deletepass123!",
+            "password": "deletepass123!",
             "mfaExempt": False,
             "appUserGroupMembershipList": [],
         }
@@ -167,7 +167,7 @@ class TestUserManagement:
             "firstName": "Invalid",
             "lastName": "User",
             "email": f"invalid{suffix}@example.com",
-            "pwHash": "pass123!",
+            "password": "pass123!",
             "mfaExempt": False,
             "appUserGroupMembershipList": [1],
         }
@@ -179,7 +179,7 @@ class TestUserManagement:
         incomplete_user = {
             "userName": f"incomplete{suffix}",
             "firstName": "Incomplete",
-            # Missing lastName, email, pwHash
+            # Missing lastName, email, password
         }
 
         response = test_client.make_request("POST", "/user", json=incomplete_user)

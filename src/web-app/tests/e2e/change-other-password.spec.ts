@@ -20,7 +20,7 @@ test("an admin changes another user's password", async ({ page }) => {
     firstName: "Password",
     lastName: "Change",
     email: `e2epw${suffix}@example.com`,
-    pwHash: `e2e-old-${suffix}!`,
+    password: `e2e-old-${suffix}!`,
     mfaExempt: true,
     appUserGroupMembershipList: [],
   });
@@ -52,5 +52,51 @@ test("an admin changes another user's password", async ({ page }) => {
       session(),
       `/user?appUserId=${user.appUserId}&updateTs=${current.updateTs}`,
     );
+  }
+});
+
+// The edit page sends a new login's password as "password", the handler's
+// json tag (B038; it was "pwHash"). Signing in with it proves the server
+// stored what the form sent.
+test("an admin creates a user with a password", async ({ page }) => {
+  const suffix = Date.now().toString(36);
+  const userName = `e2enew${suffix}`;
+  const password = `e2e-cr8-${suffix}!`;
+
+  await page.goto("/appUserEdit?appUserId=new");
+  await page.getByLabel("Username").fill(userName);
+  await page.getByLabel("First Name").fill("Created");
+  await page.getByLabel("Last Name").fill("Here");
+  await page.getByLabel("Email").fill(`${userName}@example.com`);
+  await page.getByText("Set a password").click();
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("MFA Exempt").check();
+
+  const createRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && new URL(request.url()).pathname
+        .endsWith("/user"),
+  );
+  try {
+    await page.getByRole("button", { name: "Save" }).click();
+    const body = (await createRequest).postDataJSON() as Record<
+      string,
+      unknown
+    >;
+    expect(body.password).toBe(password);
+    expect(body).not.toHaveProperty("pwHash");
+    await expect(page.getByText("User created successfully")).toBeVisible();
+
+    await signIn(userName, password);
+  } finally {
+    const createdList = (
+      await api.get<CreatedUser[]>(session(), "/userList")
+    ).filter((user) => user.userName === userName);
+    for (const created of createdList) {
+      await api.delete(
+        session(),
+        `/user?appUserId=${created.appUserId}&updateTs=${created.updateTs}`,
+      );
+    }
   }
 });

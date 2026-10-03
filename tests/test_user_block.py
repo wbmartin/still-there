@@ -41,7 +41,7 @@ def blockee(test_client):
         "firstName": "Block",
         "lastName": "Target",
         "email": f"{user_name}@example.com",
-        "pwHash": password,
+        "password": password,
         "mfaExempt": True,
         "appUserGroupMembershipList": [1],  # Basic User: carries LOGON
     })

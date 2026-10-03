@@ -41,7 +41,7 @@ def _create_user(admin: TestClient, password: str, group_list) -> dict:
         "firstName": "Revoke",
         "lastName": "Test",
         "email": f"revoke{suffix}@example.com",
-        "pwHash": password,
+        "password": password,
         "mfaExempt": True,
         "appUserGroupMembershipList": group_list,
     })

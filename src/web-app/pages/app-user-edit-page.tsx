@@ -110,7 +110,7 @@ function UserEditPage() {
                 email: user.email,
                 appUserGroupMembershipList: user.appUserGroupMembershipList,
                 mfaExempt: user.mfaExempt,
-                pwHash: "",
+                password: "",
                 updateTs: user.updateTs.toString(),
               });
               setAccountStatus(user.accountStatus);
@@ -149,7 +149,7 @@ function UserEditPage() {
       email: values.email,
       appUserGroupMembershipList: values.appUserGroupMembershipList,
       mfaExempt: values.mfaExempt,
-      pwHash: values.pwHash || undefined,
+      password: values.password || undefined,
       updateTs: !isNew ? Number(values.updateTs) : undefined,
     };
 
@@ -426,12 +426,12 @@ function UserEditPage() {
           <>
             <PasswordInput
               label="Password"
-              {...form.getInputProps('pwHash')}
+              {...form.getInputProps('password')}
               mb="md"
             />
             <PasswordGenerator
               onPasswordGenerated={(pwd) =>
-                form.setFieldValue('pwHash', pwd)
+                form.setFieldValue('password', pwd)
               }
             />
           </>

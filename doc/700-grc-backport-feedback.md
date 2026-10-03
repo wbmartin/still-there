@@ -242,120 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B038 — Wire renames: `pwHash` -&gt; `password`; `fooList` keys
-
-- **Priority:** P2  **Area:** go-api, web-app, tests
-- **GRC:** `src/internal/model/security_model.go:115`; `user_handler.go:765-769,900-904`; `repository/user_repository.go:595-720`; `types/user-type.ts:17,76,87`; `tests/test_user_management.py:22,47,100,134,170`; `tests/test_basic_user_authorization.py:64,72`; `tests/test_security_context_isolation.py:52,73,112,125-126,147,160-161,182,218-219`   **PROTO:** `src/api-srv/internal/model/security_model.go:112`; `user_handler.go:756-760,876-881`; `repository/user_repository.go:478-594`; `pages/app-user-edit-page.tsx:89,127,280,285`; `types/user-type.ts`; same test files (`test_security_context_isolation.py:123,144,183,196-197,218,231-232,253,289-290`)
-- **Ticket:** RG0043 items 36, 38 / `720f5e1`
-- **What:** A raw password travels as `pwHash`; `userIds`/`groupId` break
-PROTO's list rule. GRC: `password`, `userIdList`, `appUserGroupId`, `any`.
-- **Port notes:** Breaking: Go, web, pytest together. go-api P3, web/tests P2.
-Typo B089.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Two wire names in the user API mislead. Quality/DX gap, not a hole.
-
-**(1) A raw password travels as `pwHash`.** `POST /createUser` decodes:
-
-```go
-// src/api-srv/internal/model/security_model.go:110-112
-type CreateUserRequest struct {
-	UserName                   string `json:"userName"`
-	PwRaw                      string `json:"pwHash"` // Maps to frontend's pwHash field
-```
-
-`handler/user_handler.go:436` hashes it, so the field named "hash"
-carries the plaintext. Every other password input in the API is `password` or
-`newPassword` (`model/security_model.go:6,84,95,101`,
-`handler/user_mfa_handler.go:52`, `handler/user_handler.go:987`). The web
-mirrors the bad name: `src/web-app/types/user-type.ts:11` puts an optional
-`pwHash` on the read model `User` (the API never sends it, because
-`model/app_user_model.go:9` tags the real hash `json:"-"`), `:28,39` put it
-on the form, and `pages/app-user-edit-page.tsx:89,127,280,285` bind the
-password input to it. Consequence: a reader assumes the client hashes, or
-that the field is a stored hash, and a log filter or reviewer keyed on
-"password" walks past it.
-
-**(2) The group-membership endpoints break the `fooList` rule.**
-`AddUserListToGroupHandler` and `RemoveUserListFromGroupHandler` decode:
-
-```go
-// handler/user_handler.go:756-757 (and again :877-878)
-UserIds      []int     `json:"userIds"`
-GroupId      int       `json:"groupId"`
-```
-
-`userIds` is a plural, which CLAUDE.md forbids, and `groupId` is not the
-column/key name `appUserGroupId` used everywhere else. The repository
-carries the plural into Go (`repository/user_repository.go:480,539`
-`userIds []int`). The web store sends the same keys
-(`stores/app-user-store.ts:54,98-110`). pytest sends both bad names in `tests/test_user_management.py:22,47,100,134,170`
-and `tests/test_security_context_isolation.py:123,144,183,196-197,218,
-231-232,253,289-290`. A derived app copies these names into every new
-list endpoint.
-
-Clarification: the item's "`any`" is GRC's Go `interface{}` sweep, not
-`types/user-type.ts`. PROTO has 36 `interface{}` in 10 Go files.
-
-#### What GRC changed
-
-Commit `720f5e1` (RG0043 items 36 and 38) renamed both layers at once.
-
-- `src/internal/model/security_model.go:115`: `Password ... json:"password"`
-  commented "the raw password; hashed by the handler, never stored".
-- `src/internal/handler/user_handler.go:765-766,900-901`: `UserIDList`
-  `json:"userIdList"`, `AppUserGroupID` `json:"appUserGroupId"`.
-- `src/internal/repository/user_repository.go:597,663` rename the
-  parameter to `userIDList`; the `groupId` parameter was left as is.
-- `src/web-app/types/user-type.ts:17,76,87`: `password` on `User`
-  (commented "create only"), the form, and its default.
-- pytest: `password`, `userIdList`, `appUserGroupId` in
-  `tests/test_user_management.py`, `tests/test_basic_user_authorization.py:
-  63-64,71-72` and `tests/test_security_context_isolation.py:125-126,
-  160-161,218-219`.
-- 28 Go `interface{}` became `any`; `AppHelper` receivers became `sh`.
-
-No new test; the renamed pytest calls pin it (a wrong key decodes to zero).
-
-#### Proposed fix for PROTO
-
-One PR: Go, web and pytest together, or the UI and tests break.
-
-1. `model/security_model.go:112`: `Password` `json:"password"` with
-   GRC's comment; update `handler/user_handler.go:405,411,436`.
-2. `handler/user_handler.go:756-757,877-878`: `UserIDList` /
-   `userIdList`, `AppUserGroupID` / `appUserGroupId`; update the
-   messages at `:776-777,896` and every `req.UserIds` / `req.GroupId`.
-3. `repository/user_repository.go:480-481,539-540` (+ the
-   `UserRepositoryInterface` signatures): `userIDList`,
-   `appUserGroupID`. Go-side renames are cosmetic (P3); do them with
-   gopls so nothing is missed.
-4. Web: `types/user-type.ts:11` drop `pwHash` from `User` entirely (it
-   is never received); `:28,39` and `pages/app-user-edit-page.tsx:89,127,
-   280,285` become `password`; `stores/app-user-store.ts:13-20,54,98-110`
-   send `userIdList` / `appUserGroupId`.
-5. pytest: the two files above. Fold B089 in: PROTO's
-   `tests/test_basic_user_authorization.py:64,72` sends `userGroupId`.
-6. Keep the "never serialized" asserts (`handler/user_handler_test.go:849`,
-   `profile_handler_test.go:137`, `tests/test_own_profile.py:16`); add
-   `password` to them. `interface{}` -> `any` rides with B040.
-
-Traps: copy only struct tags, not GRC's `limitBody` /
-`handledBodyTooLarge` (B011) or `accountStatus` on `User` (B034/B035).
-
-Tests: Go handler test decoding a create body with `password` (B039);
-vitest on the edit page submit payload key; pytest is covered by step 5.
-
-#### Open question for Brandon
-
-Rename the Go internals too (`userIds` params, `interface{}`), or only
-the wire keys plus web and pytest? Recommendation: wire, web and pytest
-now; Go-internal renames ride with B040's cleanup pass.
-
 ### B039 — Go handler tests that prove the check contract
 
 - **Priority:** P2  **Area:** tests, go-api
@@ -4576,67 +4462,6 @@ GRC's `.gitignore` has `tmp/` at `:6` with no script-name comment.
    B041 (edits `.gitignore`), whichever lands first. GRC's template is
    B027's scope; do not copy it here.
 5. Tests: none.
-
-#### Open question for Brandon
-
-None.
-
-### B089 — `userGroupId` in a pytest matches neither API name
-
-- **Priority:** P2  **Area:** tests
-- **GRC:** `tests/test_basic_user_authorization.py:64,72`   **PROTO:** `tests/test_basic_user_authorization.py:64,72`; `src/api-srv/internal/handler/user_handler.go:756-757,877-878`
-- **Ticket:** none
-- **What:** Sends `userGroupId`; API reads `groupId`; passes only because authz
-refuses first.
-- **Port notes:** Fix regardless of B038.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Test-quality bug (false assurance), not a runtime defect. Two pytest
-cases prove a basic user cannot change group membership, but send
-`{"userIdList": [1], "userGroupId": 1}` to `/addUserListToGroup` and
-`/removeUserListFromGroup` (`tests/test_basic_user_authorization.py:62-65`,
-`:70-73`).
-
-The handler decodes `json:"userIds"`, `json:"groupId"` and
-`json:"updateTsList"` (`src/api-srv/internal/handler/user_handler.go:756-758`,
-same at `:877-879`).
-
-The item understates it. `userGroupId` matches neither PROTO's `groupId`
-nor GRC's `appUserGroupId` (B038); `userIdList` is GRC's name, not
-PROTO's `userIds`; `updateTsList` is missing. The sibling tests
-(`tests/test_security_context_isolation.py:195-198`) and the web store
-(`src/web-app/stores/app-user-store.ts:98-102`) use the right keys.
-
-The tests pass only because `CheckAuthorization(GrantUserGroupUpdate)`
-(`user_handler.go:744`, `:865`) answers 403 before the body is decoded
-(`:760`). Consequences: anyone copying them for an admin "allowed" case
-gets a 400 from the length check (`:771-783`) and a confusing failure;
-and the tests assert only the status, while the handler has a second 403
-(`SEC_CTX_VIOLATION`, `:786-797`) that could pass for the grant check.
-
-#### What GRC changed
-
-GRC fixed the keys with its B038 wire rename (`720f5e1`, RG0043 section 2):
-`tests/test_basic_user_authorization.py:63-64,71-72` now send
-`"userIdList": [1], "appUserGroupId": 1`, matching GRC's handler
-(`src/internal/handler/user_handler.go:765-766,900-901`). GRC still omits
-`updateTsList` and still asserts only `403`.
-
-#### Proposed fix for PROTO
-
-1. `tests/test_basic_user_authorization.py:62-65,70-73`: send
-   `"userIds": [1], "groupId": 1, "updateTsList": [0]`, a body that would
-   pass decoding and the length check.
-2. Assert the response names the grant ("Permission denied (grant ...
-   required)", `internal/security/app_helper.go:562-567`), so a
-   `SEC_CTX_VIOLATION` 403 cannot pass.
-3. Independent of B038; do not use GRC's `userIdList`/`appUserGroupId`
-   unless B038 lands in the same change.
-4. Run: `bin/300-run-tests py`.
 
 #### Open question for Brandon
 
@@ -8898,3 +8723,180 @@ through mocked `fetch`; `tests/session-expired.test.ts` moves from
 
 None. The B004 placement question resolves itself: the retry stays in
 `apiRequest`, now private, and B037 lands first.
+
+### B038 — COMPLETED — Wire renames: `pwHash` -&gt; `password`; `fooList` keys
+- **Completed:** 2026-10-03. Pulled; Go internals per the recommendation (no Brandon line): wire keys, the request structs that carry them, web and pytest now; repository params (`userIds`, `groupId`) and `interface{}` -> `any` left for B040. `model.CreateUserRequest.PwRaw` `json:"pwHash"` is now `Password` `json:"password"` (GRC comment); `/addUserListToGroup` and `/removeUserListFromGroup` decode `UserIDList` `json:"userIdList"` and `AppUserGroupID` `json:"appUserGroupId"` (length-check messages name `userIdList`; touched lines wrapped to ~80 cols). Web: `pwHash` dropped from `User`, the form field is `password` (`types/user-type.ts`, `pages/app-user-edit-page.tsx`), `app-user-store` sends `userIdList`/`appUserGroupId`; local `userIds` in the group edit page and add/remove modal renamed `userIdList`. pytest: every `/user` create sends `password` (incl. B034/B035-era `test_user_block.py`, `test_session_revocation.py`, `test_zz_mfa_totp.py`, `test_auth_flow.py`), isolation tests send the new list keys; B089 folded in (see its note). The invite endpoints (B035) already used `password`/`appUserId`, nothing to rename; doc/105 and READMEs name no body keys for these routes, unchanged. Old keys now decode to zero and are refused (400), no compatibility shim. "Never serialized" asserts gained `password` (`user_handler_test.go`, `profile_handler_test.go`, `tests/test_own_profile.py`). Tests: new Go `user_wire_keys_test.go` (`TestCreateUser_ReadsThePasswordKey`: `password` stored as an Argon2id hash, old `pwHash` 400 before the repo; `TestUserListGroupRoutes_ReadTheListKeys`: new keys reach the repo on both routes, old keys 400); vitest group-change bodies (2); e2e "an admin creates a user with a password" (form submit body carries `password`, not `pwHash`, then signs in as the new login) in place of a vitest page test (the web app has no component-render setup). All green, govulncheck clean, `gofmt -l` empty: go=437 unit=82 e2e=13 py=96.
+
+- **Priority:** P2  **Area:** go-api, web-app, tests
+- **GRC:** `src/internal/model/security_model.go:115`; `user_handler.go:765-769,900-904`; `repository/user_repository.go:595-720`; `types/user-type.ts:17,76,87`; `tests/test_user_management.py:22,47,100,134,170`; `tests/test_basic_user_authorization.py:64,72`; `tests/test_security_context_isolation.py:52,73,112,125-126,147,160-161,182,218-219`   **PROTO:** `src/api-srv/internal/model/security_model.go:112`; `user_handler.go:756-760,876-881`; `repository/user_repository.go:478-594`; `pages/app-user-edit-page.tsx:89,127,280,285`; `types/user-type.ts`; same test files (`test_security_context_isolation.py:123,144,183,196-197,218,231-232,253,289-290`)
+- **Ticket:** RG0043 items 36, 38 / `720f5e1`
+- **What:** A raw password travels as `pwHash`; `userIds`/`groupId` break
+PROTO's list rule. GRC: `password`, `userIdList`, `appUserGroupId`, `any`.
+- **Port notes:** Breaking: Go, web, pytest together. go-api P3, web/tests P2.
+Typo B089.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Two wire names in the user API mislead. Quality/DX gap, not a hole.
+
+**(1) A raw password travels as `pwHash`.** `POST /createUser` decodes:
+
+```go
+// src/api-srv/internal/model/security_model.go:110-112
+type CreateUserRequest struct {
+	UserName                   string `json:"userName"`
+	PwRaw                      string `json:"pwHash"` // Maps to frontend's pwHash field
+```
+
+`handler/user_handler.go:436` hashes it, so the field named "hash"
+carries the plaintext. Every other password input in the API is `password` or
+`newPassword` (`model/security_model.go:6,84,95,101`,
+`handler/user_mfa_handler.go:52`, `handler/user_handler.go:987`). The web
+mirrors the bad name: `src/web-app/types/user-type.ts:11` puts an optional
+`pwHash` on the read model `User` (the API never sends it, because
+`model/app_user_model.go:9` tags the real hash `json:"-"`), `:28,39` put it
+on the form, and `pages/app-user-edit-page.tsx:89,127,280,285` bind the
+password input to it. Consequence: a reader assumes the client hashes, or
+that the field is a stored hash, and a log filter or reviewer keyed on
+"password" walks past it.
+
+**(2) The group-membership endpoints break the `fooList` rule.**
+`AddUserListToGroupHandler` and `RemoveUserListFromGroupHandler` decode:
+
+```go
+// handler/user_handler.go:756-757 (and again :877-878)
+UserIds      []int     `json:"userIds"`
+GroupId      int       `json:"groupId"`
+```
+
+`userIds` is a plural, which CLAUDE.md forbids, and `groupId` is not the
+column/key name `appUserGroupId` used everywhere else. The repository
+carries the plural into Go (`repository/user_repository.go:480,539`
+`userIds []int`). The web store sends the same keys
+(`stores/app-user-store.ts:54,98-110`). pytest sends both bad names in `tests/test_user_management.py:22,47,100,134,170`
+and `tests/test_security_context_isolation.py:123,144,183,196-197,218,
+231-232,253,289-290`. A derived app copies these names into every new
+list endpoint.
+
+Clarification: the item's "`any`" is GRC's Go `interface{}` sweep, not
+`types/user-type.ts`. PROTO has 36 `interface{}` in 10 Go files.
+
+#### What GRC changed
+
+Commit `720f5e1` (RG0043 items 36 and 38) renamed both layers at once.
+
+- `src/internal/model/security_model.go:115`: `Password ... json:"password"`
+  commented "the raw password; hashed by the handler, never stored".
+- `src/internal/handler/user_handler.go:765-766,900-901`: `UserIDList`
+  `json:"userIdList"`, `AppUserGroupID` `json:"appUserGroupId"`.
+- `src/internal/repository/user_repository.go:597,663` rename the
+  parameter to `userIDList`; the `groupId` parameter was left as is.
+- `src/web-app/types/user-type.ts:17,76,87`: `password` on `User`
+  (commented "create only"), the form, and its default.
+- pytest: `password`, `userIdList`, `appUserGroupId` in
+  `tests/test_user_management.py`, `tests/test_basic_user_authorization.py:
+  63-64,71-72` and `tests/test_security_context_isolation.py:125-126,
+  160-161,218-219`.
+- 28 Go `interface{}` became `any`; `AppHelper` receivers became `sh`.
+
+No new test; the renamed pytest calls pin it (a wrong key decodes to zero).
+
+#### Proposed fix for PROTO
+
+One PR: Go, web and pytest together, or the UI and tests break.
+
+1. `model/security_model.go:112`: `Password` `json:"password"` with
+   GRC's comment; update `handler/user_handler.go:405,411,436`.
+2. `handler/user_handler.go:756-757,877-878`: `UserIDList` /
+   `userIdList`, `AppUserGroupID` / `appUserGroupId`; update the
+   messages at `:776-777,896` and every `req.UserIds` / `req.GroupId`.
+3. `repository/user_repository.go:480-481,539-540` (+ the
+   `UserRepositoryInterface` signatures): `userIDList`,
+   `appUserGroupID`. Go-side renames are cosmetic (P3); do them with
+   gopls so nothing is missed.
+4. Web: `types/user-type.ts:11` drop `pwHash` from `User` entirely (it
+   is never received); `:28,39` and `pages/app-user-edit-page.tsx:89,127,
+   280,285` become `password`; `stores/app-user-store.ts:13-20,54,98-110`
+   send `userIdList` / `appUserGroupId`.
+5. pytest: the two files above. Fold B089 in: PROTO's
+   `tests/test_basic_user_authorization.py:64,72` sends `userGroupId`.
+6. Keep the "never serialized" asserts (`handler/user_handler_test.go:849`,
+   `profile_handler_test.go:137`, `tests/test_own_profile.py:16`); add
+   `password` to them. `interface{}` -> `any` rides with B040.
+
+Traps: copy only struct tags, not GRC's `limitBody` /
+`handledBodyTooLarge` (B011) or `accountStatus` on `User` (B034/B035).
+
+Tests: Go handler test decoding a create body with `password` (B039);
+vitest on the edit page submit payload key; pytest is covered by step 5.
+
+#### Open question for Brandon
+
+Rename the Go internals too (`userIds` params, `interface{}`), or only
+the wire keys plus web and pytest? Recommendation: wire, web and pytest
+now; Go-internal renames ride with B040's cleanup pass.
+
+### B089 — COMPLETED — `userGroupId` in a pytest matches neither API name
+- **Completed:** 2026-10-03. Landed with B038 (its step 5), so the keys are B038's, not step 1's: both cases send `{"userIdList": [1], "appUserGroupId": 1, "updateTsList": [0]}` (a body that passes decoding and the length check) and assert the 403 names `grant "UPDATE_USER_GROUP" required`, so a `SEC_CTX_VIOLATION` 403 cannot pass. Counts in B038.
+
+- **Priority:** P2  **Area:** tests
+- **GRC:** `tests/test_basic_user_authorization.py:64,72`   **PROTO:** `tests/test_basic_user_authorization.py:64,72`; `src/api-srv/internal/handler/user_handler.go:756-757,877-878`
+- **Ticket:** none
+- **What:** Sends `userGroupId`; API reads `groupId`; passes only because authz
+refuses first.
+- **Port notes:** Fix regardless of B038.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Test-quality bug (false assurance), not a runtime defect. Two pytest
+cases prove a basic user cannot change group membership, but send
+`{"userIdList": [1], "userGroupId": 1}` to `/addUserListToGroup` and
+`/removeUserListFromGroup` (`tests/test_basic_user_authorization.py:62-65`,
+`:70-73`).
+
+The handler decodes `json:"userIds"`, `json:"groupId"` and
+`json:"updateTsList"` (`src/api-srv/internal/handler/user_handler.go:756-758`,
+same at `:877-879`).
+
+The item understates it. `userGroupId` matches neither PROTO's `groupId`
+nor GRC's `appUserGroupId` (B038); `userIdList` is GRC's name, not
+PROTO's `userIds`; `updateTsList` is missing. The sibling tests
+(`tests/test_security_context_isolation.py:195-198`) and the web store
+(`src/web-app/stores/app-user-store.ts:98-102`) use the right keys.
+
+The tests pass only because `CheckAuthorization(GrantUserGroupUpdate)`
+(`user_handler.go:744`, `:865`) answers 403 before the body is decoded
+(`:760`). Consequences: anyone copying them for an admin "allowed" case
+gets a 400 from the length check (`:771-783`) and a confusing failure;
+and the tests assert only the status, while the handler has a second 403
+(`SEC_CTX_VIOLATION`, `:786-797`) that could pass for the grant check.
+
+#### What GRC changed
+
+GRC fixed the keys with its B038 wire rename (`720f5e1`, RG0043 section 2):
+`tests/test_basic_user_authorization.py:63-64,71-72` now send
+`"userIdList": [1], "appUserGroupId": 1`, matching GRC's handler
+(`src/internal/handler/user_handler.go:765-766,900-901`). GRC still omits
+`updateTsList` and still asserts only `403`.
+
+#### Proposed fix for PROTO
+
+1. `tests/test_basic_user_authorization.py:62-65,70-73`: send
+   `"userIds": [1], "groupId": 1, "updateTsList": [0]`, a body that would
+   pass decoding and the length check.
+2. Assert the response names the grant ("Permission denied (grant ...
+   required)", `internal/security/app_helper.go:562-567`), so a
+   `SEC_CTX_VIOLATION` 403 cannot pass.
+3. Independent of B038; do not use GRC's `userIdList`/`appUserGroupId`
+   unless B038 lands in the same change.
+4. Run: `bin/300-run-tests py`.
+
+#### Open question for Brandon
+
+None.

@@ -59,16 +59,24 @@ class TestBasicUserAuthorization:
 
     def test_add_user_to_group_denied(self, basic_user_client):
         """Basic user should get 403 when trying to add user to group"""
+        # A body that would pass decoding and the length check, so the
+        # 403 can only be the grant check (B089).
         response = basic_user_client.make_request("POST", "/addUserListToGroup", json={
             "userIdList": [1],
-            "userGroupId": 1
+            "appUserGroupId": 1,
+            "updateTsList": [0]
         })
         assert response.status_code == 403
+        assert 'grant "UPDATE_USER_GROUP" required' in response.json()["error"]
 
     def test_remove_user_from_group_denied(self, basic_user_client):
         """Basic user should get 403 when trying to remove user from group"""
+        # A body that would pass decoding and the length check, so the
+        # 403 can only be the grant check (B089).
         response = basic_user_client.make_request("POST", "/removeUserListFromGroup", json={
             "userIdList": [1],
-            "userGroupId": 1
+            "appUserGroupId": 1,
+            "updateTsList": [0]
         })
         assert response.status_code == 403
+        assert 'grant "UPDATE_USER_GROUP" required' in response.json()["error"]

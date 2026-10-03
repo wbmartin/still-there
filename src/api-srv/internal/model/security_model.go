@@ -111,8 +111,9 @@ type AddUserRequest struct {
 
 // CreateUserRequest represents the request body for creating a new user
 type CreateUserRequest struct {
-	UserName                   string `json:"userName"`
-	PwRaw                      string `json:"pwHash"` // Maps to frontend's pwHash field
+	UserName string `json:"userName"`
+	// Password is the raw password; hashed by the handler, never stored.
+	Password                   string `json:"password"`
 	FirstName                  string `json:"firstName"`
 	LastName                   string `json:"lastName"`
 	Email                      string `json:"email"`

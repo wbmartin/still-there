@@ -122,7 +122,7 @@ class TestSecurityContextIsolation:
             "firstName": "Cross",
             "lastName": "Context",
             "email": f"cross{suffix}@example.com",
-            "pwHash": "testpass123!",
+            "password": "testpass123!",
             "mfaExempt": False,
             "appUserGroupMembershipList": [4, 5],  # Groups of OTHER_TENANT
         }
@@ -143,7 +143,7 @@ class TestSecurityContextIsolation:
             "firstName": "Update",
             "lastName": "Test",
             "email": f"update{suffix}@example.com",
-            "pwHash": "testpass123!",
+            "password": "testpass123!",
             "mfaExempt": False,
             "appUserGroupMembershipList": [1],  # TEST_TENANT's group
         }
@@ -182,7 +182,7 @@ class TestSecurityContextIsolation:
             "firstName": "Group",
             "lastName": "Test",
             "email": f"group{suffix}@example.com",
-            "pwHash": "testpass123!",
+            "password": "testpass123!",
             "mfaExempt": False,
             "appUserGroupMembershipList": [],
         }
@@ -195,8 +195,8 @@ class TestSecurityContextIsolation:
 
         # Try to add this user to OTHER_TENANT's group (should fail)
         add_data = {
-            "userIds": [user_id],
-            "groupId": 4,  # Group of OTHER_TENANT
+            "userIdList": [user_id],
+            "appUserGroupId": 4,  # Group of OTHER_TENANT
             "updateTsList": [created_user["updateTs"]],
         }
 
@@ -217,7 +217,7 @@ class TestSecurityContextIsolation:
             "firstName": "Context",
             "lastName": "Test",
             "email": f"ctx{suffix}@example.com",
-            "pwHash": "testpass123!",
+            "password": "testpass123!",
             "mfaExempt": False,
             "appUserGroupMembershipList": [],
         }
@@ -230,8 +230,8 @@ class TestSecurityContextIsolation:
 
         # Try to add a TEST_TENANT user to OTHER_TENANT's group (should fail)
         add_data = {
-            "userIds": [user_id],
-            "groupId": 5,  # Group of OTHER_TENANT
+            "userIdList": [user_id],
+            "appUserGroupId": 5,  # Group of OTHER_TENANT
             "updateTsList": [created_user["updateTs"]],
         }
 
@@ -252,7 +252,7 @@ class TestSecurityContextIsolation:
             "firstName": "Valid",
             "lastName": "Test",
             "email": f"valid{suffix}@example.com",
-            "pwHash": "testpass123!",
+            "password": "testpass123!",
             "mfaExempt": False,
             "appUserGroupMembershipList": [],  # No groups initially
         }
@@ -288,8 +288,8 @@ class TestSecurityContextIsolation:
 
         # Add user to another valid group within context
         add_data = {
-            "userIds": [user_id],
-            "groupId": 3,  # TEST_TENANT's group
+            "userIdList": [user_id],
+            "appUserGroupId": 3,  # TEST_TENANT's group
             "updateTsList": [current_update_ts],
         }
 
@@ -349,7 +349,7 @@ class TestSecurityContextIsolation:
                 "firstName": "Stale",
                 "lastName": "Member",
                 "email": f"stale{suffix}@example.com",
-                "pwHash": "testpass123!",
+                "password": "testpass123!",
                 "mfaExempt": False,
                 "appUserGroupMembershipList": [],
             },
@@ -362,8 +362,8 @@ class TestSecurityContextIsolation:
             "POST",
             "/addUserListToGroup",
             json={
-                "userIds": [created_user["appUserId"]],
-                "groupId": 3,
+                "userIdList": [created_user["appUserId"]],
+                "appUserGroupId": 3,
                 "updateTsList": [created_user["updateTs"] - 1],
             },
         )

@@ -183,16 +183,16 @@ function AppUserGroupEditPage() {
     }
   };
 
-  const handleUserModalConfirm = async (userIds: number[]) => {
+  const handleUserModalConfirm = async (userIdList: number[]) => {
     if (!numericId) return;
-    const updateTsList = userIds.map(
+    const updateTsList = userIdList.map(
       (id) => userList.find((u) => u.appUserId === id)!.updateTs,
     );
     try {
       if (userModalMode === "add") {
-        await addUserListToGroup(userIds, numericId, updateTsList);
+        await addUserListToGroup(userIdList, numericId, updateTsList);
       } else {
-        await removeUserListFromGroup(userIds, numericId, updateTsList);
+        await removeUserListFromGroup(userIdList, numericId, updateTsList);
       }
       notifications.show({
         title: "Success",

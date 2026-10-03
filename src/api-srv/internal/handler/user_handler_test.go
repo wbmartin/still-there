@@ -855,6 +855,7 @@ func TestRetrieveUserList_OmitsSecrets(t *testing.T) {
 	assert.NotContains(t, string(body), "totpSeed")
 	assert.NotContains(t, string(body), seed)
 	assert.NotContains(t, string(body), "pwHash")
+	assert.NotContains(t, string(body), "password")
 	assert.NotContains(t, string(body), "hash")
 	assert.Contains(t, string(body), `"userName":"user1"`)
 }

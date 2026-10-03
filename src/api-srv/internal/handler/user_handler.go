@@ -409,13 +409,13 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate password length
-	if len(req.PwRaw) < 8 {
+	if len(req.Password) < 8 {
 		app.WriteError(
 			w,
 			http.StatusBadRequest,
 			fmt.Sprintf(
 				"Password must be at least 8 characters long: len=%d",
-				len(req.PwRaw),
+				len(req.Password),
 			),
 			"BRQ0",
 			nil,
@@ -440,7 +440,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Hash password
-	hashed, err := auth.HashPassword(req.PwRaw)
+	hashed, err := auth.HashPassword(req.Password)
 	if err != nil {
 		app.WriteError(
 			w,
@@ -706,21 +706,24 @@ func (h *UserHandler) AddUserListToGroupHandler(
 
 	// Parse request
 	var req struct {
-		UserIds      []int     `json:"userIds"`
-		GroupId      int       `json:"groupId"`
-		UpdateTsList []float64 `json:"updateTsList"`
+		UserIDList     []int     `json:"userIdList"`
+		AppUserGroupID int       `json:"appUserGroupId"`
+		UpdateTsList   []float64 `json:"updateTsList"`
 	}
 	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
 		return
 	}
 
-	if len(req.UserIds) == 0 || len(req.UpdateTsList) != len(req.UserIds) {
+	if len(req.UserIDList) == 0 ||
+		len(req.UpdateTsList) != len(req.UserIDList) {
 		app.WriteError(
 			w,
 			http.StatusBadRequest,
 			fmt.Sprintf(
-				"userIds and updateTsList must be provided and have matching lengths: userIds=%d, updateTsList=%d",
-				len(req.UserIds),
+				"userIdList and updateTsList must be provided and "+
+					"have matching lengths: userIdList=%d, "+
+					"updateTsList=%d",
+				len(req.UserIDList),
 				len(req.UpdateTsList),
 			),
 			"BRQ0",
@@ -730,8 +733,9 @@ func (h *UserHandler) AddUserListToGroupHandler(
 	}
 
 	// Validate group is in the same security context
-	if valid, err := h.validateGroupsSecurityContext([]int{req.GroupId}, jwtClaims.SecurityContext, r.Context()); !valid ||
-		err != nil {
+	if valid, err := h.validateGroupsSecurityContext(
+		[]int{req.AppUserGroupID}, jwtClaims.SecurityContext, r.Context(),
+	); !valid || err != nil {
 		app.WriteError(
 			w,
 			http.StatusForbidden,
@@ -743,8 +747,9 @@ func (h *UserHandler) AddUserListToGroupHandler(
 	}
 
 	// Validate all users are in the same security context
-	if valid, err := h.validateUsersSecurityContext(req.UserIds, jwtClaims.SecurityContext, r.Context()); !valid ||
-		err != nil {
+	if valid, err := h.validateUsersSecurityContext(
+		req.UserIDList, jwtClaims.SecurityContext, r.Context(),
+	); !valid || err != nil {
 		app.WriteError(
 			w,
 			http.StatusForbidden,
@@ -758,8 +763,8 @@ func (h *UserHandler) AddUserListToGroupHandler(
 	// Add users to group
 	updatedUsers, err := h.userRepo.AddUserListToGroup(
 		r.Context(),
-		req.UserIds,
-		req.GroupId,
+		req.UserIDList,
+		req.AppUserGroupID,
 		req.UpdateTsList,
 		jwtClaims.UserID,
 		jwtClaims.SecurityContext,
@@ -768,7 +773,7 @@ func (h *UserHandler) AddUserListToGroupHandler(
 		mapRepoError(app, w, err,
 			fmt.Sprintf(
 				"Failed to add users to group: group_id=%d, user_count=%d",
-				req.GroupId, len(req.UserIds)),
+				req.AppUserGroupID, len(req.UserIDList)),
 			"ADD_GRP_FAIL")
 		return
 	}
@@ -806,19 +811,21 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 
 	// Parse request
 	var req struct {
-		UserIds      []int     `json:"userIds"`
-		GroupId      int       `json:"groupId"`
-		UpdateTsList []float64 `json:"updateTsList"`
+		UserIDList     []int     `json:"userIdList"`
+		AppUserGroupID int       `json:"appUserGroupId"`
+		UpdateTsList   []float64 `json:"updateTsList"`
 	}
 	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
 		return
 	}
 
-	if len(req.UserIds) == 0 || len(req.UpdateTsList) != len(req.UserIds) {
+	if len(req.UserIDList) == 0 ||
+		len(req.UpdateTsList) != len(req.UserIDList) {
 		app.WriteError(
 			w,
 			http.StatusBadRequest,
-			"userIds and updateTsList must be provided and have matching lengths",
+			"userIdList and updateTsList must be provided and "+
+				"have matching lengths",
 			"BRQ0",
 			nil,
 		)
@@ -826,8 +833,9 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 	}
 
 	// Validate group is in the same security context
-	if valid, err := h.validateGroupsSecurityContext([]int{req.GroupId}, jwtClaims.SecurityContext, r.Context()); !valid ||
-		err != nil {
+	if valid, err := h.validateGroupsSecurityContext(
+		[]int{req.AppUserGroupID}, jwtClaims.SecurityContext, r.Context(),
+	); !valid || err != nil {
 		app.WriteError(
 			w,
 			http.StatusForbidden,
@@ -839,8 +847,9 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 	}
 
 	// Validate all users are in the same security context
-	if valid, err := h.validateUsersSecurityContext(req.UserIds, jwtClaims.SecurityContext, r.Context()); !valid ||
-		err != nil {
+	if valid, err := h.validateUsersSecurityContext(
+		req.UserIDList, jwtClaims.SecurityContext, r.Context(),
+	); !valid || err != nil {
 		app.WriteError(
 			w,
 			http.StatusForbidden,
@@ -854,8 +863,8 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 	// Remove users from group
 	updatedUsers, err := h.userRepo.RemoveUserListFromGroup(
 		r.Context(),
-		req.UserIds,
-		req.GroupId,
+		req.UserIDList,
+		req.AppUserGroupID,
 		req.UpdateTsList,
 		jwtClaims.UserID,
 		jwtClaims.SecurityContext,

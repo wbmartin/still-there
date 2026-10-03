@@ -15,7 +15,6 @@ export interface User {
   appUserGroupMembershipList: number[];
   mfaExempt: boolean;
   accountStatus: AccountStatus;
-  pwHash?: string;
   createTs: number;
   createUserId: number;
   updateTs: number;
@@ -50,7 +49,8 @@ export interface UserFormData {
   email: string;
   appUserGroupMembershipList: number[];
   mfaExempt: boolean;
-  pwHash: string;
+  /** Create only: the raw password, hashed by the API, never stored. */
+  password: string;
   updateTs: string;
 }
 
@@ -61,6 +61,6 @@ export const defaultUserFormData: UserFormData = {
   email: "",
   appUserGroupMembershipList: [],
   mfaExempt: false,
-  pwHash: "",
+  password: "",
   updateTs: "",
 };
