@@ -1,4 +1,6 @@
-
+# /srv/uat-proto/etc/uat-proto-restart.service, symlinked from
+# /etc/systemd/system/ (infra/README.md). Runs as root: the hook user
+# only touches stg/restart.request.
 [Unit]
 Description=Restart proto-api on request
 

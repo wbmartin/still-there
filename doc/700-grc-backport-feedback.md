@@ -710,88 +710,6 @@ given it moves authorization differences into a matrix? Recommend an ADR
 that permits it only for derived apps past ~10 entities, never the
 template.
 
-### B074 — infra small: systemd unit, monitor placement, env headers
-
-- **Priority:** P3  **Area:** infra, docs
-- **GRC:** `infra/uat-unified001/etc/uat-grc-api.service:1,11-14,21`; `uat-grc-restart.path:1-2`; `uat-grc-restart.service:1-2`; `infra/prd-unified002/shrmpl-etc/nack-monitors/uat-grc-renew-web-certs_*.env:1-5`; `infra/prd-unified002/shrmpl-etc/pulsecheck-endpoints/uat-grc-api.env:1-3`, `uat-grc-web.env:1-3`; `infra/README.md:28-30`; `doc/330-uat-postsales-cutover.md:313-314,329-330`; `infra/uat-unified001/etc/uat-grc-api.env:1-14,33-37`; `uat-grc-migrate.env:1-6`; `uat-grc-test.env:1-12`   **PROTO:** `infra/uat/etc/uat-proto-api.service:1,11-13,20` (+ prd); `infra/README.md:57-72,143`; `infra/uat/shrmpl-etc/nack-monitors/uat-proto-renew-web-certs_NACKID.env`; `infra/uat/shrmpl-etc/pulsecheck-endpoints/uat-proto-{api,web}.env`; `infra/uat/etc/uat-proto-api.env:1-12,25-29`; `infra/uat/etc/uat-proto-migrate.env:1-4`
-- **Ticket:** RG0013 / `3a3fc94`, `cc30f35`, `a57d6ad`, `16f3acd`, `55b0066`
-- **What:** Unit gains `WorkingDirectory` and `svc-<app>`; PROTO's
-`ReadWritePaths=log/` is unneeded. UAT monitors belong on the monitoring host.
-Env headers: secret recipe, back up `TOTP_ENCRYPTION_KEY` with the DB,
-`sslmode=disable`.
-- **Port notes:** `svc-proto` touches README:143, doc/330/340, rebrand. Both
-lack `ProtectKernel*`, `SystemCallFilter` etc.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (Brandon: fix in the template; old hosts stay as they are, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Three unrelated infra nits; none is a bug in a running host today.
-
-1. The unit. `infra/uat/etc/uat-proto-api.service:1` is a blank line (no
-   note of where the file lives or that it is symlinked). `:11-12` run as
-   `User=proto`, but `infra/prd/etc/prd-proto-api.service:11` says
-   `User=prd-proto`, and `infra/README.md:143` creates `proto`: the two
-   hosts already disagree. `:20` grants `ReadWritePaths=/srv/uat-proto/log`,
-   but the API logs to the journal (`:22-23`) and writes no files; only
-   nginx writes `log/` (`nginx_uat-proto.example.com:28-29`). There is no
-   `WorkingDirectory`, so the API runs in `/` and any relative path in
-   its env would resolve there. Neither PROTO nor GRC sets
-   `ProtectKernel*`, `SystemCallFilter`, `CapabilityBoundingSet`.
-2. Monitor placement. `infra/uat/shrmpl-etc/nack-monitors/` and
-   `pulsecheck-endpoints/uat-proto-{api,web}.env` put UAT's monitors on
-   the UAT host. A monitor on the host it watches cannot report that
-   host down. `infra/README.md:57-72` describes the agents, not placement.
-3. Env headers. `infra/uat/etc/uat-proto-api.env:1-10` says "redacted
-   copy" and lists the secrets but gives no recipe for generating them and
-   no warning that `TOTP_ENCRYPTION_KEY` must travel with the database (a
-   restore under a new key makes every MFA enrolment undecryptable).
-   `uat-proto-migrate.env:1-4` likewise. Docs gap.
-
-#### What GRC changed
-
-- `cc30f35`: service account `svc-grc` everywhere; `uat-grc-api.service:1`
-  names its path and symlink, `:11-14` add `WorkingDirectory=/srv/uat-grc`,
-  `:21` writes only `data/blobs` (GRC's blob store, not in PROTO).
-  `uat-grc-restart.{path,service}:1-2` gain the same header comments.
-- `a57d6ad`, `16f3acd`: UAT monitors moved to
-  `infra/prd-unified002/shrmpl-etc/`, headers `:1-3` (pulsecheck) and
-  `:1-5` (nackmon) say why; `infra/README.md:28-30`. GRC's stated reason is
-  host-specific: UAT's pulsecheck "is not running (survey 2026-10-01)";
-  `doc/330-uat-postsales-cutover.md:313-314` records it as a lesson.
-- `55b0066`: every secret line carries `# note: generate with  openssl
-  rand -hex 32` (`uat-grc-api.env:7,9,13`; `uat-grc-migrate.env:5`);
-  `:11-12` tie the TOTP key to the database; URLs add `?sslmode=disable`
-  (`:8`). `:33-37` explain the loopback bind. No tests.
-
-#### Proposed fix for PROTO
-
-1. Units (uat + prd, api + restart pair): add a one-line header naming
-   the host path and symlink; add `WorkingDirectory=/srv/<env>-proto`;
-   drop `ReadWritePaths=.../log`, check the API starts under
-   `ProtectSystem=strict`. Pick one account name for both hosts.
-2. Optional hardening: `ProtectKernelTunables`, `ProtectKernelModules`,
-   `ProtectControlGroups`, `RestrictAddressFamilies=AF_INET AF_INET6
-   AF_UNIX`, `SystemCallFilter=@system-service`; `systemd-analyze security`
-   on a host to confirm.
-3. Move `infra/uat/shrmpl-etc/{nack-monitors,pulsecheck-endpoints}` under
-   `infra/prd/shrmpl-etc/`, prefixed `uat-`; note in `infra/README.md`
-   "monitors live on the monitoring host, never the host they watch".
-4. Env headers in `infra/{uat,prd}/etc/*-api.env` and `*-migrate.env`:
-   the `openssl rand -hex 32` recipe, the TOTP-key warning, a loopback
-   note. `sslmode=disable` is optional: pgx's default `prefer` already
-   falls back on loopback; add it only to avoid a TLS attempt.
-5. If renamed to `svc-proto`: `infra/README.md:143`, `doc/330`, `doc/340`,
-   both units, env ownership notes; `bin/000-rebrand` must rewrite it
-   (derive from `APP_SLUG`, never literal `svc-grc`). Tests: none.
-
-#### Open question for Brandon
-
-Rename the service account to `svc-<slug>` (GRC) or keep `<slug>`?
-Recommendation: `svc-<slug>`, and fix the uat/prd mismatch in the same
-change.
-
 ### B075 — Dev docs: doc/050, doc/060, doc/902, doc/810
 
 - **Priority:** P3  **Area:** docs
@@ -8997,3 +8915,86 @@ drifted produces a wrong reference; nothing checks that.
 Should bin/300 fail when the committed doc/003 differs from the migrated
 schema? Recommendation: yes, or the reference rots like any hand doc.
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as yes: the gate fails on a stale reference). New `src/api-srv/internal/migrate/schema_reference.go` (`WriteSchemaReference`, pgx): public tables from `information_schema` and indexes from `pg_indexes`, both by name, columns in table order, `nextval` defaults as SERIAL, any other DEFAULT printed (doc/900 forbids them; GRC hid them), `schema_migration` left out, header names `proto-migrate schema-reference`, the regenerate rule and `Through migration NNNN_name`; refuses a database with no applied migration. `cmd/migrate` gains `schema-reference` (stdout only; usage lines). New committed `doc/003-schema-reference.sql` (4 tables, through 0005; deviation: named without GRC's `ai-postgres-`). `bin/510` writes it right after `up`, before any fixture, via a temp file (`SCHEMA_REFERENCE_FILE` overrides the path). `bin/300` exports `SCHEMA_REFERENCE_FILE=tmp/test-logs/schema-reference.sql` for the whole run (deviation from step 3: compare with `cmp` instead of `git diff --exit-code`, so the gate never rewrites the tree, works on a dirty tree, and every reset in 330/global setup also stays under tmp/); new `schema reference` step in `go` after 510 fails with a diff and "run bin/510 (or cp) and commit". Found and fixed on the way: `bin/510` run directly (as doc/050 and READMEs say) failed at `migrate up` with `permission denied for schema public`, because it fell back to `etc/loc-api-srv.env`'s DML-only `proto_app`; it now sources `etc/loc-test.env` when `TEST_PG_URL_BASE` is unset (what that file's header already promised), and the dead loc-api-srv.env/PGPASSWORD URL fallback is gone. Step 5: new `bin/205-migrate-db [dbname]` (`set -euo pipefail`): default name from `etc/loc-api-srv.env` `DATABASE_URL`, postgres role from `etc/loc-test.env` (the env file's role cannot run DDL, as the item suspected), CREATE DATABASE if missing, roles.sql, `migrate up`, `local-seed.sql` only on a database it just created (an existing dev DB, which bin/600 dumps to UAT, gets migrations only), `status`; refuses `_test_db`/`_e2e_db` and non-plain names; never writes doc/003. Docs: doc/900 (the CRITICAL rule points at doc/003, schema-changes bullets, usage block), doc/902 (new Developer Database section, 510 notes, go mode line), doc/050 (bin/205 path above the manual one), CLAUDE.md layout. B085's README pointers left to B085. Tests: new `schema_reference_test.go` (migrated scratch DB: `app_user` with 0003's `preference_jsonb`, array and numeric types, `idx_example_uuid`, last migration line, no `schema_migration`, name order, stable on rerun; unmigrated DB refused with no output; column-definition table incl. a shown DEFAULT). Gate negative check: deleting the `preference_jsonb` line from doc/003 fails `bin/300-run-tests go` at `schema reference` with the diff; restored passes. bin/205 verified on scratch `loc_proto_b073dev_db` only (created + seeded tenant 1, rerun "nothing pending" and no reseed, scratch and injection names refused), then dropped; reference also generated from a from-scratch `loc_proto_b073ref_test_db`, byte-identical to bin/510's, dropped. The dev DB was not touched. shellcheck 0.9.0 (ubuntu:24.04) clean on 205, 300, 510. Tests: all green, infra=15 docs=541 (+14 path tokens) go=707 (+3) unit=101 e2e=68 py=103, govulncheck clean, gofmt clean.
+
+### B074 — COMPLETED — infra small: systemd unit, monitor placement, env headers
+
+- **Priority:** P3  **Area:** infra, docs
+- **GRC:** `infra/uat-unified001/etc/uat-grc-api.service:1,11-14,21`; `uat-grc-restart.path:1-2`; `uat-grc-restart.service:1-2`; `infra/prd-unified002/shrmpl-etc/nack-monitors/uat-grc-renew-web-certs_*.env:1-5`; `infra/prd-unified002/shrmpl-etc/pulsecheck-endpoints/uat-grc-api.env:1-3`, `uat-grc-web.env:1-3`; `infra/README.md:28-30`; `doc/330-uat-postsales-cutover.md:313-314,329-330`; `infra/uat-unified001/etc/uat-grc-api.env:1-14,33-37`; `uat-grc-migrate.env:1-6`; `uat-grc-test.env:1-12`   **PROTO:** `infra/uat/etc/uat-proto-api.service:1,11-13,20` (+ prd); `infra/README.md:57-72,143`; `infra/uat/shrmpl-etc/nack-monitors/uat-proto-renew-web-certs_NACKID.env`; `infra/uat/shrmpl-etc/pulsecheck-endpoints/uat-proto-{api,web}.env`; `infra/uat/etc/uat-proto-api.env:1-12,25-29`; `infra/uat/etc/uat-proto-migrate.env:1-4`
+- **Ticket:** RG0013 / `3a3fc94`, `cc30f35`, `a57d6ad`, `16f3acd`, `55b0066`
+- **What:** Unit gains `WorkingDirectory` and `svc-<app>`; PROTO's
+`ReadWritePaths=log/` is unneeded. UAT monitors belong on the monitoring host.
+Env headers: secret recipe, back up `TOTP_ENCRYPTION_KEY` with the DB,
+`sslmode=disable`.
+- **Port notes:** `svc-proto` touches README:143, doc/330/340, rebrand. Both
+lack `ProtectKernel*`, `SystemCallFilter` etc.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (Brandon: fix in the template; old hosts stay as they are, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Three unrelated infra nits; none is a bug in a running host today.
+
+1. The unit. `infra/uat/etc/uat-proto-api.service:1` is a blank line (no
+   note of where the file lives or that it is symlinked). `:11-12` run as
+   `User=proto`, but `infra/prd/etc/prd-proto-api.service:11` says
+   `User=prd-proto`, and `infra/README.md:143` creates `proto`: the two
+   hosts already disagree. `:20` grants `ReadWritePaths=/srv/uat-proto/log`,
+   but the API logs to the journal (`:22-23`) and writes no files; only
+   nginx writes `log/` (`nginx_uat-proto.example.com:28-29`). There is no
+   `WorkingDirectory`, so the API runs in `/` and any relative path in
+   its env would resolve there. Neither PROTO nor GRC sets
+   `ProtectKernel*`, `SystemCallFilter`, `CapabilityBoundingSet`.
+2. Monitor placement. `infra/uat/shrmpl-etc/nack-monitors/` and
+   `pulsecheck-endpoints/uat-proto-{api,web}.env` put UAT's monitors on
+   the UAT host. A monitor on the host it watches cannot report that
+   host down. `infra/README.md:57-72` describes the agents, not placement.
+3. Env headers. `infra/uat/etc/uat-proto-api.env:1-10` says "redacted
+   copy" and lists the secrets but gives no recipe for generating them and
+   no warning that `TOTP_ENCRYPTION_KEY` must travel with the database (a
+   restore under a new key makes every MFA enrolment undecryptable).
+   `uat-proto-migrate.env:1-4` likewise. Docs gap.
+
+#### What GRC changed
+
+- `cc30f35`: service account `svc-grc` everywhere; `uat-grc-api.service:1`
+  names its path and symlink, `:11-14` add `WorkingDirectory=/srv/uat-grc`,
+  `:21` writes only `data/blobs` (GRC's blob store, not in PROTO).
+  `uat-grc-restart.{path,service}:1-2` gain the same header comments.
+- `a57d6ad`, `16f3acd`: UAT monitors moved to
+  `infra/prd-unified002/shrmpl-etc/`, headers `:1-3` (pulsecheck) and
+  `:1-5` (nackmon) say why; `infra/README.md:28-30`. GRC's stated reason is
+  host-specific: UAT's pulsecheck "is not running (survey 2026-10-01)";
+  `doc/330-uat-postsales-cutover.md:313-314` records it as a lesson.
+- `55b0066`: every secret line carries `# note: generate with  openssl
+  rand -hex 32` (`uat-grc-api.env:7,9,13`; `uat-grc-migrate.env:5`);
+  `:11-12` tie the TOTP key to the database; URLs add `?sslmode=disable`
+  (`:8`). `:33-37` explain the loopback bind. No tests.
+
+#### Proposed fix for PROTO
+
+1. Units (uat + prd, api + restart pair): add a one-line header naming
+   the host path and symlink; add `WorkingDirectory=/srv/<env>-proto`;
+   drop `ReadWritePaths=.../log`, check the API starts under
+   `ProtectSystem=strict`. Pick one account name for both hosts.
+2. Optional hardening: `ProtectKernelTunables`, `ProtectKernelModules`,
+   `ProtectControlGroups`, `RestrictAddressFamilies=AF_INET AF_INET6
+   AF_UNIX`, `SystemCallFilter=@system-service`; `systemd-analyze security`
+   on a host to confirm.
+3. Move `infra/uat/shrmpl-etc/{nack-monitors,pulsecheck-endpoints}` under
+   `infra/prd/shrmpl-etc/`, prefixed `uat-`; note in `infra/README.md`
+   "monitors live on the monitoring host, never the host they watch".
+4. Env headers in `infra/{uat,prd}/etc/*-api.env` and `*-migrate.env`:
+   the `openssl rand -hex 32` recipe, the TOTP-key warning, a loopback
+   note. `sslmode=disable` is optional: pgx's default `prefer` already
+   falls back on loopback; add it only to avoid a TLS attempt.
+5. If renamed to `svc-proto`: `infra/README.md:143`, `doc/330`, `doc/340`,
+   both units, env ownership notes; `bin/000-rebrand` must rewrite it
+   (derive from `APP_SLUG`, never literal `svc-grc`). Tests: none.
+
+#### Open question for Brandon
+
+Rename the service account to `svc-<slug>` (GRC) or keep `<slug>`?
+Recommendation: `svc-<slug>`, and fix the uat/prd mismatch in the same
+change.
+- **Completed:** 2026-10-03. Pulled per Brandon (fix in the template; old hosts stay as they are); the open question taken as the recommendation: the service account is `svc-proto` on both hosts, which also fixes prd's `User=prd-proto` / `Group=proto` mismatch. Units (`infra/{uat,prd}/etc/<env>-proto-api.service`): a header naming the host path and the `/etc/systemd/system/` symlink, `User`/`Group=svc-proto`, `WorkingDirectory=/srv/<env>-proto`, `ReadWritePaths=.../log` dropped (the API writes no files), and the hardening from fix step 2 plus `PrivateDevices`, `ProtectKernelLogs`, `ProtectClock`, `ProtectHostname`, an empty `CapabilityBoundingSet`, `RestrictNamespaces`/`Realtime`/`SUIDSGID`, `LockPersonality`, `MemoryDenyWriteExecute`, `SystemCallArchitectures=native`, `SystemCallErrorNumber=EPERM` (deviation: more than step 2 listed; `~@resources` left out because the Go runtime calls `setrlimit` at start). The restart `.path`/`.service` pairs gain the same header. UAT's nackmon and pulsecheck files moved to `infra/prd/shrmpl-etc/` with a two-line placement header; `infra/README.md` states the rule (monitors on the monitoring host, never the host they watch; prod's own stay on prod for want of a third host), the unit sandbox, `svc-proto` in step 1 and the per-host step 7. Env headers: `*-api.env` gives the `openssl rand -hex 32` recipe and the TOTP-key warning (keep it with every backup, restore the two together), `chown root:svc-proto`; `*-migrate.env` the recipe; the loopback note was already there. `sslmode=disable` not added (optional per the fix; pgx `prefer` falls back on loopback). Docs: doc/330 (`svc-proto` in A2/A4 and both tables, `MON_SSH` never UAT, 0.2/0.3/B2 paths under `infra/prd`, `idof` and the A3 `ls` glob `infra/*/shrmpl-etc` so the nackmon id is found under either mirror, the two pending Lessons settled), doc/331 (A2, A3 chown, `MON_SSH` caveat), doc/320 table. `bin/000-rebrand` needs no change: its bare-slug rule turns `svc-proto` into `svc-<slug>` (checked with its substitutions on copies). Verified in a throwaway `ubuntu:24.04` running systemd, Postgres 16 set up with `infra/sql/proto-host-db.sql` and `proto-migrate up`, the linux/arm64 API from this tree: `systemd-analyze verify` clean on all six units; old unit active as `proto`, cwd `/`, exposure 8.3 EXPOSED; new unit active as `svc-proto`, cwd `/srv/uat-proto`, exposure 1.7 OK, `/health` 200, `/auth` 401 (DB query under the filter), path-unit restart changed `MainPID` and removed the request. Changed doc blocks: `bash -n` clean on all 65, shellcheck adds nothing (only the existing SC2010 `ls | grep`); `idof` glob tested on a scratch tree. No host touched. Tests: all green, infra=15 docs=547 (+6 path tokens) go=707 unit=101 e2e=68 py=103, govulncheck clean, gofmt clean (no Go change).

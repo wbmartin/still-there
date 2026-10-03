@@ -42,8 +42,9 @@ has renamed it — use that name wherever this runbook says `infra/prd`.
 Nothing below touches prod's other apps. Block conventions as in `doc/330`
 §0: **local blocks** (zsh, repo root) carry no inline `#` comments and
 read `PRD_SSH` and `MON_SSH` (the host that runs nackmon and pulsecheck;
-it may be prod itself), which you set once in that terminal; **host
-blocks** run in bash as root.
+it may be prod itself until a third host exists, though then nothing
+reports prod down: `infra/README.md`), which you set once in that
+terminal; **host blocks** run in bash as root.
 
 **0.1 Have to hand**
 
@@ -133,10 +134,8 @@ Expect 0.3's commit and three uuids (0.2), not `NACKID` / `HOOKID`.
 ### A2. The service user
 
 ```bash
-id proto >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin -M -d /nonexistent proto
+id svc-proto >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin -M -d /nonexistent svc-proto
 ```
-
-B074 (pending) renames it `svc-proto`.
 
 ### A3. Directories, scripts, env files
 
@@ -153,7 +152,7 @@ chown -R www-data:www-data "$APP_ROOT/log"
 cp "$I"/bin/* "$APP_ROOT/bin/" && chmod 0755 "$APP_ROOT"/bin/* && chown shrmpl-hook:shrmpl-hook "$APP_ROOT"/bin/*
 cp "$I/etc/prd-proto-api.service" "$I/etc/prd-proto-restart.path" "$I/etc/prd-proto-restart.service" "$APP_ROOT/etc/"
 for f in "$I"/etc/prd-proto-*.env; do [ -e "$APP_ROOT/etc/${f##*/}" ] || cp "$f" "$APP_ROOT/etc/"; done
-chown root:proto "$APP_ROOT/etc/prd-proto-api.env" && chmod 0640 "$APP_ROOT/etc/prd-proto-api.env"
+chown root:svc-proto "$APP_ROOT/etc/prd-proto-api.env" && chmod 0640 "$APP_ROOT/etc/prd-proto-api.env"
 for f in deploy migrate; do chown root:shrmpl-hook "$APP_ROOT/etc/prd-proto-$f.env" && chmod 0640 "$APP_ROOT/etc/prd-proto-$f.env"; done
 chown root:root "$APP_ROOT/etc/prd-proto-backup.env" && chmod 0600 "$APP_ROOT/etc/prd-proto-backup.env"
 stat -c '%U:%G %a' "$APP_ROOT"
