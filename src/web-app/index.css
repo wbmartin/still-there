@@ -29,10 +29,10 @@ h1 {
    under the shell's fixed header while a long page scrolls. AppLayout wraps
    the routed page in .app-page; the selector matches
    PAGE_HEADER_SELECTOR in hooks/use-pinned-page-header.ts, which measures
-   the block for StickyFilters. The background is Mantine's body variable, so
+   the block for a page's own sticky rows. The background is Mantine's body variable, so
    rows scroll under an opaque bar in either scheme; the negative top margin
-   cancels the top padding. zIndex 3 sits above StickyFilters (2) and below
-   Mantine's overlay range. Signed out there is no shell header and the
+   cancels the top padding. zIndex 3 sits above a page's sticky rows (2) and
+   below Mantine's overlay range. Signed out there is no shell header and the
    offset falls back to 0. */
 .app-page > * > :is(h1, :has(h1)) {
     position: sticky;

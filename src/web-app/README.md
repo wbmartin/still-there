@@ -59,9 +59,10 @@ browser.
 page's one `<h1>` (a `Title order={1}` alone or in a `Group` with its
 buttons) stays pinned under the shell header while the page scrolls
 (`index.css`). `hooks/use-pinned-page-header.ts` measures that block into
-`--app-page-header-height`, and `components/sticky-filters.tsx` uses it: a
-list page that adds a filter row wraps it in `<StickyFilters>` so the row
-pins just below the title. No template list page has a filter row yet.
+`--app-page-header-height`. No template list page has a filter row yet; a
+sticky filter row is added with the first page that has one (GRC pattern),
+pinned at `calc(var(--app-shell-header-offset, 0px) +
+var(--app-page-header-height, 0px))` just below the title.
 
 ## Entity Stores
 

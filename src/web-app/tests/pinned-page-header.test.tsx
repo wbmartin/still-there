@@ -1,17 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { renderToStaticMarkup } from "react-dom/server";
-import { MantineProvider } from "@mantine/core";
 import {
   PAGE_HEADER_HEIGHT_VARIABLE,
   usePinnedPageHeader,
 } from "../hooks/use-pinned-page-header";
-import { StickyFilters } from "../components/sticky-filters";
 
 // The pinned header itself is CSS (index.css, checked by the e2e
-// app-shell spec). What can break unseen is the measurement StickyFilters
-// sits under: the hook must find the same block the CSS pins and keep its
+// app-shell spec). What can break unseen is the measurement a page's
+// sticky rows sit under: the hook must find the same block the CSS pins and keep its
 // height current as pages change.
 
 // jsdom has no layout and no ResizeObserver: heights come from a stub keyed
@@ -108,23 +105,5 @@ describe("usePinnedPageHeader", () => {
       ),
     );
     expect(pageHeight()).toBe("40px");
-  });
-});
-
-describe("StickyFilters", () => {
-  it("sits under the shell header plus the pinned title block", () => {
-    const markup = renderToStaticMarkup(
-      <MantineProvider>
-        <StickyFilters>
-          <input aria-label="Search" />
-        </StickyFilters>
-      </MantineProvider>,
-    );
-    expect(markup).toContain("position:sticky");
-    expect(markup).toContain(
-      "top:calc(var(--app-shell-header-offset, 0px)" +
-        " + var(--app-page-header-height, 0px))",
-    );
-    expect(markup).toContain("z-index:2");
   });
 });

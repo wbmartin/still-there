@@ -52,7 +52,7 @@ test.describe("app shell", () => {
     await expect(title).toBeVisible();
     await expect(table.locator("tbody tr").first()).toBeVisible();
 
-    // The hook measured the block for StickyFilters.
+    // The hook measured the block for sticky rows.
     await expect
       .poll(() =>
         page.locator(".app-page").evaluate((el) =>

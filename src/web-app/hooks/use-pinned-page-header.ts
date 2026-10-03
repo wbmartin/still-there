@@ -2,7 +2,7 @@
 // under the shell's fixed header while a long page scrolls. index.css does
 // the pinning with the `.app-page` rule; this hook only measures.
 //
-// A page's own sticky rows (components/sticky-filters.tsx) must land below
+// A page's own sticky rows must land below
 // the pinned block, not under it, and the block's height varies by page: a
 // wrapped title, a button row, a title that renders after its data loads.
 // This writes that height to --app-page-header-height on the page element,
