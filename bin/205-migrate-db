@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Bring a developer's own database up to the embedded migrations.
+#
+#   bin/205-migrate-db              # the database etc/loc-api-srv.env names
+#                                   #   (loc_<slug>_db)
+#   bin/205-migrate-db <dbname>     # another developer database
+#
+# In order: CREATE DATABASE when it is missing, sql/roles.sql (cluster
+# roles, idempotent), `cmd/migrate up`, then `cmd/migrate status`. A
+# database this run created also gets sql/fixtures/local-seed.sql (tenant
+# 1 logins, doc/050); an existing one gets migrations only, so its data is
+# never touched.
+#
+# Connects as the postgres role etc/loc-test.env describes (PGPASSWORD,
+# TEST_PG_URL_BASE), the same one bin/510 uses: the app role in
+# etc/loc-api-srv.env is DML only and cannot run a migration. psql runs
+# inside the PG_CONTAINER container when it is up, natively otherwise;
+# PSQL overrides both (see bin/510-reset-test-db).
+#
+# Scratch databases (*_test_db, *_e2e_db) are refused: bin/510 rebuilds
+# those and seeds them as tenants 2 and 3. This script never writes
+# doc/003-schema-reference.sql: a developer database can carry whatever was
+# done to it by hand, so the reference comes from bin/510's scratch build.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
+# shellcheck disable=SC1091
+[ -n "${TEST_PG_URL_BASE:-}" ] || source "$PROJECT_ROOT/etc/loc-test.env"
+API_ENV="$PROJECT_ROOT/etc/loc-api-srv.env"
+SQL_DIR="$PROJECT_ROOT/src/api-srv/sql"
+
+# The database name from the API's DATABASE_URL: ".../<name>?params".
+ENV_DB=""
+if [ -f "$API_ENV" ]; then
+  ENV_DB="$(grep -E '^DATABASE_URL=' "$API_ENV" | head -1 \
+    | sed -nE 's#^[^=]*=[a-z]+://[^/]+/([^?]+).*$#\1#p')" || true
+fi
+DB="${1:-${ENV_DB:-loc_${APP_SLUG}_db}}"
+
+# The name goes into SQL text below, so it is checked, not quoted.
+if ! [[ "$DB" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+  echo "[ERROR] '$DB' is not a plain database name ([a-z_][a-z0-9_]*)"
+  exit 1
+fi
+case "$DB" in
+  *_test_db|*_e2e_db)
+    echo "[ERROR] '$DB' is a scratch database: use bin/510-reset-test-db"
+    exit 1 ;;
+esac
+if [ -z "${TEST_PG_URL_BASE:-}" ]; then
+  echo "[ERROR] TEST_PG_URL_BASE is not set (etc/loc-test.env sets it)"
+  exit 1
+fi
+
+# --- where psql runs (as bin/510) ------------------------------------------
+PG_CONTAINER="${PG_CONTAINER:-loc-postgres}"
+if [ -z "${PSQL:-}" ]; then
+  if command -v docker >/dev/null 2>&1 \
+     && docker ps --format '{{.Names}}' 2>/dev/null \
+        | grep -qx "$PG_CONTAINER"; then
+    PSQL="docker exec -i $PG_CONTAINER psql -U postgres"
+    echo "[INFO] Using psql inside container $PG_CONTAINER"
+  else
+    PSQL="psql -h 127.0.0.1 -U postgres"
+    echo "[INFO] Using native psql ($PSQL)"
+  fi
+fi
+export PGPASSWORD
+
+CREATED=0
+if [ "$($PSQL -d postgres -tAc \
+    "SELECT 1 FROM pg_database WHERE datname = '$DB'")" != 1 ]; then
+  echo "[INFO] Creating $DB"
+  $PSQL -d postgres -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE $DB;"
+  CREATED=1
+fi
+
+# SQL on stdin rather than -f, so it works when psql is in a container.
+echo "[INFO] Cluster roles"
+$PSQL -d postgres -q -v ON_ERROR_STOP=1 < "$SQL_DIR/roles.sql"
+echo "[INFO] Migrating $DB"
+(cd "$PROJECT_ROOT/src/api-srv" \
+  && go run ./cmd/migrate -url "$TEST_PG_URL_BASE/$DB" up)
+
+if [ "$CREATED" = 1 ]; then
+  echo "[INFO] Seeding $DB (new database): local-seed.sql, tenant 1"
+  $PSQL -d "$DB" -q -v ON_ERROR_STOP=1 < "$SQL_DIR/fixtures/local-seed.sql"
+fi
+
+(cd "$PROJECT_ROOT/src/api-srv" \
+  && go run ./cmd/migrate -url "$TEST_PG_URL_BASE/$DB" status)
+echo "[INFO] $DB is at the embedded migrations."

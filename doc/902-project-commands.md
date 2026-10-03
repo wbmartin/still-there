@@ -56,7 +56,7 @@ The one command, on a laptop or a build host:
 ./bin/300-run-tests            # all: infra + docs + go + govulncheck + unit + e2e + py (load is not part of all)
 ./bin/300-run-tests infra      # infra/<host>/bin: bash -n, shared copies identical across hosts
 ./bin/300-run-tests docs       # scripts/check-doc-paths.sh: backticked repo paths in docs exist
-./bin/300-run-tests go         # gofmt, go vet, staticcheck, go test (run before every commit)
+./bin/300-run-tests go         # gofmt, go vet, staticcheck, doc/003 current, go test (run before every commit)
 ./bin/300-run-tests unit       # eslint, vitest (src/web-app)
 ./bin/300-run-tests e2e        # Playwright only
 ./bin/300-run-tests py         # pytest HTTP suite against a private API instance
@@ -177,6 +177,18 @@ To load test the API (starts and stops its own private instance, like
   commit both. `bin/305` is the only writer; the gate never rewrites
   the fixture.
 
+## Developer Database
+
+```
+./bin/205-migrate-db [dbname]      # default: the database etc/loc-api-srv.env names (loc_proto_db)
+```
+- Creates the database if missing, `sql/roles.sql`, `cmd/migrate up`,
+  then `status`. A database it creates also gets
+  `sql/fixtures/local-seed.sql` (tenant 1); an existing one gets
+  migrations only. Connects as the postgres role in `etc/loc-test.env`
+  (the app role is DML only). Refuses `_test_db` / `_e2e_db` names, and
+  never writes `doc/003-schema-reference.sql`.
+
 ## Scratch Databases
 
 ```
@@ -192,6 +204,11 @@ To load test the API (starts and stops its own private instance, like
   overrides); the migrator connects with `TEST_PG_URL_BASE`. This also
   covers what used to be the e2e-only reset: `bin/510-reset-test-db
   loc_proto_e2e_db`.
+- `510` also rewrites `doc/003-schema-reference.sql` right after `up`,
+  before any fixture (`SCHEMA_REFERENCE_FILE` moves it; `bin/300` points
+  it at `tmp/test-logs/` and fails the `go` step when the two differ).
+  After adding a migration: run `510`, commit the reference with it.
+- `510` sources `etc/loc-test.env` when `TEST_PG_URL_BASE` is unset.
 - `515` sources `etc/loc-test.env` when `TEST_PG_URL_BASE` is unset, and
   falls back to `510` if the database doesn't exist yet. It re-runs
   `test-seed.sql` and the lock after the TRUNCATE (which keeps the lock).

@@ -12,7 +12,8 @@ set -euo pipefail
 #                              #   byte-identical across hosts
 #   bin/300-run-tests docs     # scripts/check-doc-paths.sh: every
 #                              #   backticked repo path in the docs exists
-#   bin/300-run-tests go       # gofmt, go vet, staticcheck, go test
+#   bin/300-run-tests go       # gofmt, go vet, staticcheck, schema
+#                              #   reference current (doc/003), go test
 #                              #   + coverage report, no threshold
 #                              #   (seconds; run before every commit)
 #   bin/300-run-tests unit     # eslint, vitest (src/web-app), no database
@@ -68,6 +69,11 @@ LOG_DIR="${TEST_LOG_DIR:-$PROJECT_ROOT/tmp/test-logs}"
 case "$LOG_DIR" in /*) ;; *) LOG_DIR="$PROJECT_ROOT/$LOG_DIR" ;; esac
 REPORT_DIR="$PROJECT_ROOT/tmp/test-reports"
 mkdir -p "$LOG_DIR" "$REPORT_DIR"
+# bin/510 writes the schema reference here instead of doc/003, so no
+# reset this run does (here, in bin/330 or in Playwright's global setup)
+# rewrites the tree; the go step compares it with the committed copy.
+SCHEMA_REFERENCE_DOC="$PROJECT_ROOT/doc/003-schema-reference.sql"
+export SCHEMA_REFERENCE_FILE="$LOG_DIR/schema-reference.sql"
 
 for tool in go npm; do
     command -v "$tool" >/dev/null 2>&1 || { echo "[ERROR] $tool not on PATH"; exit 1; }
@@ -244,6 +250,22 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
     echo "[INFO] Rebuilding $TEST_DB"
     "$SCRIPT_DIR/510-reset-test-db" "$TEST_DB" > "$LOG_DIR/reset-test-db.log" 2>&1 \
         || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-test-db.log:"; tail -20 "$LOG_DIR/reset-test-db.log"; exit 1; }
+
+    # A migration lands with its regenerated reference, or the reference
+    # rots like any hand-kept doc.
+    STEP="schema reference"
+    STEP_LOG=""
+    if ! cmp -s "$SCHEMA_REFERENCE_FILE" "$SCHEMA_REFERENCE_DOC"; then
+        echo "[ERROR] ${SCHEMA_REFERENCE_DOC#"$PROJECT_ROOT"/} is not" \
+            "the schema the migrations build. Regenerate and commit it:" \
+            "bin/510-reset-test-db (or cp" \
+            "${SCHEMA_REFERENCE_FILE#"$PROJECT_ROOT"/} over it). Diff:"
+        diff -u "$SCHEMA_REFERENCE_DOC" "$SCHEMA_REFERENCE_FILE" \
+            | head -40 || true
+        exit 1
+    fi
+    echo "[INFO] schema reference current"
+    STEP="go test"
 
     # -v so a skip is visible in the log; the grep for connectTestDB's exact
     # message turns it into a failure. (A plain '--- SKIP' would also catch an

@@ -21,9 +21,19 @@ only and refuses tenant 1 (doc/900), so it is for the test suites, not for
 browsing as a developer. See the header of that script for `PG_CONTAINER` /
 `PSQL` / `PGPASSWORD` / `TEST_PG_URL_BASE`.
 
-Manual path, for a database with a name of your choosing (e.g. the
-`loc_proto_db` that `etc/loc-api-srv.env`'s `DATABASE_URL` points at). Its
-seed, `sql/fixtures/local-seed.sql`, puts the same logins in tenant 1:
+Your own database -- the `loc_proto_db` that `etc/loc-api-srv.env`'s
+`DATABASE_URL` points at, or a name you pass -- and, after every pull that
+brings a migration, the same command again:
+
+```bash
+bin/205-migrate-db                       # -> loc_proto_db
+```
+
+It creates the database if missing, runs `roles.sql` and `migrate up`, and
+seeds a database it just created with `sql/fixtures/local-seed.sql` (the
+same logins, in tenant 1).
+
+Manual path, the same steps by hand:
 
 ```bash
 psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE loc_proto_db;"

@@ -5,6 +5,7 @@
 //	proto-migrate -config <env file> verify          fail if the database disagrees with the files
 //	proto-migrate -config <env file> up              apply every pending migration, in order
 //	proto-migrate -config <env file> stamp <version> record up to <version> as applied without running
+//	proto-migrate -config <env file> schema-reference print the schema as CREATE TABLE/INDEX text (doc/003)
 //	proto-migrate new <name>                        create sql/migrations/NNNN_<name>.sql (next free NNNN); no database
 //
 // -config is a KEY=VALUE file of which only DATABASE_URL is read -- the
@@ -38,7 +39,7 @@ func main() {
 	url := flag.String("url", "", "database URL (instead of -config)")
 	dir := flag.String("dir", "sql/migrations", "source directory `new` writes into (relative to the cwd)")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: proto-migrate (-config <file> | -url <url>) status|pending|verify|up|stamp <version>\n")
+		fmt.Fprintf(os.Stderr, "usage: proto-migrate (-config <file> | -url <url>) status|pending|verify|up|stamp <version>|schema-reference\n")
 		fmt.Fprintf(os.Stderr, "       proto-migrate [-dir sql/migrations] new <name>\n")
 		flag.PrintDefaults()
 	}
@@ -58,7 +59,8 @@ func main() {
 
 func run(configPath, url string, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("a command is required: status, pending, verify, up, stamp, new")
+		return fmt.Errorf("a command is required: status, pending, verify, " +
+			"up, stamp, schema-reference, new")
 	}
 	if url == "" {
 		if configPath == "" {
@@ -159,6 +161,10 @@ func run(configPath, url string, args []string) error {
 			fmt.Println("[INFO] stamp: nothing to record")
 		}
 		return nil
+	case "schema-reference":
+		// stdout only, so bin/510 can redirect it into
+		// doc/003-schema-reference.sql.
+		return migrate.WriteSchemaReference(ctx, conn, os.Stdout)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}

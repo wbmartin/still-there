@@ -710,79 +710,6 @@ given it moves authorization differences into a matrix? Recommend an ADR
 that permits it only for derived apps past ~10 entities, never the
 template.
 
-### B073 — Generated schema reference (doc/003) and dev migrate script
-
-- **Priority:** P3  **Area:** docs, bin, go-api
-- **GRC:** `bin/520-schema-reference:1-12`; `bin/205-migrate-db:1-18` (:3-6); `src/migrate-srv/cmd/migrate/schema_reference.go:11-120`; `doc/003-ai-postgres-schema-reference.sql:1-4`; `doc/900-database-guidelines.md:20`; `CLAUDE.md:35-38`; `doc/902-project-commands.md:101`; `src/internal/model/schema_contract_test.go:7-8,21,39-41`   **PROTO:** `doc/900-database-guidelines.md:27`; `src/api-srv/cmd/migrate/main.go`; new `bin/2xx`/`5xx`; `bin/510-reset-test-db`
-- **Ticket:** `c30d256`, `fc3e098`
-- **What:** A committed CREATE TABLE/INDEX snapshot regenerated after migrate;
-doc/900 points SQL authors at it. PROTO makes readers replay every migration.
-- **Port notes:** Add `schema-reference` to `cmd/migrate` (pgx, sorted);
-regenerate in bin/510; fail bin/300 on diff. A `bin/205` around `up` is
-trivial.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-`doc/900-database-guidelines.md:27` tells every SQL author, human or
-agent:
-
-    CRITICAL: For ALL SQL queries, the migrations in
-    `src/api-srv/sql/migrations/` are the exclusive and absolute source ...
-
-To know a table's columns a reader must replay every migration in their
-head: `app_user` is `0001` plus `0003_app_user_preference_jsonb.sql:5`
-(`ADD COLUMN preference_jsonb`); `example` is `0001` plus the two
-`ALTER`s in `0002`. Three files today; a derived app grows to dozens, and
-an agent that reads only `0001` writes SQL for a column set that no longer
-exists. Separately, no script migrates the dev database: `doc/050` gives a
-hand-typed `go run ./cmd/migrate -url "postgres://postgres:<pw>@..." up`
-(`doc/050-dev-env-init.md:27`). Quality/DX gap, not a bug.
-
-#### What GRC changed
-
-Commit `c30d256` added a `schema-reference` command to the migrator
-(`src/migrate-srv/cmd/migrate/schema_reference.go:11-120`). It reads
-`information_schema.tables/columns` and `pg_indexes`, sorted by name, and
-prints `CREATE TABLE` / `CREATE INDEX` text, collapsing `nextval(...)`
-defaults to `SERIAL` (`:61-63`). `bin/520-schema-reference:11` writes it to
-the committed `doc/003-ai-postgres-schema-reference.sql` (2,482 lines,
-header `:1-4` says "GENERATED ... Do not edit"). `bin/205-migrate-db:16-18`
-runs bootstrap, `up`, then 520. GRC `doc/900-database-guidelines.md:20`
-and `CLAUDE.md:35-38` name doc/003 as the only source of column names.
-Test: `src/internal/model/schema_contract_test.go:7-8,21,39-41` reads
-doc/003 as text and checks model fields against it, with no database
-(that half is B054). GRC generates from the dev DB, so a dev DB that has
-drifted produces a wrong reference; nothing checks that.
-
-#### Proposed fix for PROTO
-
-1. `src/api-srv/cmd/migrate/main.go`: add a `schema-reference` command.
-   Port the query logic on `pgx.Conn` (PROTO has no `database/sql` here),
-   exclude PROTO's `schema_migration` table, keep name ordering. Usage
-   lines `:3-8` and `:41` gain it. Header text says "proto-migrate",
-   derived from the binary, not GRC's "goose"/"migrate-srv".
-2. `bin/510-reset-test-db`: after `up` on the scratch test DB, regenerate
-   `doc/003-...sql`. A DB built only from migrations makes the output
-   deterministic, unlike GRC's dev-DB source.
-3. `bin/300-run-tests` `go` mode: after 510, fail if
-   `git diff --exit-code doc/003-...sql` shows a change ("regenerate and
-   commit"). This stops a migration landing without its reference.
-4. `doc/900:27`: point at doc/003 for reading, keep migrations as the only
-   way to change schema. Add one row each to `doc/902`.
-5. Optional `bin/205-migrate-db`: `go run ./cmd/migrate -config
-   etc/loc-api-srv.env up` for the dev DB. Check the env file's role can
-   run DDL first; doc/050:29 implies it may not.
-6. Tests: one Go integration test that runs `schema-reference` on the
-   test DB and asserts `CREATE TABLE app_user` with `preference_jsonb`.
-
-#### Open question for Brandon
-
-Should bin/300 fail when the committed doc/003 differs from the migrated
-schema? Recommendation: yes, or the reference rots like any hand doc.
-
 ### B074 — infra small: systemd unit, monitor placement, env headers
 
 - **Priority:** P3  **Area:** infra, docs
@@ -8996,3 +8923,77 @@ line. The template carries no security headers. No tests.
 
 None.
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). New `etc/uat-nginx-site.conf.template`: HTTP-only (80 + [::]:80), `__UAT_DOMAIN__`/`__APP_ROOT__`/`__PORT__` placeholders, `root` web-pub, logs under `log/`, 20M body cap, `/api/` to `127.0.0.1:__PORT__/` with Host, `X-Forwarded-For $proxy_add_x_forwarded_for`, X-Forwarded-Proto (no X-Real-IP), B022's headers on `/assets/`, `/` and `= /index.html` only, same cache rules as the post-sales site; no upstream block (names are global per host). `etc/uat-deploy.env`: `UAT_DOMAIN=uat-$APP_SLUG.example.com`. `bin/600`: requires `UAT_DOMAIN`, checks it is a lower-case hostname, ships the template as `nginx-site.conf.template`, writes `domain=` to MANIFEST. `bin/610`: after the unit step, first run only, fills the template on the host (APP_ROOT after the host override, SERVER_PORT from api-srv.env), writes `$APP_ROOT/etc/nginx-presales_<domain>` root 0644, links `/etc/nginx/sites-enabled/<domain>`, `nginx -t`, `systemctl reload nginx`, prints `sudo certbot --nginx -d <domain>`. Deviations: (1) the domain reaches 610 through `deploy.env` (a required key, host-overridable like the others), not read back from MANIFEST; MANIFEST records it. (2) Safety skips, each with a note: placeholder `*.example.com` (the committed value, so an existing presales host is untouched until the domain is set); site file exists (never overwritten); nginx or sites-enabled missing; any enabled site already has `server_name <domain>` (whitespace-folded `nginx -T`, so a hand-written site is left alone); link name taken by another file stops the deploy. (3) `nginx -t` failure unlinks and removes the new site and exits 1 before the service or DB is touched (GRC left the broken link). (4) File named `nginx-presales_<domain>`, not GRC's `nginx_<domain>`, because doc/330 A8 writes the post-sales site to `$APP_ROOT/etc/nginx_$SITE` and would overwrite the presales one it later restores on rollback. Docs: doc/320 (layout, key table, host prep step 3, new "The nginx site" section, flow), doc/902, DERIVING.md §3, presales-deploy skill. Verified in ubuntu:24.04 (nginx 1.24.0, a real bundle from `bin/600 --no-scp --no-db`, stub systemctl/sudo, Python stub API on 8088, `deploy.sh --no-db --no-restart`): shellcheck clean on 600 and 610. Old 610: no site, `/api/health` 404 from the default site. New: placeholder domain skipped; real domain installed, `nginx -t` ok, `/` 200 with the four headers, `/api/health` reaches the stub as `/health` with `X-Forwarded-For: 127.0.0.1`, no nginx security headers on `/api/`, hashed asset `public, immutable`, missing asset 404, SPA route serves index.html, index.html `no-store`, 22MB POST 413, IPv6 `[::1]` works; rerun says left alone and keeps a hand edit; existing site naming the domain (one line, multi-line, names on continuation lines) skipped, suffix-only and dot-as-wildcard names not mistaken; missing `log/` fails `nginx -t`, site removed, rc=1, nginx still valid; bad domain refused by 600 and 610; taken link name refused. `certbot install --nginx --redirect` (2.9.0, self-signed) edits the file through the link, keeps the link, 80 returns 301 and 443 serves with HSTS. Found, not fixed: `npm run build` fails at HEAD (`VITE_API_PROXY_URL is not set`, vite.config.ts since PS0014 throws in production mode too), so `bin/600` and `bin/110` cannot build the web app without that variable in the environment; the verification bundle was built with `VITE_API_PROXY_URL=http://unused`. Tests: all green, infra=15 docs=527 go=704 unit=101 e2e=68 py=103 (docs +3: new paths named), govulncheck clean, gofmt clean.
+
+### B073 — COMPLETED — Generated schema reference (doc/003) and dev migrate script
+
+- **Priority:** P3  **Area:** docs, bin, go-api
+- **GRC:** `bin/520-schema-reference:1-12`; `bin/205-migrate-db:1-18` (:3-6); `src/migrate-srv/cmd/migrate/schema_reference.go:11-120`; `doc/003-ai-postgres-schema-reference.sql:1-4`; `doc/900-database-guidelines.md:20`; `CLAUDE.md:35-38`; `doc/902-project-commands.md:101`; `src/internal/model/schema_contract_test.go:7-8,21,39-41`   **PROTO:** `doc/900-database-guidelines.md:27`; `src/api-srv/cmd/migrate/main.go`; new `bin/2xx`/`5xx`; `bin/510-reset-test-db`
+- **Ticket:** `c30d256`, `fc3e098`
+- **What:** A committed CREATE TABLE/INDEX snapshot regenerated after migrate;
+doc/900 points SQL authors at it. PROTO makes readers replay every migration.
+- **Port notes:** Add `schema-reference` to `cmd/migrate` (pgx, sorted);
+regenerate in bin/510; fail bin/300 on diff. A `bin/205` around `up` is
+trivial.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+`doc/900-database-guidelines.md:27` tells every SQL author, human or
+agent:
+
+    CRITICAL: For ALL SQL queries, the migrations in
+    `src/api-srv/sql/migrations/` are the exclusive and absolute source ...
+
+To know a table's columns a reader must replay every migration in their
+head: `app_user` is `0001` plus `0003_app_user_preference_jsonb.sql:5`
+(`ADD COLUMN preference_jsonb`); `example` is `0001` plus the two
+`ALTER`s in `0002`. Three files today; a derived app grows to dozens, and
+an agent that reads only `0001` writes SQL for a column set that no longer
+exists. Separately, no script migrates the dev database: `doc/050` gives a
+hand-typed `go run ./cmd/migrate -url "postgres://postgres:<pw>@..." up`
+(`doc/050-dev-env-init.md:27`). Quality/DX gap, not a bug.
+
+#### What GRC changed
+
+Commit `c30d256` added a `schema-reference` command to the migrator
+(`src/migrate-srv/cmd/migrate/schema_reference.go:11-120`). It reads
+`information_schema.tables/columns` and `pg_indexes`, sorted by name, and
+prints `CREATE TABLE` / `CREATE INDEX` text, collapsing `nextval(...)`
+defaults to `SERIAL` (`:61-63`). `bin/520-schema-reference:11` writes it to
+the committed `doc/003-ai-postgres-schema-reference.sql` (2,482 lines,
+header `:1-4` says "GENERATED ... Do not edit"). `bin/205-migrate-db:16-18`
+runs bootstrap, `up`, then 520. GRC `doc/900-database-guidelines.md:20`
+and `CLAUDE.md:35-38` name doc/003 as the only source of column names.
+Test: `src/internal/model/schema_contract_test.go:7-8,21,39-41` reads
+doc/003 as text and checks model fields against it, with no database
+(that half is B054). GRC generates from the dev DB, so a dev DB that has
+drifted produces a wrong reference; nothing checks that.
+
+#### Proposed fix for PROTO
+
+1. `src/api-srv/cmd/migrate/main.go`: add a `schema-reference` command.
+   Port the query logic on `pgx.Conn` (PROTO has no `database/sql` here),
+   exclude PROTO's `schema_migration` table, keep name ordering. Usage
+   lines `:3-8` and `:41` gain it. Header text says "proto-migrate",
+   derived from the binary, not GRC's "goose"/"migrate-srv".
+2. `bin/510-reset-test-db`: after `up` on the scratch test DB, regenerate
+   `doc/003-...sql`. A DB built only from migrations makes the output
+   deterministic, unlike GRC's dev-DB source.
+3. `bin/300-run-tests` `go` mode: after 510, fail if
+   `git diff --exit-code doc/003-...sql` shows a change ("regenerate and
+   commit"). This stops a migration landing without its reference.
+4. `doc/900:27`: point at doc/003 for reading, keep migrations as the only
+   way to change schema. Add one row each to `doc/902`.
+5. Optional `bin/205-migrate-db`: `go run ./cmd/migrate -config
+   etc/loc-api-srv.env up` for the dev DB. Check the env file's role can
+   run DDL first; doc/050:29 implies it may not.
+6. Tests: one Go integration test that runs `schema-reference` on the
+   test DB and asserts `CREATE TABLE app_user` with `preference_jsonb`.
+
+#### Open question for Brandon
+
+Should bin/300 fail when the committed doc/003 differs from the migrated
+schema? Recommendation: yes, or the reference rots like any hand doc.
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as yes: the gate fails on a stale reference). New `src/api-srv/internal/migrate/schema_reference.go` (`WriteSchemaReference`, pgx): public tables from `information_schema` and indexes from `pg_indexes`, both by name, columns in table order, `nextval` defaults as SERIAL, any other DEFAULT printed (doc/900 forbids them; GRC hid them), `schema_migration` left out, header names `proto-migrate schema-reference`, the regenerate rule and `Through migration NNNN_name`; refuses a database with no applied migration. `cmd/migrate` gains `schema-reference` (stdout only; usage lines). New committed `doc/003-schema-reference.sql` (4 tables, through 0005; deviation: named without GRC's `ai-postgres-`). `bin/510` writes it right after `up`, before any fixture, via a temp file (`SCHEMA_REFERENCE_FILE` overrides the path). `bin/300` exports `SCHEMA_REFERENCE_FILE=tmp/test-logs/schema-reference.sql` for the whole run (deviation from step 3: compare with `cmp` instead of `git diff --exit-code`, so the gate never rewrites the tree, works on a dirty tree, and every reset in 330/global setup also stays under tmp/); new `schema reference` step in `go` after 510 fails with a diff and "run bin/510 (or cp) and commit". Found and fixed on the way: `bin/510` run directly (as doc/050 and READMEs say) failed at `migrate up` with `permission denied for schema public`, because it fell back to `etc/loc-api-srv.env`'s DML-only `proto_app`; it now sources `etc/loc-test.env` when `TEST_PG_URL_BASE` is unset (what that file's header already promised), and the dead loc-api-srv.env/PGPASSWORD URL fallback is gone. Step 5: new `bin/205-migrate-db [dbname]` (`set -euo pipefail`): default name from `etc/loc-api-srv.env` `DATABASE_URL`, postgres role from `etc/loc-test.env` (the env file's role cannot run DDL, as the item suspected), CREATE DATABASE if missing, roles.sql, `migrate up`, `local-seed.sql` only on a database it just created (an existing dev DB, which bin/600 dumps to UAT, gets migrations only), `status`; refuses `_test_db`/`_e2e_db` and non-plain names; never writes doc/003. Docs: doc/900 (the CRITICAL rule points at doc/003, schema-changes bullets, usage block), doc/902 (new Developer Database section, 510 notes, go mode line), doc/050 (bin/205 path above the manual one), CLAUDE.md layout. B085's README pointers left to B085. Tests: new `schema_reference_test.go` (migrated scratch DB: `app_user` with 0003's `preference_jsonb`, array and numeric types, `idx_example_uuid`, last migration line, no `schema_migration`, name order, stable on rerun; unmigrated DB refused with no output; column-definition table incl. a shown DEFAULT). Gate negative check: deleting the `preference_jsonb` line from doc/003 fails `bin/300-run-tests go` at `schema reference` with the diff; restored passes. bin/205 verified on scratch `loc_proto_b073dev_db` only (created + seeded tenant 1, rerun "nothing pending" and no reseed, scratch and injection names refused), then dropped; reference also generated from a from-scratch `loc_proto_b073ref_test_db`, byte-identical to bin/510's, dropped. The dev DB was not touched. shellcheck 0.9.0 (ubuntu:24.04) clean on 205, 300, 510. Tests: all green, infra=15 docs=541 (+14 path tokens) go=707 (+3) unit=101 e2e=68 py=103, govulncheck clean, gofmt clean.

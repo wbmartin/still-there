@@ -16,10 +16,20 @@
 #                  Taken from the container's POSTGRES_PASSWORD when unset
 #                  and the container is in use.
 #   TEST_PG_URL_BASE
-#                  "postgres://user:pw@host:port" the migrator connects with;
-#                  overrides DATABASE_URL from etc/loc-api-srv.env, which in
-#                  turn overrides postgres://postgres:$PGPASSWORD@127.0.0.1:5432.
-#                  The role must be able to CREATE DATABASE and own tables.
+#                  "postgres://user:pw@host:port" the migrator connects with.
+#                  When unset, etc/loc-test.env is sourced for it (and for
+#                  PGPASSWORD). The role must be able to CREATE DATABASE and
+#                  own tables.
+#   SCHEMA_REFERENCE_FILE
+#                  where the schema reference goes (default
+#                  doc/003-schema-reference.sql). bin/300-run-tests points
+#                  it under tmp/ and compares, so the gate never rewrites
+#                  the tree.
+#
+# After `up`, and before any fixture, the migrated schema is written out as
+# CREATE TABLE/INDEX text (`proto-migrate schema-reference`). The database
+# holds only what the migrations made, so the file is the same on every
+# machine; a migration that changes it lands with the regenerated file.
 #
 # This database is scratch: it is DROPPED and rebuilt on every run. The
 # loc_<slug>_db that etc/loc-api-srv.env points at is never
@@ -42,8 +52,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # shellcheck disable=SC1091
 source "$PROJECT_ROOT/etc/app.env"
-ENV_FILE="$PROJECT_ROOT/etc/loc-api-srv.env"
+# The test harness file's postgres role, as its header promises; without it
+# a direct run fell through to etc/loc-api-srv.env's DML-only app role,
+# which cannot create schema_migration.
+# shellcheck disable=SC1091
+[ -n "${TEST_PG_URL_BASE:-}" ] || source "$PROJECT_ROOT/etc/loc-test.env"
 SQL_DIR="$PROJECT_ROOT/src/api-srv/sql"
+SCHEMA_REFERENCE_FILE="${SCHEMA_REFERENCE_FILE:-$PROJECT_ROOT/doc/003-schema-reference.sql}"
 TEST_DB="${1:-loc_${APP_SLUG}_test_db}"
 
 # This script DROPs its target. The suffix rule is the difference between a
@@ -71,18 +86,8 @@ fi
 export PGPASSWORD
 
 # --- what the migrator connects with -----------------------------------------
-if [ -z "${TEST_PG_URL_BASE:-}" ] && [ -f "$ENV_FILE" ]; then
-  ENV_DB_URL="$(grep -E '^[[:space:]]*DATABASE_URL[[:space:]]*=' "$ENV_FILE" | head -1 | sed -e 's/^[^=]*=//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-  if [ -n "$ENV_DB_URL" ]; then
-    # strip "/dbname?params" -> "postgres://user:pw@host:port"
-    TEST_PG_URL_BASE="$(printf '%s' "$ENV_DB_URL" | sed -E 's#^([a-z]+://[^/]+).*$#\1#')"
-  fi
-fi
 if [ -z "${TEST_PG_URL_BASE:-}" ]; then
-  if [ -z "${PGPASSWORD:-}" ]; then
-    echo "[ERROR] Set PGPASSWORD (or TEST_PG_URL_BASE) so the migrator can connect as postgres"; exit 1
-  fi
-  TEST_PG_URL_BASE="postgres://postgres:${PGPASSWORD}@127.0.0.1:5432"
+  echo "[ERROR] TEST_PG_URL_BASE is not set (etc/loc-test.env sets it)"; exit 1
 fi
 
 echo "[INFO] Rebuilding $TEST_DB"
@@ -104,6 +109,14 @@ echo "[INFO] Cluster roles"
 $PSQL -d postgres -q -v ON_ERROR_STOP=1 < "$SQL_DIR/roles.sql"
 echo "[INFO] Migrating"
 (cd "$PROJECT_ROOT/src/api-srv" && go run ./cmd/migrate -url "$TEST_PG_URL_BASE/$TEST_DB" up)
+
+# Written to a temp file first so a failed run leaves the old reference.
+echo "[INFO] Schema reference -> ${SCHEMA_REFERENCE_FILE#"$PROJECT_ROOT"/}"
+(cd "$PROJECT_ROOT/src/api-srv" && go run ./cmd/migrate \
+  -url "$TEST_PG_URL_BASE/$TEST_DB" schema-reference) \
+  > "$SCHEMA_REFERENCE_FILE.tmp" \
+  || { rm -f "$SCHEMA_REFERENCE_FILE.tmp"; exit 1; }
+mv "$SCHEMA_REFERENCE_FILE.tmp" "$SCHEMA_REFERENCE_FILE"
 
 echo "[INFO] Seeding tenants 2 and 3; locking out tenant 1"
 $PSQL -d "$TEST_DB" -q -v ON_ERROR_STOP=1 < "$SQL_DIR/fixtures/test-seed.sql"
