@@ -41,6 +41,9 @@ Keys read by `internal/config/config.go` `LoadConfig`:
   the header (local dev, Playwright); 1 behind the host's nginx; the pytest
   copy `bin/300-run-tests` builds sets 1
 - `CORS_ALLOWED_ORIGINS` — optional, comma-separated; empty means no CORS
+- `LOG_LEVEL` — required, one of `debug`, `info`, `warn`, `error`; lines
+  below it are dropped. Per-request lines (`APP_HELPER_INIT`, `RLP0`) and
+  health polls are debug; deployed files set `info`, local dev `debug`
 
 `TEST_BASE_URL` is not part of `Config` — the server ignores it. It is read
 by `bin/330-test-load` and exported by the test runners for the pytest

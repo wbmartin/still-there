@@ -242,150 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B031 — `LOG_LEVEL`; per-request and health lines to debug
-
-- **Priority:** P2  **Area:** go-api, etc, docs
-- **GRC:** `src/internal/config/config.go:47-49,225-233`; `src/internal/logging/logging.go:38-63`; `src/api-srv/cmd/server/main.go:58-61`; `handler/health_handler.go:36,48`; `config/config_test.go:414`; `src/api-srv/README.md:176-178`   **PROTO:** `src/api-srv/internal/logging/logging.go:28-46` (:34); `config/config.go:73-213`; `cmd/server/main.go:48`; `handler/health_handler.go:33-50`; `etc/loc-api-srv.env:17-23`; `etc/e2e-api-srv.env`; `etc/uat-api-srv.env.example`; `infra/*/etc/*-api.env`
-- **Ticket:** RG0043 item 46 / `720f5e1`
-- **What:** PROTO logs at debug always, usernames per request, two Info lines
-per health poll. GRC: optional `LOG_LEVEL` (debug|info|warn|error, default
-info, else refused); health at Debug.
-- **Port notes:** Keep PROTO's logger; add a level. Add the key to every env
-file and doc/905 (GRC never did; its doc/105:435 is stale).
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-PROTO paths below are under `src/api-srv/`. The API has one logger, built
-once in `main` with no level setting:
-
-```go
-// cmd/server/main.go:48
-logger := logging.NewLogger(config.ServerName, os.Stderr)
-// internal/logging/logging.go:32,34
-h := slog.NewTextHandler(w, &slog.HandlerOptions{
-    Level:     slog.LevelDebug,
-```
-
-Every Debug call in the code is therefore written in every environment,
-UAT and production included. There is no config key to change it;
-`internal/config/config.go` has no log field, and `doc/905` is four lines
-that say nothing about logging.
-
-What that writes, per request:
-
-- `internal/security/app_helper.go:69`: `APP_HELPER_INIT` "request
-  entered <handler>" on every request.
-- `internal/security/app_helper.go:384-386`: `RLP0` "Rate limit check
-  passed - key: ..., count: ..." on every rate-limited request.
-- `internal/security/app_helper.go:114-121`: the AppHelper wrappers attach
-  `username` to every line they write.
-- Debug lines that carry data, not just flow:
-  `internal/handler/auth_handler.go:163-168` logs the typed login name
-  ("Auth request parsed for user: "+req.UserName), so a password pasted
-  into the username box lands in the journal;
-  `internal/handler/example_handler.go:140,220` logs whole rows with
-  `%+v`; `internal/handler/user_handler.go:1080` logs the username on a
-  password change.
-
-The health route adds two Info lines on top of the Debug one:
-
-```go
-// internal/handler/health_handler.go:33-35, 45-47
-app.Logger().Info(
-    "HEALTH_REQUEST",
-...
-app.Logger().Info(
-    "HEALTH_RESPONSE",
-```
-
-So each `/health` poll writes three lines. The UAT monitor polls every
-180 s (`infra/uat/shrmpl-etc/pulsecheck-endpoints/uat-proto-api.env`,
-`PULSE_INTERVAL_SEC=180`), and any external checker can poll faster.
-
-Consequence for an operator: journald fills with routine lines, so a real
-`Warn`/`Error` is harder to find, and retention shrinks. Row contents and
-login names sit in the journal on a production host. This is a
-quality/ops gap with a small privacy edge, not a security hole. The test
-`internal/logging/logging_test.go:45` (`TestLogger_LevelsAndDebugNotDropped`)
-pins "debug is always written" as intended behaviour.
-
-#### What GRC changed
-
-GRC commit `720f5e1` (RG0043 item 2.23, "LOG_LEVEL, per-request lines at
-debug") did four things.
-
-1. Config key, optional, default `info`, anything else refused at load
-   (`src/internal/config/config.go:47-49` field,
-   `src/internal/config/config.go:225-233` parse):
-   ```go
-   config.LogLevel = env["LOG_LEVEL"]
-   if config.LogLevel == "" {
-       config.LogLevel = "info"
-   ```
-2. `logging.ParseLevel` and `NewLoggerAtLevel`
-   (`src/internal/logging/logging.go:38-63`); `main` uses them
-   (`src/api-srv/cmd/server/main.go:58-59`):
-   ```go
-   logLevel, _ := logging.ParseLevel(config.LogLevel) // LoadConfig refused anything else
-   logger := logging.NewLoggerAtLevel(config.ServerName, logLevel)
-   ```
-3. Health lines moved to Debug
-   (`src/internal/handler/health_handler.go:36,48`), and
-   `APP_HELPER_INIT` moved from Info to Debug in `app_helper.go`. PROTO
-   already has `APP_HELPER_INIT` and `RLP0` at Debug; they only print
-   because the level is pinned.
-4. Docs: `src/api-srv/README.md:176-178` describes the key.
-
-Test: `TestLoadConfigLogLevel` (`src/internal/config/config_test.go:414`)
-covers absent (info), `debug`, and `verbose` (refused by name).
-
-Corrections to the doc entry: GRC also rewrote its logger and in doing so
-dropped `AddSource`; PROTO's `source=file.go:NN` rewrite is better and
-must stay. GRC never added `LOG_LEVEL` to its env files or doc/905, and
-its `doc/105-api-srv-tech-spec.md:435` still says "all emitted; no level
-key", as the entry says.
-
-#### Proposed fix for PROTO
-
-1. `internal/logging/logging.go`: add a `level slog.Level` argument to
-   `NewLogger` (keep the `io.Writer` argument and the `ReplaceAttr`
-   source rewrite) and add `ParseLevel(name string) (slog.Level, bool)`.
-   Update the three callers that pass a buffer
-   (`internal/handler/example_handler_test.go:100`,
-   `internal/auth/rbac_test.go:12`, `logging_test.go`) to pass
-   `slog.LevelDebug`.
-2. `internal/config/config.go`: add `LogLevel string` to `Config`; in
-   `LoadConfig` read `env["LOG_LEVEL"]`, default `info`, refuse anything
-   `ParseLevel` rejects with an error that names the key. If B032 makes
-   every key required, drop the default and require it instead.
-3. `cmd/server/main.go:48`: parse the level and pass it.
-4. `internal/handler/health_handler.go:33,45`: `Info` to `Debug`.
-5. Review the "request started" Info lines in `auth_handler.go`
-   (`:118`, `:399`, `:537`, `:690`) and `user_mfa_handler.go`; GRC kept
-   them at Info. Leave them unless Brandon wants a one-line-per-login
-   audit at Info.
-6. Add `LOG_LEVEL=` to every API env file: `etc/loc-api-srv.env` (debug),
-   `etc/e2e-api-srv.env` (info), `etc/uat-api-srv.env.example`,
-   `infra/uat/etc/uat-proto-api.env`, `infra/uat/etc/uat-proto-e2e-api.env`,
-   `infra/prd/etc/prd-proto-api.env` (info). Not migrate or backup envs.
-7. Document the key in `doc/905` (lands with B032),
-   `src/api-srv/README.md` and `doc/105` "Logging".
-
-Tests: Go `TestLoadConfigLogLevel` (absent, each valid value, refused
-value); Go logger test that `NewLogger(..., slog.LevelInfo)` drops a
-Debug line and keeps Warn; rename `TestLogger_LevelsAndDebugNotDropped`
-to pass `LevelDebug` explicitly. No pytest needed.
-
-#### Open question for Brandon
-
-Should a missing `LOG_LEVEL` default to `info`, or be a required key
-like the others (B032/B061)? Recommendation: required, since every env
-file gets the line anyway and a silent default hides a typo'd file.
-Brandon: required
-
 ### B032 — Config docs: env grammar and required-key policy
 
 - **Priority:** P2  **Area:** docs, go-api
@@ -8889,3 +8745,148 @@ Which tenant may the second group live in for the pytest, since tenant 2
 is the only one tests may touch and a switch needs two? Recommendation:
 seed a dedicated tenant (for example 3) used only by the context-switch
 test, and record it beside the tenant-2 rule in CLAUDE.md and doc/900.
+
+### B031 — COMPLETED — `LOG_LEVEL`; per-request and health lines to debug
+- **Completed:** 2026-10-02. New required key `LOG_LEVEL` (debug|info|warn|error; Brandon: required, no default) parsed by `logging.ParseLevel` in `config.LoadConfig` into `Config.LogLevel`; `logging.NewLogger` takes the level and `main` passes it. `Logger.log` now checks `Handler.Enabled` first (slog `Handle` does not filter, so without it a level would have dropped nothing). Health `HEALTH_REQUEST`/`HEALTH_RESPONSE` moved to Debug; `APP_HELPER_INIT`/`RLP0` were already Debug; the per-handler `*_START`/auth "request started" Info lines were left at Info per step 5. `LOG_LEVEL` set in every API env file (loc `debug`, all others `info`); documented in `src/api-srv/README.md`, doc/105 Logging and doc/320 (a host whose `api-srv.env` predates the key must add it by hand; doc/905 lands with B032). Tests: new `TestLoadConfig_LogLevel`, `TestParseLevel`, `TestLogger_InfoLevelDropsDebug`; `TestLogger_LevelsAndDebugNotDropped` renamed `TestLogger_DebugLevelWritesEveryLevel` and passes `LevelDebug`. Tests: all green, go=323 unit=42 e2e=12 py=81
+
+- **Priority:** P2  **Area:** go-api, etc, docs
+- **GRC:** `src/internal/config/config.go:47-49,225-233`; `src/internal/logging/logging.go:38-63`; `src/api-srv/cmd/server/main.go:58-61`; `handler/health_handler.go:36,48`; `config/config_test.go:414`; `src/api-srv/README.md:176-178`   **PROTO:** `src/api-srv/internal/logging/logging.go:28-46` (:34); `config/config.go:73-213`; `cmd/server/main.go:48`; `handler/health_handler.go:33-50`; `etc/loc-api-srv.env:17-23`; `etc/e2e-api-srv.env`; `etc/uat-api-srv.env.example`; `infra/*/etc/*-api.env`
+- **Ticket:** RG0043 item 46 / `720f5e1`
+- **What:** PROTO logs at debug always, usernames per request, two Info lines
+per health poll. GRC: optional `LOG_LEVEL` (debug|info|warn|error, default
+info, else refused); health at Debug.
+- **Port notes:** Keep PROTO's logger; add a level. Add the key to every env
+file and doc/905 (GRC never did; its doc/105:435 is stale).
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+PROTO paths below are under `src/api-srv/`. The API has one logger, built
+once in `main` with no level setting:
+
+```go
+// cmd/server/main.go:48
+logger := logging.NewLogger(config.ServerName, os.Stderr)
+// internal/logging/logging.go:32,34
+h := slog.NewTextHandler(w, &slog.HandlerOptions{
+    Level:     slog.LevelDebug,
+```
+
+Every Debug call in the code is therefore written in every environment,
+UAT and production included. There is no config key to change it;
+`internal/config/config.go` has no log field, and `doc/905` is four lines
+that say nothing about logging.
+
+What that writes, per request:
+
+- `internal/security/app_helper.go:69`: `APP_HELPER_INIT` "request
+  entered <handler>" on every request.
+- `internal/security/app_helper.go:384-386`: `RLP0` "Rate limit check
+  passed - key: ..., count: ..." on every rate-limited request.
+- `internal/security/app_helper.go:114-121`: the AppHelper wrappers attach
+  `username` to every line they write.
+- Debug lines that carry data, not just flow:
+  `internal/handler/auth_handler.go:163-168` logs the typed login name
+  ("Auth request parsed for user: "+req.UserName), so a password pasted
+  into the username box lands in the journal;
+  `internal/handler/example_handler.go:140,220` logs whole rows with
+  `%+v`; `internal/handler/user_handler.go:1080` logs the username on a
+  password change.
+
+The health route adds two Info lines on top of the Debug one:
+
+```go
+// internal/handler/health_handler.go:33-35, 45-47
+app.Logger().Info(
+    "HEALTH_REQUEST",
+...
+app.Logger().Info(
+    "HEALTH_RESPONSE",
+```
+
+So each `/health` poll writes three lines. The UAT monitor polls every
+180 s (`infra/uat/shrmpl-etc/pulsecheck-endpoints/uat-proto-api.env`,
+`PULSE_INTERVAL_SEC=180`), and any external checker can poll faster.
+
+Consequence for an operator: journald fills with routine lines, so a real
+`Warn`/`Error` is harder to find, and retention shrinks. Row contents and
+login names sit in the journal on a production host. This is a
+quality/ops gap with a small privacy edge, not a security hole. The test
+`internal/logging/logging_test.go:45` (`TestLogger_LevelsAndDebugNotDropped`)
+pins "debug is always written" as intended behaviour.
+
+#### What GRC changed
+
+GRC commit `720f5e1` (RG0043 item 2.23, "LOG_LEVEL, per-request lines at
+debug") did four things.
+
+1. Config key, optional, default `info`, anything else refused at load
+   (`src/internal/config/config.go:47-49` field,
+   `src/internal/config/config.go:225-233` parse):
+   ```go
+   config.LogLevel = env["LOG_LEVEL"]
+   if config.LogLevel == "" {
+       config.LogLevel = "info"
+   ```
+2. `logging.ParseLevel` and `NewLoggerAtLevel`
+   (`src/internal/logging/logging.go:38-63`); `main` uses them
+   (`src/api-srv/cmd/server/main.go:58-59`):
+   ```go
+   logLevel, _ := logging.ParseLevel(config.LogLevel) // LoadConfig refused anything else
+   logger := logging.NewLoggerAtLevel(config.ServerName, logLevel)
+   ```
+3. Health lines moved to Debug
+   (`src/internal/handler/health_handler.go:36,48`), and
+   `APP_HELPER_INIT` moved from Info to Debug in `app_helper.go`. PROTO
+   already has `APP_HELPER_INIT` and `RLP0` at Debug; they only print
+   because the level is pinned.
+4. Docs: `src/api-srv/README.md:176-178` describes the key.
+
+Test: `TestLoadConfigLogLevel` (`src/internal/config/config_test.go:414`)
+covers absent (info), `debug`, and `verbose` (refused by name).
+
+Corrections to the doc entry: GRC also rewrote its logger and in doing so
+dropped `AddSource`; PROTO's `source=file.go:NN` rewrite is better and
+must stay. GRC never added `LOG_LEVEL` to its env files or doc/905, and
+its `doc/105-api-srv-tech-spec.md:435` still says "all emitted; no level
+key", as the entry says.
+
+#### Proposed fix for PROTO
+
+1. `internal/logging/logging.go`: add a `level slog.Level` argument to
+   `NewLogger` (keep the `io.Writer` argument and the `ReplaceAttr`
+   source rewrite) and add `ParseLevel(name string) (slog.Level, bool)`.
+   Update the three callers that pass a buffer
+   (`internal/handler/example_handler_test.go:100`,
+   `internal/auth/rbac_test.go:12`, `logging_test.go`) to pass
+   `slog.LevelDebug`.
+2. `internal/config/config.go`: add `LogLevel string` to `Config`; in
+   `LoadConfig` read `env["LOG_LEVEL"]`, default `info`, refuse anything
+   `ParseLevel` rejects with an error that names the key. If B032 makes
+   every key required, drop the default and require it instead.
+3. `cmd/server/main.go:48`: parse the level and pass it.
+4. `internal/handler/health_handler.go:33,45`: `Info` to `Debug`.
+5. Review the "request started" Info lines in `auth_handler.go`
+   (`:118`, `:399`, `:537`, `:690`) and `user_mfa_handler.go`; GRC kept
+   them at Info. Leave them unless Brandon wants a one-line-per-login
+   audit at Info.
+6. Add `LOG_LEVEL=` to every API env file: `etc/loc-api-srv.env` (debug),
+   `etc/e2e-api-srv.env` (info), `etc/uat-api-srv.env.example`,
+   `infra/uat/etc/uat-proto-api.env`, `infra/uat/etc/uat-proto-e2e-api.env`,
+   `infra/prd/etc/prd-proto-api.env` (info). Not migrate or backup envs.
+7. Document the key in `doc/905` (lands with B032),
+   `src/api-srv/README.md` and `doc/105` "Logging".
+
+Tests: Go `TestLoadConfigLogLevel` (absent, each valid value, refused
+value); Go logger test that `NewLogger(..., slog.LevelInfo)` drops a
+Debug line and keeps Warn; rename `TestLogger_LevelsAndDebugNotDropped`
+to pass `LevelDebug` explicitly. No pytest needed.
+
+#### Open question for Brandon
+
+Should a missing `LOG_LEVEL` default to `info`, or be a required key
+like the others (B032/B061)? Recommendation: required, since every env
+file gets the line anyway and a silent default hides a typo'd file.
+Brandon: required

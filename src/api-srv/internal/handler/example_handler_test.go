@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -97,7 +98,7 @@ func testServices(t *testing.T) *app.Services {
 			MaxUserReqPerMin:      1000,
 			MaxUnauthReqPerMin:    1000,
 		},
-		Logger: logging.NewLogger("test", &bytes.Buffer{}),
+		Logger: logging.NewLogger("test", &bytes.Buffer{}, slog.LevelDebug),
 	}
 }
 

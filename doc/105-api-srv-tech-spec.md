@@ -369,6 +369,9 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
   it into journald. No remote receiver.
 - **Levels**: DEBUG, INFO, WARN, ERROR, via `Debug/Info/Warn/Error(code,
   message, kv...)`
+- **Threshold**: `LOG_LEVEL` (required: `debug`, `info`, `warn` or `error`)
+  sets the lowest level written. Per-request flow lines and health polls are
+  DEBUG, so deployed hosts (`info`) skip them; local dev runs `debug`.
 - **Context**: Username, user ID, request details passed as key/value pairs
 - **Code**: the `code` argument is emitted as a `code=` attribute on every
   line, e.g. `level=INFO source=example_handler.go:88 msg="..." code=EX_CR_START service=proto-api username=alice`

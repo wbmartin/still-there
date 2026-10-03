@@ -30,7 +30,7 @@ func HealthHandler(deps *app.Services) http.HandlerFunc {
 		}
 
 		username := "PreAuth"
-		app.Logger().Info(
+		app.Logger().Debug(
 			"HEALTH_REQUEST",
 			"Health check requested",
 			"username",
@@ -42,7 +42,7 @@ func HealthHandler(deps *app.Services) http.HandlerFunc {
 		wrapper := model.DataWrapper{Data: data}
 		app.WriteJSON(w, http.StatusOK, wrapper)
 
-		app.Logger().Info(
+		app.Logger().Debug(
 			"HEALTH_RESPONSE",
 			"Health check completed",
 			"username",

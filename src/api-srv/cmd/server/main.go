@@ -46,7 +46,9 @@ func main() {
 	defer kv.Close()
 
 	// slog to stderr; systemd captures it into journald
-	logger := logging.NewLogger(config.ServerName, os.Stderr)
+	logger := logging.NewLogger(
+		config.ServerName, os.Stderr, config.LogLevel,
+	)
 	logger.Info("SERVER_INIT", "Starting API server", "username", "app-root")
 
 	// Initialize database

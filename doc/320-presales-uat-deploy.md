@@ -117,6 +117,13 @@ sudo /tmp/<app>_bundle_YYYYMMDD_hhmm/deploy.sh --no-db
 everyone out) and `TOTP_ENCRYPTION_KEY` (rotating it breaks every enrolled
 authenticator) unless they are weak.
 
+### A host whose `api-srv.env` predates a required key
+
+Deploys never rewrite `api-srv.env`, so a key the API started requiring after
+the host's first deploy is missing there and the new binary exits with
+"`KEY` is required". Add it by hand, as root, before deploying:
+`LOG_LEVEL=info` (debug, info, warn or error).
+
 ## The two commands
 
 ```bash

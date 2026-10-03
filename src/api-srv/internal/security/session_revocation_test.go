@@ -2,6 +2,7 @@ package security
 
 import (
 	"bytes"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -26,7 +27,7 @@ func revocationServices(t *testing.T) *app.Services {
 			JWTSecret:             "test-secret",
 			JWTSessionExpireHours: 72,
 		},
-		Logger: logging.NewLogger("test", &bytes.Buffer{}),
+		Logger: logging.NewLogger("test", &bytes.Buffer{}, slog.LevelDebug),
 	}
 }
 

@@ -23,15 +23,15 @@ type Logger struct {
 	h slog.Handler
 }
 
-// NewLogger builds a Logger that writes every level to w, tagged with the
-// server name. Pass os.Stderr in main; tests can pass a buffer.
-func NewLogger(serverName string, w io.Writer) *Logger {
+// NewLogger builds a Logger that writes level and above to w, tagged with
+// the server name. Pass os.Stderr in main; tests can pass a buffer.
+func NewLogger(serverName string, w io.Writer, level slog.Level) *Logger {
 	if w == nil {
 		w = os.Stderr
 	}
 	h := slog.NewTextHandler(w, &slog.HandlerOptions{
 		AddSource: true,
-		Level:     slog.LevelDebug,
+		Level:     level,
 		// source=file.go:NN rather than the build machine's absolute path
 		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.SourceKey {
@@ -46,11 +46,31 @@ func NewLogger(serverName string, w io.Writer) *Logger {
 	return &Logger{h: h.WithAttrs([]slog.Attr{slog.String("service", serverName)})}
 }
 
+// ParseLevel maps a LOG_LEVEL value (debug, info, warn, error) to its
+// slog level. Anything else, including other case, is not ok.
+func ParseLevel(name string) (slog.Level, bool) {
+	switch name {
+	case "debug":
+		return slog.LevelDebug, true
+	case "info":
+		return slog.LevelInfo, true
+	case "warn":
+		return slog.LevelWarn, true
+	case "error":
+		return slog.LevelError, true
+	}
+	return 0, false
+}
+
 // log emits one record. skip is a runtime.Caller-style frame count with log
 // itself at 0, so 1 is log's caller; the WithCallerSkip methods pass their
 // argument straight through, which is the contract every call site was
 // written against.
 func (l *Logger) log(level slog.Level, code, message string, skip int, keyvals ...interface{}) {
+	// Handle does not filter by level; the caller must.
+	if !l.h.Enabled(context.Background(), level) {
+		return
+	}
 	var pcs [1]uintptr
 	// +1 because runtime.Callers counts itself where runtime.Caller does not.
 	runtime.Callers(skip+1, pcs[:])

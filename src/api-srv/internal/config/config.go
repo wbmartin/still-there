@@ -3,31 +3,35 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/wbmartin/starter-api/internal/logging"
 )
 
 // Config holds the application configuration
 type Config struct {
-	DatabaseURL                      string   `json:"database_url"`
-	JWTSecret                        string   `json:"jwt_secret"`
-	JWTSessionExpireHours            int      `json:"jwt_session_expire_hours"`
-	MaxUserReqPerMin                 int      `json:"max_user_req_per_min"`
-	MaxUnauthReqPerMin               int      `json:"max_unauth_req_per_min"`
-	ServerName                       string   `json:"server_name"`
-	AppName                          string   `json:"app_name"`
-	ServerPort                       int      `json:"server_port"`
-	ServerBindAddress                string   `json:"server_bind_address"`
-	EnableTLS                        bool     `json:"enable_tls"`
-	TLSCertPath                      string   `json:"tls_cert_path"`
-	TLSKeyPath                       string   `json:"tls_key_path"`
-	TOTPEncryptionKey                string   `json:"totp_encryption_key"`
-	FailedLoginAttemptThreshold      int      `json:"failed_login_attempt_threshold"`
-	FailedLoginAttemptWindowDuration string   `json:"failed_login_attempt_window_duration"`
-	FailedLoginLockoutDuration       string   `json:"failed_login_lockout_duration"`
-	CorsAllowedOrigins               []string `json:"cors_allowed_origins"`
-	TrustedProxyCount                int      `json:"trusted_proxy_count"`
+	DatabaseURL                      string     `json:"database_url"`
+	JWTSecret                        string     `json:"jwt_secret"`
+	JWTSessionExpireHours            int        `json:"jwt_session_expire_hours"`
+	MaxUserReqPerMin                 int        `json:"max_user_req_per_min"`
+	MaxUnauthReqPerMin               int        `json:"max_unauth_req_per_min"`
+	ServerName                       string     `json:"server_name"`
+	AppName                          string     `json:"app_name"`
+	ServerPort                       int        `json:"server_port"`
+	ServerBindAddress                string     `json:"server_bind_address"`
+	EnableTLS                        bool       `json:"enable_tls"`
+	TLSCertPath                      string     `json:"tls_cert_path"`
+	TLSKeyPath                       string     `json:"tls_key_path"`
+	TOTPEncryptionKey                string     `json:"totp_encryption_key"`
+	FailedLoginAttemptThreshold      int        `json:"failed_login_attempt_threshold"`
+	FailedLoginAttemptWindowDuration string     `json:"failed_login_attempt_window_duration"`
+	FailedLoginLockoutDuration       string     `json:"failed_login_lockout_duration"`
+	CorsAllowedOrigins               []string   `json:"cors_allowed_origins"`
+	TrustedProxyCount                int        `json:"trusted_proxy_count"`
+	LogLevel                         slog.Level `json:"log_level"`
 }
 
 // ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,
@@ -101,6 +105,19 @@ func LoadConfig(configFilePath string) (*Config, error) {
 			config.MaxUnauthReqPerMin = val
 		}
 	}
+
+	logLevelStr := env["LOG_LEVEL"]
+	if logLevelStr == "" {
+		return nil, fmt.Errorf("LOG_LEVEL is required")
+	}
+	logLevel, ok := logging.ParseLevel(logLevelStr)
+	if !ok {
+		return nil, fmt.Errorf(
+			"LOG_LEVEL must be debug, info, warn or error, got %q",
+			logLevelStr,
+		)
+	}
+	config.LogLevel = logLevel
 
 	config.ServerName = env["SERVER_NAME"]
 	config.AppName = env["APP_NAME"]
