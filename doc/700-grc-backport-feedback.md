@@ -786,69 +786,6 @@ Adopt batched testing in the template, or keep `bin/300-run-tests all`
 per ticket? Recommendation: keep per ticket in the template, since PROTO
 has no 440-check smoke to make it slow; a derived app can batch.
 
-### B081 — DERIVING.md: paste-ready "Template lineage" block
-
-- **Priority:** P3  **Area:** docs
-- **GRC:** `CLAUDE.md:14-17,156-173`   **PROTO:** `DERIVING.md:108-118,126-127`
-- **Ticket:** `59d351c`
-- **What:** GRC wrote the section DERIVING asks for: derive commit, last tag and
-range, three `git` commands, PS id in `raised_by:`.
-- **Port notes:** Add to DERIVING §8.
-- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (per recommendation, lineage block must not cite tickets/ (B091), 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Docs/DX gap. `DERIVING.md` §8 tells a derived app how to pull later
-template changes with generic commands, `DERIVING.md:108-116`
-(`git log template-<last-sync>..template/main -- tickets/04-archive`).
-It then says only (`:126-127`): "record the template tag you synced to in
-your own `CLAUDE.md` or a ticket". It gives no shape for that record, and
-§1 (`:13-34`) never says to note the commit the app was derived from. §5
-(`:70-75`) says the `CLAUDE.md` Conventions/Tickets/Branches sections
-"carry over" but names no lineage section, and says `DERIVING.md` "can
-go". A derived app that deletes it loses the starting point
-and the commands; its first sync starts with archaeology.
-
-#### What GRC changed
-
-GRC commit `59d351c` (2026-09-21) wrote that record into its `CLAUDE.md`:
-- `:14-17`: "Derived from ProtoStack-ReactGo (`<remote>`) at its commit
-  `0c2130a` on 2026-09-17", plus which local decisions override template
-  conventions.
-- `:156-173`, "## Template lineage": the last reviewed tag
-  (`template-2026-09-21`), the template ticket range it covered and the
-  local ticket range it became, the three `git` commands with the real tag
-  filled in, and the rule: decide pull/adapt/skip per archive file, file a
-  local ticket with the template id in `raised_by:`, never cherry-pick
-  blind (module path, binaries and migrator differ), then update the tag.
-
-#### Proposed fix for PROTO
-
-1. `DERIVING.md` §1: after the `bin/000-rebrand` commit, record
-   `git rev-parse --short HEAD~1` (the template commit) and the date.
-2. `DERIVING.md` §8: add a fenced, paste-ready "## Template lineage" block
-   with placeholders `<template-remote>`, `<derive-sha>`, `<derive-date>`,
-   `<last-tag>`, `<template-id range>`, the three commands, and GRC's
-   pull/adapt/skip paragraph. Replace `:126-127` with "paste it into
-   `CLAUDE.md` and update `<last-tag>` after each sync".
-3. `DERIVING.md` §5: list "Template lineage" among sections the derived
-   `CLAUDE.md` must have, before `DERIVING.md` is deleted.
-4. Trap: `bin/000-rebrand` rewrites every `PS` + four digits in tracked
-   files outside `tickets/` (step 3, `--ticket-prefix`). A literal
-   `PS0001-PS0021` in the block becomes `AC0001`. Use placeholders only.
-5. Trap: the §7 check (`DERIVING.md:89-91`) greps for `wbmartin`; a
-   literal template remote in the block makes that check print. Keep
-   `<template-remote>` as a placeholder, as `:110` already does.
-6. Do not copy GRC ids, goose wording or sha. Test: §7 grep after rebrand.
-
-#### Open question for Brandon
-
-Should `bin/000-rebrand` print the derive sha and pre-filled lineage block
-in its "Left for a human" list? Recommend yes: the sha is known at that
-moment and nowhere else so cheaply.
-
 ### B082 — Later post-sales docs: repository reset; release checklist
 
 - **Priority:** P3  **Area:** docs, skills
@@ -9003,3 +8940,67 @@ Six small rules; five are doc gaps, one is a code smell (DX, not a bug).
 Should the 33-site `appHelper` rename ride this docs ticket or its own?
 Recommend its own, so the mechanical diff does not bury the doc lines.
 - **Completed:** 2026-10-03. `CLAUDE.md` Layout: the `bin/` line points at doc/902, a new `src/api-srv/cmd/` line says only shipped binaries live there (`src/load-test` is outside), the `sql/` line says seed and test data are `fixtures/`, never a migration, and the `doc/` line names the runbooks (310, 320, 330, 331, 340). Conventions: pin a Go dependency below a release that raises `go` in `src/api-srv/go.mod` unless the bump is the point. doc/105 HTTP status codes: 409 also when a well-formed request is refused by the record's state (400 stays for malformed). `src/api-srv/README.md` Architecture notes the `cmd/` rule. Code, in its own commit per the recommendation (open question): every `app := security.NewAppHelper` in `internal/handler/` (41 sites incl. two tests, not 33) renamed to `appHelper` with `gopls rename`, changed lines past 80 columns rewrapped, the `app_helper.go` and doc/105 examples follow; no behaviour change. No length cap or other structure rule: the item sets none. Tests: none new (per item); all green, infra=15 docs=673 go=708 unit=105 e2e=70 py=103 (docs +10: the new backticked paths).
+
+### B081 — COMPLETED — DERIVING.md: paste-ready "Template lineage" block
+
+- **Priority:** P3  **Area:** docs
+- **GRC:** `CLAUDE.md:14-17,156-173`   **PROTO:** `DERIVING.md:108-118,126-127`
+- **Ticket:** `59d351c`
+- **What:** GRC wrote the section DERIVING asks for: derive commit, last tag and
+range, three `git` commands, PS id in `raised_by:`.
+- **Port notes:** Add to DERIVING §8.
+- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (per recommendation, lineage block must not cite tickets/ (B091), 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Docs/DX gap. `DERIVING.md` §8 tells a derived app how to pull later
+template changes with generic commands, `DERIVING.md:108-116`
+(`git log template-<last-sync>..template/main -- tickets/04-archive`).
+It then says only (`:126-127`): "record the template tag you synced to in
+your own `CLAUDE.md` or a ticket". It gives no shape for that record, and
+§1 (`:13-34`) never says to note the commit the app was derived from. §5
+(`:70-75`) says the `CLAUDE.md` Conventions/Tickets/Branches sections
+"carry over" but names no lineage section, and says `DERIVING.md` "can
+go". A derived app that deletes it loses the starting point
+and the commands; its first sync starts with archaeology.
+
+#### What GRC changed
+
+GRC commit `59d351c` (2026-09-21) wrote that record into its `CLAUDE.md`:
+- `:14-17`: "Derived from ProtoStack-ReactGo (`<remote>`) at its commit
+  `0c2130a` on 2026-09-17", plus which local decisions override template
+  conventions.
+- `:156-173`, "## Template lineage": the last reviewed tag
+  (`template-2026-09-21`), the template ticket range it covered and the
+  local ticket range it became, the three `git` commands with the real tag
+  filled in, and the rule: decide pull/adapt/skip per archive file, file a
+  local ticket with the template id in `raised_by:`, never cherry-pick
+  blind (module path, binaries and migrator differ), then update the tag.
+
+#### Proposed fix for PROTO
+
+1. `DERIVING.md` §1: after the `bin/000-rebrand` commit, record
+   `git rev-parse --short HEAD~1` (the template commit) and the date.
+2. `DERIVING.md` §8: add a fenced, paste-ready "## Template lineage" block
+   with placeholders `<template-remote>`, `<derive-sha>`, `<derive-date>`,
+   `<last-tag>`, `<template-id range>`, the three commands, and GRC's
+   pull/adapt/skip paragraph. Replace `:126-127` with "paste it into
+   `CLAUDE.md` and update `<last-tag>` after each sync".
+3. `DERIVING.md` §5: list "Template lineage" among sections the derived
+   `CLAUDE.md` must have, before `DERIVING.md` is deleted.
+4. Trap: `bin/000-rebrand` rewrites every `PS` + four digits in tracked
+   files outside `tickets/` (step 3, `--ticket-prefix`). A literal
+   `PS0001-PS0021` in the block becomes `AC0001`. Use placeholders only.
+5. Trap: the §7 check (`DERIVING.md:89-91`) greps for `wbmartin`; a
+   literal template remote in the block makes that check print. Keep
+   `<template-remote>` as a placeholder, as `:110` already does.
+6. Do not copy GRC ids, goose wording or sha. Test: §7 grep after rebrand.
+
+#### Open question for Brandon
+
+Should `bin/000-rebrand` print the derive sha and pre-filled lineage block
+in its "Left for a human" list? Recommend yes: the sha is known at that
+moment and nowhere else so cheaply.
+- **Completed:** 2026-10-03. `DERIVING.md` §1 records the template commit after the rebrand commit (`git rev-parse --short HEAD~1`); §5 lists "Template lineage" among the `CLAUDE.md` sections to add before `DERIVING.md` goes; §8 now holds one fenced paste-ready block (placeholders `<template-remote>`, `<derive-sha>`, `<derive-date>`, `<last-sync>`, the three `git` commands, pull/adapt/skip rule) and the duplicate command list was dropped. `<last-sync>` is a `template-YYYY-MM-DD` tag or the derive sha before the first sync (the log range takes either). No ticket ids (B091), no GRC ids or sha; placeholders only, so the rebrand and the §7 grep leave it alone. Open question taken as recommended: `bin/000-rebrand` now prints the template commit sha and date in its "Left for a human" list (HEAD at that moment, tree clean). Verified in a throwaway clone: `git remote add template`, `fetch --tags`, `git log <tag-or-sha>..template/main`, `HEAD~1` after a commit. Tests: none new; all green, infra=15 docs=677 go=708 unit=105 e2e=70 py=103 (docs +4: new backticked paths).

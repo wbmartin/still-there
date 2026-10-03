@@ -18,6 +18,7 @@ git remote set-url origin <the new app's remote>
 bin/000-rebrand acme "Acme Portal"                          # --module github.com/you/acme-api to set the Go module path
 git status && git diff --stat                               # review; it is one commit
 git commit -am "Derive acme from ProtoStack"
+git rev-parse --short HEAD~1                                # the template commit this app derives from; keep it (§8)
 ```
 
 What it changed: `etc/app.env`; `proto-api`/`proto-migrate` → `acme-*`;
@@ -80,6 +81,8 @@ initial migration.
 - `CLAUDE.md`: the first paragraph and the Layout list describe
   ProtoStack; make them describe this app. The Conventions and Branches
   sections carry over as they are.
+- `CLAUDE.md`: add a "Template lineage" section (the block in §8) before
+  `DERIVING.md` goes; it is the only record of where the app came from.
 - `README.md`: title, first paragraph, and drop this file's mention if you
   do not want derivation instructions in the derived app. `DERIVING.md`
   itself can go.
@@ -109,15 +112,7 @@ name (put it in `etc/app.env` or `constants/app.ts` instead) or a pattern
 
 ProtoStack keeps moving after you derive. The template tags `main` at each
 sync point: `template-YYYY-MM-DD`. A derived app reviews the commits since
-the last tag it synced to:
-
-```bash
-# in the derived app
-git remote add template <protostack-remote>            # once
-git fetch template --tags
-git log --oneline template-<last-sync>..template/main  # what changed since
-git show <sha>                                         # one change in full
-```
+the last tag it synced to, using the commands in the lineage block below.
 
 For each commit decide pull / adapt / skip; where you pull, cherry-pick or
 re-apply it. Names differ (`bin/000-rebrand` rewrote them), so a
@@ -125,5 +120,29 @@ cherry-pick of anything touching `etc/`, `infra/`, SQL role names or the
 Go module path needs a rebrand pass by hand. Skip template-only changes
 (`DERIVING.md`, `bin/000-rebrand`).
 
-When you are done, record the template tag you synced to in your own
-`CLAUDE.md`, so the next sync starts from there.
+The lineage block: paste this into the derived app's `CLAUDE.md` as "## Template lineage" and
+fill the placeholders. Keep them as placeholders in the template itself.
+
+````markdown
+## Template lineage
+
+Derived from ProtoStack (`<template-remote>`) at its commit `<derive-sha>`
+on `<derive-date>` (`git rev-parse --short HEAD~1` after the rebrand
+commit; `bin/000-rebrand` prints it too). Local decisions that override
+template conventions: `<none, or list them>`.
+
+Last template point reviewed: `<last-sync>` (a `template-YYYY-MM-DD` tag,
+or `<derive-sha>` before the first sync).
+
+```bash
+git remote add template <template-remote>              # once
+git fetch template --tags
+git log --oneline <last-sync>..template/main           # what changed since
+git show <sha>                                         # one change in full
+```
+
+For each commit decide pull, adapt or skip. Never cherry-pick blind: the
+module path, binary names, role names and `infra/` directories differ.
+Record the decision where the app tracks work, naming the template commit.
+Then set `<last-sync>` above to the newest template tag you reviewed.
+````
