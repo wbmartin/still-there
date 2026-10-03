@@ -2542,6 +2542,55 @@ None.
   Prefer the former. Check `bin/110-build-web-app` and the UAT build too.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
 
+### B094 — `/mfaSetup` and `/mfaVerify` never check the block flag on the session path
+- **Priority:** P2  **Area:** go-api
+- **GRC:** not checked   **PROTO:** `src/api-srv/internal/handler/user_mfa_handler.go:167` (`CheckRateLimitAndUserBlock` before the body is read), `:212` (`CheckJWT`, session path); same at `:362` and `:402`; `src/api-srv/internal/security/app_helper.go:472-481` (no claims: per-address bucket), `:502-518` (block flag read only when claims are set); `src/api-srv/internal/handler/user_block_handler.go:14-27`; `src/api-srv/internal/security/session_revocation.go:56-64`; `src/api-srv/internal/handler/route_check_contract_test.go:171-178`
+- **Ticket:** found while implementing B039 (2026-10-03)
+- **What:** Both handlers call `CheckRateLimitAndUserBlock` first, then read
+  the body to pick the temp-token or session path, and only call `CheckJWT`
+  on the session path. At the rate check the claims are nil, so the
+  `BLOCKED*` flag is skipped (`app_helper.go:502`) and the caller is counted
+  in the anonymous per-address bucket, not the per-user one (`:476-480`).
+  Today this matters only after an API restart: a block also revokes every
+  session (`user_block_handler.go:18-20`), so a pre-block token gets 401
+  from `CheckJWT`, but revocations live in the in-process KV and are lost
+  on restart, while the flag is reloaded. After a restart a pre-block token
+  can still run the session path of both routes (start or finish MFA
+  enrolment on the blocked login) until it expires; every other route
+  answers 403. `/auth` refuses the blocked row, so no new session results.
+  B039's route contract table records the current behaviour
+  (`session: true, rate: true`, no `block`).
+- **Port notes:** Move the rate/block call into each branch after the
+  bounded body read: temp-token path `SkipJWT`, `CheckRateLimit`,
+  `SkipUserBlock` (the temp token comes from `/auth`, which already refuses
+  a blocked row); session path `CheckJWT`, then `CheckRateLimitAndUserBlock`.
+  Flip both contract rows to `block: true` and add a Go test: valid JWT
+  plus the `BLOCKED*` flag answers 403 on both routes. The body read stays
+  ahead of every check (it chooses the path) and stays bounded.
+- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
+
+### B095 — Six bash scripts run without `set -o pipefail`
+- **Priority:** P3  **Area:** bin
+- **GRC:** not checked   **PROTO:** `bin/100-build-api-server:6` (`set -e`), `bin/215-run-api-srv:3` (`set -e`), `bin/216-stop-local-stack:3` (`set -e`), `bin/220-run-web-app` (no `set` line at all), `bin/510-reset-test-db:39` (`set -e`), `bin/515-reseed-db:27` (`set -e`)
+- **Ticket:** reported during the B034-B061 batch, list verified 2026-10-03
+- **What:** Every other tracked bash script (23) starts `set -euo pipefail`;
+  these six do not, so a failing command on the left of a pipe is ignored
+  and, in `bin/220`, any failure is. Only `bin/510` and `bin/515` have
+  pipes today: `bin/510-reset-test-db:60` and `bin/515-reseed-db:47`
+  (`docker ps | grep -qx`), `bin/510-reset-test-db:75,78` (`grep | head |
+  sed`, `printf | sed`), `bin/515-reseed-db:55` (`psql -lqt | cut | grep
+  -qw`, where a failed `psql` reads as "database missing"). The four POSIX
+  `sh` start/stop scripts (`infra/uat/bin/uat-proto-start`,
+  `infra/uat/bin/uat-proto-stop` and the `prd` pair) are two `systemctl`
+  lines each with no pipe and are not counted here.
+- **Port notes:** Add `set -euo pipefail` to all six to match the house
+  line; check each for `-u` (unset `$1` and optional variables) and for
+  `| grep -q` pipelines, which can fail under `pipefail` when `grep` exits
+  early (small outputs here, but test each). Run shellcheck on the six.
+  Tests: run each script once (bin/100, 215/216, 220, 510, 515) after the
+  change.
+- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
+
 # SKIP / Brandon-veto list (tick to override)
 
 **Recommendations against porting**
