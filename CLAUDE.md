@@ -65,6 +65,12 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
   `constants/grants.ts`).
 - Config is a flat `KEY=VALUE` file passed to the binary; no environment-
   variable lookups.
+- Customer data never in git: source exports and anything derived from
+  them live outside the repo; fixtures and mock data are synthetic
+  (`DERIVING.md` section 2). A leak costs a new repository.
+- Show only what the code verified: a count counts confirmed results, a
+  metric is measured or absent, a missing value stays missing. Nothing
+  fabricated reaches a screen, report or log.
 - Git: summarize a PR from `git diff`, not memory, in markdown with headings.
 
 ## Branches

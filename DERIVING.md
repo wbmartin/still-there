@@ -43,6 +43,16 @@ Postgres cluster is the safe default for every derived app.
 | `etc/loc-api-srv.env`, `etc/e2e-api-srv.env` | `JWT_SECRET`, `TOTP_ENCRYPTION_KEY` (32 bytes hex) | local-only, but make them yours |
 | `etc/uat-api-srv.env.template`, `infra/*/etc/*-api.env` | `__SECRET__` / `SERVERONLY` placeholders | stay placeholders in git; real values are generated on the host (presales by `610`, post-sales by doc/330 / doc/331) |
 
+**Customer data never enters git.** A tenant's source data (exports,
+spreadsheets, import sets) and anything derived from it, including mock
+data built from real records, lives in a directory outside the repository,
+named by a key in the app's env file. The key is the derived app's to add;
+ProtoStack has no import path. Fixtures, seeds and mock data are synthetic.
+Deleting a committed file does not remove it: the first derived app
+committed a tenant's export and needed a new repository, new webhooks, a
+new deploy key and a re-clone of every checkout to get it out of history.
+The rule has to hold before the first commit of real data.
+
 ## 3. Hosts
 
 - **Presales** (`bin/600`/`610`): `etc/uat-deploy.env` — `UAT_HOST` (ssh

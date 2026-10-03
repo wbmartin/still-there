@@ -454,123 +454,6 @@ repository and a prod repository that promote copies into, or accept that
 UAT's credential can move `:prd`? Recommendation: split; it is the only
 way a UAT compromise cannot ship to prod.
 
-### B052 — Rules: customer data never in git; never assert the unverified
-
-- **Priority:** P2  **Area:** docs
-- **GRC:** `CLAUDE.md:39-42,99-100`; `README.md:38-42`; RG0043 md `:912-940,1084-1095`; `tickets/01-open/RG0044-fresh-repo-webhooks-deploy-keys.md:19-26`; `tickets/04-archive/engineering-log/260924_0740-TKT-NONE-round-11-on-main.md:9-21`; RG0006 md `:151-158`; RG0037 md `:133-134`   **PROTO:** `DERIVING.md:36-45`; `CLAUDE.md:25,29-54`
-- **Ticket:** RG0043 1.7 / `03ad0f3`; RG0044; round-11 log
-- **What:** (a) GRC committed a tenant's real import set and mock data, then
-needed a history purge; source data lives outside the repo, fixtures
-synthetic. (b) Review found the app counting attempts as successes and faking
-a metric: never show what the code has not verified.
-- **Port notes:** (a) as a DERIVING.md rule citing RG0044. Docs part 4 rated (a)
-P1.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-This is a quality/process gap, not a code bug. Two rules that GRC learned
-the hard way are absent from PROTO's guidance. A derived app inherits
-PROTO's `CLAUDE.md` and `DERIVING.md` and nothing else.
-
-**(a) Nothing says where customer data lives.** `DERIVING.md:36-44` is the
-"Secrets and passwords" table. It covers `roles.sql`, seed logins, JWT and
-TOTP keys, and `SERVERONLY` placeholders:
-
-```
-| `etc/uat-api-srv.env.example`, `infra/*/etc/*-api.env` | `SERVERONLY`
-  placeholders | stay placeholders in git; real values only on the host |
-```
-
-It never mentions customer source data (exports, spreadsheets, import
-sets) or mock data built from it. `CLAUDE.md:24` lists
-`roles.sql` and `fixtures/` with no rule that fixtures are synthetic.
-`.gitignore` has no data directory. The first derived app (GRC) put a
-tenant's raw export, 42 employees' records and 226 risks, into
-`doc/evidence-for-import/`, and its mock data (82 files) was real tenant
-records, not fakes. CLAUDE.md described that layout as intended. Removing it
-from the tree was easy. Removing it from history needs a new repository,
-new webhooks, a new deploy key and a re-clone of every checkout (GRC
-RG0044). The rule has to exist before the first commit of real data,
-because after it the cost is a history purge.
-
-**(b) Nothing forbids the app asserting what it has not verified.**
-`CLAUDE.md:29-54` (Conventions) covers schema, tenant numbering, check
-order, naming, line length, config and PR summaries. No line says a screen,
-report or count must reflect only verified results. PROTO already carries
-one instance: the load test's server monitor appends fixed numbers.
-
-```go
-// src/load-test/main.go:86-89
-// This would use gopsutil or similar on real systems
-metrics.CPUUsage = append(
-    metrics.CPUUsage,
-    50.0,
-```
-
-The `--monitor-server` report prints those as measured server CPU and
-memory. B042 removes the code; this item adds the rule that would have
-stopped it.
-
-#### What GRC changed
-
-(a) GRC commit `03ad0f3` (RG0043 1.7) moved the import set and mock data to
-`../radley-grc-data/`, outside git, behind a config key `IMPORT_DATA_DIR`.
-The rule now sits in `CLAUDE.md:40-42`:
-
-```
-The first-tenant source data (byte-for-byte exports; `prepared/`,
-`generated/`, `mock-data/` derived) is customer data and lives
-outside the repo in `IMPORT_DATA_DIR` (`etc/loc-api-srv.env`, RG0043).
-```
-
-`README.md:38-42` repeats it. The Go chain test switched to a synthetic
-golden fixture so no test reads real data. History is open: RG0044
-(`tickets/01-open/RG0044-fresh-repo-webhooks-deploy-keys.md:19-26`) plans a
-fresh root commit because "personal data of 42 people and
-customer-confidential registers must not stay reachable by sha, PR ref or
-fork."
-
-(b) `CLAUDE.md:99-100`: "Real data only: nothing fabricated reaches the
-running app; assumptions go on the import report and the plan." The source
-is the round-11 review log
-(`tickets/04-archive/engineering-log/260924_0740-TKT-NONE-round-11-on-main.md:9-21`):
-"most of the defects were the app asserting something untrue." Examples:
-"Record completions" counted fifteen 403s as fifteen records; a hash minted
-from the clock with no bytes stored; a screen saying a rule "runs on the
-schedule" when nothing read it. RG0006 (`:151-158`) deleted the load test's
-fake 50% CPU / 256 MB under the same rule. RG0037 (`:133-134`) applied it to
-data: an import with no completion date may not invent one. No test pins
-either rule; they are review rules.
-
-#### Proposed fix for PROTO
-
-1. `DERIVING.md` section 2: add a row or short paragraph. Customer source
-   data, and anything derived from it, never enters git. It lives in a
-   sibling directory named by a config key in the app's env file. Fixtures
-   and mock data are synthetic. Cite the cost: a leak means a new repo
-   (GRC RG0044). Do not copy GRC's `IMPORT_DATA_DIR` key; PROTO has no
-   import path, so the key is the derived app's to add.
-2. `CLAUDE.md` Conventions (`:44-54`): add two bullets.
-   "Customer data never in git; fixtures are synthetic (DERIVING.md 2)."
-   "Show only what the code verified: a count counts confirmed results, a
-   metric is measured or absent, a missing value stays missing."
-3. `sql/fixtures/local-seed.sql` is already synthetic (`admin`, `basic`).
-   No `.gitignore` entry: the data directory sits outside the repo.
-4. Dependency: B042 removes the load-test placeholder that (b) forbids.
-   Land them together or note B042 in the commit.
-5. Tests: none. A grep gate for "Placeholder" in Go is possible but would
-   be noisy; not proposed.
-
-#### Open question for Brandon
-
-Should (a) be written as a hard rule in `CLAUDE.md` (every agent sees it)
-or only in `DERIVING.md` (read once at derivation)? Recommendation: both,
-one line in `CLAUDE.md` pointing at the `DERIVING.md` paragraph, because
-the leak happens during later import work, long after derivation.
-
 ### B053 — `scripts/check-doc-paths.sh`: backticked paths must exist
 
 - **Priority:** P2  **Area:** docs, bin
@@ -8919,3 +8802,122 @@ appendix flags it for a security look)? Recommendation: document it now as
 it is, with a pointer to the appendix line, so the spec stops hiding it.
 
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: the `admin` rate-limit/block exemption is stated as it is, with a pointer to the appendix). `doc/105-api-srv-tech-spec.md`: endpoint table regenerated from `cmd/server/main.go` (40 routes, main.go order) with JWT / rate / CSRF / grant columns taken from `routeContractList` in `route_check_contract_test.go` (B039), grants as `grants.go` short codes with ids; notes that `ADD_USER_TO_GROUP`/`REMOVE_USER_FROM_GROUP` are checked by no route. New request-body table with the real wire keys (B038 `password`, `userIdList`, `appUserGroupId`; `/userSelfCreate` lower-case `username`; `/admin/resetUserMFA` `userId`), success/error body shapes, `json:"-"` on `PwHash`/`TOTPSeed`, timestamps corrected to seconds as float64. Security Checks: rate keys `RPM*<subject|ip>*<minute>` and the config keys, refusal messages per check, the `admin` exemption, a fail-closed contract section, an exceptions table (every `Skip*` site with its reason, incl. `/changeSecurityContext` CSRF skip kept by B005 skip and decoded before the JWT, `/userSelfCreate` kept per B002 skip/B035, the B039 finding that `/mfaSetup`/`/mfaVerify` never read the block flag), and a "what proves it" list naming the contract, example and lockout tests. JWT corrected RS256 -> HS256 with `JWT_SECRET`, `iss` = `APP_NAME`; temp token key and TTL; "no `/auth2` route"; `account_status` gains `invited`; the restart limit moved under Session Revocation. Error Handling: 429 includes lockouts, 500 includes fail-closed refusals, and how the web reads a status (B036/B037: 5xx/429 `ApiUnreachableError` banner, session 401 `SessionExpiredError`, else `ApiError` with `status`). Deleted the shipped "TOTP implementation" future item and the stale "43 test cases"; "stateless horizontal scaling" replaced by a single-process note (Runtime Requirements and Operational Considerations); project tree, testing, test data and config pointer (`INVITE_TTL_HOURS` etc.) brought up to date. `src/api-srv/README.md`: `GET`/`PUT /me` added to the route list, pointer to the doc/105 table and contract test, wire keys, and paragraphs for fail closed, exceptions (with the admin exemption), lockout and MFA; "admin blocks" wording fixed; KV bullet adds revocations and the one-process rule. Deviations: B059 (rate-key `ip:` prefix) has not landed, so the key shape is today's; B007 had landed, so `ClientIP` is described from the right. Not done (out of scope, follow-up): the `/changeSecurityContext` row in `route_check_contract_test.go` still says "no CSRF until B005" though B005 was skipped; dead `Auth2RequestModel` and `ChangeCurrentUserPasswordRequest` remain in `model/security_model.go`. Every route and path written was checked against `main.go` and the tree. No new tests (prose). Tests: all green, infra=15 go=687 unit=82 e2e=13 py=102, govulncheck clean, gofmt clean.
+
+### B052 — COMPLETED — Rules: customer data never in git; never assert the unverified
+
+- **Priority:** P2  **Area:** docs
+- **GRC:** `CLAUDE.md:39-42,99-100`; `README.md:38-42`; RG0043 md `:912-940,1084-1095`; `tickets/01-open/RG0044-fresh-repo-webhooks-deploy-keys.md:19-26`; `tickets/04-archive/engineering-log/260924_0740-TKT-NONE-round-11-on-main.md:9-21`; RG0006 md `:151-158`; RG0037 md `:133-134`   **PROTO:** `DERIVING.md:36-45`; `CLAUDE.md:25,29-54`
+- **Ticket:** RG0043 1.7 / `03ad0f3`; RG0044; round-11 log
+- **What:** (a) GRC committed a tenant's real import set and mock data, then
+needed a history purge; source data lives outside the repo, fixtures
+synthetic. (b) Review found the app counting attempts as successes and faking
+a metric: never show what the code has not verified.
+- **Port notes:** (a) as a DERIVING.md rule citing RG0044. Docs part 4 rated (a)
+P1.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+This is a quality/process gap, not a code bug. Two rules that GRC learned
+the hard way are absent from PROTO's guidance. A derived app inherits
+PROTO's `CLAUDE.md` and `DERIVING.md` and nothing else.
+
+**(a) Nothing says where customer data lives.** `DERIVING.md:36-44` is the
+"Secrets and passwords" table. It covers `roles.sql`, seed logins, JWT and
+TOTP keys, and `SERVERONLY` placeholders:
+
+```
+| `etc/uat-api-srv.env.example`, `infra/*/etc/*-api.env` | `SERVERONLY`
+  placeholders | stay placeholders in git; real values only on the host |
+```
+
+It never mentions customer source data (exports, spreadsheets, import
+sets) or mock data built from it. `CLAUDE.md:24` lists
+`roles.sql` and `fixtures/` with no rule that fixtures are synthetic.
+`.gitignore` has no data directory. The first derived app (GRC) put a
+tenant's raw export, 42 employees' records and 226 risks, into
+`doc/evidence-for-import/`, and its mock data (82 files) was real tenant
+records, not fakes. CLAUDE.md described that layout as intended. Removing it
+from the tree was easy. Removing it from history needs a new repository,
+new webhooks, a new deploy key and a re-clone of every checkout (GRC
+RG0044). The rule has to exist before the first commit of real data,
+because after it the cost is a history purge.
+
+**(b) Nothing forbids the app asserting what it has not verified.**
+`CLAUDE.md:29-54` (Conventions) covers schema, tenant numbering, check
+order, naming, line length, config and PR summaries. No line says a screen,
+report or count must reflect only verified results. PROTO already carries
+one instance: the load test's server monitor appends fixed numbers.
+
+```go
+// src/load-test/main.go:86-89
+// This would use gopsutil or similar on real systems
+metrics.CPUUsage = append(
+    metrics.CPUUsage,
+    50.0,
+```
+
+The `--monitor-server` report prints those as measured server CPU and
+memory. B042 removes the code; this item adds the rule that would have
+stopped it.
+
+#### What GRC changed
+
+(a) GRC commit `03ad0f3` (RG0043 1.7) moved the import set and mock data to
+`../radley-grc-data/`, outside git, behind a config key `IMPORT_DATA_DIR`.
+The rule now sits in `CLAUDE.md:40-42`:
+
+```
+The first-tenant source data (byte-for-byte exports; `prepared/`,
+`generated/`, `mock-data/` derived) is customer data and lives
+outside the repo in `IMPORT_DATA_DIR` (`etc/loc-api-srv.env`, RG0043).
+```
+
+`README.md:38-42` repeats it. The Go chain test switched to a synthetic
+golden fixture so no test reads real data. History is open: RG0044
+(`tickets/01-open/RG0044-fresh-repo-webhooks-deploy-keys.md:19-26`) plans a
+fresh root commit because "personal data of 42 people and
+customer-confidential registers must not stay reachable by sha, PR ref or
+fork."
+
+(b) `CLAUDE.md:99-100`: "Real data only: nothing fabricated reaches the
+running app; assumptions go on the import report and the plan." The source
+is the round-11 review log
+(`tickets/04-archive/engineering-log/260924_0740-TKT-NONE-round-11-on-main.md:9-21`):
+"most of the defects were the app asserting something untrue." Examples:
+"Record completions" counted fifteen 403s as fifteen records; a hash minted
+from the clock with no bytes stored; a screen saying a rule "runs on the
+schedule" when nothing read it. RG0006 (`:151-158`) deleted the load test's
+fake 50% CPU / 256 MB under the same rule. RG0037 (`:133-134`) applied it to
+data: an import with no completion date may not invent one. No test pins
+either rule; they are review rules.
+
+#### Proposed fix for PROTO
+
+1. `DERIVING.md` section 2: add a row or short paragraph. Customer source
+   data, and anything derived from it, never enters git. It lives in a
+   sibling directory named by a config key in the app's env file. Fixtures
+   and mock data are synthetic. Cite the cost: a leak means a new repo
+   (GRC RG0044). Do not copy GRC's `IMPORT_DATA_DIR` key; PROTO has no
+   import path, so the key is the derived app's to add.
+2. `CLAUDE.md` Conventions (`:44-54`): add two bullets.
+   "Customer data never in git; fixtures are synthetic (DERIVING.md 2)."
+   "Show only what the code verified: a count counts confirmed results, a
+   metric is measured or absent, a missing value stays missing."
+3. `sql/fixtures/local-seed.sql` is already synthetic (`admin`, `basic`).
+   No `.gitignore` entry: the data directory sits outside the repo.
+4. Dependency: B042 removes the load-test placeholder that (b) forbids.
+   Land them together or note B042 in the commit.
+5. Tests: none. A grep gate for "Placeholder" in Go is possible but would
+   be noisy; not proposed.
+
+#### Open question for Brandon
+
+Should (a) be written as a hard rule in `CLAUDE.md` (every agent sees it)
+or only in `DERIVING.md` (read once at derivation)? Recommendation: both,
+one line in `CLAUDE.md` pointing at the `DERIVING.md` paragraph, because
+the leak happens during later import work, long after derivation.
+
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: both). `DERIVING.md` section 2: a paragraph under the secrets table — customer source data and anything derived from it (including mock data built from real records) lives outside the repo in a directory named by a key in the app's env file; the key is the derived app's to add (no `IMPORT_DATA_DIR` copied, ProtoStack has no import path); fixtures, seeds and mock data are synthetic; the cost of a leak (new repository, webhooks, deploy key, re-clone; GRC RG0044, described without the ticket id since ProtoStack carries no ticket system after B091). `CLAUDE.md` Conventions: two bullets after the config rule — customer data never in git (pointing at `DERIVING.md` section 2), and show only what the code verified (a count counts confirmed results, a metric is measured or absent, a missing value stays missing; nothing fabricated reaches a screen, report or log). Step 3 checked: `local-seed.sql`/`test-seed.sql` are synthetic; no `.gitignore` entry (the data directory sits outside the repo). Step 4: B042 had already removed the load test's fixed CPU/memory numbers (no `CPUUsage`/`--monitor-server` left in `src/load-test`). No tests (rules, per step 5). Tests: all green, infra=15 go=687 unit=82 e2e=13 py=102, govulncheck clean, gofmt clean.
