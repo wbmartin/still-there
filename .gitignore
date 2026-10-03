@@ -4,7 +4,7 @@ dist
 etc/crt/*.pem
 tmp/
 src/api-srv/server
-# A bare `go build` in src/load-test; bin/330 builds to dist/.
+# A bare `go build` in src/load-test; bin/330 builds to tmp/test-logs/.
 src/load-test/load-test
 tests/.venv/
 tests/__pycache__/

@@ -242,126 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B042 — Load test: fake metrics, broken cycle, dev target, argv password
-
-- **Priority:** P2  **Area:** tests, bin, etc, skills
-- **GRC:** `src/load-test/main.go:79-86,163-166,179-186,219-223,244-248,285,322-358,666-695`; `src/load-test/client.go:24-25,62-81,122-131`; `bin/330-test-load:10-23,54-72`; `etc/loc-test-api-srv.env:52-58`; `.claude/skills/ticket-workflow/SKILL.md:117-119`; `src/load-test/main.go:163-185`; `etc/loc-test-api-srv.env:1-9,19-21,31-36`   **PROTO:** `src/load-test/main.go:182-183,335-460` (:365,395,413,417), `:60-103,239-246,185-190,589-592,722-766,814-857` (`SystemMonitor`), `:263,298`; `src/load-test/client.go:126,193`; `bin/330-test-load:6-29`; `etc/loc-api-srv.env:36`; `etc/loc-test.env:1-41`; `etc/e2e-api-srv.env:1-60`
-- **Ticket:** RG0006 / `c37a717`; RG0041 / `31970ae`; RG0043 item 33 / `720f5e1`
-- **What:** PROTO fakes CPU/memory, times a create as update, double-closes
-`stopChan`, writes the dev DB as tenant 1, takes `-password` on argv. GRC:
-measured only, test API, `TEST_PERSONA_PASSWORD`, tenant 2.
-- **Port notes:** Keep the example cycle (+`UpdateExample`); 330 starts a
-private instance (bin/300 :140-182) or needs 8082. After B018.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-- **Partial (2026-10-03):** step 2 (`runCycle` as create, `UpdateExample`, get, delete; `UpdateExample` returns the new `updateTs`) landed with B040 to clear the staticcheck SA4006 findings. Steps 1, 3-7 still open.
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-`bin/330-test-load` runs 100 workers for 60 s, each looping login,
-create, update, get, delete, logout. Correctness bugs plus a data-safety
-gap; no API hole. The report is untrustworthy and the dev DB gets dirty.
-
-**(1) Invented server metrics.** `--monitor-server` appends constants:
-
-```go
-// src/load-test/main.go:85-90
-// Placeholder: collect CPU and memory usage
-...
-metrics.CPUUsage = append(
-	metrics.CPUUsage,
-	50.0,
-) // Placeholder
-```
-(`:91-94` does the same with 256 MB.)
-
-The HTML report prints them as "Server CPU" and "Server Memory"
-(`:590-591`, aggregated at `:726-762`, console at `:815-848`). A reader
-sees a measured 50 % / 256 MB that nobody measured.
-
-**(2) The cycle is broken.** `runCycle` (`:335`) logs in, then creates
-an example three times (`:365`, `:395`, `:413`). It sends a second
-`OpLogin` metric (`:381-387`) carrying the create's duration, and labels
-the third create `OpUpdate` (`:417`). `UpdateExample`
-(`src/load-test/client.go:181`) is never called. Only the last row is
-deleted (`:439`), so two rows leak per cycle. The "update" and "login"
-latencies in the report are wrong. staticcheck flags `:365` and `:395`
-(SA4006, see B040).
-
-**(3) Ctrl-C panics.** The signal handler closes `stopChan` (`:263`);
-the normal end closes it again (`:298`). A Ctrl-C during the run panics
-"close of closed channel" instead of writing the report.
-
-**(4) Under-count.** After `close(metricsChan)` (`:303`) nothing waits
-for the collector (`:266-279`) to drain before the report reads it.
-
-**(5) It writes the dev database as tenant 1.** `bin/330-test-load:15-18`
-takes `TEST_BASE_URL` from `etc/loc-api-srv.env:36`
-(`http://localhost:8080`, the dev API). The default login is `admin`
-(`main.go:182`), which the fixtures put in tenant 1, and the subject
-`admin` is exempt from the per-user rate limit
-(`src/api-srv/internal/security/app_helper.go:348`). So a run writes
-thousands of leaked example rows into the developer's real tenant and
-never meets the limiter it claims to load.
-
-**(6) Password on argv.** `main.go:183` defaults `-password` to
-`admin123!`; any other must go on the command line, visible in `ps` and
-shell history. Low impact locally (fixture password), real on a shared
-build host.
-
-#### What GRC changed
-
-- RG0006 `c37a717` deleted `--monitor-server`, `SystemMonitor` and every
-  report line it fed: "a report must not carry invented numbers".
-- RG0043 item 33 / `720f5e1`: `runCycle`
-  (`src/load-test/main.go:322-358`) is one create, one update, one get,
-  one delete, each timed by a `record` helper. `sync.Once` guards the
-  close (`:222-223`); `collectorDone` waits for the drain (`:246-248`,
-  `:285`).
-- Password: `-env <file>` reads `TEST_PERSONA_PASSWORD` (`:166`,
-  `:179-186`, `readEnvKey` `:666-695`); `-user` and the password are
-  required (`:79-85`). `etc/loc-test-api-srv.env:58` holds it, committed
-  in clear (scratch databases only).
-- RG0041 `31970ae`: `bin/330-test-load:56-62` reads the test API env
-  only; `client.go:24-25,122-131` refuses a login outside tenant 2.
-
-#### Proposed fix for PROTO
-
-1. Delete `SystemMonitor`, `SystemMetrics`, `--monitor-server` and the
-   report/summary blocks (`main.go:57-103,185-190,239-246,482-502,
-   589-592,722-766,814-857`).
-2. Rewrite `runCycle` as create, `UpdateExample`, get, delete. Keep the
-   example cycle (PROTO's only scaffold entity) rather than GRC's
-   controls.
-3. `sync.Once` around `close(stopChan)`; a `collectorDone` channel.
-4. Drop the `-password` flag and its default; add `-env` and read one key
-   with a tiny stdlib reader (the module is stdlib only). PROTO has no
-   `TEST_PERSONA_PASSWORD`: add one to `etc/e2e-api-srv.env` (or to
-   `etc/loc-test.env`, which is a sourced shell file with `export`, so
-   the reader must strip that). Make `-user` required, default none.
-5. Target the private test API, not 8080. Either `bin/330` starts it as
-   `bin/300` py mode does (`bin/300-run-tests:140-182`, `:8082` from
-   `etc/e2e-api-srv.env:55,60`), or it refuses unless `:8082` answers.
-6. After B018 lands tenant-2 logins, refuse a login outside tenant 2 in
-   `client.go` Login, and use a non-admin, MFA-exempt test user so the
-   rate limiter is exercised.
-7. Update `doc/902-project-commands.md:100-108`, which documents
-   `--password 'admin123!'` at `:105`.
-
-Traps: GRC's `CreateControl`/`UpdateControl`, its module path in
-`go build` (`bin/330:41`) and `bin/216` do not exist in PROTO.
-Depends on B018 (tenant 2) and pairs with B040 (staticcheck sees it).
-
-Tests: Go unit test for the env-key reader; a smoke run with
-`--iterations 1 --concurrency 1`.
-
-#### Open question for Brandon
-
-Should `bin/330` start its own private API like `bin/300 py`, or require
-one already running on 8082? Recommend: start its own, so a load run can
-never hit the dev database by accident.
-
 ### B043 — pytest: core tests off `/example`; regression gates
 
 - **Priority:** P2  **Area:** tests
@@ -8905,3 +8785,124 @@ Fail on any eslint error or warning (`--max-warnings 0`), or only on
 auto-fixable rewrites as GRC does? Recommend: any error or warning,
 since PROTO is at zero today and the GRC carve-out exists only for a
 backlog PROTO does not have.
+
+### B042 — COMPLETED — Load test: fake metrics, broken cycle, dev target, argv password
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line); open question taken as recommended: `bin/330` starts its own private API. Steps 1, 3-7 here (step 2 landed with B040). (1) `SystemMonitor`, `SystemMetrics`, `--monitor-server` and every report/summary line they fed deleted. (3) `sync.Once` closes `stopChan`; a `collectorDone` channel drains the collector before the report; duration mode also stops waiting on Ctrl-C (it slept out the full duration before), and `signal.Stop` after. (4) `-password` and its default gone; `-env <file>` reads `TEST_PERSONA_PASSWORD` with a stdlib `readEnvKey` mirroring the API's `ReadEnvFile` (comments, first `=`, trim, one pair of quotes, last wins; also drops `export `); `-user` required, no default. `etc/e2e-api-srv.env` gains `TEST_PERSONA_USER=basic` / `TEST_PERSONA_PASSWORD=basic123!`. (5) `bin/330-test-load` rewritten on the `bin/300 py` pattern: sources `etc/loc-test.env`, rebuilds `loc_proto_e2e_db`, refuses if `:8082` already answers, builds the API and load test into `tmp/test-logs/` (was `dist/`), starts the API from `etc/e2e-api-srv.env` (its lifted limits), runs as `TEST_PERSONA_USER`, stops the API on exit; `LOAD_TEST_ENV` gone. (6) `client.go` Login refuses a login outside tenant 2 (`testTenant`); `main` does one preflight login/logout so a bad password, wrong tenant or dead API fails fast instead of filling the report. Persona is `basic` (tenant 2, MFA-exempt, non-admin) per this step, so the per-user limiter runs on every request; the smoke runs therefore ran as `basic`, not the tenant-2 admin B040 used. (7) doc/902 load section and `go` step, README table row, DERIVING.md fixture row, bin/300 header and load comment, `.gitignore` comment. Also: `bin/300` go mode now runs `go test` in every `GO_MODULE_DIR_LIST` module (one `go-test.log`), so the new `src/load-test/main_test.go` (env-key reader: 9 value cases, empty/missing/unreadable errors) is in the gate. Verified against a private :8082 API on the e2e scratch DB: `--iterations 1 --concurrency 1` 6 requests 100%; Ctrl-C at 5s of a 60s run writes the report (1374 requests, no panic); `bin/300-run-tests load` default 60s/100 workers 18222 requests 100%, 3037 rows created and soft-deleted, live example rows 2 before and after (the seed), clean-tree check passes; with `basic` moved to tenant 3 in the scratch DB the preflight refuses (exit 1, no rows written); missing `--user`/`--env` and `--password` rejected. E2e DB rebuilt after. shellcheck 0.9.0 in `ubuntu:24.04` clean on `bin/330` and `bin/300`. Tests: all green, govulncheck clean, `gofmt -l` empty: go=687 unit=82 e2e=13 py=96 (go +11: the load-test reader tests).
+
+- **Priority:** P2  **Area:** tests, bin, etc, skills
+- **GRC:** `src/load-test/main.go:79-86,163-166,179-186,219-223,244-248,285,322-358,666-695`; `src/load-test/client.go:24-25,62-81,122-131`; `bin/330-test-load:10-23,54-72`; `etc/loc-test-api-srv.env:52-58`; `.claude/skills/ticket-workflow/SKILL.md:117-119`; `src/load-test/main.go:163-185`; `etc/loc-test-api-srv.env:1-9,19-21,31-36`   **PROTO:** `src/load-test/main.go:182-183,335-460` (:365,395,413,417), `:60-103,239-246,185-190,589-592,722-766,814-857` (`SystemMonitor`), `:263,298`; `src/load-test/client.go:126,193`; `bin/330-test-load:6-29`; `etc/loc-api-srv.env:36`; `etc/loc-test.env:1-41`; `etc/e2e-api-srv.env:1-60`
+- **Ticket:** RG0006 / `c37a717`; RG0041 / `31970ae`; RG0043 item 33 / `720f5e1`
+- **What:** PROTO fakes CPU/memory, times a create as update, double-closes
+`stopChan`, writes the dev DB as tenant 1, takes `-password` on argv. GRC:
+measured only, test API, `TEST_PERSONA_PASSWORD`, tenant 2.
+- **Port notes:** Keep the example cycle (+`UpdateExample`); 330 starts a
+private instance (bin/300 :140-182) or needs 8082. After B018.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+- **Partial (2026-10-03):** step 2 (`runCycle` as create, `UpdateExample`, get, delete; `UpdateExample` returns the new `updateTs`) landed with B040 to clear the staticcheck SA4006 findings. Steps 1, 3-7 still open.
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+`bin/330-test-load` runs 100 workers for 60 s, each looping login,
+create, update, get, delete, logout. Correctness bugs plus a data-safety
+gap; no API hole. The report is untrustworthy and the dev DB gets dirty.
+
+**(1) Invented server metrics.** `--monitor-server` appends constants:
+
+```go
+// src/load-test/main.go:85-90
+// Placeholder: collect CPU and memory usage
+...
+metrics.CPUUsage = append(
+	metrics.CPUUsage,
+	50.0,
+) // Placeholder
+```
+(`:91-94` does the same with 256 MB.)
+
+The HTML report prints them as "Server CPU" and "Server Memory"
+(`:590-591`, aggregated at `:726-762`, console at `:815-848`). A reader
+sees a measured 50 % / 256 MB that nobody measured.
+
+**(2) The cycle is broken.** `runCycle` (`:335`) logs in, then creates
+an example three times (`:365`, `:395`, `:413`). It sends a second
+`OpLogin` metric (`:381-387`) carrying the create's duration, and labels
+the third create `OpUpdate` (`:417`). `UpdateExample`
+(`src/load-test/client.go:181`) is never called. Only the last row is
+deleted (`:439`), so two rows leak per cycle. The "update" and "login"
+latencies in the report are wrong. staticcheck flags `:365` and `:395`
+(SA4006, see B040).
+
+**(3) Ctrl-C panics.** The signal handler closes `stopChan` (`:263`);
+the normal end closes it again (`:298`). A Ctrl-C during the run panics
+"close of closed channel" instead of writing the report.
+
+**(4) Under-count.** After `close(metricsChan)` (`:303`) nothing waits
+for the collector (`:266-279`) to drain before the report reads it.
+
+**(5) It writes the dev database as tenant 1.** `bin/330-test-load:15-18`
+takes `TEST_BASE_URL` from `etc/loc-api-srv.env:36`
+(`http://localhost:8080`, the dev API). The default login is `admin`
+(`main.go:182`), which the fixtures put in tenant 1, and the subject
+`admin` is exempt from the per-user rate limit
+(`src/api-srv/internal/security/app_helper.go:348`). So a run writes
+thousands of leaked example rows into the developer's real tenant and
+never meets the limiter it claims to load.
+
+**(6) Password on argv.** `main.go:183` defaults `-password` to
+`admin123!`; any other must go on the command line, visible in `ps` and
+shell history. Low impact locally (fixture password), real on a shared
+build host.
+
+#### What GRC changed
+
+- RG0006 `c37a717` deleted `--monitor-server`, `SystemMonitor` and every
+  report line it fed: "a report must not carry invented numbers".
+- RG0043 item 33 / `720f5e1`: `runCycle`
+  (`src/load-test/main.go:322-358`) is one create, one update, one get,
+  one delete, each timed by a `record` helper. `sync.Once` guards the
+  close (`:222-223`); `collectorDone` waits for the drain (`:246-248`,
+  `:285`).
+- Password: `-env <file>` reads `TEST_PERSONA_PASSWORD` (`:166`,
+  `:179-186`, `readEnvKey` `:666-695`); `-user` and the password are
+  required (`:79-85`). `etc/loc-test-api-srv.env:58` holds it, committed
+  in clear (scratch databases only).
+- RG0041 `31970ae`: `bin/330-test-load:56-62` reads the test API env
+  only; `client.go:24-25,122-131` refuses a login outside tenant 2.
+
+#### Proposed fix for PROTO
+
+1. Delete `SystemMonitor`, `SystemMetrics`, `--monitor-server` and the
+   report/summary blocks (`main.go:57-103,185-190,239-246,482-502,
+   589-592,722-766,814-857`).
+2. Rewrite `runCycle` as create, `UpdateExample`, get, delete. Keep the
+   example cycle (PROTO's only scaffold entity) rather than GRC's
+   controls.
+3. `sync.Once` around `close(stopChan)`; a `collectorDone` channel.
+4. Drop the `-password` flag and its default; add `-env` and read one key
+   with a tiny stdlib reader (the module is stdlib only). PROTO has no
+   `TEST_PERSONA_PASSWORD`: add one to `etc/e2e-api-srv.env` (or to
+   `etc/loc-test.env`, which is a sourced shell file with `export`, so
+   the reader must strip that). Make `-user` required, default none.
+5. Target the private test API, not 8080. Either `bin/330` starts it as
+   `bin/300` py mode does (`bin/300-run-tests:140-182`, `:8082` from
+   `etc/e2e-api-srv.env:55,60`), or it refuses unless `:8082` answers.
+6. After B018 lands tenant-2 logins, refuse a login outside tenant 2 in
+   `client.go` Login, and use a non-admin, MFA-exempt test user so the
+   rate limiter is exercised.
+7. Update `doc/902-project-commands.md:100-108`, which documents
+   `--password 'admin123!'` at `:105`.
+
+Traps: GRC's `CreateControl`/`UpdateControl`, its module path in
+`go build` (`bin/330:41`) and `bin/216` do not exist in PROTO.
+Depends on B018 (tenant 2) and pairs with B040 (staticcheck sees it).
+
+Tests: Go unit test for the env-key reader; a smoke run with
+`--iterations 1 --concurrency 1`.
+
+#### Open question for Brandon
+
+Should `bin/330` start its own private API like `bin/300 py`, or require
+one already running on 8082? Recommend: start its own, so a load run can
+never hit the dev database by accident.

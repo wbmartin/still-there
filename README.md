@@ -47,7 +47,7 @@ See [doc/060-dev-env-start.md](doc/060-dev-env-start.md) for day-to-day startup 
 | `./bin/216-stop-local-stack` | Stop the API server and web app dev server |
 | `./bin/110-build-web-app` | Build and package web app for deployment |
 | `./bin/300-run-tests [all\|go\|unit\|e2e\|py\|load]` | The one test gate (go, vitest, Playwright, pytest, load) |
-| `./bin/330-test-load` | Load test a running API (not part of `all`) |
+| `./bin/330-test-load` | Load test a private API it starts on the e2e database (not part of `all`) |
 
 Full command reference: [doc/902-project-commands.md](doc/902-project-commands.md)
 

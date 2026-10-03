@@ -57,7 +57,7 @@ The one command, on a laptop or a build host:
 ./bin/300-run-tests unit       # eslint, vitest (src/web-app)
 ./bin/300-run-tests e2e        # Playwright only
 ./bin/300-run-tests py         # pytest HTTP suite against a private API instance
-./bin/300-run-tests load       # load test against a running API (see below); not part of `all`
+./bin/300-run-tests load       # load test on its own private API (see below); not part of `all`
 ```
 - Sources `etc/loc-test.env` (override the file with `TEST_ENV=...`):
   scratch database names, `TEST_PG_URL_BASE` for the migrator,
@@ -73,7 +73,8 @@ The one command, on a laptop or a build host:
   `tmp/tools/bin/` (needs proxy.golang.org the first time; v0.8.1 builds
   with Go 1.26, which `go install` fetches unless `GOTOOLCHAIN=local`).
   Then rebuilds `loc_proto_test_db` via `bin/510` and runs
-  `go test -v ./...` in `src/api-srv` with `TEST_DATABASE_URL` exported.
+  `go test -v ./...` in each module with `TEST_DATABASE_URL` exported
+  (one `go-test.log`; the `go=` count covers both).
   A repository suite that cannot reach the database SKIPS (see
   `internal/repository/testdb_test.go`); the runner greps for that skip and
   fails the run, so a green run always includes the integration suites.
@@ -120,16 +121,26 @@ To run the Playwright end-to-end suite directly:
   (`E2E_DB_SEEDED=1`), so a `bin/300-run-tests` run reseeds only once.
 - Specs are `src/web-app/tests/e2e/*.spec.ts`; vitest owns `*.test.ts`.
 
-To load test the api server against a server you started (reads
-`TEST_BASE_URL` from `etc/loc-api-srv.env`, or `LOAD_TEST_ENV=<file>` for
-another):
+To load test the API (starts and stops its own private instance, like
+`py` mode; never touches the developer's 8080 or its database):
 ```
-./bin/330-test-load
-./bin/330-test-load --user admin --password 'admin123!'   # defaults shown
-./bin/330-test-load --insecure                             # opt-in TLS skip
+./bin/330-test-load                                   # 60s, 100 workers
+./bin/330-test-load --iterations 1 --concurrency 1    # smoke run
 ```
-- Builds `src/load-test` (its own Go module) and writes its report to
-  `tmp/test-reports/`.
+- Rebuilds `loc_proto_e2e_db`, starts the Go API on `127.0.0.1:8082` from
+  `etc/e2e-api-srv.env`, and refuses to start if something already
+  answers there. Builds `src/load-test` (its own Go module) and the API
+  into `tmp/test-logs/`; the report goes to `tmp/test-reports/`.
+- Each worker loops login, create, update, get, delete, logout on an
+  example row; every row it creates it deletes. The report holds only
+  what the client measured (no server CPU/memory).
+- Logs in as `TEST_PERSONA_USER` from that file (`basic`: tenant 2,
+  MFA-exempt, not `admin`, so the per-user rate limiter runs on every
+  request). The binary takes `--user` and `--env <file>`, reads
+  `TEST_PERSONA_PASSWORD` from the file (there is no `--password`; argv
+  shows in `ps` and shell history), and refuses a login outside tenant 2.
+  Extra flags pass through (`--duration`, `--concurrency`, `--iterations`,
+  `--output`).
 
 ## Scratch Databases
 

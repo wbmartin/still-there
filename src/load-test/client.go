@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+// testTenant is the only security context the load test may write
+// (CLAUDE.md: tenant 2 is reserved for automated tests).
+const testTenant = 2
+
 type APIClient struct {
 	baseURL   string
 	client    *http.Client
@@ -111,6 +115,16 @@ func (c *APIClient) Login() error {
 
 	if c.jwtToken == "" {
 		return fmt.Errorf("no JWT token received")
+	}
+
+	// The load test writes; it may only ever write the test tenant.
+	if authResp.User.SecurityContext != testTenant {
+		return fmt.Errorf(
+			"refusing to run as %s: tenant %d, not the test tenant %d",
+			c.userName,
+			authResp.User.SecurityContext,
+			testTenant,
+		)
 	}
 
 	return nil

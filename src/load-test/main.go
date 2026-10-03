@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"html/template"
@@ -16,15 +17,14 @@ import (
 )
 
 type Config struct {
-	Duration      time.Duration
-	Iterations    int
-	Concurrency   int
-	BaseURL       string
-	MonitorServer bool
-	OutputFile    string
-	UserName      string
-	Password      string
-	Insecure      bool
+	Duration    time.Duration
+	Iterations  int
+	Concurrency int
+	BaseURL     string
+	OutputFile  string
+	UserName    string
+	Password    string
+	Insecure    bool
 }
 
 type Operation string
@@ -54,59 +54,11 @@ type Metrics struct {
 	Errors    map[string]int
 }
 
-type SystemMetrics struct {
-	CPUUsage    []float64
-	MemoryUsage []int64 // MB
-	Timestamp   time.Time
-}
-
-type SystemMonitor struct {
-	stopChan chan struct{}
-}
-
-func NewSystemMonitor() *SystemMonitor {
-	return &SystemMonitor{
-		stopChan: make(chan struct{}),
-	}
-}
-
-func (sm *SystemMonitor) Start(metrics *SystemMetrics) {
-	// For now, just collect basic metrics
-	// In a real implementation, this would use system monitoring libraries
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-sm.stopChan:
-				return
-			case <-ticker.C:
-				// Placeholder: collect CPU and memory usage
-				// This would use gopsutil or similar on real systems
-				metrics.CPUUsage = append(
-					metrics.CPUUsage,
-					50.0,
-				) // Placeholder
-				metrics.MemoryUsage = append(
-					metrics.MemoryUsage,
-					256,
-				) // Placeholder MB
-			}
-		}
-	}()
-}
-
-func (sm *SystemMonitor) Stop() {
-	close(sm.stopChan)
-}
-
 type TestResults struct {
 	StartTime      time.Time
 	EndTime        time.Time
 	Config         Config
 	OperationStats map[Operation]*Metrics
-	SystemMetrics  *SystemMetrics
 	TotalRequests  int
 	TotalErrors    int
 }
@@ -142,6 +94,19 @@ func main() {
 	)
 	log.Printf("Output: %s", config.OutputFile)
 
+	// One login before any worker starts: a wrong password, a user outside
+	// the test tenant or an API that is not there stops the run here
+	// instead of filling the report with failures.
+	preflight := NewAPIClient(
+		config.BaseURL, config.UserName, config.Password, config.Insecure,
+	)
+	if err := preflight.Login(); err != nil {
+		log.Fatalf("Login as %s failed: %v", config.UserName, err)
+	}
+	if err := preflight.Logout(); err != nil {
+		log.Fatalf("Logout after the first login failed: %v", err)
+	}
+
 	results := runLoadTest(config)
 
 	// Generate HTML report
@@ -160,9 +125,8 @@ func parseFlags() Config {
 	var iterations int
 	var concurrency int
 	var baseURL string
-	var monitorServer bool
 	var outputFile string
-	var userName, password string
+	var userName, envFile string
 	var insecure bool
 
 	flag.StringVar(
@@ -179,14 +143,25 @@ func parseFlags() Config {
 	)
 	flag.IntVar(&concurrency, "concurrency", 100, "Number of concurrent users")
 	flag.StringVar(&baseURL, "base-url", "", "Base URL of the API server")
-	flag.StringVar(&userName, "user", "admin", "User to log in as (the seeded admin from sql/fixtures)")
-	flag.StringVar(&password, "password", "admin123!", "That user's password")
-	flag.BoolVar(&insecure, "insecure", false, "Skip TLS certificate verification (self-signed local cert only)")
+	flag.StringVar(
+		&userName,
+		"user",
+		"",
+		"User to log in as; must be in the test tenant (2)",
+	)
+	// The password never goes on the command line, where ps and shell
+	// history would keep it: it is read from a KEY=VALUE file.
+	flag.StringVar(
+		&envFile,
+		"env",
+		"",
+		"KEY=VALUE file holding "+passwordKey+" for -user",
+	)
 	flag.BoolVar(
-		&monitorServer,
-		"monitor-server",
+		&insecure,
+		"insecure",
 		false,
-		"Monitor server CPU and memory usage",
+		"Skip TLS certificate verification (self-signed local cert only)",
 	)
 	flag.StringVar(
 		&outputFile,
@@ -200,18 +175,69 @@ func parseFlags() Config {
 	if err != nil {
 		log.Fatalf("Invalid duration format: %v", err)
 	}
+	if userName == "" {
+		log.Fatal("Must specify --user")
+	}
+	if envFile == "" {
+		log.Fatalf("Must specify --env (a file holding %s)", passwordKey)
+	}
+	password, err := readEnvKey(envFile, passwordKey)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	return Config{
-		Duration:      duration,
-		Iterations:    iterations,
-		Concurrency:   concurrency,
-		BaseURL:       baseURL,
-		MonitorServer: monitorServer,
-		OutputFile:    outputFile,
-		UserName:      userName,
-		Password:      password,
-		Insecure:      insecure,
+		Duration:    duration,
+		Iterations:  iterations,
+		Concurrency: concurrency,
+		BaseURL:     baseURL,
+		OutputFile:  outputFile,
+		UserName:    userName,
+		Password:    password,
+		Insecure:    insecure,
 	}
+}
+
+// passwordKey names the -user's password in the -env file.
+const passwordKey = "TEST_PERSONA_PASSWORD"
+
+// readEnvKey returns key's value from a flat KEY=VALUE file, read the way
+// the API reads its config (src/api-srv/internal/config ReadEnvFile):
+// blank and # lines skipped, split at the first =, whitespace trimmed, one
+// pair of matching quotes removed. A leading "export " is dropped too, so
+// a sourced shell file works. A missing or empty key is an error.
+func readEnvKey(path, key string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("cannot read %s: %w", path, err)
+	}
+	defer file.Close()
+
+	value := ""
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		name, rest, found := strings.Cut(line, "=")
+		if !found || strings.TrimSpace(name) != key {
+			continue
+		}
+		value = strings.TrimSpace(rest)
+		if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') &&
+			value[len(value)-1] == value[0] {
+			value = value[1 : len(value)-1]
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("cannot read %s: %w", path, err)
+	}
+	if value == "" {
+		return "", fmt.Errorf("%s not set in %s", key, path)
+	}
+	return value, nil
 }
 
 func runLoadTest(config Config) *TestResults {
@@ -219,7 +245,6 @@ func runLoadTest(config Config) *TestResults {
 		StartTime:      time.Now(),
 		Config:         config,
 		OperationStats: make(map[Operation]*Metrics),
-		SystemMetrics:  &SystemMetrics{},
 	}
 
 	// Initialize metrics for each operation
@@ -234,15 +259,10 @@ func runLoadTest(config Config) *TestResults {
 
 	// Channel for metrics collection
 	metricsChan := make(chan OperationMetric, 10000)
+	// Closed once, by whichever comes first: Ctrl-C or the normal end.
 	stopChan := make(chan struct{})
-
-	// Start system monitoring if requested
-	var systemMonitor *SystemMonitor
-	if config.MonitorServer {
-		systemMonitor = NewSystemMonitor()
-		go systemMonitor.Start(results.SystemMetrics)
-		defer systemMonitor.Stop()
-	}
+	var stopOnce sync.Once
+	stop := func() { stopOnce.Do(func() { close(stopChan) }) }
 
 	// Start workers
 	var wg sync.WaitGroup
@@ -260,11 +280,14 @@ func runLoadTest(config Config) *TestResults {
 	go func() {
 		<-sigChan
 		log.Println("Received shutdown signal, stopping workers...")
-		close(stopChan)
+		stop()
 	}()
 
-	// Collect metrics
+	// Collect metrics. collectorDone closes once the channel is drained,
+	// so the report never reads a half-counted result.
+	collectorDone := make(chan struct{})
 	go func() {
+		defer close(collectorDone)
 		for metric := range metricsChan {
 			stats := results.OperationStats[metric.Operation]
 			stats.Count++
@@ -279,28 +302,37 @@ func runLoadTest(config Config) *TestResults {
 		}
 	}()
 
-	// Wait for test completion
+	// Wait for test completion (or Ctrl-C)
 	if config.Iterations > 0 {
 		log.Printf(
 			"Waiting for %d iterations to complete across %d workers...",
 			config.Iterations*config.Concurrency,
 			config.Concurrency,
 		)
-		// Wait for all iterations to complete
 		wg.Wait()
 		log.Printf("All iterations completed. Stopping workers...")
 	} else {
-		log.Printf("Running load test for duration %v with %d concurrent workers...", config.Duration, config.Concurrency)
-		// Wait for duration
-		time.Sleep(config.Duration)
-		log.Printf("Duration %v completed. Stopping workers...", config.Duration)
+		log.Printf(
+			"Running load test for duration %v with %d concurrent workers...",
+			config.Duration,
+			config.Concurrency,
+		)
+		select {
+		case <-time.After(config.Duration):
+			log.Printf(
+				"Duration %v completed. Stopping workers...",
+				config.Duration,
+			)
+		case <-stopChan:
+		}
 	}
-	close(stopChan)
+	stop()
 	wg.Wait()
-	log.Printf("All workers stopped. Generating report...")
+	signal.Stop(sigChan)
 
-	// Close metrics channel
 	close(metricsChan)
+	<-collectorDone
+	log.Printf("All workers stopped. Generating report...")
 
 	results.EndTime = time.Now()
 	return results
@@ -312,7 +344,9 @@ func runWorker(
 	metricsChan chan<- OperationMetric,
 	stopChan <-chan struct{},
 ) {
-	client := NewAPIClient(config.BaseURL, config.UserName, config.Password, config.Insecure)
+	client := NewAPIClient(
+		config.BaseURL, config.UserName, config.Password, config.Insecure,
+	)
 
 	iteration := 0
 	for {
@@ -400,15 +434,6 @@ type OperationStatsDisplay struct {
 	P99Ms       float64
 }
 
-type SystemMetricsDisplay struct {
-	CPUAvg    float64
-	CPUMin    float64
-	CPUMax    float64
-	MemoryAvg int64
-	MemoryMin int64
-	MemoryMax int64
-}
-
 type TemplateData struct {
 	StartTime          time.Time
 	Duration           time.Duration
@@ -420,7 +445,6 @@ type TemplateData struct {
 	ErrorRate          float64
 	OperationStats     map[Operation]*Metrics
 	OperationStatsList []OperationStatsDisplay
-	SystemMetrics      SystemMetricsDisplay
 }
 
 func generateHTMLReport(results *TestResults) error {
@@ -507,10 +531,6 @@ func generateHTMLReport(results *TestResults) error {
                     {{printf "%.1f" .SuccessRate}}%
                 </span>
             </p>
-            {{if .Config.MonitorServer}}
-            <p><strong>Server CPU:</strong> {{printf "%.1f" .SystemMetrics.CPUAvg}}% avg ({{printf "%.1f" .SystemMetrics.CPUMin}}% - {{printf "%.1f" .SystemMetrics.CPUMax}}%)</p>
-            <p><strong>Server Memory:</strong> {{.SystemMetrics.MemoryAvg}}MB avg ({{.SystemMetrics.MemoryMin}}MB - {{.SystemMetrics.MemoryMax}}MB)</p>
-            {{end}}
         </div>
 
         <h2>Detailed Metrics</h2>
@@ -566,7 +586,6 @@ func generateHTMLReport(results *TestResults) error {
 		TotalRequests:  results.TotalRequests,
 		TotalErrors:    results.TotalErrors,
 		OperationStats: results.OperationStats,
-		SystemMetrics:  SystemMetricsDisplay{},
 	}
 
 	// Calculate overall metrics
@@ -643,46 +662,6 @@ func generateHTMLReport(results *TestResults) error {
 		)
 	}
 
-	// Calculate system metrics
-	if results.Config.MonitorServer && len(results.SystemMetrics.CPUUsage) > 0 {
-		minCPU, maxCPU := results.SystemMetrics.CPUUsage[0], results.SystemMetrics.CPUUsage[0]
-		var totalCPU float64
-		for _, cpu := range results.SystemMetrics.CPUUsage {
-			if cpu < minCPU {
-				minCPU = cpu
-			}
-			if cpu > maxCPU {
-				maxCPU = cpu
-			}
-			totalCPU += cpu
-		}
-		templateData.SystemMetrics.CPUAvg = totalCPU / float64(
-			len(results.SystemMetrics.CPUUsage),
-		)
-		templateData.SystemMetrics.CPUMin = minCPU
-		templateData.SystemMetrics.CPUMax = maxCPU
-	}
-
-	if results.Config.MonitorServer &&
-		len(results.SystemMetrics.MemoryUsage) > 0 {
-		minMem, maxMem := results.SystemMetrics.MemoryUsage[0], results.SystemMetrics.MemoryUsage[0]
-		var totalMem int64
-		for _, mem := range results.SystemMetrics.MemoryUsage {
-			if mem < minMem {
-				minMem = mem
-			}
-			if mem > maxMem {
-				maxMem = mem
-			}
-			totalMem += mem
-		}
-		templateData.SystemMetrics.MemoryAvg = totalMem / int64(
-			len(results.SystemMetrics.MemoryUsage),
-		)
-		templateData.SystemMetrics.MemoryMin = minMem
-		templateData.SystemMetrics.MemoryMax = maxMem
-	}
-
 	// A bare file name lands in tmp/test-reports (bin/330 passes a full path)
 	reportsDir := "tmp/test-reports"
 	if !strings.Contains(results.Config.OutputFile, "/") &&
@@ -731,50 +710,6 @@ func printSummary(results *TestResults) {
 	fmt.Printf("Requests/sec:       %.1f\n", requestsPerSecond)
 	fmt.Printf("Success Rate:       %.1f%%\n", successRate)
 	fmt.Printf("Concurrency:        %d users\n", results.Config.Concurrency)
-
-	if results.Config.MonitorServer {
-		if len(results.SystemMetrics.CPUUsage) > 0 {
-			var minCPU, maxCPU float64 = results.SystemMetrics.CPUUsage[0], results.SystemMetrics.CPUUsage[0]
-			var totalCPU float64
-			for _, cpu := range results.SystemMetrics.CPUUsage {
-				if cpu < minCPU {
-					minCPU = cpu
-				}
-				if cpu > maxCPU {
-					maxCPU = cpu
-				}
-				totalCPU += cpu
-			}
-			avgCPU := totalCPU / float64(len(results.SystemMetrics.CPUUsage))
-			fmt.Printf(
-				"Server CPU:         %.1f%% avg (%.1f%% - %.1f%%)\n",
-				avgCPU,
-				minCPU,
-				maxCPU,
-			)
-		}
-
-		if len(results.SystemMetrics.MemoryUsage) > 0 {
-			minMem, maxMem := results.SystemMetrics.MemoryUsage[0], results.SystemMetrics.MemoryUsage[0]
-			var totalMem int64
-			for _, mem := range results.SystemMetrics.MemoryUsage {
-				if mem < minMem {
-					minMem = mem
-				}
-				if mem > maxMem {
-					maxMem = mem
-				}
-				totalMem += mem
-			}
-			avgMem := totalMem / int64(len(results.SystemMetrics.MemoryUsage))
-			fmt.Printf(
-				"Server Memory:      %dMB avg (%dMB - %dMB)\n",
-				avgMem,
-				minMem,
-				maxMem,
-			)
-		}
-	}
 
 	if results.TotalErrors > 0 {
 		fmt.Printf(

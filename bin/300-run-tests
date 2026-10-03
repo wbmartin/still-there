@@ -13,7 +13,8 @@ set -euo pipefail
 #   bin/300-run-tests e2e      # Playwright only (bin/230-run-web-app-e2e)
 #   bin/300-run-tests py       # pytest HTTP suite (tests/) against a private
 #                              #   API instance this script starts and stops
-#   bin/300-run-tests load     # bin/330-test-load against a running API (not in all)
+#   bin/300-run-tests load     # bin/330-test-load: its own private API on
+#                              #   the e2e database, a minute (not in all)
 #
 # Output: tmp/test-logs/ (logs, the private API's env and binary) and
 # tmp/test-reports/ (pytest HTML). Both gitignored.
@@ -134,13 +135,17 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
     "$SCRIPT_DIR/510-reset-test-db" "$TEST_DB" > "$LOG_DIR/reset-test-db.log" 2>&1 \
         || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-test-db.log:"; tail -20 "$LOG_DIR/reset-test-db.log"; exit 1; }
 
-    pushd "$PROJECT_ROOT/src/api-srv" > /dev/null
     # -v so a skip is visible in the log; the grep for connectTestDB's exact
     # message turns it into a failure. (A plain '--- SKIP' would also catch an
     # upstream subtest that skips on purpose.)
-    echo "[INFO] go test"
     GO_LOG="$LOG_DIR/go-test.log"
-    TEST_DATABASE_URL="$TEST_DATABASE_URL" go test -v ./... > "$GO_LOG" 2>&1 || true
+    : > "$GO_LOG"
+    for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
+        echo "[INFO] go test $module_dir"
+        (cd "$PROJECT_ROOT/$module_dir" \
+            && TEST_DATABASE_URL="$TEST_DATABASE_URL" go test -v ./...) \
+            >> "$GO_LOG" 2>&1 || true
+    done
     grep -E '^(ok|FAIL|--- FAIL)' "$GO_LOG" || true
     if grep -q 'skipping integration tests' "$GO_LOG"; then
         echo "[ERROR] Go integration suites skipped -- $TEST_DB was not reachable:"
@@ -155,7 +160,6 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
     GO_COUNT=$(grep -c -E '^\s*--- PASS' "$GO_LOG" || true)
     echo "[INFO] go: $GO_COUNT passed"
     SUMMARY+=("go=$GO_COUNT")
-    popd > /dev/null
 fi
 
 # ------------------------------------------------------------------------------
@@ -340,8 +344,8 @@ fi
 
 # ------------------------------------------------------------------------------
 if [ "$MODE" = load ]; then
-    # Not part of "all": it needs a developer's API already running and takes
-    # a minute by design.
+    # Not part of "all": it takes a minute by design. bin/330 starts and
+    # stops its own private API on the e2e scratch database.
     "$SCRIPT_DIR/330-test-load"
     SUMMARY+=("load=done")
 fi
