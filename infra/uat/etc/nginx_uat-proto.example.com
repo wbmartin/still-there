@@ -1,6 +1,8 @@
 # /etc/nginx/sites-available/uat-proto.example.com  (symlink into sites-enabled)
 # Replace uat-proto.example.com with the real hostname; keep the port in step
 # with SERVER_PORT in uat-proto-api.env and HEALTH_URL in uat-proto-deploy.env.
+# Run bin/uat-proto-renew-web-certs once before linking this file, or
+# nginx -t fails on the missing pem files.
 
 upstream proto_api_server {
   server 127.0.0.1:8088 fail_timeout=0;

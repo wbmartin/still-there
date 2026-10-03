@@ -1,4 +1,12 @@
 #!/bin/bash
+# Issues / renews the site's Let's Encrypt certificate and copies it to
+# crt/<site>/, which the nginx site reads. Root, from cron; the schedule is
+# NACK_CRON in shrmpl-etc/nack-monitors/uat-proto-renew-web-certs_NACKID.env.
+# Checks in with nackmon only on success. Run it once by hand before linking
+# the nginx site, which fails nginx -t until the pem files exist.
+# --agree-tos -n: cron has no terminal for the ToS prompt.
+# --force-renewal: a monthly reissue, so a failure is never mistaken for
+# "not due yet".
 set -euo pipefail
 export PATH=/usr/sbin:$PATH
 
@@ -10,16 +18,19 @@ source "$DEPLOY_ENV"
 for var in SITE_NAME CERTBOT_EMAIL CERT_HEALTHCHECK_URL; do
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $DEPLOY_ENV"; exit 1; }
 done
-CRT_FOLDER_PATH="$SRV_ROOT/crt"
+LIVE_DIR="/etc/letsencrypt/live/$SITE_NAME"
+CRT_DIR="$SRV_ROOT/crt/$SITE_NAME"
 
-echo "[INFO] starting cert renewal;starting certbot"
-/usr/bin/certbot --nginx certonly -d "$SITE_NAME" --email "$CERTBOT_EMAIL" --force-renewal #--quiet
-echo "[INFO] certbot completed, positioning certs"
-mkdir -p "$CRT_FOLDER_PATH/$SITE_NAME"
+echo "[INFO] certbot for $SITE_NAME"
+/usr/bin/certbot --nginx certonly -d "$SITE_NAME" --email "$CERTBOT_EMAIL" \
+    --agree-tos -n --force-renewal
 
-cp "/etc/letsencrypt/live/$SITE_NAME/"{fullchain.pem,privkey.pem} "$CRT_FOLDER_PATH/$SITE_NAME/"
-chown -R www-data:www-data "$CRT_FOLDER_PATH/$SITE_NAME"
+# The nginx master reads both files as root; www-data never needs the key.
+install -d -o root -g www-data -m 0750 "$CRT_DIR"
+install -o root -g www-data -m 0640 "$LIVE_DIR/fullchain.pem" "$CRT_DIR/"
+install -o root -g root -m 0600 "$LIVE_DIR/privkey.pem" "$CRT_DIR/"
 
-echo "[INFO] completed cert renewal; starting nginx"
+nginx -t
 systemctl reload nginx
-curl -fsS "$CERT_HEALTHCHECK_URL"
+curl -fsS "$CERT_HEALTHCHECK_URL" > /dev/null
+echo "[INFO] $SITE_NAME renewed; nginx reloaded; nackmon checked in"

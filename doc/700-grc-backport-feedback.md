@@ -240,139 +240,6 @@ published password off UAT hosts that already have it but makes the host
 env file the only source of truth? Recommendation: yes, and check the
 existing UAT host once by hand in the same ticket.
 
-### B021 — Cert renewal: non-interactive; key not owned by www-data
-
-- **Priority:** P1  **Area:** infra
-- **GRC:** `infra/uat-unified001/bin/uat-grc-renew-web-certs:1-29`; `infra/uat-unified001/etc/nginx_uat-grc.atticustechnology.com:1-6`   **PROTO:** `infra/uat/bin/uat-proto-renew-web-certs:15-25` (:16, :21, :24); `infra/prd/bin/prd-proto-renew-web-certs`
-- **Ticket:** RG0013 / `3a3fc94`
-- **What:** No `--agree-tos -n` (first issue hangs under cron); `chown -R www-data` hands over `privkey.pem`. GRC: flags, `root:www-data` 0750/0640,
-`nginx -t` before reload.
-- **Port notes:** Drop-in. Keep the note: renew once before linking the site.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-`infra/uat/bin/uat-proto-renew-web-certs` (and the prd copy, identical but
-for the env filename at `:6`) runs as root from cron on the 3rd of each
-month (`NACK_CRON=30 3 3 * *` in both `*-renew-web-certs_NACKID.env`). It
-asks certbot for a certificate, copies it into `crt/<site>/`, which is
-what the nginx site reads (`infra/uat/etc/nginx_uat-proto.example.com:25-26`),
-and reloads nginx. Three lines bite.
-
-1. Interactive certbot, `infra/uat/bin/uat-proto-renew-web-certs:16`:
-
-       /usr/bin/certbot --nginx certonly -d "$SITE_NAME" \
-         --email "$CERTBOT_EMAIL" --force-renewal #--quiet
-
-   There is no `--agree-tos` and no `-n` (`--non-interactive`). On a host
-   where certbot has never registered an ACME account, certbot asks the
-   operator to accept the Let's Encrypt Terms of Service. That question is
-   forced interactive (certbot 5.8 `_internal/main.py:732`,
-   `yesno(msg, cli_flag="--agree-tos", force_interactive=True)`), so certbot
-   reads stdin even with no terminal. Cron gives the job no input: the read
-   hits end-of-file and certbot dies with an `EOFError`. It waits forever
-   only when stdin is held open (an ssh session, a hook runner). So the
-   item's "hangs under cron" is wrong in detail; the outcome is the same:
-   no certificate, `set -e` stops the script, the nackmon check-in (`:25`)
-   is skipped and the operator learns of it from the alert.
-   `infra/README.md:168-170` (step 6) says to link the site and put the
-   script in cron; it never says to run it once by hand.
-2. Wrong order on a fresh host. README step 6 links the nginx site first.
-   The site names `crt/<site>/fullchain.pem` and `privkey.pem`, which do
-   not exist until this script has run once, so `nginx -t` fails on the
-   missing files. A failing config blocks every later reload of the
-   host's shared nginx, and a restart (reboot) would leave every site on
-   the box down. PROTO's nginx header (`:1-3`) does not warn about this.
-3. Key ownership, `:20-21`:
-
-       cp "/etc/letsencrypt/live/$SITE_NAME/"{fullchain.pem,privkey.pem} ...
-       chown -R www-data:www-data "$CRT_FOLDER_PATH/$SITE_NAME"
-
-   The TLS private key ends up owned by `www-data`. The nginx master
-   process reads keys as root, so www-data needs no access at all. As
-   owner, any process running as www-data (nginx workers, and on a shared
-   host other apps' presales units; `infra/README.md:24` lists
-   `User=www-data` for presales) can read the key, rewrite it, or replace
-   the certificate. This is a security weakness: the site's TLS identity
-   is exposed to the least-trusted service account on the box.
-4. No explicit config test, `:24`: `systemctl reload nginx` runs straight
-   after the copy. This is hygiene, not a live bug: on the stock
-   Debian/Ubuntu unit `ExecReload` is `nginx ... -s reload`, which parses
-   the config first and exits non-zero on an error, so `set -e` already
-   stops the script (not checked on a target host).
-
-Summary: a correctness bug (unattended first issue fails), a doc ordering
-bug, a security weakness (key owner), and a missing explicit `nginx -t`.
-
-#### What GRC changed
-
-GRC's script is the same shape with these fixes
-(`infra/uat-unified001/bin/uat-grc-renew-web-certs`, byte-identical to the
-prd copy because names derive from the app root, `:11-12`, B045):
-
-- `:22`: `certbot --nginx certonly -d "$SITE_NAME" --email
-  "$CERTBOT_EMAIL" --agree-tos -n --force-renewal`. Never prompts.
-- `:25`: `chown -R root:www-data "$CRT_DIR"; chmod 0750 "$CRT_DIR";
-  chmod 0640 "$CRT_DIR"/*.pem`. Root owns the files; www-data can read
-  but not change them; other users cannot list the directory.
-- `:26-27`: `nginx -t` before `systemctl reload nginx`: a bad config
-  stops the script with nginx's own error before any reload is tried.
-- `:28`: check-in output to `/dev/null`; `:5` documents why
-  `--force-renewal` stays (a monthly reissue, so a failure is never
-  mistaken for "not due yet").
-- The nginx site header (`etc/nginx_uat-grc.*:2-4`): run the script "once
-  before linking this file, or `nginx -t` fails on the missing pem."
-
-Why: commit `3a3fc94` (RG0013) wrote the scripts; the RG0013 ticket does not
-single out the cert changes, so intent comes from the comments and the
-runbooks GRC executed on both hosts. GRC
-`doc/331-prd-postsales-cutover.md:216-253` pulls the first certificate by
-hand with `--agree-tos -n --dry-run`, then for real, sets `root:www-data
-0750/0640`, and links the site only if `nginx -t` passes (removing the link
-otherwise). Its reason (`:217-220`): certbot's nginx plugin edits and
-reloads the live nginx every app on the host shares, and a failed first
-issue can leave it down. The cron script "takes over from the first
-renewal". No automated test covers it.
-
-#### Proposed fix for PROTO
-
-1. `infra/uat/bin/uat-proto-renew-web-certs:16` and the prd copy: add
-   `--agree-tos -n`; delete the dead `#--quiet`.
-2. `:21` in both: replace with `chown -R root:www-data "$CRT_DIR"; chmod
-   0750 "$CRT_DIR"; chmod 0640 "$CRT_DIR"/*.pem`.
-3. `:24` in both: put `nginx -t` on the line before the reload.
-4. Header comment in both scripts: root, cron, nackmon, why
-   `--force-renewal`.
-5. `infra/uat/etc/nginx_uat-proto.example.com:1-3` and the prd site: add
-   "run `*-renew-web-certs` once before linking this file, or `nginx -t`
-   fails on the missing pem."
-6. `infra/README.md:168-170` (step 6): reorder to: copy the site file;
-   run the renew script once by hand (or the `--dry-run` then real
-   `certbot` pair); check `ls -l crt/<site>`; link; `nginx -t && systemctl
-   reload nginx`; then the cron line. The full runbook is B026.
-7. If B045 is taken, derive `DEPLOY_ENV` from `basename "$SRV_ROOT"` so
-   the two copies become byte-identical; otherwise keep `:6` as is.
-
-Blind-copy traps: GRC's site filename and `SITE_NAME` are real hostnames;
-PROTO keeps `uat-proto.example.com` and `proto.example.com`. Keep PROTO's
-variable names (`CRT_FOLDER_PATH` or rename to `CRT_DIR`, either is fine)
-and `CERT_HEALTHCHECK_URL`, which already matches. Do not import GRC's
-`doc/310-api-srv-cert-renewal.md`; it is a GRC laptop note.
-
-Depends on nothing. Related: B045 (name derivation), B026 (runbook), B048
-(the same nginx files).
-
-Tests: none automated. `shellcheck` both scripts; `diff` the uat and prd
-copies (only `:6` may differ without B045); on a host, run once and check
-`stat -c '%U:%G %a' crt/<site> crt/<site>/*.pem` shows `root:www-data 750`
-and `640`.
-
-#### Open question for Brandon
-
-None.
-
 ### B022 — nginx: security headers per web location, none at server level
 
 - **Priority:** P1  **Area:** infra
@@ -8864,3 +8731,137 @@ Should the nightly tarball keep shipping `etc/` (secrets) in clear to
 this fix now with the 0700 directory, because today there is no database
 backup at all and the secrets already travel in clear.
 Brandon: yes
+
+### B021 — COMPLETED — Cert renewal: non-interactive; key not owned by www-data
+- **Completed:** 2026-10-02. `infra/uat/bin/uat-proto-renew-web-certs` and the prd copy now run certbot with `--agree-tos -n`, copy the pem files with `install` (dir root:www-data 0750, `fullchain.pem` root:www-data 0640, `privkey.pem` root:root 0600), run `nginx -t` before the reload, and carry a header (root, cron, nackmon, why `--force-renewal`). Deviation: the key is root-only 0600 rather than GRC's 0640, since the nginx master reads it as root and www-data needs no access. Both nginx site headers say to run the script before linking, and `infra/README.md` step 6 is reordered (copy site, run once, check modes, link, `nginx -t && reload`, then cron); B045 is not done, so the copies still differ only in the env name. Verified in ubuntu:24.04 with a fake certbot and Let's Encrypt tree: old script exits 1 with EOFError on a closed stdin and leaves the key www-data-owned; new script fixes ownership on an old www-data crt dir, www-data cannot read the key, and `nginx -t` passes with each site linked (fails if linked first). Tests: all green, go=279 unit=42 e2e=10 py=79
+
+- **Priority:** P1  **Area:** infra
+- **GRC:** `infra/uat-unified001/bin/uat-grc-renew-web-certs:1-29`; `infra/uat-unified001/etc/nginx_uat-grc.atticustechnology.com:1-6`   **PROTO:** `infra/uat/bin/uat-proto-renew-web-certs:15-25` (:16, :21, :24); `infra/prd/bin/prd-proto-renew-web-certs`
+- **Ticket:** RG0013 / `3a3fc94`
+- **What:** No `--agree-tos -n` (first issue hangs under cron); `chown -R www-data` hands over `privkey.pem`. GRC: flags, `root:www-data` 0750/0640,
+`nginx -t` before reload.
+- **Port notes:** Drop-in. Keep the note: renew once before linking the site.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+`infra/uat/bin/uat-proto-renew-web-certs` (and the prd copy, identical but
+for the env filename at `:6`) runs as root from cron on the 3rd of each
+month (`NACK_CRON=30 3 3 * *` in both `*-renew-web-certs_NACKID.env`). It
+asks certbot for a certificate, copies it into `crt/<site>/`, which is
+what the nginx site reads (`infra/uat/etc/nginx_uat-proto.example.com:25-26`),
+and reloads nginx. Three lines bite.
+
+1. Interactive certbot, `infra/uat/bin/uat-proto-renew-web-certs:16`:
+
+       /usr/bin/certbot --nginx certonly -d "$SITE_NAME" \
+         --email "$CERTBOT_EMAIL" --force-renewal #--quiet
+
+   There is no `--agree-tos` and no `-n` (`--non-interactive`). On a host
+   where certbot has never registered an ACME account, certbot asks the
+   operator to accept the Let's Encrypt Terms of Service. That question is
+   forced interactive (certbot 5.8 `_internal/main.py:732`,
+   `yesno(msg, cli_flag="--agree-tos", force_interactive=True)`), so certbot
+   reads stdin even with no terminal. Cron gives the job no input: the read
+   hits end-of-file and certbot dies with an `EOFError`. It waits forever
+   only when stdin is held open (an ssh session, a hook runner). So the
+   item's "hangs under cron" is wrong in detail; the outcome is the same:
+   no certificate, `set -e` stops the script, the nackmon check-in (`:25`)
+   is skipped and the operator learns of it from the alert.
+   `infra/README.md:168-170` (step 6) says to link the site and put the
+   script in cron; it never says to run it once by hand.
+2. Wrong order on a fresh host. README step 6 links the nginx site first.
+   The site names `crt/<site>/fullchain.pem` and `privkey.pem`, which do
+   not exist until this script has run once, so `nginx -t` fails on the
+   missing files. A failing config blocks every later reload of the
+   host's shared nginx, and a restart (reboot) would leave every site on
+   the box down. PROTO's nginx header (`:1-3`) does not warn about this.
+3. Key ownership, `:20-21`:
+
+       cp "/etc/letsencrypt/live/$SITE_NAME/"{fullchain.pem,privkey.pem} ...
+       chown -R www-data:www-data "$CRT_FOLDER_PATH/$SITE_NAME"
+
+   The TLS private key ends up owned by `www-data`. The nginx master
+   process reads keys as root, so www-data needs no access at all. As
+   owner, any process running as www-data (nginx workers, and on a shared
+   host other apps' presales units; `infra/README.md:24` lists
+   `User=www-data` for presales) can read the key, rewrite it, or replace
+   the certificate. This is a security weakness: the site's TLS identity
+   is exposed to the least-trusted service account on the box.
+4. No explicit config test, `:24`: `systemctl reload nginx` runs straight
+   after the copy. This is hygiene, not a live bug: on the stock
+   Debian/Ubuntu unit `ExecReload` is `nginx ... -s reload`, which parses
+   the config first and exits non-zero on an error, so `set -e` already
+   stops the script (not checked on a target host).
+
+Summary: a correctness bug (unattended first issue fails), a doc ordering
+bug, a security weakness (key owner), and a missing explicit `nginx -t`.
+
+#### What GRC changed
+
+GRC's script is the same shape with these fixes
+(`infra/uat-unified001/bin/uat-grc-renew-web-certs`, byte-identical to the
+prd copy because names derive from the app root, `:11-12`, B045):
+
+- `:22`: `certbot --nginx certonly -d "$SITE_NAME" --email
+  "$CERTBOT_EMAIL" --agree-tos -n --force-renewal`. Never prompts.
+- `:25`: `chown -R root:www-data "$CRT_DIR"; chmod 0750 "$CRT_DIR";
+  chmod 0640 "$CRT_DIR"/*.pem`. Root owns the files; www-data can read
+  but not change them; other users cannot list the directory.
+- `:26-27`: `nginx -t` before `systemctl reload nginx`: a bad config
+  stops the script with nginx's own error before any reload is tried.
+- `:28`: check-in output to `/dev/null`; `:5` documents why
+  `--force-renewal` stays (a monthly reissue, so a failure is never
+  mistaken for "not due yet").
+- The nginx site header (`etc/nginx_uat-grc.*:2-4`): run the script "once
+  before linking this file, or `nginx -t` fails on the missing pem."
+
+Why: commit `3a3fc94` (RG0013) wrote the scripts; the RG0013 ticket does not
+single out the cert changes, so intent comes from the comments and the
+runbooks GRC executed on both hosts. GRC
+`doc/331-prd-postsales-cutover.md:216-253` pulls the first certificate by
+hand with `--agree-tos -n --dry-run`, then for real, sets `root:www-data
+0750/0640`, and links the site only if `nginx -t` passes (removing the link
+otherwise). Its reason (`:217-220`): certbot's nginx plugin edits and
+reloads the live nginx every app on the host shares, and a failed first
+issue can leave it down. The cron script "takes over from the first
+renewal". No automated test covers it.
+
+#### Proposed fix for PROTO
+
+1. `infra/uat/bin/uat-proto-renew-web-certs:16` and the prd copy: add
+   `--agree-tos -n`; delete the dead `#--quiet`.
+2. `:21` in both: replace with `chown -R root:www-data "$CRT_DIR"; chmod
+   0750 "$CRT_DIR"; chmod 0640 "$CRT_DIR"/*.pem`.
+3. `:24` in both: put `nginx -t` on the line before the reload.
+4. Header comment in both scripts: root, cron, nackmon, why
+   `--force-renewal`.
+5. `infra/uat/etc/nginx_uat-proto.example.com:1-3` and the prd site: add
+   "run `*-renew-web-certs` once before linking this file, or `nginx -t`
+   fails on the missing pem."
+6. `infra/README.md:168-170` (step 6): reorder to: copy the site file;
+   run the renew script once by hand (or the `--dry-run` then real
+   `certbot` pair); check `ls -l crt/<site>`; link; `nginx -t && systemctl
+   reload nginx`; then the cron line. The full runbook is B026.
+7. If B045 is taken, derive `DEPLOY_ENV` from `basename "$SRV_ROOT"` so
+   the two copies become byte-identical; otherwise keep `:6` as is.
+
+Blind-copy traps: GRC's site filename and `SITE_NAME` are real hostnames;
+PROTO keeps `uat-proto.example.com` and `proto.example.com`. Keep PROTO's
+variable names (`CRT_FOLDER_PATH` or rename to `CRT_DIR`, either is fine)
+and `CERT_HEALTHCHECK_URL`, which already matches. Do not import GRC's
+`doc/310-api-srv-cert-renewal.md`; it is a GRC laptop note.
+
+Depends on nothing. Related: B045 (name derivation), B026 (runbook), B048
+(the same nginx files).
+
+Tests: none automated. `shellcheck` both scripts; `diff` the uat and prd
+copies (only `:6` may differ without B045); on a host, run once and check
+`stat -c '%U:%G %a' crt/<site> crt/<site>/*.pem` shows `root:www-data 750`
+and `640`.
+
+#### Open question for Brandon
+
+None.

@@ -165,9 +165,14 @@ full runbook belongs.
    unit as the hook user: `sudo -u shrmpl-hook touch
    /srv/<env>-proto/stg/restart.request` must disappear within seconds and
    `systemctl show -p MainPID --value <env>-proto-api` must change.
-6. **nginx + certs.** `etc/nginx_<site>` into `sites-available`, symlink,
-   `*-renew-web-certs` from root's cron (`SITE_NAME`, `CERTBOT_EMAIL` in
-   `deploy.env`).
+6. **nginx + certs.** In this order, because the site names
+   `crt/<site>/*.pem` and a site that fails `nginx -t` blocks every reload
+   of the host's shared nginx: `etc/nginx_<site>` into `sites-available`
+   (not linked yet); run `*-renew-web-certs` once by hand (`SITE_NAME`,
+   `CERTBOT_EMAIL` in `deploy.env`); `ls -l crt/<site>` shows
+   `fullchain.pem` root:www-data 0640 and `privkey.pem` root:root 0600;
+   symlink into `sites-enabled`; `nginx -t && systemctl reload nginx`;
+   then the script into root's cron.
 7. **Webhook and monitoring.** Each `shrmpl-etc/` subdirectory into the
    matching one under `/srv/shrmpl/etc/`. Hooks: the real `HOOK_SECRET`, and
    `HOOK_ALLOWED_BRANCHES` must equal `BRANCH_TO_CHECKOUT`. Monitors: rename

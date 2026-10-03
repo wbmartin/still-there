@@ -1,6 +1,8 @@
 # /etc/nginx/sites-available/proto.example.com  (symlink into sites-enabled)
 # Replace proto.example.com with the real hostname; keep the port in step
 # with SERVER_PORT in prd-proto-api.env and HEALTH_URL in prd-proto-deploy.env.
+# Run bin/prd-proto-renew-web-certs once before linking this file, or
+# nginx -t fails on the missing pem files.
 
 upstream proto_api_server {
   server 127.0.0.1:8088 fail_timeout=0;
