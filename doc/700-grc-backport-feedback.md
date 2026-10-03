@@ -710,78 +710,6 @@ given it moves authorization differences into a matrix? Recommend an ADR
 that permits it only for derived apps past ~10 entities, never the
 template.
 
-### B076 — Web README: house patterns and small rules
-
-- **Priority:** P3  **Area:** docs, web-app
-- **GRC:** `README.md:106-108,120-122,136-139`; RG0008 md `:183`; `tickets/02-working/RG0034-capture-procedure-for-evidence/RG0034-capture-procedure-for-evidence.md:66`; RG0036 md `:28-38`   **PROTO:** `src/web-app/README.md:73-110`
-- **Ticket:** RG0007; RG0008; RG0018; RG0034; RG0036
-- **What:** Store test per store; empty load shows `<Alert />`; store throws,
-page notifies; body keys equal json tags; Zustand `set` hides misspelled keys;
-reload form on route-id change.
-- **Port notes:** Docs only; example test from B013.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-`src/web-app/README.md:73-110` gives the copy list and a five-bullet house
-pattern. Six rules GRC learned the hard way are missing, and PROTO's
-example page already breaks two of them. Docs gap with real bugs behind it.
-
-1. No store test in the copy list (`:75-80`). `tests/` holds
-   `api-unreachable`, `entity-store-cache`, `session-expired`; no
-   per-entity store test, so a wrong request body ships untested.
-2. Body keys must equal the Go `json` tags. Not stated. PROTO has the bug
-   (B013): `stores/app-user-store.ts:112-116` posts `{ userId, newPassword
-   }`; `handler/user_handler.go:986` decodes `json:"appUserId"`, so the
-   id is 0 and every admin "Change Password" answers 400.
-3. Empty load renders a blank form. `pages/example-edit-page.tsx:62-87`:
-   `readExampleById` returns `null` on 404/400 (`examples-store.ts:25`);
-   the page only sets loading false (`:86`), passes the loading return
-   (`:100-102`) and renders the edit form for a record it never loaded.
-4. Store throws, page notifies. The load `.catch` (`:82-84`) only calls
-   `reportError`, which writes to the console; the user sees nothing.
-5. Zustand `set` hides misspelled keys. Not stated; `set` takes a
-   `Partial<T>`-shaped union, so TypeScript skips the excess-property
-   check and a typo is silently a new key.
-6. Reload on route-id change. The `hasFetched` one-shot (`:57-61`) never
-   resets, so if the router reuses the page for another `?exampleId=`,
-   the old record stays on screen.
-
-#### What GRC changed
-
-GRC `src/web-app/README.md:106-108` adds `stores/<entity>-store.test.ts`
-to the copy list ("vitest in the default node environment, `fetch`
-stubbed, no DOM"). `:120-122`: the early returns end with "a load that
-came back empty → an `<Alert />`. A form is never rendered for a record
-that was not loaded." `:136-139`: "The store throws, the page tells the
-user ... `notifications.show` and ... `reportError`." RG0008 md `:183`
-records the zustand `Partial<T>` trap. RG0036 md `:28-38` is the
-`userId`/`appUserId` root cause; its test is
-`stores/app-user-store.test.ts:39`. RG0034 md `:66-71`: a Create that
-navigated to the new id showed a blank step because the form reloaded
-only once; "the form now records which route id it was loaded for".
-
-#### Proposed fix for PROTO
-
-1. `src/web-app/README.md` house pattern: add the six rules above, one
-   bullet each, in PROTO's voice; add a store-test row to the copy table.
-2. Ship B013's fix and its fetch-stubbing vitest as the example store
-   test (`tests/app-user-store.test.ts`; PROTO keeps tests in `tests/`,
-   not beside the store, and runs vitest under jsdom, not node).
-3. Make `example-edit-page.tsx` obey rules 3, 4, 6, since it is the copy
-   source (memory: entity pages are deliberate copy-paste). Apply the same
-   edit to `app-user-edit-page.tsx` and `app-user-group-edit-page.tsx`.
-4. Leave out GRC's `constants/grc-routes.ts`, `grcLink`, and the `App.tsx`
-   name (PROTO's is `app.tsx`).
-5. Tests: one vitest per rule-3/4 change is optional; the store test in
-   step 2 is required.
-
-#### Open question for Brandon
-
-None.
-
 ### B077 — Security architecture doc for the template
 
 - **Priority:** P3  **Area:** docs, infra
@@ -8999,3 +8927,76 @@ table; `:130-151` lists conventions. No tests.
 
 None.
 - **Completed:** 2026-10-03. Pulled per the recommendation, each defect re-checked against the current text. Already fixed: doc/902 `tmp/server.log` -> `tmp/api-srv/server.log` (B070), doc/902 `npm run test:unit` (B041), gate contract text (B040/B041), doc/050 deleted SQL path and doc/810 paths (B053), dev DB command (`bin/205-migrate-db`, B073), PS0010 landed first (B028). Fixed here: doc/050 gets a title, "What runs in dev" (Postgres container, API on 127.0.0.1:8080 with the in-process KV, Vite proxying `/api`, no nginx), Tools (Go per go.mod, Node 22, Docker, Python venv, openssl for 400, `npm ci`), "Files and the web app" replacing the nginx TODO, a short Linux section (docker group, `python3-venv`, `playwright install-deps`); the stale `0001 ... applied` expectation now reads one applied line per migration. doc/060: title and doc/050 pointer, one headed section per shell, `bin/510` -> `./bin/205-migrate-db`, repo-relative `./bin/220-run-web-app`, `curl -s http://localhost:8080/health`. doc/902: one table row per `bin/` script (all 18) with the "new script, new row" rule, a Setup and Build section for the three missing scripts (000, 100, 400), and the health line now `curl -s http://localhost:8080/health` (B087 step 1 only; doc/310 and the tree grep stay with B087). doc/810: `:1` banner removed (its three complaints were already fixed), standard fields `<table>_id` / `security_context_id`, a "One column, every layer" table for `app_user.preference_jsonb` with PROTO paths, `max<Entity>UpdateTs` -> `maxUpdateTs`. Left alone: doc/060's infrahub `loc-postgres` block (B086's `docker run` replacement), README.md/api-srv README `bin/510` lines (B085), other doc/810 path tokens (B090); doc/810's grant-numbering prose (1xx0 READ vs the code's 1001 READ, 9001 CREATE) disagrees with `grants.go`, not in B075. Tests: all green, infra=15 docs=603 (+56: the new path tokens) go=707 unit=101 e2e=68 py=103; govulncheck clean; no new tests (docs only).
+
+### B076 — COMPLETED — Web README: house patterns and small rules
+
+- **Priority:** P3  **Area:** docs, web-app
+- **GRC:** `README.md:106-108,120-122,136-139`; RG0008 md `:183`; `tickets/02-working/RG0034-capture-procedure-for-evidence/RG0034-capture-procedure-for-evidence.md:66`; RG0036 md `:28-38`   **PROTO:** `src/web-app/README.md:73-110`
+- **Ticket:** RG0007; RG0008; RG0018; RG0034; RG0036
+- **What:** Store test per store; empty load shows `<Alert />`; store throws,
+page notifies; body keys equal json tags; Zustand `set` hides misspelled keys;
+reload form on route-id change.
+- **Port notes:** Docs only; example test from B013.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+`src/web-app/README.md:73-110` gives the copy list and a five-bullet house
+pattern. Six rules GRC learned the hard way are missing, and PROTO's
+example page already breaks two of them. Docs gap with real bugs behind it.
+
+1. No store test in the copy list (`:75-80`). `tests/` holds
+   `api-unreachable`, `entity-store-cache`, `session-expired`; no
+   per-entity store test, so a wrong request body ships untested.
+2. Body keys must equal the Go `json` tags. Not stated. PROTO has the bug
+   (B013): `stores/app-user-store.ts:112-116` posts `{ userId, newPassword
+   }`; `handler/user_handler.go:986` decodes `json:"appUserId"`, so the
+   id is 0 and every admin "Change Password" answers 400.
+3. Empty load renders a blank form. `pages/example-edit-page.tsx:62-87`:
+   `readExampleById` returns `null` on 404/400 (`examples-store.ts:25`);
+   the page only sets loading false (`:86`), passes the loading return
+   (`:100-102`) and renders the edit form for a record it never loaded.
+4. Store throws, page notifies. The load `.catch` (`:82-84`) only calls
+   `reportError`, which writes to the console; the user sees nothing.
+5. Zustand `set` hides misspelled keys. Not stated; `set` takes a
+   `Partial<T>`-shaped union, so TypeScript skips the excess-property
+   check and a typo is silently a new key.
+6. Reload on route-id change. The `hasFetched` one-shot (`:57-61`) never
+   resets, so if the router reuses the page for another `?exampleId=`,
+   the old record stays on screen.
+
+#### What GRC changed
+
+GRC `src/web-app/README.md:106-108` adds `stores/<entity>-store.test.ts`
+to the copy list ("vitest in the default node environment, `fetch`
+stubbed, no DOM"). `:120-122`: the early returns end with "a load that
+came back empty → an `<Alert />`. A form is never rendered for a record
+that was not loaded." `:136-139`: "The store throws, the page tells the
+user ... `notifications.show` and ... `reportError`." RG0008 md `:183`
+records the zustand `Partial<T>` trap. RG0036 md `:28-38` is the
+`userId`/`appUserId` root cause; its test is
+`stores/app-user-store.test.ts:39`. RG0034 md `:66-71`: a Create that
+navigated to the new id showed a blank step because the form reloaded
+only once; "the form now records which route id it was loaded for".
+
+#### Proposed fix for PROTO
+
+1. `src/web-app/README.md` house pattern: add the six rules above, one
+   bullet each, in PROTO's voice; add a store-test row to the copy table.
+2. Ship B013's fix and its fetch-stubbing vitest as the example store
+   test (`tests/app-user-store.test.ts`; PROTO keeps tests in `tests/`,
+   not beside the store, and runs vitest under jsdom, not node).
+3. Make `example-edit-page.tsx` obey rules 3, 4, 6, since it is the copy
+   source (memory: entity pages are deliberate copy-paste). Apply the same
+   edit to `app-user-edit-page.tsx` and `app-user-group-edit-page.tsx`.
+4. Leave out GRC's `constants/grc-routes.ts`, `grcLink`, and the `App.tsx`
+   name (PROTO's is `app.tsx`).
+5. Tests: one vitest per rule-3/4 change is optional; the store test in
+   step 2 is required.
+
+#### Open question for Brandon
+
+None.
+- **Completed:** 2026-10-03. Already covered: the store-test example and the B013 body fix (B013: `tests/app-user-store.test.ts`); PROTO's vitest runs under jsdom from `tests/`. Re-checked against code: zustand 5.0.15 does flag a misspelled key in a bare `set({...})` literal, so the rule is narrowed to what escapes: the updater form and an `as Partial<Store>` cast (`create-entity-store.ts`). `src/web-app/README.md`: Entity Stores gains three store rules (body keys are the Go `json` tags, since `decodeJSONBody` drops unknown keys; the store throws and the page tells the user; the `set` key-check gap); the copy table gains `tests/examples-store.test.ts`; the house pattern says edit pages load once per route id (`requestedId` ref; list pages keep `hasFetched`) and never render a form for a record that did not load. Code: `example-edit-page.tsx`, `app-user-edit-page.tsx`, `app-user-group-edit-page.tsx` record `{ id, found }` per route id, reload on a new id (`new` resets the form), drop a stale response, show title + `<Alert />` for a non-numeric, empty or failed load, and notify on a load error; `app-user-edit-page.tsx` no longer shows a stale "Blocked" badge on Add User. Beyond the item (rule 2 in the copy source): `example-list-page.tsx` and `app-user-list-page.tsx` deletes now notify success/failure (the example list said "Error is handled in store", which was false); the example list refresh after a delete no longer reports a refresh failure as a failed delete. doc/810 WEB-APP pointer follows; `scripts/doc-paths-allow.txt` lists the new `tests/widget-store.test.ts` copy target. New tests: vitest `tests/examples-store.test.ts` (4: readExampleById URL + cache refresh, create/update/delete URL and body); Playwright `example-pages.spec.ts` (2: missing id shows the Alert and no form; `history.go(-2)` between two edit pages reloads the form), both failing on the old page. Tests: all green, infra=15 docs=611 go=707 unit=105 e2e=70 py=103 (docs +8 path tokens, unit +4, e2e +2).

@@ -74,6 +74,45 @@ test.describe("example pages", () => {
     ).toHaveCount(0);
   });
 
+  // A form is never rendered for a record that was not loaded (B076).
+  test("an id that does not exist shows an alert, not a form", async ({
+    page,
+  }) => {
+    await page.goto("/example?exampleId=999999999");
+    await expect(
+      page.getByText("This example could not be loaded."),
+    ).toBeVisible();
+    await expect(page.getByLabel("Text", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+  });
+
+  // The router reuses the edit page when only ?exampleId= changes; the form
+  // must reload for the new id (B076). history.go(-2) from one edit page to
+  // another is one such change: a single popstate, the page not remounted.
+  test("a new ?exampleId= on the same page reloads the form", async ({
+    page,
+  }) => {
+    const textField = page.getByLabel("Text", { exact: true });
+    const openSeed = async (exampleText: string) => {
+      await page
+        .getByRole("row", { name: new RegExp(`${exampleText}\\b`) })
+        .getByRole("button", { name: "Edit" })
+        .click();
+      await expect(textField).toHaveValue(exampleText);
+    };
+
+    await page.goto("/exampleList");
+    await openSeed("Sample example 1");
+    const firstUrl = page.url();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page).toHaveURL(/\/exampleList/);
+    await openSeed("Sample example 2");
+
+    await page.evaluate(() => window.history.go(-2));
+    await expect(page).toHaveURL(firstUrl);
+    await expect(textField).toHaveValue("Sample example 1");
+  });
+
   // Every tab shares the cookie but keeps its own CSRF token; another tab
   // loading must not leave this one's Save refused (B004).
   test("a save still works after another tab loads", async ({

@@ -74,8 +74,13 @@ function UserEditPage() {
   const authState = useAuthGuard([requiredGrant, grants.READ_USER]);
   const grantList = useAuthStore((state) => state.grantList);
   const ownUserName = useAuthStore((state) => state.userName);
-  const [userLoading, setUserLoading] = useState(!isNew && numericId !== null);
-  const hasFetched = useRef(false);
+  // The route id the form was last loaded for, and what that load found;
+  // a new ?appUserId= on the same page reloads the form.
+  const requestedId = useRef<string | null>(null);
+  const [loadResult, setLoadResult] = useState<{
+    id: string;
+    found: boolean;
+  } | null>(null);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
   const [passwordChangeError, setPasswordChangeError] = useState<
@@ -96,37 +101,47 @@ function UserEditPage() {
   const [inviteActionLoading, setInviteActionLoading] = useState(false);
 
   useEffect(() => {
-    if (!hasFetched.current && authState === "YES") {
-      hasFetched.current = true;
-      void readAppUserGroupList().catch((err) => reportError(err, "user edit"));
-      if (numericId && !isNew) {
-        void readUserById(numericId)
-          .then((user) => {
-            if (user) {
-              form.setValues({
-                userName: user.userName,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                email: user.email,
-                appUserGroupMembershipList: user.appUserGroupMembershipList,
-                mfaExempt: user.mfaExempt,
-                password: "",
-                updateTs: user.updateTs.toString(),
-              });
-              setAccountStatus(user.accountStatus);
-            }
-          })
-          .catch((error: unknown) => {
-            reportError(error, "loading user");
-          })
-          .finally(() => {
-            setUserLoading(false);
-          });
-      }
+    if (authState !== "YES" || requestedId.current === id) return;
+    requestedId.current = id;
+    void readAppUserGroupList().catch((err) => reportError(err, "user edit"));
+    if (isNew || !numericId) {
+      form.reset();
+      return;
     }
-    // `form` is a new object every render; hasFetched makes this a one-shot.
+    void readUserById(numericId)
+      .then((user) => {
+        if (requestedId.current !== id) return; // a later id took over
+        if (user) {
+          form.setValues({
+            userName: user.userName,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            appUserGroupMembershipList: user.appUserGroupMembershipList,
+            mfaExempt: user.mfaExempt,
+            password: "",
+            updateTs: user.updateTs.toString(),
+          });
+          setAccountStatus(user.accountStatus);
+        }
+        setLoadResult({ id, found: user !== null });
+      })
+      .catch((error: unknown) => {
+        if (requestedId.current !== id) return;
+        reportError(error, "loading user");
+        notifications.show({
+          title: "Error",
+          message: "Failed to load user",
+          color: "red",
+          autoClose: 5000,
+          withCloseButton: true,
+        });
+        setLoadResult({ id, found: false });
+      });
+    // `form` is a new object every render; requestedId makes this run once
+    // per route id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authState, numericId, isNew, readAppUserGroupList, readUserById]);
+  }, [authState, id, isNew, numericId, readAppUserGroupList, readUserById]);
 
   //============================^ HOOK LINE ^====================
 
@@ -137,8 +152,17 @@ function UserEditPage() {
     return <Container size={1280} px={32} py={32} mx="auto"><Alert color="red">Authentication required.</Alert></Container>;
   }
 
-  if (userLoading) {
+  if (!isNew && numericId && loadResult?.id !== id) {
     return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
+  }
+  // Never render the form for a record that was not loaded.
+  if (!isNew && (!numericId || !loadResult?.found)) {
+    return (
+      <Container size={1280} px={32} py={32} mx="auto">
+        <Title order={1} mb="lg">Edit User</Title>
+        <Alert color="red">This user could not be loaded.</Alert>
+      </Container>
+    );
   }
 
   const handleSubmit = async (values: typeof defaultUserFormData) => {
@@ -359,7 +383,7 @@ function UserEditPage() {
     }
   };
 
-  const isBlocked = accountStatus === "blocked";
+  const isBlocked = !isNew && accountStatus === "blocked";
   const isInvited = !isNew && accountStatus === "invited";
 
   const groupOptions = appUserGroupList.map((g) => ({

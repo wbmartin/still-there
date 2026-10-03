@@ -37,3 +37,4 @@ src/web-app/README.md:types/widget-type.ts
 src/web-app/README.md:stores/widget-store.ts
 src/web-app/README.md:pages/widget-list-page.tsx
 src/web-app/README.md:pages/widget-edit-page.tsx
+src/web-app/README.md:tests/widget-store.test.ts

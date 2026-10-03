@@ -20,6 +20,7 @@ import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { User } from "../types/user-type";
 import { SortTh } from "../components/sort-th";
+import { notifications } from "@mantine/notifications";
 import { reportError } from "../utils/report-error";
 
 function UserAdminPage() {
@@ -128,8 +129,22 @@ function UserAdminPage() {
     if (user) {
       try {
         await deleteUser(user.appUserId, user.updateTs);
+        notifications.show({
+          title: "Success",
+          message: "User deleted successfully",
+          color: "green",
+          autoClose: 3000,
+          withCloseButton: false,
+        });
       } catch (error) {
         reportError(error, "deleting user");
+        notifications.show({
+          title: "Error",
+          message: "Failed to delete user",
+          color: "red",
+          autoClose: 5000,
+          withCloseButton: true,
+        });
       }
     }
   };

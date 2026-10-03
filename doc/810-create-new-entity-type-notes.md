@@ -97,10 +97,12 @@ This document outlines the steps and key points for creating a new entity type i
 ## WEB-APP
 
 The web half is the *Scaffolding* section of `src/web-app/README.md`: the
-four files to copy from `example-*`, the constants/route/nav entries to add
-by hand, and the in-page house pattern (hook order, `HOOK LINE` banner,
-`hasFetched` ref, load by id, list state in the URL, absolute `ROUTES`).
-Keep it there; do not duplicate it here.
+files to copy from `example-*` (four plus the store test), the
+constants/route/nav entries to add by hand, and the in-page house pattern
+(hook order, `HOOK LINE` banner, load by id once per route id, no form for
+a record that did not load, list state in the URL, absolute `ROUTES`).
+Its *Entity Stores* section holds the store rules (body keys are the Go
+`json` tags). Keep it there; do not duplicate it here.
 
 Quirks that still apply:
 - Edit pages take their id as a query string with an entity-specific name

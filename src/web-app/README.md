@@ -76,6 +76,29 @@ read — mutations never touch it. Every store registers a cache clearer so
 sign-out and security-context switches cannot leave another tenant's rows
 in memory.
 
+Rules for any store:
+
+- **A request body's keys are the Go `json` tags**, spelled exactly.
+  `decodeJSONBody` (`src/api-srv/internal/handler/common.go`) drops a key
+  it does not know, so `userId` posted where the handler reads
+  `appUserId` arrives as a zero and the call fails every time (B013). The
+  store test is what catches it: it stubs `fetch` and asserts each
+  request's URL and body against the tags (`tests/examples-store.test.ts`,
+  `tests/app-user-store.test.ts`).
+- **The store throws; the page tells the user.** A store does not toast
+  or swallow a failure (`readExampleById` turns only the 404/400 it
+  expects into `null`). The example pages catch, call `reportError`
+  (console only) and show the user something: `notifications.show` for a
+  failed save, delete or edit-page load, and the list page renders the
+  store's `error` in an `<Alert />`.
+- **Zustand `set` checks keys only for a bare object literal.**
+  `set({ itemLst: [] })` is a type error; the updater form
+  `set((state) => ({ ... }))` and a literal cast `as Partial<Store>` (which
+  `create-entity-store.ts` needs, being generic) are not checked, so a
+  misspelled key there is silently a new field. Prefer the bare literal;
+  where a cast is unavoidable, a test reads the field back
+  (`tests/entity-store-cache.test.ts`).
+
 ## API Errors
 
 Every call goes through `apiJson` in `utils/api.ts`; it is the only
@@ -132,6 +155,7 @@ To add an entity `widget`, copy and rename:
 | `stores/examples-store.ts` | `stores/widget-store.ts` — `createEntityStore` + `readWidgetById` |
 | `pages/example-list-page.tsx` | `pages/widget-list-page.tsx` |
 | `pages/example-edit-page.tsx` | `pages/widget-edit-page.tsx` |
+| `tests/examples-store.test.ts` | `tests/widget-store.test.ts` — vitest (jsdom, as every test in `tests/`), `fetch` stubbed, each write's URL and body against the Go `json` tags |
 
 Then add, by hand, in each of:
 
@@ -155,15 +179,24 @@ The API half is `doc/810-create-new-entity-type-notes.md`.
 House pattern inside a page, in this order:
 
 - hooks first (`useSearchParams`, `useAuthGuard`, the store, `useForm`,
-  a `hasFetched` ref, the load effect), then the
+  the load-once ref, the load effect), then the
   `//====^ HOOK LINE ^====` banner, then the early returns for
-  `CHECKING` / not-`YES` / loading, then handlers and JSX. Nothing below
-  the banner may call a hook.
-- the load effect runs once (`hasFetched` ref), only when `authState`
-  is `"YES"` (`useAuthGuard` answers `"DENIED"`, not `"YES"`, to a
-  user without the page's grants, so a refused page asks the API
-  nothing), and fetches by id through the store — never by searching
-  `itemList`, which is empty on a deep link.
+  `CHECKING` / not-`YES` / loading / not loaded, then handlers and JSX.
+  Nothing below the banner may call a hook.
+- the load effect runs only when `authState` is `"YES"` (`useAuthGuard`
+  answers `"DENIED"`, not `"YES"`, to a user without the page's grants,
+  so a refused page asks the API nothing), and an edit page fetches by id
+  through the store — never by searching `itemList`, which is empty on a
+  deep link. A list page loads once (a `hasFetched` ref). An edit page
+  loads once **per route id**: the router reuses the page when only
+  `?widgetId=` changes, so a `requestedId` ref records the id the form was
+  loaded for, a different id reloads it (`new` resets it), and a response
+  for an id the page has since left is dropped.
+- an edit page never renders its form for a record it did not load. The
+  load records `{ id, found }`; until it matches the route id the page
+  shows a `Loader`, and an id that is not a number, came back empty
+  (`null` from the store) or failed shows the title and an `<Alert />`
+  instead of a blank form whose Save would write a record nobody read.
 - `form` from `useForm` is a new object each render, so the load effect
   carries a scoped `react-hooks/exhaustive-deps` disable with that reason.
 - list state that should survive a refresh or a shared link (page, sort)

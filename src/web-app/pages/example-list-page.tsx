@@ -14,6 +14,7 @@ import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { useRowsPerPage } from "../hooks/use-preference";
 import { confirmDelete } from "../utils/confirm-delete";
+import { notifications } from "@mantine/notifications";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import { SortTh } from "../components/sort-th";
@@ -132,11 +133,27 @@ function ExampleListPage() {
     if (example) {
       try {
         await deleteItem(example.exampleId, example.updateTs);
-        // List is updated locally, but refresh to ensure sync
-        await readList({ incremental: true });
+        notifications.show({
+          title: "Success",
+          message: "Example deleted successfully",
+          color: "green",
+          autoClose: 3000,
+          withCloseButton: false,
+        });
+        // The store already dropped the row; this picks up others' changes.
+        // A failure here sets the store's error, which the page shows.
+        void readList({ incremental: true }).catch((err) =>
+          reportError(err, "example list"),
+        );
       } catch (error) {
         reportError(error, "deleting example");
-        // Error is handled in store
+        notifications.show({
+          title: "Error",
+          message: "Failed to delete example",
+          color: "red",
+          autoClose: 5000,
+          withCloseButton: true,
+        });
       }
     }
   };

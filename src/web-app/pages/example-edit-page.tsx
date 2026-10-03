@@ -52,44 +52,60 @@ function ExampleEditPage() {
     },
   });
   const [exampleUuid, setExampleUuid] = useState("");
-  const [exampleLoading, setExampleLoading] = useState(
-    !isNew && numericId !== null,
-  );
-  const hasFetched = useRef(false);
+  // The route id the form was last loaded for, and what that load found.
+  // The router reuses this page when only ?exampleId= changes, so a new id
+  // reloads the form instead of leaving the old record on screen.
+  const requestedId = useRef<string | null>(null);
+  const [loadResult, setLoadResult] = useState<{
+    id: string;
+    found: boolean;
+  } | null>(null);
 
   useEffect(() => {
-    if (!hasFetched.current && authState === "YES" && numericId && !isNew) {
-      hasFetched.current = true;
-      void readExampleById(numericId)
-        .then((existingExample) => {
-          if (existingExample) {
-            form.setValues({
-              exampleText: existingExample.exampleText,
-              exampleInt: existingExample.exampleInt?.toString() || "",
-              exampleFloat: existingExample.exampleFloat?.toString() || "",
-              exampleIntArray:
-                existingExample.exampleIntArray?.join(", ") || "",
-              exampleFloatArray:
-                existingExample.exampleFloatArray?.join(", ") || "",
-              exampleJsonb:
-                existingExample.exampleJsonb === undefined
-                  ? ""
-                  : JSON.stringify(existingExample.exampleJsonb, null, 2),
-              updateTs: existingExample.updateTs.toString(),
-            });
-            setExampleUuid(existingExample.exampleUuid ?? "");
-          }
-        })
-        .catch((error: unknown) => {
-          reportError(error, "loading example");
-        })
-        .finally(() => {
-          setExampleLoading(false);
-        });
+    if (authState !== "YES" || requestedId.current === id) return;
+    requestedId.current = id;
+    if (isNew || !numericId) {
+      form.reset();
+      return;
     }
-    // `form` is a new object every render; hasFetched makes this a one-shot.
+    void readExampleById(numericId)
+      .then((existingExample) => {
+        if (requestedId.current !== id) return; // a later id took over
+        if (existingExample) {
+          form.setValues({
+            exampleText: existingExample.exampleText,
+            exampleInt: existingExample.exampleInt?.toString() || "",
+            exampleFloat: existingExample.exampleFloat?.toString() || "",
+            exampleIntArray:
+              existingExample.exampleIntArray?.join(", ") || "",
+            exampleFloatArray:
+              existingExample.exampleFloatArray?.join(", ") || "",
+            exampleJsonb:
+              existingExample.exampleJsonb === undefined
+                ? ""
+                : JSON.stringify(existingExample.exampleJsonb, null, 2),
+            updateTs: existingExample.updateTs.toString(),
+          });
+          setExampleUuid(existingExample.exampleUuid ?? "");
+        }
+        setLoadResult({ id, found: existingExample !== null });
+      })
+      .catch((error: unknown) => {
+        if (requestedId.current !== id) return;
+        reportError(error, "loading example");
+        notifications.show({
+          title: "Error",
+          message: "Failed to load example",
+          color: "red",
+          autoClose: 5000,
+          withCloseButton: true,
+        });
+        setLoadResult({ id, found: false });
+      });
+    // `form` is a new object every render; requestedId makes this run once
+    // per route id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authState, numericId, isNew, readExampleById]);
+  }, [authState, id, isNew, numericId, readExampleById]);
 
   //============================^ HOOK LINE ^====================
   if (authState === "CHECKING") {
@@ -99,8 +115,17 @@ function ExampleEditPage() {
     return <Container size={1280} px={32} py={32} mx="auto"><Alert color="red">Authentication required.</Alert></Container>;
   }
 
-  if (exampleLoading) {
+  if (!isNew && numericId && loadResult?.id !== id) {
     return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
+  }
+  // Never render the form for a record that was not loaded.
+  if (!isNew && (!numericId || !loadResult?.found)) {
+    return (
+      <Container size={1280} px={32} py={32} mx="auto">
+        <Title order={1} mb="lg">Edit Example</Title>
+        <Alert color="red">This example could not be loaded.</Alert>
+      </Container>
+    );
   }
 
   const handleSubmit = async (values: typeof defaultExampleFormData) => {
