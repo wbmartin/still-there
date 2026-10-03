@@ -564,79 +564,6 @@ moves on a deliberate release; GRC left this open too.
 
 # P3: nice to have
 
-### B064 — Web: colour scheme only when signed in; list-page URL fixes
-
-- **Priority:** P3  **Area:** web-app
-- **GRC:** `App.tsx:283-309`; `pages/app-user-list-page.tsx:25-37,95`; `pages/app-user-group-list-page.tsx:46-58,80-93`   **PROTO:** `app.tsx:162-164`; `pages/app-user-list-page.tsx:116`; `pages/app-user-group-list-page.tsx:36-70`
-- **Ticket:** RG0016; RG0008
-- **What:** PROTO writes the default scheme before `/me` (reload flash, leaks to
-next user); GRC applies on `YES`. Stale `?page=` clamps; sort keeps other
-params; group list sorts.
-- **Port notes:** Scaffolding pages: per page, no factoring.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Two small web-app UX bugs. Paths are under `src/web-app/`.
-
-**(1) Colour-scheme flash on reload.** Mantine keeps the scheme in
-localStorage (`main.tsx:13`, `defaultColorScheme="auto"`). `AppLayout`
-applies the preference unconditionally:
-
-```tsx
-// app.tsx:162-164
-useEffect(() => {
-  setColorScheme(colorScheme);
-}, [colorScheme, setColorScheme]);
-```
-
-`usePreference` returns the default `"auto"` until `readProfile` answers,
-and that is a second call made only after `authState` turns `YES`
-(`app.tsx:156-160`). A dark-mode user who reloads sees stored dark, then
-`"auto"` written over it, then dark again when `/me` lands. The doc's
-"leaks to next user" is overstated: sign-out clears the profile store
-(`stores/profile-store.ts:58,61`), so the effect writes `"auto"` and the
-next person starts from the default.
-
-**(2) List URLs.** `pages/app-user-list-page.tsx:27` takes `?page=` as is;
-a stale link (`?page=9` on a two-page list, or the last row deleted) shows
-an empty table. The sort at `:116` is `setSearchParams({ sort, dir })`,
-which wipes every other query parameter a derived page adds. `:40` casts
-any `?dir=` to `"asc" | "desc"`. `pages/app-user-group-list-page.tsx`
-has the same page parse (`:38`) and does not sort at all (plain `<Th>`,
-`:120-123`). `pages/example-list-page.tsx:33,133` repeats both URL bugs.
-
-#### What GRC changed
-
-RG0016 moved the effect into `ColorSchemePreference`
-(`src/web-app/App.tsx:292-309`): it sets the scheme only when `authState`
-is `YES`, and calls `clearColorScheme()` only on a real `YES` to signed-out
-transition, so a cold load keeps the stored scheme. GRC's profile arrives
-with the identity answer (`stores/profile-store.ts:59-67`). RG0008 added
-`setListParams`, which merges into the query string
-(`pages/app-user-list-page.tsx:29-35`), sorts with `page: "1"`, parses
-`dir` strictly (`:28`), and clamps `currentPage` (`:95`). The group list
-gained the same plus a name/id sort (`app-user-group-list-page.tsx:44-58,
-80-95`). No tests pin either.
-
-#### Proposed fix for PROTO
-
-1. Trap: PROTO loads the profile after `YES`, so gating on `YES` alone still
-   flashes. Gate `app.tsx:162-164` on a loaded profile (profile not null);
-   call `clearColorScheme()` on the signed-in to signed-out edge.
-2. Each list page, separately (scaffolding, no shared hook): merge-style
-   `setListParams`, strict `dir`, `Math.min(page, Math.max(1, pages))`.
-3. Group list: `sort`/`dir` params and sortable headers for id and name.
-4. Playwright: `?page=99` on the user list shows rows; as a dark-mode user,
-   delay `/me` with `page.route`, reload, and expect `<html
-   data-mantine-color-scheme="dark">` before `/me` answers.
-
-#### Open question for Brandon
-
-None.
-
 ### B065 — Web: small UI helpers
 
 - **Priority:** P3  **Area:** web-app
@@ -8986,4 +8913,79 @@ Recommend porting the pinned header with B025 and `StickyFilters` only
 when the first filter row lands.
 
 - **Completed:** 2026-10-03. No Brandon line; took the recommendation (pin the header now, no page gains `StickyFilters` until it has a filter row) while still adding the component per fix step 4, so a derived app has it. `AppLayout` (`src/web-app/app.tsx`) wraps the routed page, and the `UNREACHABLE` notice, in an always-mounted `<div className="app-page">` and calls the new `usePinnedPageHeader(pageRef)` (`src/web-app/hooks/use-pinned-page-header.ts`), which writes `--app-page-header-height`; `src/web-app/index.css` pins `.app-page > * > :is(h1, :has(h1))` (sticky at `var(--app-shell-header-offset, 0px)`, body background, z-index 3) and hides a subtitle `<p>` under `@container scroll-state(stuck: top)`; new `src/web-app/components/sticky-filters.tsx` (sticky at shell offset plus page-header height, z-index 2), unused by the template pages. Pages keep `Title order={1}`; the selector keys on `h1` (trap 3). Deviations: the selector is `:is(h1, :has(h1))`, not GRC's `:nth-child(1 of h2, :has(h2))` (jsdom cannot parse the `of` list, and a page has one `<h1>`); the hook drops GRC's `pageKey` argument because the page element never unmounts, so its MutationObserver sees every route; the CSS cancels only the top padding (`mb` on the title rows is an inline style, so a bottom negative margin would never apply); fallback offset is `0px` (fix step 1), not GRC's `56px`. `src/web-app/README.md` gains a "Page Header and Filter Row" section. Tests: e2e `app-shell.spec.ts` "the page title block stays pinned under the header" (1280x260, scroll the example list to the bottom: the table moves by `scrollY`, the title block stops at y=56, title and Add Example stay in the viewport, the height variable is set); vitest `tests/pinned-page-header.test.tsx` (hook measures and rounds up, re-measures on route change, matches a bare `<h1>`; `StickyFilters` offset). All green, infra=15 docs=503 go=700 unit=97 e2e=14 py=103 (docs +4 from new paths, unit +4, e2e +1), govulncheck clean, gofmt clean.
+
+### B064 — COMPLETED — Web: colour scheme only when signed in; list-page URL fixes
+
+- **Priority:** P3  **Area:** web-app
+- **GRC:** `App.tsx:283-309`; `pages/app-user-list-page.tsx:25-37,95`; `pages/app-user-group-list-page.tsx:46-58,80-93`   **PROTO:** `app.tsx:162-164`; `pages/app-user-list-page.tsx:116`; `pages/app-user-group-list-page.tsx:36-70`
+- **Ticket:** RG0016; RG0008
+- **What:** PROTO writes the default scheme before `/me` (reload flash, leaks to
+next user); GRC applies on `YES`. Stale `?page=` clamps; sort keeps other
+params; group list sorts.
+- **Port notes:** Scaffolding pages: per page, no factoring.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Two small web-app UX bugs. Paths are under `src/web-app/`.
+
+**(1) Colour-scheme flash on reload.** Mantine keeps the scheme in
+localStorage (`main.tsx:13`, `defaultColorScheme="auto"`). `AppLayout`
+applies the preference unconditionally:
+
+```tsx
+// app.tsx:162-164
+useEffect(() => {
+  setColorScheme(colorScheme);
+}, [colorScheme, setColorScheme]);
+```
+
+`usePreference` returns the default `"auto"` until `readProfile` answers,
+and that is a second call made only after `authState` turns `YES`
+(`app.tsx:156-160`). A dark-mode user who reloads sees stored dark, then
+`"auto"` written over it, then dark again when `/me` lands. The doc's
+"leaks to next user" is overstated: sign-out clears the profile store
+(`stores/profile-store.ts:58,61`), so the effect writes `"auto"` and the
+next person starts from the default.
+
+**(2) List URLs.** `pages/app-user-list-page.tsx:27` takes `?page=` as is;
+a stale link (`?page=9` on a two-page list, or the last row deleted) shows
+an empty table. The sort at `:116` is `setSearchParams({ sort, dir })`,
+which wipes every other query parameter a derived page adds. `:40` casts
+any `?dir=` to `"asc" | "desc"`. `pages/app-user-group-list-page.tsx`
+has the same page parse (`:38`) and does not sort at all (plain `<Th>`,
+`:120-123`). `pages/example-list-page.tsx:33,133` repeats both URL bugs.
+
+#### What GRC changed
+
+RG0016 moved the effect into `ColorSchemePreference`
+(`src/web-app/App.tsx:292-309`): it sets the scheme only when `authState`
+is `YES`, and calls `clearColorScheme()` only on a real `YES` to signed-out
+transition, so a cold load keeps the stored scheme. GRC's profile arrives
+with the identity answer (`stores/profile-store.ts:59-67`). RG0008 added
+`setListParams`, which merges into the query string
+(`pages/app-user-list-page.tsx:29-35`), sorts with `page: "1"`, parses
+`dir` strictly (`:28`), and clamps `currentPage` (`:95`). The group list
+gained the same plus a name/id sort (`app-user-group-list-page.tsx:44-58,
+80-95`). No tests pin either.
+
+#### Proposed fix for PROTO
+
+1. Trap: PROTO loads the profile after `YES`, so gating on `YES` alone still
+   flashes. Gate `app.tsx:162-164` on a loaded profile (profile not null);
+   call `clearColorScheme()` on the signed-in to signed-out edge.
+2. Each list page, separately (scaffolding, no shared hook): merge-style
+   `setListParams`, strict `dir`, `Math.min(page, Math.max(1, pages))`.
+3. Group list: `sort`/`dir` params and sortable headers for id and name.
+4. Playwright: `?page=99` on the user list shows rows; as a dark-mode user,
+   delay `/me` with `page.route`, reload, and expect `<html
+   data-mantine-color-scheme="dark">` before `/me` answers.
+
+#### Open question for Brandon
+
+None.
+
+- **Completed:** 2026-10-03. No Brandon line; took the recommendation. `AppLayout` (`src/web-app/app.tsx`) applies the colour-scheme preference only once the profile is loaded (`profile !== null`), so a reload keeps Mantine's stored scheme until `/me` answers (fix step 1's trap: gating on `YES` alone still flashes), and calls `clearColorScheme()` on the signed-in to `NO` edge only (a `wasSignedIn` ref; `UNREACHABLE` and a cold signed-out load leave the stored scheme). Each list page separately (`app-user-list-page.tsx`, `app-user-group-list-page.tsx`, `example-list-page.tsx`; no shared hook): merge-style `setListParams` (empty value deletes the key; `setPage` and the sort use it, a sort drops `page`), `dir` is `desc` or else `asc`, and `page = Math.min(requestedPage, Math.max(1, totalPageCount))`. Group list gains `sort`/`dir` and sortable ID and Group Name headers (default `appUserGroupId` asc). Deviations: `?page=` is also floored (`?page=1.5` sliced mid-row); the sort drops `page` rather than GRC's `page: "1"` (same as `setPage(1)`); `example-list-page.tsx` got the same fixes (the Expanded block names its bugs). `src/web-app/README.md` page-conventions bullet extended. Tests: e2e `profile-page.spec.ts` "colour scheme" (own session; set Dark, hold GET `/api/me` with `page.route`, reload, `<html data-mantine-color-scheme="dark">` while held and after; sign-out and a reload at `/login` are not dark; `finally` restores the fixture user through the API), failing on the old `app.tsx` (`light` while `/me` held); `entity-pages.spec.ts` per list page `?page=99&keep=1` shows rows and a header sort keeps `keep=1`, drops `page`; unknown `dir` shows ascending; group list sorts by name (asc, then reversed) and id desc. All green, infra=15 docs=503 go=700 unit=97 e2e=20 py=103 (e2e +6), govulncheck clean, gofmt clean.
 

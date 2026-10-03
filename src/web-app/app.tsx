@@ -213,8 +213,10 @@ function AppLayout() {
   const navigate = useNavigate();
   const readProfile = useProfileStore((state) => state.readProfile);
   const apiUnreachable = useApiStatusStore((state) => state.unreachable);
+  const profileLoaded = useProfileStore((state) => state.profile !== null);
   const { colorScheme } = usePreference();
-  const { setColorScheme } = useMantineColorScheme();
+  const { setColorScheme, clearColorScheme } = useMantineColorScheme();
+  const wasSignedIn = useRef(false);
   const [navOpened, { toggle: toggleNav, close: closeNav }] =
     useDisclosure();
   // Always mounted, whatever the route or session state, so the hook's one
@@ -231,9 +233,23 @@ function AppLayout() {
     }
   }, [authState, securityContext, readProfile]);
 
+  // Mantine keeps the scheme in localStorage, so a reload starts from the
+  // one last applied. Until /me answers, usePreference holds only the
+  // default; writing that would flash it over the stored scheme. So the
+  // preference applies once the profile is loaded, and the stored scheme
+  // is cleared only when a session ends, not on a cold load signed out.
   useEffect(() => {
-    setColorScheme(colorScheme);
-  }, [colorScheme, setColorScheme]);
+    if (profileLoaded) setColorScheme(colorScheme);
+  }, [profileLoaded, colorScheme, setColorScheme]);
+
+  useEffect(() => {
+    if (authState === 'YES') {
+      wasSignedIn.current = true;
+    } else if (authState === 'NO' && wasSignedIn.current) {
+      wasSignedIn.current = false;
+      clearColorScheme();
+    }
+  }, [authState, clearColorScheme]);
 
   const handleLogout = async () => {
     closeNav();

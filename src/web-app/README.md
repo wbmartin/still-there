@@ -158,7 +158,10 @@ House pattern inside a page, in this order:
 - `form` from `useForm` is a new object each render, so the load effect
   carries a scoped `react-hooks/exhaustive-deps` disable with that reason.
 - list state that should survive a refresh or a shared link (page, sort)
-  lives in the URL via `useSearchParams`, not in `useState`.
+  lives in the URL via `useSearchParams`, not in `useState`. Each list
+  page writes it through its own merge-style `setListParams` (a sort or a
+  page change keeps every other parameter), reads `dir` strictly
+  (anything but `desc` is `asc`), and clamps `?page=` to the last page.
 - `ROUTES` values are absolute; `navigate(ROUTES.X)`, never
   `` `/${ROUTES.X}` ``.
 

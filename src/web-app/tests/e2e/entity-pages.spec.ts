@@ -24,4 +24,61 @@ test.describe("entity pages", () => {
     await expect(page).toHaveURL(/sort=userName/);
     await expect(page).toHaveURL(/dir=asc/);
   });
+
+  // Each list page is its own copy, so each is checked.
+  for (const { path, sortHeader, sortKey } of [
+    { path: "/appUserList", sortHeader: /Username/, sortKey: "userName" },
+    {
+      path: "/appUserGroupList",
+      sortHeader: /Group Name/,
+      sortKey: "groupName",
+    },
+    { path: "/exampleList", sortHeader: /Text/, sortKey: "exampleText" },
+  ]) {
+    test(`${path}: a stale page shows rows; a sort keeps other params`, async ({
+      page,
+    }) => {
+      // Past the end (a stale link, or the last row deleted) clamps to the
+      // last page rather than drawing an empty table.
+      await page.goto(`${path}?page=99&keep=1`);
+      await expect(page.getByRole("table")).toBeVisible();
+      await expect(page.locator("tbody tr").first()).toBeVisible();
+
+      // A sort merges into the query string and starts from page one.
+      await page.getByRole("columnheader", { name: sortHeader }).click();
+      await expect(page).toHaveURL(new RegExp(`sort=${sortKey}`));
+      await expect(page).toHaveURL(/dir=asc/);
+      await expect(page).toHaveURL(/keep=1/);
+      await expect(page).not.toHaveURL(/page=/);
+    });
+  }
+
+  test("an unknown dir sorts ascending", async ({ page }) => {
+    await page.goto("/appUserList?sort=userName&dir=sideways");
+    await expect(
+      page.getByRole("columnheader", { name: /Username/ }),
+    ).toHaveText(/↑/);
+  });
+
+  test("the user group list sorts by name and id", async ({ page }) => {
+    const nameCellList = page.locator("tbody tr td:nth-child(2)");
+    const idCellList = page.locator("tbody tr td:nth-child(1)");
+    await page.goto("/appUserGroupList?sort=groupName");
+    await expect(nameCellList.first()).toBeVisible();
+    const ascNameList = await nameCellList.allTextContents();
+    const byName = (a: string, b: string) =>
+      a.toLowerCase() < b.toLowerCase() ? -1 : 1;
+    expect(ascNameList).toEqual([...ascNameList].sort(byName));
+
+    await page.getByRole("columnheader", { name: /Group Name/ }).click();
+    await expect(page).toHaveURL(/dir=desc/);
+    await expect(nameCellList.first()).not.toHaveText(ascNameList[0]);
+    const descNameList = await nameCellList.allTextContents();
+    expect(descNameList).toEqual([...ascNameList].reverse());
+
+    await page.goto("/appUserGroupList?sort=appUserGroupId&dir=desc");
+    await expect(idCellList.first()).toBeVisible();
+    const idList = (await idCellList.allTextContents()).map(Number);
+    expect(idList).toEqual([...idList].sort((a, b) => b - a));
+  });
 });

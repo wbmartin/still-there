@@ -29,21 +29,32 @@ function ExampleListPage() {
   } = useExamplesStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  // Page lives in the URL so a refresh or a shared link keeps its place.
-  const page = Math.max(1, Number(searchParams.get("page")) || 1);
-  const setPage = (nextPage: number) =>
+  // Page and sort live in the URL so a refresh or a shared link keeps its
+  // place. setListParams merges into the query string, so a parameter a
+  // derived page adds (a filter) survives a sort or a page change; an
+  // empty value removes its key.
+  const setListParams = (update: Record<string, string>) =>
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
-      if (nextPage > 1) next.set("page", String(nextPage));
-      else next.delete("page");
+      for (const [key, value] of Object.entries(update)) {
+        if (value) next.set(key, value);
+        else next.delete(key);
+      }
       return next;
     });
+  // As asked for; clamped to the last page once the list is known.
+  const requestedPage = Math.max(
+    1,
+    Math.floor(Number(searchParams.get("page"))) || 1,
+  );
+  const setPage = (nextPage: number) =>
+    setListParams({ page: nextPage > 1 ? String(nextPage) : "" });
   const itemsPerPage = useRowsPerPage();
   const hasFetched = useRef(false);
 
   // Sort state from URL params
   const sortColumn = searchParams.get("sort") || "exampleId";
-  const sortDirection = (searchParams.get("dir") || "asc") as "asc" | "desc";
+  const sortDirection = searchParams.get("dir") === "desc" ? "desc" : "asc";
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
@@ -99,6 +110,9 @@ function ExampleListPage() {
   }
 
   const totalPageCount = Math.ceil(sortedExampleList.length / itemsPerPage);
+  // A stale link, or deleting the last row of the last page, can ask for a
+  // page past the end: show the last page rather than an empty table.
+  const page = Math.min(requestedPage, Math.max(1, totalPageCount));
   const paginatedExampleList = sortedExampleList.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
@@ -129,8 +143,8 @@ function ExampleListPage() {
   const handleSort = (column: string) => {
     const newDirection =
       sortColumn === column && sortDirection === "asc" ? "desc" : "asc";
-    // Dropping "page" resets to the first page
-    setSearchParams({ sort: column, dir: newDirection });
+    // A new order starts from the first page.
+    setListParams({ sort: column, dir: newDirection, page: "" });
   };
 
   return (
