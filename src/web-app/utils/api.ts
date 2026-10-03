@@ -16,23 +16,64 @@ export const clearCsrfToken = (): void => {
 };
 
 /**
- * The request never reached the server.
+ * The API did not answer, or said "not now": a rejected fetch (refused, DNS,
+ * CORS, offline), a 5xx (nginx's 502 while the API restarts, a 503) or a 429
+ * (the per-minute rate limit, an account lockout).
  *
  * A 401 or a 500 RESOLVES fetch with a response; only a connection-level
- * failure (refused, DNS, CORS, offline) rejects, and it rejects with a bare
- * `TypeError: Failed to fetch`. Naming it lets callers tell an outage the user
- * can wait out from a refusal that signing in again would fix.
+ * failure rejects, with a bare `TypeError: Failed to fetch`. apiRequest
+ * folds both shapes into this one error so callers can tell an outage the
+ * user can wait out from a refusal that signing in again would fix. It says
+ * nothing about the session.
  */
 export class ApiUnreachableError extends Error {
-  constructor(url: string, options?: { cause?: unknown }) {
-    super(`Could not reach the server (${url})`);
+  /** The status that made it unreachable; undefined when fetch failed. */
+  readonly status?: number;
+  constructor(
+    message: string,
+    options: { status?: number; cause?: unknown } = {},
+  ) {
+    super(message);
     this.name = "ApiUnreachableError";
-    if (options?.cause !== undefined) this.cause = options.cause;
+    this.status = options.status;
+    if (options.cause !== undefined) this.cause = options.cause;
   }
 }
 
-export const isApiUnreachable = (error: unknown): boolean =>
-  error instanceof ApiUnreachableError;
+export const isApiUnreachable = (
+  error: unknown,
+): error is ApiUnreachableError => error instanceof ApiUnreachableError;
+
+/**
+ * What a call said about the API and the session. Two subscribers:
+ * stores/api-status-store.ts (the "server not answering" banner, raised by
+ * `unreachable`, cleared by the next `ok`) and stores/auth-store.ts (sign
+ * out on `session-expired`, and nothing else).
+ */
+export type ApiOutcome =
+  | { kind: "ok" }
+  | { kind: "unreachable"; error: ApiUnreachableError }
+  | { kind: "session-expired"; error: SessionExpiredError };
+
+type ApiOutcomeListener = (outcome: ApiOutcome) => void;
+
+const apiOutcomeListenerList: ApiOutcomeListener[] = [];
+
+/** Listen to every call's outcome; returns the unsubscribe. */
+export const subscribeApiOutcome = (
+  listener: ApiOutcomeListener,
+): (() => void) => {
+  apiOutcomeListenerList.push(listener);
+  return () => {
+    const at = apiOutcomeListenerList.indexOf(listener);
+    if (at >= 0) apiOutcomeListenerList.splice(at, 1);
+  };
+};
+
+const announce = (outcome: ApiOutcome): void => {
+  // A copy: a listener may unsubscribe itself while being called.
+  for (const listener of [...apiOutcomeListenerList]) listener(outcome);
+};
 
 // The fetch itself, with the CSRF header and the outage mapping.
 const sendRequest = async (
@@ -56,7 +97,9 @@ const sendRequest = async (
     if (cause instanceof DOMException && cause.name === "AbortError") {
       throw cause;
     }
-    throw new ApiUnreachableError(url, { cause });
+    throw new ApiUnreachableError(`Could not reach the server (${url})`, {
+      cause,
+    });
   }
 };
 
@@ -77,7 +120,8 @@ export const isSessionChanged = (error: unknown): boolean =>
 
 /**
  * How the API layer asks the auth store about a refreshed session, through
- * a callback for the same import-cycle reason as setSessionExpiredListener.
+ * a callback: the auth store imports this module, so a direct call would
+ * be a cycle.
  */
 export interface SessionResyncListener {
   /** The refreshed session is the user and tenant this tab shows. */
@@ -146,16 +190,14 @@ const resyncSession = (): Promise<ResyncOutcome> => {
   return pendingResync;
 };
 
-/**
- * fetch against the API. A write refused for a stale CSRF token is resent
- * once after /refresh supplies the current token, if the session is still
- * the user and tenant this tab shows; if it is not, the write is dropped and
- * the tab moves to the new identity (SessionChangedError). A second refusal,
- * or a failed refresh, returns the 403 as it came.
- */
-const apiRequest = async (
+// A write refused for a stale CSRF token is resent once after /refresh
+// supplies the current token, if the session is still the user and tenant
+// this tab shows; if it is not, the write is dropped and the tab moves to the
+// new identity (SessionChangedError). A second refusal, or a failed refresh,
+// returns the 403 as it came.
+const sendWithCsrfResync = async (
   url: string,
-  options: RequestInit = {},
+  options: RequestInit,
   csrfToken?: string,
 ) => {
   const response = await sendRequest(url, options, csrfToken);
@@ -164,6 +206,37 @@ const apiRequest = async (
   if (outcome === "CHANGED") throw new SessionChangedError();
   if (outcome === "FAILED") return response;
   return sendRequest(url, options);
+};
+
+// 5xx and 429 mean "the API is there but cannot answer this now": wait and
+// try again, the same advice as no answer at all.
+const isUnavailableStatus = (status: number): boolean =>
+  status >= 500 || status === 429;
+
+/**
+ * fetch against the API, with the CSRF resync above. A 5xx or 429 throws
+ * ApiUnreachableError carrying the server's message, as a failed fetch does.
+ * Every call announces its outcome: `ok` on a 2xx, `unreachable` on an
+ * ApiUnreachableError. Other statuses return to the caller as they came.
+ */
+const apiRequest = async (
+  url: string,
+  options: RequestInit = {},
+  csrfToken?: string,
+) => {
+  try {
+    const response = await sendWithCsrfResync(url, options, csrfToken);
+    if (isUnavailableStatus(response.status)) {
+      throw new ApiUnreachableError(await readErrorMessage(response), {
+        status: response.status,
+      });
+    }
+    if (response.ok) announce({ kind: "ok" });
+    return response;
+  } catch (error) {
+    if (isApiUnreachable(error)) announce({ kind: "unreachable", error });
+    throw error;
+  }
 };
 
 /**
@@ -187,20 +260,10 @@ export class SessionExpiredError extends Error {
 export const isSessionExpired = (error: unknown): boolean =>
   error instanceof SessionExpiredError;
 
-// Reported through a callback rather than by importing the auth store, which
-// imports this module -- a direct call would be a cycle. The store registers
-// itself once at startup.
-let sessionExpiredListener: (() => void) | null = null;
-
-export const setSessionExpiredListener = (
-  listener: (() => void) | null,
-): void => {
-  sessionExpiredListener = listener;
-};
-
 /**
- * Turn a failed response into the right error, and tell the app when the
- * reason was the session. Call this instead of throwing on !response.ok.
+ * Turn a failed response into the right error, and announce
+ * `session-expired` on a 401 (the auth store signs out). Call this instead
+ * of throwing on !response.ok.
  */
 export const throwForFailedResponse = async (
   response: Response,
@@ -208,8 +271,9 @@ export const throwForFailedResponse = async (
 ): Promise<never> => {
   const message = await readMessage(response);
   if (response.status === 401) {
-    sessionExpiredListener?.();
-    throw new SessionExpiredError(response.status, message);
+    const error = new SessionExpiredError(response.status, message);
+    announce({ kind: "session-expired", error });
+    throw error;
   }
   throw new Error(message);
 };
@@ -233,8 +297,8 @@ export const readErrorMessage = async (response: Response): Promise<string> => {
 /**
  * apiRequest + the failure handling every caller used to repeat: a non-2xx
  * response throws and a 2xx one is parsed as JSON, so callers never look at
- * response.ok. By default a 401 is a SessionExpiredError and the app is
- * told; `anonymous: true` is for the endpoints reached before there is a
+ * response.ok. A 5xx or 429 is an ApiUnreachableError (from apiRequest).
+ * By default a 401 is a SessionExpiredError and the app is told; `anonymous: true` is for the endpoints reached before there is a
  * session (login, MFA setup/verify, self-registration), where a 401 means
  * "wrong password/code", not "signed out", and must not touch the session.
  */

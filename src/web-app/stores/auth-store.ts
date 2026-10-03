@@ -12,14 +12,37 @@ import {
   setCsrfToken,
   clearCsrfToken,
   isApiUnreachable,
-  setSessionExpiredListener,
   setSessionResyncListener,
+  subscribeApiOutcome,
 } from "../utils/api";
 import { clearAllCaches } from "../utils/cache-utils";
 import { API_ENDPOINTS } from "../constants/api";
 import { ROUTES } from "../constants/routes";
 import { notifications } from "@mantine/notifications";
 import { reportError } from "../utils/report-error";
+
+/**
+ * How long the page-load /refresh keeps asking while the API is unreachable
+ * (a failed fetch, 5xx or 429): three more attempts, 1 s / 2 s / 4 s apart,
+ * so a page loaded during an API restart waits it out instead of showing
+ * the outage notice. Then authState is "UNREACHABLE".
+ */
+const REFRESH_RETRY_DELAY_MS = [1000, 2000, 4000];
+
+const wait = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+const requestRefreshWithRetry = async (): Promise<Response> => {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await apiRequest(API_ENDPOINTS.REFRESH, {});
+    } catch (err) {
+      if (!isApiUnreachable(err)) throw err;
+      if (attempt >= REFRESH_RETRY_DELAY_MS.length) throw err;
+      await wait(REFRESH_RETRY_DELAY_MS[attempt]);
+    }
+  }
+};
 
 interface AuthStore extends Omit<AuthState, "csrfToken"> {
   mfaRequired: boolean;
@@ -91,10 +114,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
     } catch (err) {
       // Deliberately still "NO" rather than "UNREACHABLE": the person is
       // standing at the login form and the useful thing is to leave them
-      // there with an accurate message.
+      // there with an accurate message. A 5xx or 429 carries the server's
+      // own words (an account lockout is a 429); a failed fetch has none.
       set({
         authState: "NO",
-        error: isApiUnreachable(err)
+        error: isApiUnreachable(err) && err.status === undefined
           ? "Could not reach the server. Check your connection and try again."
           : err instanceof Error
             ? err.message
@@ -108,12 +132,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
   authenticateWithAuthToken: async () => {
     set({ authState: "CHECKING", loading: true, error: null });
     try {
-      const response = await apiRequest(API_ENDPOINTS.REFRESH, {});
+      const response = await requestRefreshWithRetry();
 
       // Only an explicit refusal means signed out. A 502 from a proxy while
-      // the API restarts is an ordinary HTTP response, not a verdict on the
-      // session -- so the question is "did the server say this person is
-      // not signed in", and only 401/403 say that.
+      // the API restarts (apiRequest throws it as ApiUnreachableError, and
+      // it is retried above) is not a verdict on the session -- so the
+      // question is "did the server say this person is not signed in", and
+      // only 401/403 say that.
       if (response.status === 401 || response.status === 403) {
         set({ authState: "NO", error: null });
         return;
@@ -142,9 +167,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
         securityContext: data.user.securityContext || 0,
       });
     } catch (err) {
-      // What reaches here is a connection failure or a body that would not
-      // parse. Neither told us anything about the session, so neither may
-      // claim it has ended.
+      // What reaches here is an outage that outlasted the retries or a body
+      // that would not parse. Neither told us anything about the session,
+      // so neither may claim it has ended.
       set({
         authState: "UNREACHABLE",
         error: err instanceof Error ? err.message : "Refresh failed",
@@ -224,16 +249,19 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 }));
 
-// The API layer reports an ended session here rather than importing this
-// store, which imports it -- a direct call would be a cycle.
+// The API layer announces an ended session through subscribeApiOutcome
+// rather than importing this store, which imports it -- a direct call would
+// be a cycle.
 //
 // Deliberately NOT a call to logout(): the credential is already dead, so
 // POST /logoff would fail. The local half of logout is what matters.
 // postAuthDestination is left alone so the person lands back where they were.
-setSessionExpiredListener(() => {
-  // Several in-flight requests can each come back 401; the first one does
-  // the work.
-  if (useAuthStore.getState().authState === "NO") return;
+subscribeApiOutcome((outcome) => {
+  if (outcome.kind !== "session-expired") return;
+  // Only an established session can end. Several in-flight requests can
+  // each come back 401 (the first does the work), and a 401 while CHECKING
+  // or at the login page is someone who was never signed in: no toast.
+  if (useAuthStore.getState().authState !== "YES") return;
 
   clearCsrfToken();
   clearAllCaches();

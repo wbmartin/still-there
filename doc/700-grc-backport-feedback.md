@@ -242,130 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B036 — Web: API unreachable seam for 5xx/429; `/refresh` retried
-
-- **Priority:** P2  **Area:** web-app, docs
-- **GRC:** `utils/api.ts:47-64,93-125,286-292`; `stores/api-status-store.ts:1-46`; `stores/auth-store.ts:20-33,117-152`; `components/grc/shell.tsx:153-160`; `App.tsx:64-84`; `README.md:33-78`; `README.md:96-140`   **PROTO:** `utils/api.ts:14-56`; `stores/auth-store.ts:102-149`; `app.tsx:194`; `tests/api-unreachable.test.ts:56`; `README.md:27-34`
-- **Ticket:** RG0018 / `d752dbd`, `ed5d1cd`; RG0007
-- **What:** PROTO notices an outage only at boot; a 502/429 mid-session is a
-per-call error. GRC classifies 5xx/429 as unreachable through one seam, shows
-one self-clearing notice, retries `/refresh` 1/2/4 s.
-- **Port notes:** Keep boot `UNREACHABLE`; seam replaces
-`setSessionExpiredListener`; rewrite `api-unreachable.test.ts:56`; README
-section.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Web paths are under `src/web-app/`. PROTO tells "the API is down" apart
-from "you are signed out" only at page load.
-
-1. **Classification.** `ApiUnreachableError` covers only a rejected fetch
-   (connection refused, DNS, offline): `utils/api.ts:50-55`. A 502 from
-   nginx while the API restarts, a 503, or a 429 from the per-minute limit
-   is a normal response, and `throwForFailedResponse` turns it into a
-   plain `Error` (`utils/api.ts:102`), "Request failed (502)" when the body
-   is nginx HTML.
-2. **Boot does it right, once.** `authenticateWithAuthToken`
-   (`stores/auth-store.ts:102-148`) maps 401/403 to `NO` (`:111`) and any
-   other non-2xx or a thrown fetch to `UNREACHABLE` (`:115-117`,
-   `:138-143`). `app.tsx:194` then swaps the page for
-   `<ApiUnreachableNotice />`, whose "Try again" is manual. No retry, so
-   a page loaded during a two-second API restart shows the notice until
-   the user clicks.
-3. **Mid-session it is per call.** On the example list,
-   `pages/example-list-page.tsx:109` replaces the whole page with "Error
-   loading examples: Request failed (502)", and the store keeps that error
-   until the next read. A failed delete goes only to `reportError`
-   (`:122-123`), which writes to the console: the user sees nothing. Each
-   screen shows the outage its own way, none says "the server is not
-   answering, you are still signed in", and nothing clears when the API
-   comes back.
-
-UX gap, not a security hole: the server enforces every check; this only
-changes what the user is told.
-
-Doc ref check: `tests/api-unreachable.test.ts:56` asserts that a 401 is
-not unreachable. That stays true after B036. The test file still needs
-rewriting, because it imports `apiRequest` (`:2`), which B037 unexports.
-
-#### What GRC changed
-
-RG0018, commits `d752dbd` (classification) and `ed5d1cd` (notice).
-
-- **One classifier.** `refusal()` in `src/web-app/utils/api.ts:287`:
-  ```ts
-  if (status >= 500 || status === 429) {
-    return unreachable(message, { status });
-  ```
-  `ApiUnreachableError` gains `status` (`:55-64`).
-- **One seam.** `subscribeApiOutcome` (`:114`) announces `ok`,
-  `unreachable` or `session-expired` for every `apiJson` call. Two
-  subscribers: the auth store (sign out on `session-expired` only) and
-  `stores/api-status-store.ts:37-46` (one `unreachable` flag, raised by
-  the first failure, cleared by the next `ok`; both setters return early
-  so twenty failing lists render once).
-- **One notice.** The shell shows an alert, "You are still signed in"
-  (`components/grc/shell.tsx:153-159`); the pre-auth gate shows the same
-  with "Try again" (`App.tsx:64-84`).
-- **`/refresh` retried.** `stores/auth-store.ts:29`,
-  `REFRESH_RETRY_DELAY_MS = [1000, 2000, 4000]`; on `ApiUnreachableError`
-  wait and retry, then leave `authState` alone (`:133-145`). GRC has no
-  `UNREACHABLE` state; it stays `CHECKING` and the gate reads the flag.
-- README "Talking to the API" (`src/web-app/README.md:33-78`) has the
-  table: unreachable / session-expired / plain `Error`.
-
-Tests: `src/web-app/utils/api.test.ts:47-80` (failed fetch, 500, 429 are
-`ApiUnreachableError` and announced). No test for the store, the notice
-or the retry loop.
-
-#### Proposed fix for PROTO
-
-Order: B037 (one fetch path), then B004 (CSRF resync), then B006
-(401 only, which B006's decision puts after B004), then this. All four
-edit `utils/api.ts`.
-
-1. **`utils/api.ts`**: give `ApiUnreachableError` a `status`; in the one
-   function every call goes through (B037), throw it for `>= 500` and
-   `429`. Add `subscribeApiOutcome` and announce `ok` on every 2xx.
-2. **Replace `setSessionExpiredListener`** (`utils/api.ts:81-87`) with the
-   seam. The auth store subscribes to `session-expired`. Trap: once
-   `/refresh` goes through the seam, every visit to the login page gets a
-   401 announced. Change the guard at `stores/auth-store.ts:226` from
-   `=== "NO"` to `!== "YES"` (GRC `:187`), or the login page toasts
-   "Session ended" to someone who was never signed in.
-3. **New `stores/api-status-store.ts`**, ported as is.
-4. **`app.tsx`**: when `authState === "YES"` and the flag is up, show one
-   banner above `<Outlet />` (still signed in, clears itself). Keep the
-   boot `UNREACHABLE` state and `ApiUnreachableNotice` (`:194`); they are
-   clearer than GRC's stuck `CHECKING`.
-5. **`authenticateWithAuthToken`**: call through `apiJson`; on
-   `ApiUnreachableError` retry at 1/2/4 s, then set `UNREACHABLE`. A 401
-   or 403 still sets `NO` (B006 kept that for `/refresh`, where 403 means
-   blocked).
-6. **B004's resync `/refresh` is not retried.** It runs inside a user's
-   save; a 7 s stall there is worse than letting the write's 403 stand.
-   Use a single attempt and do not announce its outcome.
-7. **README**: an "Errors from the API" section after "API Proxy"
-   (`src/web-app/README.md:27-34`), with GRC's three-row table.
-
-Tests (vitest): rewrite `tests/api-unreachable.test.ts` against `apiJson`
-(500, 502, 503, 429 unreachable; 401 not); store: raised once, cleared by
-`ok`; refresh with fake timers: 502, 502, 200 ends `YES`, four 502s end
-`UNREACHABLE` after 7 s, 401 ends `NO` with no retry; a 401 while
-`CHECKING` shows no toast.
-
-#### Open question for Brandon
-
-Should a 429 show the "server not answering" banner like a 5xx (GRC), or
-stay a per-call error saying "too many requests"? Recommendation: banner,
-since PROTO's bucket resets each minute and the banner clears itself on
-the next success.
-
-Brandon: banner
-
 ### B037 — Web: one fetch path; unexport `apiRequest`
 
 - **Priority:** P2  **Area:** web-app, docs
@@ -8895,3 +8771,129 @@ Recommendation: keep it `active` (today's behaviour) and leave approval
 to a later ticket; B035 is about admin onboarding only.
 
 Brandon: Let's adapt so we have both invite links and self create, the generated app will have to decid what it wants.
+
+### B036 — COMPLETED — Web: API unreachable seam for 5xx/429; `/refresh` retried
+- **Completed:** 2026-10-03. Pulled; per Brandon a 429 raises the banner like a 5xx. `utils/api.ts`: `ApiUnreachableError` takes a message and carries `status` (undefined for a failed fetch); `apiRequest` (CSRF resync body moved to a private `sendWithCsrfResync`) throws it for `>= 500` and `429` with the server's message, and announces through the new `subscribeApiOutcome` (`ok` on a 2xx, `unreachable`); `throwForFailedResponse` announces `session-expired` on a 401. `setSessionExpiredListener` is gone: the auth store subscribes, and its guard is now `!== "YES"`. New `stores/api-status-store.ts` (ported as is); `app.tsx` shows one `ApiUnreachableBanner` above `<Outlet />` when `authState === "YES"` and the flag is up; boot `UNREACHABLE` and `ApiUnreachableNotice` kept. `authenticateWithAuthToken` retries an `ApiUnreachableError` at 1/2/4 s, then `UNREACHABLE`; 401/403 still `NO` with no retry. B004's resync `/refresh` still calls `sendRequest`: one attempt, not announced. README "API Errors" table updated in place (the section already existed). Deviations: B037 has not landed, so the classification sits in `apiRequest` (the function both `apiJson` and the raw store calls go through, and the one B037 makes private), and `/refresh` stays on `apiRequest` rather than `apiJson` (B037 step 2 moves it; `apiJson`'s plain `Error` cannot yet tell its 403 from other failures). An account lockout is a 429 on `/auth`, `/mfaVerify`, `/inviteRedeem`: it is an `ApiUnreachableError` with the server's message, and the login form shows that message (its fixed "Could not reach the server" text is now only for a failed fetch). Tests: `tests/api-unreachable.test.ts` rewritten against `apiJson` (fetch failure, 500/502/503/429, lockout message, 401 not unreachable, `ok` announced, abort; store raised once and cleared by `ok`, not raised by 403/404; refresh with fake timers 502,502,200 `YES`, four 502s `UNREACHABLE` at 7 s, 401 `NO` with no retry or toast; a 401 while `CHECKING` shows no toast). All green: go=429 unit=67 e2e=12 py=96, govulncheck clean, `gofmt -l` empty.
+
+
+- **Priority:** P2  **Area:** web-app, docs
+- **GRC:** `utils/api.ts:47-64,93-125,286-292`; `stores/api-status-store.ts:1-46`; `stores/auth-store.ts:20-33,117-152`; `components/grc/shell.tsx:153-160`; `App.tsx:64-84`; `README.md:33-78`; `README.md:96-140`   **PROTO:** `utils/api.ts:14-56`; `stores/auth-store.ts:102-149`; `app.tsx:194`; `tests/api-unreachable.test.ts:56`; `README.md:27-34`
+- **Ticket:** RG0018 / `d752dbd`, `ed5d1cd`; RG0007
+- **What:** PROTO notices an outage only at boot; a 502/429 mid-session is a
+per-call error. GRC classifies 5xx/429 as unreachable through one seam, shows
+one self-clearing notice, retries `/refresh` 1/2/4 s.
+- **Port notes:** Keep boot `UNREACHABLE`; seam replaces
+`setSessionExpiredListener`; rewrite `api-unreachable.test.ts:56`; README
+section.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Web paths are under `src/web-app/`. PROTO tells "the API is down" apart
+from "you are signed out" only at page load.
+
+1. **Classification.** `ApiUnreachableError` covers only a rejected fetch
+   (connection refused, DNS, offline): `utils/api.ts:50-55`. A 502 from
+   nginx while the API restarts, a 503, or a 429 from the per-minute limit
+   is a normal response, and `throwForFailedResponse` turns it into a
+   plain `Error` (`utils/api.ts:102`), "Request failed (502)" when the body
+   is nginx HTML.
+2. **Boot does it right, once.** `authenticateWithAuthToken`
+   (`stores/auth-store.ts:102-148`) maps 401/403 to `NO` (`:111`) and any
+   other non-2xx or a thrown fetch to `UNREACHABLE` (`:115-117`,
+   `:138-143`). `app.tsx:194` then swaps the page for
+   `<ApiUnreachableNotice />`, whose "Try again" is manual. No retry, so
+   a page loaded during a two-second API restart shows the notice until
+   the user clicks.
+3. **Mid-session it is per call.** On the example list,
+   `pages/example-list-page.tsx:109` replaces the whole page with "Error
+   loading examples: Request failed (502)", and the store keeps that error
+   until the next read. A failed delete goes only to `reportError`
+   (`:122-123`), which writes to the console: the user sees nothing. Each
+   screen shows the outage its own way, none says "the server is not
+   answering, you are still signed in", and nothing clears when the API
+   comes back.
+
+UX gap, not a security hole: the server enforces every check; this only
+changes what the user is told.
+
+Doc ref check: `tests/api-unreachable.test.ts:56` asserts that a 401 is
+not unreachable. That stays true after B036. The test file still needs
+rewriting, because it imports `apiRequest` (`:2`), which B037 unexports.
+
+#### What GRC changed
+
+RG0018, commits `d752dbd` (classification) and `ed5d1cd` (notice).
+
+- **One classifier.** `refusal()` in `src/web-app/utils/api.ts:287`:
+  ```ts
+  if (status >= 500 || status === 429) {
+    return unreachable(message, { status });
+  ```
+  `ApiUnreachableError` gains `status` (`:55-64`).
+- **One seam.** `subscribeApiOutcome` (`:114`) announces `ok`,
+  `unreachable` or `session-expired` for every `apiJson` call. Two
+  subscribers: the auth store (sign out on `session-expired` only) and
+  `stores/api-status-store.ts:37-46` (one `unreachable` flag, raised by
+  the first failure, cleared by the next `ok`; both setters return early
+  so twenty failing lists render once).
+- **One notice.** The shell shows an alert, "You are still signed in"
+  (`components/grc/shell.tsx:153-159`); the pre-auth gate shows the same
+  with "Try again" (`App.tsx:64-84`).
+- **`/refresh` retried.** `stores/auth-store.ts:29`,
+  `REFRESH_RETRY_DELAY_MS = [1000, 2000, 4000]`; on `ApiUnreachableError`
+  wait and retry, then leave `authState` alone (`:133-145`). GRC has no
+  `UNREACHABLE` state; it stays `CHECKING` and the gate reads the flag.
+- README "Talking to the API" (`src/web-app/README.md:33-78`) has the
+  table: unreachable / session-expired / plain `Error`.
+
+Tests: `src/web-app/utils/api.test.ts:47-80` (failed fetch, 500, 429 are
+`ApiUnreachableError` and announced). No test for the store, the notice
+or the retry loop.
+
+#### Proposed fix for PROTO
+
+Order: B037 (one fetch path), then B004 (CSRF resync), then B006
+(401 only, which B006's decision puts after B004), then this. All four
+edit `utils/api.ts`.
+
+1. **`utils/api.ts`**: give `ApiUnreachableError` a `status`; in the one
+   function every call goes through (B037), throw it for `>= 500` and
+   `429`. Add `subscribeApiOutcome` and announce `ok` on every 2xx.
+2. **Replace `setSessionExpiredListener`** (`utils/api.ts:81-87`) with the
+   seam. The auth store subscribes to `session-expired`. Trap: once
+   `/refresh` goes through the seam, every visit to the login page gets a
+   401 announced. Change the guard at `stores/auth-store.ts:226` from
+   `=== "NO"` to `!== "YES"` (GRC `:187`), or the login page toasts
+   "Session ended" to someone who was never signed in.
+3. **New `stores/api-status-store.ts`**, ported as is.
+4. **`app.tsx`**: when `authState === "YES"` and the flag is up, show one
+   banner above `<Outlet />` (still signed in, clears itself). Keep the
+   boot `UNREACHABLE` state and `ApiUnreachableNotice` (`:194`); they are
+   clearer than GRC's stuck `CHECKING`.
+5. **`authenticateWithAuthToken`**: call through `apiJson`; on
+   `ApiUnreachableError` retry at 1/2/4 s, then set `UNREACHABLE`. A 401
+   or 403 still sets `NO` (B006 kept that for `/refresh`, where 403 means
+   blocked).
+6. **B004's resync `/refresh` is not retried.** It runs inside a user's
+   save; a 7 s stall there is worse than letting the write's 403 stand.
+   Use a single attempt and do not announce its outcome.
+7. **README**: an "Errors from the API" section after "API Proxy"
+   (`src/web-app/README.md:27-34`), with GRC's three-row table.
+
+Tests (vitest): rewrite `tests/api-unreachable.test.ts` against `apiJson`
+(500, 502, 503, 429 unreachable; 401 not); store: raised once, cleared by
+`ok`; refresh with fake timers: 502, 502, 200 ends `YES`, four 502s end
+`UNREACHABLE` after 7 s, 401 ends `NO` with no retry; a 401 while
+`CHECKING` shows no toast.
+
+#### Open question for Brandon
+
+Should a 429 show the "server not answering" banner like a 5xx (GRC), or
+stay a per-call error saying "too many requests"? Recommendation: banner,
+since PROTO's bucket resets each minute and the banner clears itself on
+the next success.
+
+Brandon: banner

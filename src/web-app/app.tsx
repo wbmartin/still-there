@@ -29,6 +29,7 @@ import {
 } from '@tabler/icons-react'
 import { useEffect } from 'react'
 import { useProfileStore } from './stores/profile-store'
+import { useApiStatusStore } from './stores/api-status-store'
 import { usePreference } from './hooks/use-preference'
 import { reportError } from './utils/report-error'
 import Login from './pages/login'
@@ -89,6 +90,31 @@ function ApiUnreachableNotice() {
       </Stack>
     </Alert>
   );
+}
+
+// Shown above the routed page, while signed in, from the first call the API
+// did not answer (a failed fetch, 5xx or 429) until the next one it does.
+// One banner however many calls failed; the session is not touched.
+function ApiUnreachableBanner() {
+  const reason = useApiStatusStore((state) => state.reason)
+  return (
+    <Alert
+      color="orange"
+      title="The server is not answering"
+      role="status"
+      mb="md"
+    >
+      <Text size="sm">
+        You are still signed in. Parts of this page may be empty or out of
+        date; this notice clears itself as soon as the server answers again.
+      </Text>
+      {reason && (
+        <Text size="xs" c="dimmed">
+          {reason}
+        </Text>
+      )}
+    </Alert>
+  )
 }
 
 const router = createBrowserRouter([
@@ -184,6 +210,7 @@ function AppLayout() {
   } = useAuthStore();
   const navigate = useNavigate();
   const readProfile = useProfileStore((state) => state.readProfile);
+  const apiUnreachable = useApiStatusStore((state) => state.unreachable);
   const { colorScheme } = usePreference();
   const { setColorScheme } = useMantineColorScheme();
   const [navOpened, { toggle: toggleNav, close: closeNav }] =
@@ -284,7 +311,14 @@ function AppLayout() {
         </AppShell.Section>
       </AppShell.Navbar>
       <AppShell.Main>
-        {authState === 'UNREACHABLE' ? <ApiUnreachableNotice /> : <Outlet />}
+        {authState === 'UNREACHABLE' ? (
+          <ApiUnreachableNotice />
+        ) : (
+          <>
+            {authState === 'YES' && apiUnreachable && <ApiUnreachableBanner />}
+            <Outlet />
+          </>
+        )}
       </AppShell.Main>
     </AppShell>
   )
