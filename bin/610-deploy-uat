@@ -92,6 +92,9 @@ DB_NAME="$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$ENV_FILE"
 [ -n "$DB_NAME" ] || { echo "[ERROR] cannot read the database name from DATABASE_URL in $ENV_FILE"; exit 1; }
 PORT="$(sed -nE 's/^SERVER_PORT=([0-9]+).*/\1/p' "$ENV_FILE" | head -1)"
 [ -n "$PORT" ] || { echo "[ERROR] SERVER_PORT not set in $ENV_FILE"; exit 1; }
+# Required since B061; a file written before then lacks it (doc/320). Checked
+# here so the deploy stops before the service does, not after.
+grep -qE '^SERVER_BIND_ADDRESS=.' "$ENV_FILE" || { echo "[ERROR] SERVER_BIND_ADDRESS not set in $ENV_FILE; add SERVER_BIND_ADDRESS=127.0.0.1"; exit 1; }
 HEALTH="http://127.0.0.1:$PORT/health"
 DB_LOGIN="$(sed -nE 's#^DATABASE_URL=postgres://([^:@/]+):.*#\1#p' "$ENV_FILE" | head -1)"
 [ "$DB_LOGIN" = "$DB_APP_ROLE" ] || { echo "[ERROR] DATABASE_URL in $ENV_FILE logs in as '$DB_LOGIN', not DB_APP_ROLE=$DB_APP_ROLE"; exit 1; }

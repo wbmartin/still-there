@@ -14,8 +14,9 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 - **Existing UAT host `api-srv.env` needs hand edits before the next
   deploy** (deploys never overwrite that file): add `LOG_LEVEL=info`
   (B031: required now, the API will not start without it), add
-  `SERVER_BIND_ADDRESS=127.0.0.1` and set `JWT_SESSION_EXPIRE_HOURS=12`
-  (B016), rotate the DB password off the repo literal (B027, step in
+  `SERVER_BIND_ADDRESS=127.0.0.1` (B016; required since B061, the API and
+  `bin/610-deploy-uat` refuse a file without it) and set
+  `JWT_SESSION_EXPIRE_HOURS=12` (B016), rotate the DB password off the repo literal (B027, step in
   `doc/320-presales-uat-deploy.md`).
 - **Grant 9020 (reset another user's MFA) by hand** on every real tenant's
   admin group (B010). No migration seeds groups, so a deployed admin loses

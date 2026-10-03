@@ -129,10 +129,16 @@ func LoadConfig(configFilePath string) (*Config, error) {
 
 	config.ServerName = env["SERVER_NAME"]
 	config.AppName = env["APP_NAME"]
-	// Optional. Empty listens on every interface, which is what every config
-	// did before the key existed. 127.0.0.1 is right behind nginx and for the
+	// Required, so a forgotten key fails closed instead of listening on
+	// every interface. 127.0.0.1 is right behind nginx, for dev and for the
 	// test harness, whose instance carries a well-known password.
 	config.ServerBindAddress = env["SERVER_BIND_ADDRESS"]
+	if config.ServerBindAddress == "" {
+		return nil, fmt.Errorf(
+			"SERVER_BIND_ADDRESS is required (the interface to listen " +
+				"on, e.g. 127.0.0.1; 0.0.0.0 for every interface)",
+		)
+	}
 
 	if config.ServerPort, err = requirePositiveInt(
 		env, "SERVER_PORT",

@@ -56,6 +56,7 @@ JWT_SECRET=s
 SERVER_NAME=n
 APP_NAME=a
 SERVER_PORT=8080
+SERVER_BIND_ADDRESS=127.0.0.1
 ENABLE_TLS=false
 TOTP_ENCRYPTION_KEY=k
 JWT_SESSION_EXPIRE_HOURS=12
@@ -124,6 +125,44 @@ func TestLoadConfig_LogLevel(t *testing.T) {
 			if config.LogLevel != testCase.want {
 				t.Errorf("LogLevel = %v, want %v",
 					config.LogLevel, testCase.want)
+			}
+		})
+	}
+}
+
+// SERVER_BIND_ADDRESS is required: an empty bind used to listen on every
+// interface, beside nginx rather than behind it.
+func TestLoadConfig_ServerBindAddress(t *testing.T) {
+	testCaseList := []struct {
+		name    string
+		line    string
+		want    string
+		wantErr bool
+	}{
+		{"absent", "", "", true},
+		{"empty", "SERVER_BIND_ADDRESS=\n", "", true},
+		{"loopback", "SERVER_BIND_ADDRESS=127.0.0.1\n", "127.0.0.1", false},
+		{"every interface", "SERVER_BIND_ADDRESS=0.0.0.0\n", "0.0.0.0", false},
+		{"ipv6 loopback", "SERVER_BIND_ADDRESS=::1\n", "::1", false},
+	}
+	for _, testCase := range testCaseList {
+		t.Run(testCase.name, func(t *testing.T) {
+			config, err := LoadConfig(writeEnv(
+				t, withoutKey("SERVER_BIND_ADDRESS")+testCase.line,
+			))
+			if testCase.wantErr {
+				wantErr := "SERVER_BIND_ADDRESS is required"
+				if err == nil || !strings.Contains(err.Error(), wantErr) {
+					t.Fatalf("err = %v, want %q", err, wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.ServerBindAddress != testCase.want {
+				t.Errorf("ServerBindAddress = %q, want %q",
+					config.ServerBindAddress, testCase.want)
 			}
 		})
 	}

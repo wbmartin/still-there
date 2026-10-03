@@ -11,17 +11,18 @@
 - a key the API needs is **present in the file**. `config.LoadConfig`
   refuses to start, naming the key, when one is missing rather than guessing
   a value: `DATABASE_URL`, `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`,
-  `SERVER_NAME`, `APP_NAME`, `SERVER_PORT`, `ENABLE_TLS`,
-  `JWT_SESSION_EXPIRE_HOURS`, the two `MAX_*_REQ_PER_MIN` keys, the three
+  `SERVER_NAME`, `APP_NAME`, `SERVER_PORT`, `SERVER_BIND_ADDRESS`,
+  `ENABLE_TLS`, `JWT_SESSION_EXPIRE_HOURS`, the two `MAX_*_REQ_PER_MIN`
+  keys, the three
   `FAILED_LOGIN_*` keys, `LOG_LEVEL`, and the TLS paths when
   `ENABLE_TLS=true`. A silent default is how a server ends up with every JWT
-  born expired (0 hours) or every request refused 429 (a limit of 0). It
+  born expired (0 hours) or every request refused 429 (a limit of 0), or an
+  API meant to sit behind nginx answering on every interface. It
   also checks shape at load, not at first use: the port, hours, limits and
   threshold are whole numbers above 0, the two `FAILED_LOGIN_*_DURATION`
   keys are KV durations above 0 (`30s`, `5min`, `1h`), and `LOG_LEVEL` is
   `debug`, `info`, `warn` or `error`. The optional keys
-  (`SERVER_BIND_ADDRESS`, `TRUSTED_PROXY_COUNT`, `CORS_ALLOWED_ORIGINS`) and
-  the whole list are in `src/api-srv/README.md`
+  (`TRUSTED_PROXY_COUNT`, `CORS_ALLOWED_ORIGINS`) and the whole list are in `src/api-srv/README.md`
 - a deploy never rewrites a host's env file, so a key that became required
   after the file was written must be added by hand before the new binary
   starts (`doc/320-presales-uat-deploy.md`)

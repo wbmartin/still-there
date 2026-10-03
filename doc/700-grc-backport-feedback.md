@@ -564,76 +564,6 @@ moves on a deliberate release; GRC left this open too.
 
 # P3: nice to have
 
-### B061 — `SERVER_BIND_ADDRESS` required (fail-closed bind)
-
-- **Priority:** P3  **Area:** go-api
-- **GRC:** `src/internal/config/config.go:284-290`   **PROTO:** `src/api-srv/internal/config/config.go:106-109`; `etc/loc-api-srv.env:27-28`
-- **Ticket:** RG0009 / `d36bfda`
-- **What:** GRC refuses to start without a bind address; PROTO's empty default
-is deliberate for LAN/phone dev.
-- **Port notes:** Brandon's call; B016 covers deployed hosts.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-The bind address is optional, and empty means every interface:
-
-```go
-// src/api-srv/internal/config/config.go:106-109
-// Optional. Empty listens on every interface, which is what every config
-// did before the key existed. 127.0.0.1 is right behind nginx and for the
-config.ServerBindAddress = env["SERVER_BIND_ADDRESS"]
-```
-
-`cmd/server/main.go:202` then listens on `":8080"`. Every deployed env file
-sets `127.0.0.1` (`infra/uat/etc/uat-proto-api.env:29`,
-`infra/prd/etc/prd-proto-api.env:29`, `etc/e2e-api-srv.env:58`). Three do
-not: `etc/loc-api-srv.env:27-28` leaves it commented out on purpose,
-`etc/uat-api-srv.env.example` (the presales UAT file) omits it, and any
-derived app's new env file omits it by default. Forgetting the key fails
-open: the API answers on every interface of the host, beside nginx rather
-than behind it, and only a firewall stands between it and the internet. A
-security default, not a live hole on the infra hosts; the presales UAT
-gap is B016 (P1).
-
-The stated reason for the dev default is weaker than it reads.
-`etc/loc-api-srv.env:27` says the vite proxy and a phone on the LAN need it.
-The proxy targets `http://localhost:8080` (`src/web-app/.env.development`),
-which a loopback bind serves. A phone reaches vite, not the API, and
-`npm run dev` (plain `vite`) listens on localhost only. Nothing in the repo
-needs the API on every interface; a developer who points a device straight
-at the API does.
-
-#### What GRC changed
-
-GRC refuses to start without the key, and the error names the fix
-(`src/internal/config/config.go:284-290`: "SERVER_BIND_ADDRESS is required
-(the interface to listen on, e.g. 127.0.0.1; 0.0.0.0 for every
-interface)"). Every GRC env file sets `127.0.0.1`, including dev
-(`etc/loc-api-srv.env:18-20`). `config_test.go:229` sets the key in its
-fixture; no test asserts the refusal. The doc's ticket ref is off: the
-check came in with RG0001 (`e54967b`); RG0009 (`d36bfda`) only moved
-`config.go` into `internal/config`.
-
-#### Proposed fix for PROTO
-
-1. `config/config.go:106-109`: return GRC's error when the key is empty.
-2. `etc/loc-api-srv.env:27-28`: set `SERVER_BIND_ADDRESS=127.0.0.1` with
-   GRC's comment ("0.0.0.0 publishes it" for device testing).
-3. `etc/uat-api-srv.env.example`: add the key (do with B016).
-4. `cmd/server/main.go:202`: `net.JoinHostPort` (B060 item 4).
-5. `src/api-srv/README.md:37` and `doc/330:190-191`: "required".
-6. Go test: PROTO has no `LoadConfig` test today; add one in
-   `config_test.go` that loads a temp env without the key and expects the
-   error.
-
-#### Open question for Brandon
-
-Require the key everywhere, dev included? Recommend yes: dev works on
-loopback, and fail-closed protects every env file a derived app adds.
-
 ### B062 — Preferences: off the admin list; validated against options
 
 - **Priority:** P3  **Area:** go-api, web-app
@@ -8931,3 +8861,75 @@ RG0015 (`1fc6e86`, `6ee3abc`) added `model.Now()` over
 None.
 
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). New `src/api-srv/internal/model/time.go`: `EpochSeconds(t)` (one clock read, `Unix()` + `Nanosecond()/1e9`) and `Now()`; GRC's three tests ported in `model/time_test.go`. Both `CurrentTimestamp` functions (handler `UnixNano()/1e9`, repository's racy two-read form) deleted; every call site, the two inline `UnixNano()/1e9` in `AddUserListToGroup`/`RemoveUserListFromGroup` and the invite expiry (`model.EpochSeconds(time.Now().Add(ttl))`) use `model`; repository `TestCurrentTimestamp` dropped (superseded by `TestNowMovesForward`). `auth/totp.go`: `totpLabelDisallowed` package var. `cmd/server/main.go`: `net.JoinHostPort` (IPv6 bind bracketed; empty address still `:8080`, B061 still owns requiring the key). `app_user_group_handler.go`: the bare `http.Error` is `WriteError` with GRC's message and code (400 is now the JSON `{"error"}` shape; the duplicate `app.Error` log went with it); four route comments say `/appUserGroup*`. Item 3 (config) was already done by B032 (`requirePositiveInt`/`requireDuration`, one read-and-check per `FAILED_LOGIN_*` key); nothing left. Item 7 is moot: B091 removed the ticket system, PS0011 no longer exists. Also folded in (leftovers from earlier items): `AddUserListToGroup`/`RemoveUserListFromGroup` parameters `userIds`/`groupId` renamed `userIdList`/`appUserGroupId`, and the dead `Auth2RequestModel` and `ChangeCurrentUserPasswordRequest` removed from `model/security_model.go`. Not done: `interface{}` to `any` (36 sites, outside RG0015's list; left for the cleanup pass). doc/105 timestamp line names `model.Now()`. New pytest `test_bad_user_group_id_list_is_json_400`. B039 route contract and B054 grants fixture green. Tests: all green, infra=15 docs=499 go=692 unit=87 e2e=13 py=103 (go +2: three time tests, one superseded test removed; py +1), govulncheck clean, gofmt/vet/staticcheck clean.
+
+### B061 — COMPLETED — `SERVER_BIND_ADDRESS` required (fail-closed bind)
+
+- **Priority:** P3  **Area:** go-api
+- **GRC:** `src/internal/config/config.go:284-290`   **PROTO:** `src/api-srv/internal/config/config.go:106-109`; `etc/loc-api-srv.env:27-28`
+- **Ticket:** RG0009 / `d36bfda`
+- **What:** GRC refuses to start without a bind address; PROTO's empty default
+is deliberate for LAN/phone dev.
+- **Port notes:** Brandon's call; B016 covers deployed hosts.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+The bind address is optional, and empty means every interface:
+
+```go
+// src/api-srv/internal/config/config.go:106-109
+// Optional. Empty listens on every interface, which is what every config
+// did before the key existed. 127.0.0.1 is right behind nginx and for the
+config.ServerBindAddress = env["SERVER_BIND_ADDRESS"]
+```
+
+`cmd/server/main.go:202` then listens on `":8080"`. Every deployed env file
+sets `127.0.0.1` (`infra/uat/etc/uat-proto-api.env:29`,
+`infra/prd/etc/prd-proto-api.env:29`, `etc/e2e-api-srv.env:58`). Three do
+not: `etc/loc-api-srv.env:27-28` leaves it commented out on purpose,
+`etc/uat-api-srv.env.example` (the presales UAT file) omits it, and any
+derived app's new env file omits it by default. Forgetting the key fails
+open: the API answers on every interface of the host, beside nginx rather
+than behind it, and only a firewall stands between it and the internet. A
+security default, not a live hole on the infra hosts; the presales UAT
+gap is B016 (P1).
+
+The stated reason for the dev default is weaker than it reads.
+`etc/loc-api-srv.env:27` says the vite proxy and a phone on the LAN need it.
+The proxy targets `http://localhost:8080` (`src/web-app/.env.development`),
+which a loopback bind serves. A phone reaches vite, not the API, and
+`npm run dev` (plain `vite`) listens on localhost only. Nothing in the repo
+needs the API on every interface; a developer who points a device straight
+at the API does.
+
+#### What GRC changed
+
+GRC refuses to start without the key, and the error names the fix
+(`src/internal/config/config.go:284-290`: "SERVER_BIND_ADDRESS is required
+(the interface to listen on, e.g. 127.0.0.1; 0.0.0.0 for every
+interface)"). Every GRC env file sets `127.0.0.1`, including dev
+(`etc/loc-api-srv.env:18-20`). `config_test.go:229` sets the key in its
+fixture; no test asserts the refusal. The doc's ticket ref is off: the
+check came in with RG0001 (`e54967b`); RG0009 (`d36bfda`) only moved
+`config.go` into `internal/config`.
+
+#### Proposed fix for PROTO
+
+1. `config/config.go:106-109`: return GRC's error when the key is empty.
+2. `etc/loc-api-srv.env:27-28`: set `SERVER_BIND_ADDRESS=127.0.0.1` with
+   GRC's comment ("0.0.0.0 publishes it" for device testing).
+3. `etc/uat-api-srv.env.example`: add the key (do with B016).
+4. `cmd/server/main.go:202`: `net.JoinHostPort` (B060 item 4).
+5. `src/api-srv/README.md:37` and `doc/330:190-191`: "required".
+6. Go test: PROTO has no `LoadConfig` test today; add one in
+   `config_test.go` that loads a temp env without the key and expects the
+   error.
+
+#### Open question for Brandon
+
+Require the key everywhere, dev included? Recommend yes: dev works on
+loopback, and fail-closed protects every env file a derived app adds.
+
+- **Completed:** 2026-10-03. No Brandon line; took the recommendation (required everywhere, dev included). `config.LoadConfig` refuses an empty or missing `SERVER_BIND_ADDRESS` with GRC's message ("SERVER_BIND_ADDRESS is required (the interface to listen on, e.g. 127.0.0.1; 0.0.0.0 for every interface)"); `cmd/server/main.go` comment drops the empty-means-`:8080` note (`net.JoinHostPort` came with B060). `etc/loc-api-srv.env` sets `127.0.0.1` (comment: loopback serves the vite proxy, 0.0.0.0 publishes the API; checked that Node 22 reaches a 127.0.0.1-only listener at `localhost`, which resolves to ::1 first). Every other API env file already carried it (e2e, the pytest copy `bin/300-run-tests` derives from e2e, the UAT template from B016, the three infra API files); `TestLoadConfig_RepoEnvFiles` loads them all. Step 3 was done by B016 (the file is now `etc/uat-api-srv.env.template`). Added beyond the steps: `bin/610-deploy-uat` refuses an existing host `api-srv.env` without the key before it stops the service (shellcheck clean in ubuntu:24.04; a file without the key refused, with it passed); `doc/320-presales-uat-deploy.md` hand-edit section names the key; tasks/todo.md hand-edit bullet updated. Docs: `src/api-srv/README.md` moves the key to Required, doc/905 lists it as required. doc/330 had no bind line to change (step 5's ref is stale). New Go test `TestLoadConfig_ServerBindAddress` (absent, empty, 127.0.0.1, 0.0.0.0, ::1); `validBase` carries the key. Built binary on a dev env without the key exits 1 with the message. Existing presales UAT host `api-srv.env` must get `SERVER_BIND_ADDRESS=127.0.0.1` by hand (already listed under B016). Tests: all green, infra=15 docs=499 go=698 unit=87 e2e=13 py=103 (go +6: one test, five cases), govulncheck clean, gofmt clean.

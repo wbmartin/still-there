@@ -243,8 +243,8 @@ func main() {
 
 	// Create server
 	server := &http.Server{
-		// JoinHostPort brackets an IPv6 bind ("[::1]:8080"); an empty
-		// address is still every interface (":8080").
+		// JoinHostPort brackets an IPv6 bind ("[::1]:8080"). The address
+		// is never empty: LoadConfig requires SERVER_BIND_ADDRESS.
 		Addr: net.JoinHostPort(
 			config.ServerBindAddress, strconv.Itoa(config.ServerPort),
 		),

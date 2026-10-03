@@ -30,6 +30,8 @@ Required:
 
 - `DATABASE_URL`, `JWT_SECRET`, `SERVER_NAME`, `APP_NAME`
 - `SERVER_PORT` — positive integer
+- `SERVER_BIND_ADDRESS` — the interface to listen on: `127.0.0.1` behind
+  nginx, in dev and in the test harness; `0.0.0.0` for every interface
 - `ENABLE_TLS` — boolean; when true, `TLS_CERT_PATH` and `TLS_KEY_PATH` are
   required
 - `TOTP_ENCRYPTION_KEY` — 32 bytes as hex (AES-256)
@@ -44,7 +46,6 @@ Required:
 
 Optional:
 
-- `SERVER_BIND_ADDRESS` — empty listens on every interface
 - `TRUSTED_PROXY_COUNT` — non-negative integer, default 0. How
   many proxies append to `X-Forwarded-For`; the client IP (rate limit and
   login lockout keys) is the entry that many hops from the right. 0 ignores
