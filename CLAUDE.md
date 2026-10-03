@@ -70,6 +70,9 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
   only in `utils/report-error.ts`; file names kebab-case; a file that
   mirrors a Go file names it in its header (`constants/api.ts`,
   `constants/grants.ts`).
+- Go and web mirrors are hand-coded and drift-tested: Go writes a fixture,
+  vitest replays it (`src/web-app/tests/contract.test.ts`;
+  `bin/305-update-grants-fixture` after a grant change).
 - Config is a flat `KEY=VALUE` file passed to the binary; no environment-
   variable lookups.
 - Customer data never in git: source exports and anything derived from

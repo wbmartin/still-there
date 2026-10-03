@@ -153,6 +153,24 @@ To load test the API (starts and stops its own private instance, like
   Extra flags pass through (`--duration`, `--concurrency`, `--iterations`,
   `--output`).
 
+## Go/Web Mirror Fixture
+
+```
+./bin/305-update-grants-fixture    # rewrite model/testdata/grants.json
+```
+
+- The web app mirrors Go by hand (`src/web-app/constants/grants.ts`,
+  `src/web-app/constants/api.ts`); `src/web-app/tests/contract.test.ts`
+  fails on drift. Grants go through a fixture:
+  `TestGrantsFixtureIsCurrent` fails when
+  `src/api-srv/internal/model/testdata/grants.json` differs from
+  `AllKnownGrants`, and vitest replays the same file against
+  `grants.ts` both ways. Routes: every `API_ENDPOINTS` path must be
+  registered in `src/api-srv/cmd/server/main.go`.
+- After a grant change: run `bin/305`, mirror the change in `grants.ts`,
+  commit both. `bin/305` is the only writer; the gate never rewrites
+  the fixture.
+
 ## Scratch Databases
 
 ```

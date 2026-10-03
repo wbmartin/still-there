@@ -79,6 +79,9 @@ This document outlines the steps and key points for creating a new entity type i
 4. **Grants** (`src/api-srv/internal/model/grants.go`):
    - Add constants: `GrantEntityRead = 1xx0`, `GrantEntityCreate = 1xx1`, `GrantEntityUpdate = 1xx2`, `GrantEntityDelete = 1xx3`.
    - Update `AllKnownGrants` and `GrantIDToShortCodeMap`.
+   - Run `bin/305-update-grants-fixture` and add the same ids to
+     `src/web-app/constants/grants.ts`; `src/web-app/tests/contract.test.ts`
+     fails until both sides agree.
    - Use in handlers.
 
 5. **Routes** (`cmd/server/main.go`):

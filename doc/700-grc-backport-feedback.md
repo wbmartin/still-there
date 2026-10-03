@@ -454,112 +454,6 @@ repository and a prod repository that promote copies into, or accept that
 UAT's credential can move `:prd`? Recommendation: split; it is the only
 way a UAT compromise cannot ship to prod.
 
-### B054 — Mirror drift tests: hand-coded contract, tested both sides
-
-- **Priority:** P2  **Area:** docs, web-app, tests
-- **GRC:** `tickets/03-done/RG0020-retire-as-built-generator-chain/RG0020-retire-as-built-generator-chain.md:118-120,223-224`; `CLAUDE.md:74-78`; `types/grc-contract.test.ts:1-25,150-246`; `utils/permissions.test.ts`   **PROTO:** `CLAUDE.md:29-54`; `src/web-app/README.md:85`; `constants/grants.ts` vs `src/api-srv/internal/model/grants.go`; `constants/api.ts`; new `tests/contract.test.ts`
-- **Ticket:** RG0020 (Brandon 2026-09-22)
-- **What:** Ruling: mirrors are hand-coded and drift-tested; Go writes a JSON
-fixture, vitest replays it, with a floor and parser canary. PROTO mirrors
-grants and routes unchecked.
-- **Port notes:** Start with `AllKnownGrants` -&gt; `testdata/grants.json` vs
-`grants.ts`. Web P3, docs P2.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-A correctness risk with a live instance, plus a missing rule. The web app
-keeps two hand-written mirrors of Go values and nothing compares them.
-
-**Grants.** `src/web-app/constants/grants.ts:2-22` lists grant ids; the Go
-source is `src/api-srv/internal/model/grants.go:4-32` and
-`AllKnownGrants` (`:35-54`). They have already drifted:
-
-```ts
-// src/web-app/constants/grants.ts:21
-   RESET_MFA_TOKEN: 9020,
-```
-
-`grants.go` has no 9020 at all. The web app shows "Reset MFA" only to users
-holding 9020 (`pages/app-user-edit-page.tsx:313`); the seed hands 9020 to
-Admin (`sql/fixtures/local-seed.sql:52`). The API registers
-`POST /admin/resetUserMFA` (`cmd/server/main.go:179`), whose handler checks
-`model.GrantUserUpdate` (9003) at `handler/user_mfa_handler.go:684`. The
-button and the server disagree about who may reset MFA, and no test
-notices. B010 fixes the grant; this item makes the next drift fail a test.
-
-**Routes.** `constants/api.ts:1-4` says it "Mirrors the routes in
-src/api-srv/cmd/server/main.go by hand". Today the 20 paths in
-`API_ENDPOINTS` all exist among the routes at `main.go:130-198`, so there is
-no route drift yet. Nothing would catch a rename.
-
-**Docs.** `src/web-app/README.md:84-86` tells the next entity author to add
-api paths "(mirrors `src/api-srv/cmd/server/main.go`; no generator)" and
-"the four `*_WIDGET` grant ids from `roles.sql`". `roles.sql` holds no
-grants; they live in `model/grants.go`. `grants.ts:1` names no Go file,
-although PS0013's surviving rule says each mirror "carries a header naming
-the Go file it mirrors". `CLAUDE.md:29-54` has no line on mirrors.
-
-#### What GRC changed
-
-Ruling, `tickets/03-done/RG0020-retire-as-built-generator-chain/RG0020-retire-as-built-generator-chain.md:118-120`:
-"the intent was always to decouple the layers by coding the shared values
-in each ... So keep the contract, delete the chain, and test the drift."
-GRC's `CLAUDE.md:74-78` makes it a convention: the contract is "coded in
-each layer, not generated", with "drift tests in the gate".
-
-The pattern is one fixture, both sides replay it:
-
-1. Go `src/internal/model/contract_fixture_test.go:221`
-   (`TestContractFixtureIsCurrent`) walks the model source and asserts the
-   committed `testdata/contract.json` is what it would write. Only
-   `bin/536-gen-contract-fixture` passes `-update-contract`, so tests never
-   write the tree. A floor (`:39`, `enumFieldFloor = 100`; ticket
-   `:224-226`) fails if the parser stops finding fields, so an empty
-   contract cannot pass on both sides.
-2. vitest `src/web-app/types/grc-contract.test.ts` loads the same JSON with
-   Vite `?raw` (`:22`). A canary (`:151-157`) asserts the regex parser
-   still finds >90 interfaces. Checks run both directions: every Go enum
-   literal is in the TS union (`:166`), and no TS union lacks a Go check
-   (`:199`). It also checks `API_ENDPOINTS` does not collide with resource
-   routes (`:232`).
-3. Same arrangement for permissions: `authz/testdata/matrix.json` replayed
-   by `utils/permissions.test.ts` and `authz/matrix_test.go`.
-
-Correction to the doc/700 entry: GRC has no drift test for grant ids. Its
-`grants.ts` vs `grants.go` agreement was counted by hand in the RG0043
-review ("15 grant ids = `grants.go`"). "Start with `AllKnownGrants`" is a
-PROTO proposal, not a port.
-
-#### Proposed fix for PROTO
-
-1. Go: add `TestGrantsFixtureIsCurrent` in `internal/model` that marshals
-   `AllKnownGrants` (sorted) and compares it with committed
-   `internal/model/testdata/grants.json`; a `-update-grants` flag rewrites
-   it, passed only by a new `bin/` helper (number per `bin/` scheme).
-2. vitest: `src/web-app/tests/contract.test.ts` (the vitest include is
-   `tests/**`, `vitest.config.ts:11`; the doc's `tests/contract.test.ts`
-   path means this one). Import the JSON with `?raw`, compare with
-   `grantConstants` both ways, and assert a floor (at least 18 entries).
-3. Routes, second test in the same file: read `cmd/server/main.go` with
-   `?raw`, extract `"METHOD /path"` patterns, assert every `API_ENDPOINTS`
-   value is registered. Canary: the parse finds at least 25 routes.
-4. Resolve 9020 first (B010), or the new test lands red.
-5. Fix `src/web-app/README.md:86` (`roles.sql` to `model/grants.go`) and
-   give `grants.ts:1` a header naming `grants.go`.
-6. `CLAUDE.md` Conventions: one line, "Go and web mirrors are hand-coded
-   and drift-tested; a fixture written by Go, replayed by vitest."
-7. Do not copy GRC's `contract.json` walker, entity enums or matrix;
-   PROTO has no generic entity layer (B068).
-
-#### Open question for Brandon
-
-Should the route test go beyond "web paths exist in Go" and also flag Go
-routes the web never calls? Recommendation: no; `/health` and test-only
-routes are legitimately web-unused, so one direction is enough.
-
 ### B055 — `npm update` is not a security fix
 
 - **Priority:** P2  **Area:** docs, web-app
@@ -8923,3 +8817,111 @@ print a warning? Recommendation: fail it, since GRC's unwired copy went
 from 0 to 16 misses in ten days.
 
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: a miss fails the gate). New `scripts/` dir: `scripts/check-doc-paths.sh` ported from GRC RG0011 (`cd` via `dirname`, `set -euo pipefail`, `LC_ALL=C`, the ellipsis as `$'\xe2\x80\xa6'` so the file is ASCII; bash 3.2 clean). Docs checked: `CLAUDE.md`, `DERIVING.md`, `README.md`, `doc/*.md` minus doc/700, `infra/README.md`, `src/*/README.md`, `src/web-app/schemas/README.md`, `tests/README.md` (21); `.claude/skills` left out per step 3. Bases per step 2 plus `src/api-srv/sql` (doc/810 names `migrations/0002_...`) and `infra/{uat,prd}/fail2ban` (infra/README names `etc/jail.local`, `bin/migrate-to-srv-config`); runtime skips add `src/web-app/coverage` and `tests/e2e/.auth` (a fresh copy without them otherwise missed). Two fixes over GRC: `find -print -quit` inside `[ -n ]` and a direct `grep -qxF` for the allowlist, since under pipefail `| grep -q` can fail on SIGPIPE. Allowlist `scripts/doc-paths-allow.txt` (`doc:token`, grouped with reasons): presales bundle/host names (`deploy.sh`, `deploy.env`, `db.sql`, `000-roles.sql`, `api-srv.env`, `etc/api-srv.env`, `etc/deploy.env`), certbot `fullchain.pem`/`privkey.pem`, DERIVING's post-rebrand `uat-acme-test.env`, the web-app README `widget-*` copy targets; an entry its doc no longer names fails as STALE. Real misses fixed: doc/050 names the deleted sql/010-initialcreate.sql in prose; doc/810 `app-user-group-edit-page.tsx`; doc/810 placeholders now `<entity>_model.go` etc. (doc/330's `sql/ddl-role-host-setup.sql` was already gone after the doc/330 rewrite). Wired as `bin/300-run-tests docs`, also in `all` (`docs=` = path tokens checked); `CLAUDE.md` layout + conventions bullet, `doc/902` mode list and a `docs` paragraph. Verified: `shellcheck` 0.9.0 clean in `ubuntu:24.04` (script and bin/300; one `SC2016` disable for the literal backticks in the grep pattern); the script run from a fresh copy there passes; a planted `bin/999-no-such-script` and a stale allow entry each exit 1. Tests: all green, infra=15 docs=478 go=687 unit=82 e2e=13 py=102, govulncheck clean, gofmt clean.
+
+### B054 — COMPLETED — Mirror drift tests: hand-coded contract, tested both sides
+
+- **Priority:** P2  **Area:** docs, web-app, tests
+- **GRC:** `tickets/03-done/RG0020-retire-as-built-generator-chain/RG0020-retire-as-built-generator-chain.md:118-120,223-224`; `CLAUDE.md:74-78`; `types/grc-contract.test.ts:1-25,150-246`; `utils/permissions.test.ts`   **PROTO:** `CLAUDE.md:29-54`; `src/web-app/README.md:85`; `constants/grants.ts` vs `src/api-srv/internal/model/grants.go`; `constants/api.ts`; new `tests/contract.test.ts`
+- **Ticket:** RG0020 (Brandon 2026-09-22)
+- **What:** Ruling: mirrors are hand-coded and drift-tested; Go writes a JSON
+fixture, vitest replays it, with a floor and parser canary. PROTO mirrors
+grants and routes unchecked.
+- **Port notes:** Start with `AllKnownGrants` -&gt; `testdata/grants.json` vs
+`grants.ts`. Web P3, docs P2.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+A correctness risk with a live instance, plus a missing rule. The web app
+keeps two hand-written mirrors of Go values and nothing compares them.
+
+**Grants.** `src/web-app/constants/grants.ts:2-22` lists grant ids; the Go
+source is `src/api-srv/internal/model/grants.go:4-32` and
+`AllKnownGrants` (`:35-54`). They have already drifted:
+
+```ts
+// src/web-app/constants/grants.ts:21
+   RESET_MFA_TOKEN: 9020,
+```
+
+`grants.go` has no 9020 at all. The web app shows "Reset MFA" only to users
+holding 9020 (`pages/app-user-edit-page.tsx:313`); the seed hands 9020 to
+Admin (`sql/fixtures/local-seed.sql:52`). The API registers
+`POST /admin/resetUserMFA` (`cmd/server/main.go:179`), whose handler checks
+`model.GrantUserUpdate` (9003) at `handler/user_mfa_handler.go:684`. The
+button and the server disagree about who may reset MFA, and no test
+notices. B010 fixes the grant; this item makes the next drift fail a test.
+
+**Routes.** `constants/api.ts:1-4` says it "Mirrors the routes in
+src/api-srv/cmd/server/main.go by hand". Today the 20 paths in
+`API_ENDPOINTS` all exist among the routes at `main.go:130-198`, so there is
+no route drift yet. Nothing would catch a rename.
+
+**Docs.** `src/web-app/README.md:84-86` tells the next entity author to add
+api paths "(mirrors `src/api-srv/cmd/server/main.go`; no generator)" and
+"the four `*_WIDGET` grant ids from `roles.sql`". `roles.sql` holds no
+grants; they live in `model/grants.go`. `grants.ts:1` names no Go file,
+although PS0013's surviving rule says each mirror "carries a header naming
+the Go file it mirrors". `CLAUDE.md:29-54` has no line on mirrors.
+
+#### What GRC changed
+
+Ruling, `tickets/03-done/RG0020-retire-as-built-generator-chain/RG0020-retire-as-built-generator-chain.md:118-120`:
+"the intent was always to decouple the layers by coding the shared values
+in each ... So keep the contract, delete the chain, and test the drift."
+GRC's `CLAUDE.md:74-78` makes it a convention: the contract is "coded in
+each layer, not generated", with "drift tests in the gate".
+
+The pattern is one fixture, both sides replay it:
+
+1. Go `src/internal/model/contract_fixture_test.go:221`
+   (`TestContractFixtureIsCurrent`) walks the model source and asserts the
+   committed `testdata/contract.json` is what it would write. Only
+   `bin/536-gen-contract-fixture` passes `-update-contract`, so tests never
+   write the tree. A floor (`:39`, `enumFieldFloor = 100`; ticket
+   `:224-226`) fails if the parser stops finding fields, so an empty
+   contract cannot pass on both sides.
+2. vitest `src/web-app/types/grc-contract.test.ts` loads the same JSON with
+   Vite `?raw` (`:22`). A canary (`:151-157`) asserts the regex parser
+   still finds >90 interfaces. Checks run both directions: every Go enum
+   literal is in the TS union (`:166`), and no TS union lacks a Go check
+   (`:199`). It also checks `API_ENDPOINTS` does not collide with resource
+   routes (`:232`).
+3. Same arrangement for permissions: `authz/testdata/matrix.json` replayed
+   by `utils/permissions.test.ts` and `authz/matrix_test.go`.
+
+Correction to the doc/700 entry: GRC has no drift test for grant ids. Its
+`grants.ts` vs `grants.go` agreement was counted by hand in the RG0043
+review ("15 grant ids = `grants.go`"). "Start with `AllKnownGrants`" is a
+PROTO proposal, not a port.
+
+#### Proposed fix for PROTO
+
+1. Go: add `TestGrantsFixtureIsCurrent` in `internal/model` that marshals
+   `AllKnownGrants` (sorted) and compares it with committed
+   `internal/model/testdata/grants.json`; a `-update-grants` flag rewrites
+   it, passed only by a new `bin/` helper (number per `bin/` scheme).
+2. vitest: `src/web-app/tests/contract.test.ts` (the vitest include is
+   `tests/**`, `vitest.config.ts:11`; the doc's `tests/contract.test.ts`
+   path means this one). Import the JSON with `?raw`, compare with
+   `grantConstants` both ways, and assert a floor (at least 18 entries).
+3. Routes, second test in the same file: read `cmd/server/main.go` with
+   `?raw`, extract `"METHOD /path"` patterns, assert every `API_ENDPOINTS`
+   value is registered. Canary: the parse finds at least 25 routes.
+4. Resolve 9020 first (B010), or the new test lands red.
+5. Fix `src/web-app/README.md:86` (`roles.sql` to `model/grants.go`) and
+   give `grants.ts:1` a header naming `grants.go`.
+6. `CLAUDE.md` Conventions: one line, "Go and web mirrors are hand-coded
+   and drift-tested; a fixture written by Go, replayed by vitest."
+7. Do not copy GRC's `contract.json` walker, entity enums or matrix;
+   PROTO has no generic entity layer (B068).
+
+#### Open question for Brandon
+
+Should the route test go beyond "web paths exist in Go" and also flag Go
+routes the web never calls? Recommendation: no; `/health` and test-only
+routes are legitimately web-unused, so one direction is enough.
+
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: routes checked one direction only, web paths must exist in Go). Go: `src/api-srv/internal/model/grants_fixture_test.go` `TestGrantsFixtureIsCurrent` compares `json.MarshalIndent(AllKnownGrants)` (keys sorted) with committed `internal/model/testdata/grants.json`, floor 18; `-update-grants` rewrites it, passed only by new `bin/305-update-grants-fixture` (3xx = tests; shellcheck clean). No reverse-map test added: `user_grant_model_test.go` already checks `GrantIDToShortCodeMap` against `AllKnownGrants` both ways. Web: `src/web-app/tests/contract.test.ts` reads the fixture and `cmd/server/main.go` with `node:fs` (not `?raw`: no reliance on Vite fs access outside the web root), compares grant ids with `constants/grants.ts` both ways plus a floor of 18, and asserts every `API_ENDPOINTS` path (incl. B034 block/unblock, B035 invite) is registered; route regex handles a pattern on the line after `mux.HandleFunc(`, canary >= 25 routes. 9020 already resolved by B010 (`GrantResetUserMFA`), so the test landed green; planted drift (changed id, extra grant, renamed path, emptied fixture) each fail. Docs: `CLAUDE.md` conventions bullet; `src/web-app/README.md` names `model/grants.go` (not `roles.sql`) and the test; `doc/902` new mirror-fixture section; `doc/810` grant step runs bin/305; `grants.ts`/`api.ts` headers name the test (grants.ts already named grants.go since B037; its stray 3-space indents fixed). Tests: all green, infra=15 docs=494 go=688 unit=87 e2e=13 py=102, govulncheck clean, gofmt clean.

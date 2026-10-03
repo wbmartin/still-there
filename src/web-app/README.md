@@ -122,7 +122,10 @@ Then add, by hand, in each of:
 
 - `constants/api.ts` — `WIDGET_LIST: "/widgetList"`, `WIDGET: "/widget"`
   (mirrors `src/api-srv/cmd/server/main.go`; no generator)
-- `constants/grants.ts` — the four `*_WIDGET` grant ids from `roles.sql`
+- `constants/grants.ts` — the four `*_WIDGET` grant ids from
+  `src/api-srv/internal/model/grants.go`, after
+  `bin/305-update-grants-fixture`; `tests/contract.test.ts` fails if the
+  two disagree
 - `constants/routes.ts` — `WIDGET_LIST: "/widgetList"`,
   `WIDGET_EDIT: "/widget"` (absolute paths; the edit page takes
   `?widgetId=N` or `?widgetId=new`)

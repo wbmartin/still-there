@@ -2,6 +2,7 @@
 // src/api-srv/cmd/server/main.go by hand -- the two lists are maintained
 // separately on purpose (no generator, no build-time coupling); when a route
 // is added there, add it here. apiJson takes one of these.
+// tests/contract.test.ts fails if a path here is not registered there.
 export const API_ENDPOINTS = {
   // Session
   AUTH: "/auth",

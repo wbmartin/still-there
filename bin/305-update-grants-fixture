@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Rewrite src/api-srv/internal/model/testdata/grants.json from AllKnownGrants
+# in model/grants.go. The fixture is the Go half of the grant mirror check:
+# TestGrantsFixtureIsCurrent fails when it is stale, and
+# src/web-app/tests/contract.test.ts replays it against
+# src/web-app/constants/grants.ts. This is the only caller of -update-grants;
+# the test gate never writes the tree.
+#
+#   bin/305-update-grants-fixture
+#
+# After a grant change: run this, mirror the change in constants/grants.ts,
+# commit both, then bin/300-run-tests go and unit.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+cd "$PROJECT_ROOT/src/api-srv"
+go test ./internal/model -count=1 -run '^TestGrantsFixtureIsCurrent$' \
+    -update-grants
+git -C "$PROJECT_ROOT" status --short -- \
+    src/api-srv/internal/model/testdata/grants.json
