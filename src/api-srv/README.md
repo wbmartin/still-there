@@ -95,7 +95,7 @@ All JSON is camelCase. List endpoints take `?<entity>IdList=1,2,3`
 
 ### Other
 - `GET /health` — no auth
-- `POST /error-report` — no auth
+- `POST /error-report` — signed-in (LOGON); logs the caller's client error
 
 ## Security
 

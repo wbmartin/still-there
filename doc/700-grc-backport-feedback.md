@@ -242,123 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B033 — Remove anonymous `POST /error-report`
-
-- **Priority:** P2  **Area:** go-api, web-app, tests, docs
-- **GRC:** deleted; `src/internal/handler/common.go:15-25`; `src/api-srv/README.md:15-21`   **PROTO:** `src/api-srv/internal/handler/error_report_handler.go:1-80`; `src/api-srv/cmd/server/main.go:105,198`; `tests/test_error_reporting.py`; `tests/README.md:53`; `src/api-srv/README.md:81`
-- **Ticket:** RG0018 / `68c77d2`
-- **What:** Anonymous route writes 2000 chars of client text to the log at
-Error. GRC's client posted to the wrong origin; GRC deleted it.
-- **Port notes:** Brandon's call: delete, or require a session? Keep
-`test_error_reporting.py` unless the route goes.
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-
-Brandon: Let's just require a session
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-PROTO paths below are under `src/api-srv/` unless they start with
-`src/web-app/` or `tests/`. The API registers an anonymous route:
-
-```go
-// cmd/server/main.go:105, 197-198
-errorReportHandler := handler.NewErrorReportHandler(appServices)
-// Error reporting (no auth required)
-mux.HandleFunc("POST /error-report", errorReportHandler.HandleErrorReport)
-```
-
-The handler skips JWT, CSRF, authorization and the block check, keeps
-only the per-IP rate limit (`internal/handler/error_report_handler.go:37-41`),
-caps the body at 8 KiB (`:14`, `:52`), then writes up to 2000 characters
-of whatever the caller sent at Error level:
-
-```go
-// internal/handler/error_report_handler.go:74
-app.Logger().Error("CLER", "Client Error Report: "+report)
-```
-
-**Correction to the doc entry: nothing in PROTO's web app calls it.**
-PS0001 (`8559400`) already removed the error boundary's
-`fetch('/error-report')` and its "We've automatically reported this
-issue" text. `src/web-app/utils/report-error.ts:11-13` writes to the
-console only, and its header (`:4`) calls the POST "tomorrow maybe". The
-only callers are the 7 pytest cases in `tests/test_error_reporting.py`,
-and most of them accept either 200 or 429 (`:21`, `:43`, `:66`), so they
-pin little. GRC's "client posted to the wrong origin" bug does not exist
-in PROTO; PROTO fixed the client half and left the server half.
-
-Consequence, for an attacker with no account:
-
-- Anyone on the internet can write attacker-chosen text into the
-  production journal at Error level, 20 lines per minute per IP
-  (`MAX_UNAUTH_REQ_PER_MIN=20`, `etc/loc-api-srv.env:20`). The rate key
-  is `ClientIP`, which trusts a forged first `X-Forwarded-For` entry until
-  B007's XFF fix lands, so the real cap today is none.
-- An operator who alerts or greps on `level=ERROR` gets noise that looks
-  like real faults, and journal retention shrinks.
-- slog's text handler quotes the message, so a newline cannot forge a
-  separate log line. This is not log injection.
-
-Classification: a small security exposure (unauthenticated write to an
-operator surface) on a route with no reader and no caller. Dead code with
-an attack surface.
-
-#### What GRC changed
-
-GRC commit `68c77d2` (RG0018) deleted the route. Its reasoning: the
-route's one caller had never worked (it posted to the dev server's
-origin, not `/api`), it appended "anonymous, attacker-choosable text to
-the log for no reader", and putting it behind a session would not serve
-its purpose, because a render crash can happen on the login screen
-where there is no session.
-
-Removed: `internal/handler/error_report_handler.go`, its construction and
-route in `src/api-srv/cmd/server/main.go`, the 8 KiB cap, and
-`tests/test_error_reporting.py` (8 cases). GRC's
-`src/internal/handler/common.go:15-25` comment records that the 8 KiB cap
-"went with `/error-report` (RG0018)". `src/api-srv/README.md:15-21`
-lists the remaining routes and says where `/error-report` went. The
-error boundary was changed to report through `reportError` and tell the
-user nothing was sent; PROTO already has that. No test replaces the
-deleted ones; there is nothing left to test.
-
-#### Proposed fix for PROTO
-
-1. Delete `internal/handler/error_report_handler.go`. This also closes
-   PS0011's "`error_report_handler.go:78` unchecked `w.Write`" line.
-2. `cmd/server/main.go`: remove `:105` (construction) and `:197-198`
-   (comment and route).
-3. Delete `tests/test_error_reporting.py`; drop its bullet at
-   `tests/README.md:53`.
-4. Docs: drop `POST /error-report` from `src/api-srv/README.md:81`; in
-   `doc/105-api-srv-tech-spec.md:200` drop `error_report_handler.go` from
-   the skipped-checks list (leave `UserSelfCreateHandler`, which stays
-   because B002 is SKIP).
-5. `src/web-app/utils/report-error.ts:2-5`: replace "tomorrow maybe POST
-   /error-report" with the decision: errors go to the console only; a
-   server sink would need its own ticket.
-6. Check `src/web-app/constants/api.ts` and the mirror test (B054) still
-   agree after the route list shrinks; the web side has no `/error-report`
-   entry today, so nothing changes there.
-
-Blind-copy traps: GRC's commit also edits `common.go`'s `maxAuthBodyBytes`
-comment, which PROTO does not have until B011; do not port that comment
-here. GRC's `/grc` link change in the error boundary is GRC-only.
-
-Tests: no new tests; run the Go build, `go vet`, and the pytest suite to
-confirm nothing else posts to the route. A route-sweep spec (B066) would
-pin that the route answers 404/405.
-
-#### Open question for Brandon
-
-Delete the route, or keep it behind a session? Recommendation: delete;
-no client calls it, and a session-only version misses the crashes it
-would exist to catch.
-
-Brandon: keep behind a session.
-
 ### B034 — User block feature (PROTO ships dead block primitives)
 
 - **Priority:** P2  **Area:** go-api, web-app, tests
@@ -8891,3 +8774,121 @@ Should every key the API reads be required (no defaults at all, so
 Recommendation: yes for the integers and `LOG_LEVEL`, since every env
 file already sets them and their zero value breaks login; decide CORS
 and the bind address under B061.
+
+### B033 — COMPLETED — Remove anonymous `POST /error-report`
+- **Completed:** 2026-10-02. Brandon's answer ("keep behind a session") overrides the delete recommendation: `POST /error-report` stays but `error_report_handler.go` now runs CheckJWT, CheckRateLimitAndUserBlock, CheckCSRF and CheckAuthorization(LOGON) instead of four Skip calls, logs through `app.Error` (username attached) and answers via `WriteJSON` (closes PS0011's unchecked `w.Write`). New `error_report_handler_test.go` pins 401/403/403/413/200 and the 2000-character log cut; `tests/test_error_reporting.py` rewritten (7 cases, no more 200-or-429 asserts) to pin no session 401, no CSRF 403, GET 405, over 8 KiB 413. Docs: doc/105 skipped-checks list and body-cap table, `src/api-srv/README.md`, `tests/README.md`; `src/web-app/utils/report-error.ts` comment says console only, the web client still does not call the route. Tests: all green, go=386 unit=42 e2e=12 py=81
+
+- **Priority:** P2  **Area:** go-api, web-app, tests, docs
+- **GRC:** deleted; `src/internal/handler/common.go:15-25`; `src/api-srv/README.md:15-21`   **PROTO:** `src/api-srv/internal/handler/error_report_handler.go:1-80`; `src/api-srv/cmd/server/main.go:105,198`; `tests/test_error_reporting.py`; `tests/README.md:53`; `src/api-srv/README.md:81`
+- **Ticket:** RG0018 / `68c77d2`
+- **What:** Anonymous route writes 2000 chars of client text to the log at
+Error. GRC's client posted to the wrong origin; GRC deleted it.
+- **Port notes:** Brandon's call: delete, or require a session? Keep
+`test_error_reporting.py` unless the route goes.
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+
+Brandon: Let's just require a session
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+PROTO paths below are under `src/api-srv/` unless they start with
+`src/web-app/` or `tests/`. The API registers an anonymous route:
+
+```go
+// cmd/server/main.go:105, 197-198
+errorReportHandler := handler.NewErrorReportHandler(appServices)
+// Error reporting (no auth required)
+mux.HandleFunc("POST /error-report", errorReportHandler.HandleErrorReport)
+```
+
+The handler skips JWT, CSRF, authorization and the block check, keeps
+only the per-IP rate limit (`internal/handler/error_report_handler.go:37-41`),
+caps the body at 8 KiB (`:14`, `:52`), then writes up to 2000 characters
+of whatever the caller sent at Error level:
+
+```go
+// internal/handler/error_report_handler.go:74
+app.Logger().Error("CLER", "Client Error Report: "+report)
+```
+
+**Correction to the doc entry: nothing in PROTO's web app calls it.**
+PS0001 (`8559400`) already removed the error boundary's
+`fetch('/error-report')` and its "We've automatically reported this
+issue" text. `src/web-app/utils/report-error.ts:11-13` writes to the
+console only, and its header (`:4`) calls the POST "tomorrow maybe". The
+only callers are the 7 pytest cases in `tests/test_error_reporting.py`,
+and most of them accept either 200 or 429 (`:21`, `:43`, `:66`), so they
+pin little. GRC's "client posted to the wrong origin" bug does not exist
+in PROTO; PROTO fixed the client half and left the server half.
+
+Consequence, for an attacker with no account:
+
+- Anyone on the internet can write attacker-chosen text into the
+  production journal at Error level, 20 lines per minute per IP
+  (`MAX_UNAUTH_REQ_PER_MIN=20`, `etc/loc-api-srv.env:20`). The rate key
+  is `ClientIP`, which trusts a forged first `X-Forwarded-For` entry until
+  B007's XFF fix lands, so the real cap today is none.
+- An operator who alerts or greps on `level=ERROR` gets noise that looks
+  like real faults, and journal retention shrinks.
+- slog's text handler quotes the message, so a newline cannot forge a
+  separate log line. This is not log injection.
+
+Classification: a small security exposure (unauthenticated write to an
+operator surface) on a route with no reader and no caller. Dead code with
+an attack surface.
+
+#### What GRC changed
+
+GRC commit `68c77d2` (RG0018) deleted the route. Its reasoning: the
+route's one caller had never worked (it posted to the dev server's
+origin, not `/api`), it appended "anonymous, attacker-choosable text to
+the log for no reader", and putting it behind a session would not serve
+its purpose, because a render crash can happen on the login screen
+where there is no session.
+
+Removed: `internal/handler/error_report_handler.go`, its construction and
+route in `src/api-srv/cmd/server/main.go`, the 8 KiB cap, and
+`tests/test_error_reporting.py` (8 cases). GRC's
+`src/internal/handler/common.go:15-25` comment records that the 8 KiB cap
+"went with `/error-report` (RG0018)". `src/api-srv/README.md:15-21`
+lists the remaining routes and says where `/error-report` went. The
+error boundary was changed to report through `reportError` and tell the
+user nothing was sent; PROTO already has that. No test replaces the
+deleted ones; there is nothing left to test.
+
+#### Proposed fix for PROTO
+
+1. Delete `internal/handler/error_report_handler.go`. This also closes
+   PS0011's "`error_report_handler.go:78` unchecked `w.Write`" line.
+2. `cmd/server/main.go`: remove `:105` (construction) and `:197-198`
+   (comment and route).
+3. Delete `tests/test_error_reporting.py`; drop its bullet at
+   `tests/README.md:53`.
+4. Docs: drop `POST /error-report` from `src/api-srv/README.md:81`; in
+   `doc/105-api-srv-tech-spec.md:200` drop `error_report_handler.go` from
+   the skipped-checks list (leave `UserSelfCreateHandler`, which stays
+   because B002 is SKIP).
+5. `src/web-app/utils/report-error.ts:2-5`: replace "tomorrow maybe POST
+   /error-report" with the decision: errors go to the console only; a
+   server sink would need its own ticket.
+6. Check `src/web-app/constants/api.ts` and the mirror test (B054) still
+   agree after the route list shrinks; the web side has no `/error-report`
+   entry today, so nothing changes there.
+
+Blind-copy traps: GRC's commit also edits `common.go`'s `maxAuthBodyBytes`
+comment, which PROTO does not have until B011; do not port that comment
+here. GRC's `/grc` link change in the error boundary is GRC-only.
+
+Tests: no new tests; run the Go build, `go vet`, and the pytest suite to
+confirm nothing else posts to the route. A route-sweep spec (B066) would
+pin that the route answers 404/405.
+
+#### Open question for Brandon
+
+Delete the route, or keep it behind a session? Recommendation: delete;
+no client calls it, and a session-only version misses the crashes it
+would exist to catch.
+
+Brandon: keep behind a session.

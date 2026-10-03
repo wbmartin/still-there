@@ -245,7 +245,7 @@ own text goes to the log only.
 | Cap | Routes |
 |---|---|
 | 4 KiB (`maxAuthBodyBytes`) | `/auth`, `/mfaSetup`, `/mfaVerify`, `/changeSecurityContext`, `/userSelfCreate` (read before or without a session) |
-| 8 KiB | `/error-report` |
+| 8 KiB (`maxErrorReportBodyBytes`) | `/error-report` (signed-in; logs the first 2000 characters) |
 | 12 KiB (4 KiB + `maxPreferenceBytes`) | `PUT /me` |
 | 64 KiB (`maxLoginLayerBodyBytes`) | `POST`/`PUT /user`, `POST`/`PUT /appUserGroup`, `/addUserListToGroup`, `/removeUserListFromGroup`, `/changeOwnPassword`, `/changeOtherUserPassword`, `/admin/resetUserMFA` |
 | 1 MiB (`maxEntityBodyBytes`) | `example_handler.go` writes, bulk lists included |
@@ -314,8 +314,8 @@ difference where the auditor reads it, with `Skip*` calls:
   counts unknown names as well as wrong passwords.
 - `RefreshHandler`, `LogoffHandler` — `CheckJWT`, rate limit and block, then
   `SkipCSRF` / `SkipAuthorization` with a one-line reason each.
-- `UserSelfCreateHandler`, `error_report_handler.go` — `SkipJWT` +
-  `CheckRateLimit` (the anonymous, IP-keyed limiter), everything else skipped.
+- `UserSelfCreateHandler` — `SkipJWT` + `CheckRateLimit` (the anonymous,
+  IP-keyed limiter), everything else skipped.
 - `MFASetupHandler`, `MFAVerifyHandler` — rate limit and block, `SkipCSRF`,
   `SkipAuthorization`; then either `SkipJWT` (a temp token from the
   password step stands in) or `CheckJWT`, chosen in the handler.

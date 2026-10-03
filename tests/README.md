@@ -88,7 +88,8 @@ authenticates in one step. Fixtures:
 - `test_auth_flow.py` — authentication and CSRF token handling
 - `test_basic_user_authorization.py` — basic users denied admin-only ops
 - `test_bulk_operations.py` — bulk CRUD via `/exampleList`
-- `test_error_reporting.py` — client-side error reporting endpoint
+- `test_error_reporting.py` — `POST /error-report` takes a signed-in
+  caller's report; no session → 401, no CSRF → 403
 - `test_security_context_isolation.py` — tenant 2 cannot use or probe
   tenant 3's groups; client-sent tenants are ignored
 - `test_session_revocation.py` — sign-out, an admin password change and a

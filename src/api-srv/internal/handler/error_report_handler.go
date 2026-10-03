@@ -4,13 +4,16 @@ import (
 	"net/http"
 
 	"github.com/wbmartin/starter-api/internal/app"
+	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/security"
 )
 
-// maxErrorReportBodyBytes caps what an unauthenticated caller can make the
-// server allocate. Generous against the 2000 characters actually kept, so a
-// real stack trace still arrives intact, but bounded.
+// maxErrorReportBodyBytes bounds a report: generous against the 2000
+// characters kept, so a real stack trace arrives intact.
 const maxErrorReportBodyBytes = 8 << 10 // 8 KiB
+
+// maxErrorReportLogChars is how much of a report reaches the log.
+const maxErrorReportLogChars = 2000
 
 // ErrorReportHandler handles client-side error reporting
 type ErrorReportHandler struct {
@@ -26,41 +29,36 @@ func NewErrorReportHandler(
 	}
 }
 
-// HandleErrorReport handles POST /error-report for client-side error reporting
+// HandleErrorReport handles POST /error-report: a signed-in caller's
+// client-side error, logged with its username. Anonymous callers get 401,
+// so nobody without an account can write to the log.
 func (h *ErrorReportHandler) HandleErrorReport(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	// Security checks - rate limiting only, skip others for error reports
+	// Security checks
 	app := security.NewAppHelper(w, r, h.appServices, "HandleErrorReport")
-	app.SkipJWT()           // No auth required for error reports
-	app.SkipCSRF()          // Error reports aren't form submissions
-	app.SkipAuthorization() // No grants needed
-	app.SkipUserBlock()     // Not relevant for error reports
-	app.CheckRateLimit()    // Rate limit to prevent abuse
+	app.CheckJWT()
+	app.CheckRateLimitAndUserBlock()
+	app.CheckCSRF()
+	app.CheckAuthorization(model.GrantLogon)
 
 	if !app.CheckAllChecksComplete() {
 		return
 	}
 
-	// Bounded before it is read, not after: the truncation below runs on a
-	// string already in memory, so it protects only the log line.
+	// Bounded before it is read; the truncation below protects only the log
+	// line.
 	body, ok := readBody(app, w, r, maxErrorReportBodyBytes)
 	if !ok {
 		return
 	}
 
-	// Truncate to 2000 characters
 	report := string(body)
-	if len(report) > 2000 {
-		report = report[:2000] + "...[truncated]"
+	if len(report) > maxErrorReportLogChars {
+		report = report[:maxErrorReportLogChars] + "...[truncated]"
 	}
+	app.Error("CLER", "Client Error Report: "+report)
 
-	// Log the error report
-	app.Logger().Error("CLER", "Client Error Report: "+report)
-
-	// Return success
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"reported"}`))
+	app.WriteJSON(w, http.StatusOK, map[string]string{"status": "reported"})
 }

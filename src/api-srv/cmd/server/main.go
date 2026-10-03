@@ -197,7 +197,7 @@ func main() {
 		appUserGroupHandler.DeleteAppUserGroup,
 	)
 
-	// Error reporting (no auth required)
+	// Client error reports (signed-in callers only)
 	mux.HandleFunc("POST /error-report", errorReportHandler.HandleErrorReport)
 
 	// Create server
