@@ -456,35 +456,29 @@ the two pem files, `reloaded`, and the health JSON.
 Every login arrived `invited`, with no password (0.4), so the first one in
 comes through an invite link issued here. Pick a login that administers
 its tenant (the manifest's `logins.tenant_<n>` line lists them); a second
-tenant needs its own. The token is printed once and never stored: only its
-SHA-256 goes into `user_invite`, exactly as the API stores the links it
-issues, and the link lives `INVITE_TTL_HOURS`:
+tenant needs its own. `proto-migrate invite` is the API's reissue without
+a caller (`src/api-srv/cmd/migrate/invite.go`): same token code, same
+`user_invite` write, only the token's SHA-256 stored, any open link for
+the login revoked first. The link lives `INVITE_TTL_HOURS`, as the API's
+do:
 
 ```bash
 : "${ENV:?}" "${APP_ROOT:?}"
 LOGIN=the-admin-login-to-invite
-DB=$(urldb "$APP_ROOT/etc/$ENV-proto-migrate.env")
 TTL=$(getv "$APP_ROOT/etc/$ENV-proto-api.env" INVITE_TTL_HOURS)
 SITE=$(getv "$APP_ROOT/etc/$ENV-proto-deploy.env" SITE_NAME)
-TOKEN=$(openssl rand -hex 32)
-HASH=$(printf %s "$TOKEN" | sha256sum | cut -d' ' -f1)
-sudo -u postgres psql -X -v ON_ERROR_STOP=1 -d "$DB" -v login="$LOGIN" -v hash="$HASH" -v ttl="$TTL" <<'SQL'
-INSERT INTO user_invite (security_context_id, app_user_id, token_hash,
-       expires_ts, create_ts, create_user_id, update_ts, update_user_id)
-SELECT security_context_id, app_user_id, :'hash',
-       extract(epoch FROM now()) + :ttl * 3600,
-       extract(epoch FROM now()), 0, extract(epoch FROM now()), 0
-FROM app_user
-WHERE user_name = :'login' AND account_status = 'invited'
-  AND delete_ts IS NULL;
-SQL
-echo "https://$SITE/invite#$TOKEN"
+"$APP_ROOT/libexec/proto-migrate" -config "$APP_ROOT/etc/$ENV-proto-migrate.env" -base-url "https://$SITE" -invite-ttl-hours "$TTL" invite "$LOGIN"
 ```
 
-Expect `INSERT 0 1` and the link (`INSERT 0 0`: no live invited login by
-that name). Send the link privately. Its holder sets a password, enrols
-in MFA, and invites everyone else from the user list ("New link" on an
-invited login).
+Expect `[INFO] invite: <login> (tenant <n>), expires <time>; ...` and the
+link, `https://<SITE_NAME>/invite#<token>`, alone on the last line (stdout);
+the token is printed once and stored nowhere. It writes nothing and exits
+1 for a name with no live login, a login that is not `invited`, or a
+tenant-2 login; it runs `verify` first, so it also refuses a database not
+at the binary's schema (A7 left it there). Running it again for the same
+login replaces the link. Send the link privately. Its holder sets a
+password, enrols in MFA, and invites everyone else from the user list
+("New link" on an invited login).
 
 UAT is back.
 

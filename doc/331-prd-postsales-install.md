@@ -339,8 +339,9 @@ Expect `reloaded`, the health JSON, and `200`.
 ### A9. First login
 
 Every login arrived `invited`, with no password. Issue the first invite
-link with `doc/330` A9's block, here (`ENV` and `APP_ROOT` are prod's in
-this shell), and send it privately; its holder sets a password, enrols
+link with `doc/330` A9's `proto-migrate invite` block, here (`ENV` and
+`APP_ROOT` are prod's in this shell, so the link is built on prod's
+`SITE_NAME`), and send it privately; its holder sets a password, enrols
 in MFA and invites the rest.
 
 **Prod is live and is now the system of record.** The freeze ends; work

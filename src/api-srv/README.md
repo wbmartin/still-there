@@ -191,6 +191,10 @@ Go 1.25 (see `go.mod`). Schema changes are migrations only:
 `sql/migrations/NNNN_name.sql`, embedded and applied by `cmd/migrate` —
 never hand-run DDL. Also `sql/roles.sql` (the role the migrator and app
 connect as) and `sql/fixtures/` (seed data, e.g. `local-seed.sql`).
+The migrator's subcommands are listed in
+`doc/900-database-guidelines.md`; besides the schema ones, `invite
+<userName>` prints a first sign-in link for an invited login on a host
+whose logins all came from a scrubbed export (doc/330 A9).
 
 ## Testing
 

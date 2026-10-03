@@ -300,4 +300,4 @@ sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside
   writes `<slug>-data-<stamp>.dump` with `.sha256` and `.manifest` to
   `<out-dir>`, which must be outside the checkout. The export is customer
   data. The first sign-in on the host is an invite link issued there
-  (doc/330 A9).
+  by `proto-migrate invite <userName>` (doc/330 A9, doc/900).

@@ -7,6 +7,8 @@
 //	proto-migrate -config <env file> stamp <version> record up to <version> as applied without running
 //	proto-migrate -config <env file> schema-reference print the schema as CREATE TABLE/INDEX text (doc/003)
 //	proto-migrate new <name>                        create sql/migrations/NNNN_<name>.sql (next free NNNN); no database
+//	proto-migrate -config <env file> -base-url <origin> [-invite-ttl-hours N] invite <userName>
+//	                                                print a first sign-in link for an invited login (invite.go)
 //
 // -config is a KEY=VALUE file of which only DATABASE_URL is read -- the
 // migrator's own file, with the DDL role's credentials, never the API's.
@@ -28,6 +30,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/wbmartin/starter-api/internal/config"
 	"github.com/wbmartin/starter-api/internal/migrate"
@@ -38,8 +41,13 @@ func main() {
 	configPath := flag.String("config", "", "env file holding DATABASE_URL")
 	url := flag.String("url", "", "database URL (instead of -config)")
 	dir := flag.String("dir", "sql/migrations", "source directory `new` writes into (relative to the cwd)")
+	baseURL := flag.String("base-url", "",
+		"site origin the `invite` link is built on, e.g. https://app.example.com")
+	inviteTTLHours := flag.Int("invite-ttl-hours", 72,
+		"hours the `invite` link lives (pass the API's INVITE_TTL_HOURS)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: proto-migrate (-config <file> | -url <url>) status|pending|verify|up|stamp <version>|schema-reference\n")
+		fmt.Fprintf(os.Stderr, "       proto-migrate (-config <file> | -url <url>) -base-url <origin> [-invite-ttl-hours N] invite <userName>\n")
 		fmt.Fprintf(os.Stderr, "       proto-migrate [-dir sql/migrations] new <name>\n")
 		flag.PrintDefaults()
 	}
@@ -51,16 +59,25 @@ func main() {
 		}
 		return
 	}
-	if err := run(*configPath, *url, flag.Args()); err != nil {
+	invite := inviteOptions{baseURL: *baseURL, ttlHours: *inviteTTLHours}
+	if err := run(*configPath, *url, invite, flag.Args()); err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(configPath, url string, args []string) error {
+// inviteOptions carries the flags only `invite` reads.
+type inviteOptions struct {
+	baseURL  string
+	ttlHours int
+}
+
+func run(
+	configPath, url string, invite inviteOptions, args []string,
+) error {
 	if len(args) == 0 {
 		return fmt.Errorf("a command is required: status, pending, verify, " +
-			"up, stamp, schema-reference, new")
+			"up, stamp, schema-reference, invite, new")
 	}
 	if url == "" {
 		if configPath == "" {
@@ -165,6 +182,33 @@ func run(configPath, url string, args []string) error {
 		// stdout only, so bin/510 can redirect it into
 		// doc/003-schema-reference.sql.
 		return migrate.WriteSchemaReference(ctx, conn, os.Stdout)
+	case "invite":
+		if len(args) != 2 {
+			return fmt.Errorf("invite needs exactly one user name")
+		}
+		// The writes below are this binary's SQL: refuse a database whose
+		// schema is not the one it was built with.
+		if err := m.Verify(ctx); err != nil {
+			return err
+		}
+		pool, err := pgxpool.New(ctx, url)
+		if err != nil {
+			return fmt.Errorf("failed to connect: %w", err)
+		}
+		defer pool.Close()
+		issued, err := issueInvite(ctx, pool, args[1], invite.baseURL,
+			invite.ttlHours, time.Now())
+		if err != nil {
+			return err
+		}
+		// The link alone on stdout, so a script can capture it; it is the
+		// only copy of the token (only its hash is stored).
+		fmt.Fprintf(os.Stderr, "[INFO] invite: %s (tenant %d), expires "+
+			"%s; any earlier link for it is revoked\n", issued.userName,
+			issued.securityContext,
+			issued.expires.UTC().Format(time.RFC3339))
+		fmt.Println(issued.link)
+		return nil
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}

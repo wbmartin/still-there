@@ -91,6 +91,8 @@ proto-migrate ... verify                                   fail if the database 
 proto-migrate ... up                                       apply every pending file, in order
 proto-migrate ... stamp <version>                          record up to <version> as applied WITHOUT running
 proto-migrate ... schema-reference                         print the schema as CREATE TABLE/INDEX text (doc/003)
+proto-migrate ... -base-url <origin> [-invite-ttl-hours N] invite <userName>
+                                                           first sign-in link for an invited login (doc/330 A9)
 ```
 
 `-config` reads only `DATABASE_URL` from a KEY=VALUE file -- the migrator's

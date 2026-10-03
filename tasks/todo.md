@@ -13,10 +13,9 @@ recommendation. Done items sit under `# Completed` at the end of that file.
   exits at start otherwise.
 - **`etc/uat-deploy.env`:** set `UAT_DOMAIN` (B072). Until set, presales
   deploys install no nginx site.
-- **Decide B071:** add a `migrate invite <user>` subcommand to replace the
-  hand psql INSERT in doc/330 A9? The export scrub refuses a live login
-  named `admin`: rename or delete the seeded dev admin before a real
-  export.
+- **Before a real export (B071):** the export scrub refuses a live login
+  named `admin`: rename or delete the seeded dev admin first. (The A9
+  first-login link is now `proto-migrate invite`, B099.)
 - **Optional reviews:** B062 rows-per-page [10,15,25,50,100] default 15 vs
   GRC [10,20,25,50,100] default 25; B063 added unused
   `components/sticky-filters.tsx` (delete it and its test to defer); B066
@@ -64,7 +63,7 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 ## 1. Queue (doc/700 items not done, not skipped), in order
 
 The decided queue is empty: B062-B066, B069-B078, B080-B083, B085-B088, B090,
-B093, B094, B095, B096, B097 and B098 are done (B089 folded into B038, B091 removed the ticket
+B093, B094, B095, B096, B097, B098 and B099 are done (B089 folded into B038, B091 removed the ticket
 system). No items await Brandon's decision except those in §0.
 Skipped, do not do: B002, B005, B015, B049, B050, B057, B067, B068, B079,
 B084, B092. B067 (audit log) is skipped, so B035 stripped GRC's audit
