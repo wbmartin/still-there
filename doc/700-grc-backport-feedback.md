@@ -786,69 +786,6 @@ Adopt batched testing in the template, or keep `bin/300-run-tests all`
 per ticket? Recommendation: keep per ticket in the template, since PROTO
 has no 440-check smoke to make it slow; a derived app can batch.
 
-### B083 — Serving user-uploaded files: header override, sniff by bytes
-
-- **Priority:** P3  **Area:** docs
-- **GRC:** `tickets/03-done/RG0026-file-routes-embeddable/RG0026-file-routes-embeddable.md:24`; `tickets/03-done/RG0023-policy-document-tab/RG0023-policy-document-tab.md:166`; `tickets/03-done/RG0024-evidence-artifact-file-route/RG0024-evidence-artifact-file-route.md:75,116`   **PROTO:** `doc/105-api-srv-tech-spec.md` \~\`:214`;` src/api-srv/internal/security/security\_headers.go:13-34`;` DERIVING.md\`
-- **Ticket:** RG0023, RG0024, RG0026
-- **What:** Override XFO/CSP for inline PDFs; cap declared and actual size
-(413); type from magic bytes (415); `private, no-store`; every miss 404.
-- **Port notes:** Docs until a blob route exists (PS0018 avatars); then P2.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Nothing is broken yet. PROTO has no file route; PS0018 dropped the avatar
-because "the template has no file storage"
-(`tickets/04-archive/PS0018-user-profile-page.md:19-20`). This is a DX gap:
-the first derived app to serve a file meets traps nothing documents.
-`HeadersMiddleware` forbids framing on every API response:
-```go
-// src/api-srv/internal/security/security_headers.go:21-22, 34
-"object-src 'none'; "+  "frame-src 'none'; "+
-w.Header().Set("X-Frame-Options", "DENY")
-```
-A PDF served that way cannot render in an `<object>`/`<iframe>`; Chrome
-shows a broken-document icon. nginx's `/api/` location has no `add_header`,
-so it inherits server-level `X-Frame-Options "DENY"`
-(`infra/uat/etc/nginx_uat-proto.example.com:34,40`); a handler override to
-`SAMEORIGIN` would arrive beside a second `DENY`, which browsers treat as a
-block. `doc/105-api-srv-tech-spec.md:211-219` says the headers apply to
-"All Responses" and says nothing on judging uploads, so a naive route
-trusts the client's `Content-Type`, letting the uploader pick the type.
-
-#### What GRC changed
-
-RG0023/24/26 put the rules in `src/internal/handler/upload_artifact.go`:
-```go
-// upload_artifact.go:286-288 (RG0026; a handler Set beats the middleware)
-func allowSameOriginEmbed(w http.ResponseWriter) {
-    w.Header().Set("X-Frame-Options", "SAMEORIGIN")
-    w.Header().Set("Content-Security-Policy", "frame-ancestors 'self'")
-```
-Each file route calls it, then sets `Cache-Control: private, no-store`
-(`evidence_file_handler.go:171-172`). Size: declared `Content-Length`, then
-`MaxBytesReader`, then bytes read, over 20 MiB is 413 (`:226-258`). Type
-from magic bytes (`%PDF-`, PNG/JPEG, DOCX zip; `:95-97,162-186`), else 415;
-the stored type is re-sniffed on the way out (`evidence_file_handler.go:150`).
-`safeFileName` (`:189`) cleans the name; every miss is 404. Tests:
-`upload_artifact_embed_test.go:15,38` (embed override; default still DENY).
-
-#### Proposed fix for PROTO
-
-1. Docs now: a "Serving user files" subsection after
-   `doc/105-api-srv-tech-spec.md:219` with the five rules, the nginx
-   `DENY` trap, SPA CSP needs `object-src`/`frame-src 'self'`; DERIVING link.
-2. Code (P2) when a blob route lands. Leave out GRC's `GRC_*` error codes,
-   its PDF/DOCX/OLE2 set, evidence `LogRead`, and tombstone 404s.
-3. Depends on B022. Tests then: Go override vs default `DENY`; 413/415.
-
-#### Open question for Brandon
-
-None.
-
 ### B084 — Skills and tickets: small fixes
 
 - **Priority:** P3  **Area:** skills, tickets
@@ -9005,3 +8942,67 @@ Docs gap: two post-sales procedures a derived app will need are unwritten.
 Release checklist as a doc section or a skill? Recommend a doc section
 first; make it a skill once two derived apps have used it.
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: a doc section, not a skill). New `doc/350-repository-reset.md`: what hangs off a GitHub repo (deploy key, UAT build webhook, prod promote webhook, collaborators/protection/Actions secrets, every clone), then 0 before (data out of the released tree, freeze, record settings and each host's `proto-api.revision`), 1 orphan root commit (tree checked equal), 2 rename old aside (webhooks deleted, archived) and recreate same owner/name so `REPO_URL` and the `github-proto` alias stay valid, deploy key and hooks re-added before the first push (secret read from the host hook file), `git ls-remote` as `shrmpl-hook`, 3 push `fresh:main` only, then the root commit to prod (release-branch push or by-hand promote by full sha; same-branch prod hook re-promotes or refuses, per doc/331 B6), 4 re-clone UAT's `BUILD_STG` (old moved aside, deleted after the clone checks) and every laptop, 5 checks, rollback, empty Lessons. ProtoStack's branch model, not GRC's (B057 skipped under B091): UAT builds `BRANCH_TO_CHECKOUT` (`main`), the prod hook branch is the app's choice. Linked from `DERIVING.md` section 2 (the B052 leak paragraph, rather than section 3 as the item said: that is where the leak is now described), `infra/README.md` header and step 7, `README.md` doc table, `CLAUDE.md` Layout runbooks. `infra/README.md` gains "Release checklist" after Promotion flow: when a release needs a record, P (what ships by layer, rollback shas from `proto-api.revision`, freeze, prod backup before a migration) / A (approvals) / U / R (promote by full sha) / rollback per host (re-promote; restore `backup/` across a migration; UAT revert; `.before` copy), and a hash-checked one-file move to prod (`git show origin/main:` + `shasum -a 256`, host `sha256sum` + `diff` + `.before` + `cp` keeping owner/mode; env files, the nginx site and `jail.local` excluded with pointers). None of RG0043's content, no hosts or hashes; framed as a skeleton per Brandon's "every project will be different". Deviation: written before RG0044 ran (the item said wait). doc/350 says so up front ("Not yet run": git commands checked on a scratch repo, GitHub and host steps not) per B052; reconcile it with RG0044 once that runs. Verified: the root-commit block in `zsh -f` and a scratch repo (same tree, 1 commit, fresh clone has no trace of the removed file; an old clone fetching the new root still holds the old objects, hence the re-clone); `git ls-remote` on an empty repo exits 0; the UAT re-clone block and the host-file move in ubuntu:24.04 (owner/mode kept, hash equal). Tests: none new (docs); all green, infra=15 docs=700 go=708 unit=105 e2e=70 py=103 (docs +23: new backticked paths).
+
+### B083 — COMPLETED — Serving user-uploaded files: header override, sniff by bytes
+
+- **Priority:** P3  **Area:** docs
+- **GRC:** `tickets/03-done/RG0026-file-routes-embeddable/RG0026-file-routes-embeddable.md:24`; `tickets/03-done/RG0023-policy-document-tab/RG0023-policy-document-tab.md:166`; `tickets/03-done/RG0024-evidence-artifact-file-route/RG0024-evidence-artifact-file-route.md:75,116`   **PROTO:** `doc/105-api-srv-tech-spec.md` \~\`:214`;` src/api-srv/internal/security/security\_headers.go:13-34`;` DERIVING.md\`
+- **Ticket:** RG0023, RG0024, RG0026
+- **What:** Override XFO/CSP for inline PDFs; cap declared and actual size
+(413); type from magic bytes (415); `private, no-store`; every miss 404.
+- **Port notes:** Docs until a blob route exists (PS0018 avatars); then P2.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Nothing is broken yet. PROTO has no file route; PS0018 dropped the avatar
+because "the template has no file storage"
+(`tickets/04-archive/PS0018-user-profile-page.md:19-20`). This is a DX gap:
+the first derived app to serve a file meets traps nothing documents.
+`HeadersMiddleware` forbids framing on every API response:
+```go
+// src/api-srv/internal/security/security_headers.go:21-22, 34
+"object-src 'none'; "+  "frame-src 'none'; "+
+w.Header().Set("X-Frame-Options", "DENY")
+```
+A PDF served that way cannot render in an `<object>`/`<iframe>`; Chrome
+shows a broken-document icon. nginx's `/api/` location has no `add_header`,
+so it inherits server-level `X-Frame-Options "DENY"`
+(`infra/uat/etc/nginx_uat-proto.example.com:34,40`); a handler override to
+`SAMEORIGIN` would arrive beside a second `DENY`, which browsers treat as a
+block. `doc/105-api-srv-tech-spec.md:211-219` says the headers apply to
+"All Responses" and says nothing on judging uploads, so a naive route
+trusts the client's `Content-Type`, letting the uploader pick the type.
+
+#### What GRC changed
+
+RG0023/24/26 put the rules in `src/internal/handler/upload_artifact.go`:
+```go
+// upload_artifact.go:286-288 (RG0026; a handler Set beats the middleware)
+func allowSameOriginEmbed(w http.ResponseWriter) {
+    w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+    w.Header().Set("Content-Security-Policy", "frame-ancestors 'self'")
+```
+Each file route calls it, then sets `Cache-Control: private, no-store`
+(`evidence_file_handler.go:171-172`). Size: declared `Content-Length`, then
+`MaxBytesReader`, then bytes read, over 20 MiB is 413 (`:226-258`). Type
+from magic bytes (`%PDF-`, PNG/JPEG, DOCX zip; `:95-97,162-186`), else 415;
+the stored type is re-sniffed on the way out (`evidence_file_handler.go:150`).
+`safeFileName` (`:189`) cleans the name; every miss is 404. Tests:
+`upload_artifact_embed_test.go:15,38` (embed override; default still DENY).
+
+#### Proposed fix for PROTO
+
+1. Docs now: a "Serving user files" subsection after
+   `doc/105-api-srv-tech-spec.md:219` with the five rules, the nginx
+   `DENY` trap, SPA CSP needs `object-src`/`frame-src 'self'`; DERIVING link.
+2. Code (P2) when a blob route lands. Leave out GRC's `GRC_*` error codes,
+   its PDF/DOCX/OLE2 set, evidence `LogRead`, and tombstone 404s.
+3. Depends on B022. Tests then: Go override vs default `DENY`; 413/415.
+
+#### Open question for Brandon
+
+None.
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line): docs only, since PROTO has no file route (step 1; steps 2-3 wait for a blob route). New `doc/105` subsection "Serving user files": five rules (framing override `X-Frame-Options: SAMEORIGIN` + `frame-ancestors 'self'` on that route only, set in the handler after its checks; inline only PDF/PNG/JPEG, never HTML/SVG/XML, `mime.FormatMediaType` on a cleaned name; size checked declared/`MaxBytesReader`/read, 413, under nginx 20M; type from magic bytes against an allowlist, 415, re-sniffed on the way out; `private, no-store` and every miss 404), the usual explicit checks and route-contract row, the tests the route lands with, and what is not carried from GRC. The Security Headers list notes the override. Deviation: the nginx `DENY` trap is already gone (B022 left `/api/` with no `add_header` and nothing at server level), so the doc says to keep it that way rather than describing a live trap; nginx sends no page CSP today, so the `object-src`/`frame-src 'self'` note applies when a derived app adds one. Pointers: `DERIVING.md` section 4, `doc/110` control 7 (user files judged by their bytes), and a comment in `security_headers.go`. No code, no test. Tests: all green, infra=15 docs=701 go=708 unit=105 e2e=70 py=103, govulncheck clean, gofmt clean.

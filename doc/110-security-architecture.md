@@ -180,6 +180,11 @@ Testable statements, each with what proves it today.
    per invite token. The `admin` exemption is open.
 6. **Backups pulled, encrypted, restored on a schedule.** Open: push today,
    unencrypted beyond the host's disk, no recorded restore test.
+7. **User files judged by their bytes.** A file route caps size (413) and
+   takes its type from magic bytes against an allowlist (415), serves
+   inline only what cannot run script, relaxes framing on that route alone
+   and answers every miss 404 (doc/105, Serving user files). No file route
+   exists today.
 
 Not carried: an audit log (doc/700 B067, skipped: no audit log in the
 template) and host-access logging (3.8, an operator practice before it is

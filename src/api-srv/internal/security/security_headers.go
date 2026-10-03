@@ -10,7 +10,9 @@ func HeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Content Security Policy. The API answers JSON only and serves no
 		// page, script or asset (nginx serves the web bundle), so nothing
-		// may load, frame, or submit from a response.
+		// may load, frame, or submit from a response. A file route shown
+		// inline replaces this and X-Frame-Options in its handler
+		// (doc/105, Serving user files).
 		w.Header().Set("Content-Security-Policy",
 			"default-src 'none'; "+
 				"frame-ancestors 'none'; "+

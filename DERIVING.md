@@ -77,6 +77,11 @@ Keep it until the first real entity exists, then delete
 routes and e2e spec, and drop the table in a migration. Do not edit the
 initial migration.
 
+The template stores no files. The first route that takes or returns a
+user's file follows doc/105, Serving user files: a framing override on that
+route only, size and type checked from the bytes (413, 415), `no-store`,
+every miss 404.
+
 ## 5. Agent guidance
 
 - `CLAUDE.md`: the first paragraph and the Layout list describe

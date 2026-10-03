@@ -502,9 +502,10 @@ anything not here runs all five.
   'none'; base-uri 'none'; form-action 'none'`. The API answers JSON only
   and serves no page, script or asset (nginx serves the web bundle), so
   nothing may load from a response. A derived app's page policy belongs in
-  nginx, not here
+  nginx, not here. A file route shown inline replaces this and
+  `X-Frame-Options` (Serving user files, below)
 - **Strict-Transport-Security**: Forces HTTPS connections (1 year + subdomains + preload)
-- **X-Frame-Options**: `DENY` on every path
+- **X-Frame-Options**: `DENY` on every path but a file route shown inline
 - **X-Content-Type-Options**: Prevents MIME type sniffing
 - **Referrer-Policy**: Controls referrer information leakage
 - **Permissions-Policy**: Restricts browser features (camera, microphone, geolocation, etc.)
@@ -513,7 +514,71 @@ anything not here runs all five.
 
 nginx adds none of these on `/api/`; it sets its own four (nosniff,
 frame, referrer, HSTS) on the web locations only, so each API header
-arrives once.
+arrives once. A file route replaces two of them; see Serving user files.
+
+### Serving user files
+The template has no upload or file route (PS0018 dropped the avatar for
+want of file storage). The first route a derived app adds that stores or
+returns a user's file follows these rules. They come from GRC's evidence
+and policy-document routes (RG0023, RG0024, RG0026), which shipped them
+with tests.
+
+1. **Framing, on that route only.** The middleware's `X-Frame-Options:
+   DENY` and `frame-ancestors 'none'` stop a PDF rendering in the web
+   app's `<object>` or `<iframe>` (Chrome shows a broken-document icon).
+   A route that serves a file to be shown inline calls one helper, after
+   its security checks and before writing, that sets
+   `X-Frame-Options: SAMEORIGIN` and
+   `Content-Security-Policy: frame-ancestors 'self'`. The middleware sets
+   its headers before the handler runs, so the handler's `Set` replaces
+   them. The web app and the API share an origin (nginx proxies `/api/`),
+   so `'self'` is enough. Every other route keeps `DENY`.
+2. **Inline only for types that cannot run script.** PDF, PNG and JPEG go
+   out `Content-Disposition: inline`; anything else allowed goes out
+   `attachment`. Never serve HTML, SVG or XML inline: it would run in the
+   web app's origin. Build the header with `mime.FormatMediaType` from a
+   cleaned name (base name only, control characters and quotes removed);
+   it encodes non-ASCII names. `nosniff` stays.
+3. **Size, three times.** A declared `Content-Length` over the route's cap
+   is 413 before reading; the read goes through `http.MaxBytesReader`
+   (`readBody` in `internal/handler/common.go` does this and answers 413
+   `BODY_TOO_LARGE`); the stored length is the bytes actually read. The cap
+   sits under nginx's `client_max_body_size` (20M), or both are raised
+   together, and gets a row in Request Body Limits.
+4. **Type from the bytes.** The client's `Content-Type` and the file
+   name's extension are ignored. The route compares the first bytes to an
+   allowlist (`%PDF-`, PNG `\x89PNG\r\n\x1a\n`, JPEG `\xFF\xD8\xFF`, plus
+   whatever the app needs) and answers 415 for anything else. Store the
+   sniffed type; on the way out, sniff the stored bytes again and set
+   `Content-Type` from that, never from a column a client once wrote.
+   `http.DetectContentType` is a sniffer, not an allowlist (it recognises
+   HTML), so map its answer through the list or compare bytes directly.
+5. **Not cached, and every miss is 404.** Set
+   `Cache-Control: private, no-store` on the file response. No row,
+   another tenant's id, a deleted row and a row whose bytes are gone all
+   answer the same 404, as Multi-tenancy requires for any record.
+
+Checks are the usual explicit sequence in each handler (JWT, rate limit,
+CSRF on the upload, grant, `CheckAllChecksComplete`), and each route gets
+its row in `routeContractList`.
+
+**nginx.** `/api/` sets no `add_header` (and nothing is set at server
+level), so the override arrives alone. Keep it that way: a second
+`X-Frame-Options: DENY` beside the handler's `SAMEORIGIN` makes the
+browser block the frame.
+
+**The page's CSP.** nginx sends no `Content-Security-Policy` for the web
+app today. A derived app that adds one allows the embed: `object-src
+'self'` for `<object>`, `frame-src 'self'` for `<iframe>`.
+
+**Tests the route lands with.** The file route answers `SAMEORIGIN` and
+`frame-ancestors 'self'` while another route still answers `DENY`; a
+declared and an actual over-cap body are each 413; an HTML body named
+`.pdf` and sent as `application/pdf` is 415; another tenant's file id is
+404.
+
+Not carried from GRC: its `GRC_*` error codes, its PDF/DOCX/OLE2 type set,
+its evidence read log, and tombstone 404s.
 
 ### Multi-tenancy
 Isolation is application code only (no row-level security); the rule and
