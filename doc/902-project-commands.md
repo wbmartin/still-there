@@ -135,7 +135,7 @@ another):
   `test-seed.sql` and the lock after the TRUNCATE (which keeps the lock).
 - `515` is what Playwright's global setup calls: dropping the database
   under a running API leaves its pool pointing at nothing.
-- Users after a reset: `admin` / `admin123!`, `basic` / `basic123!`, and `mfa` / `basic123!` (the only one that is not MFA-exempt; it enrols a TOTP on first sign-in).
+- Users after a reset: `admin` / `admin123!`, `basic` / `basic123!`, `mfa` / `basic123!` (the only one that is not MFA-exempt; it enrols a TOTP on first sign-in), and `switcher` / `basic123!` (homed in tenant 2 with a group in 3: the login that tests `/changeSecurityContext`).
 
 ## Presales UAT Deploy
 

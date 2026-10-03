@@ -14,7 +14,8 @@ bin/510-reset-test-db loc_proto_e2e_db # any *_test_db / *_e2e_db name
 That runs, in order: `CREATE DATABASE`, `src/api-srv/sql/roles.sql` (cluster
 roles, idempotent), `go run ./cmd/migrate ... up` (the embedded
 `sql/migrations/`), then `sql/fixtures/test-seed.sql` (seed groups,
-`admin`/`admin123!`, `basic`/`basic123!`, `mfa`/`basic123!` (not MFA-exempt), two example rows) and
+`admin`/`admin123!`, `basic`/`basic123!`, `mfa`/`basic123!` (not MFA-exempt),
+`switcher`/`basic123!` (groups in tenants 2 and 3), two example rows) and
 `sql/fixtures/test-tenant-lock.sql`. A scratch database is in tenants 2 and 3
 only and refuses tenant 1 (doc/900), so it is for the test suites, not for
 browsing as a developer. See the header of that script for `PG_CONTAINER` /

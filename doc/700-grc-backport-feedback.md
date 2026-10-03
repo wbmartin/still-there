@@ -242,110 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B030 — `/me` 404s after a context switch
-
-- **Priority:** P2  **Area:** go-api, tests
-- **GRC:** `src/internal/handler/own_profile_handler.go:142-226` (:189, :211); `repository/user_repository.go:44-56,521-557`; `own_profile_check_sequence_test.go:155-454`   **PROTO:** `src/api-srv/internal/handler/profile_handler.go:55-90,92-178` (:72-73, :146, :168); `repository/user_repository.go:614-709`
-- **Ticket:** RG0016 / `62403fd`
-- **What:** `/me` reads and writes in the JWT's active tenant, so a switched
-user gets 404. GRC: row by subject, write in the row's tenant, 200-char
-fields, preference shape check.
-- **Port notes:** Keep PROTO's `ProfileHandler`; change lookup and scope.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-All PROTO paths are under `src/api-srv/internal/`. A user has one
-`app_user` row in one home tenant; groups can reach other tenants.
-`/changeSecurityContext` mints a JWT whose `SecurityContext` is the picked
-tenant (`handler/auth_handler.go:618-619`); the row stays home. `/me` then
-looks the row up in the JWT's active tenant:
-
-```go
-// handler/profile_handler.go:72-73 (GET), same at :146-147 (PUT)
-user, err := h.userRepo.RetrieveUserByID(
-    r.Context(), jwtClaims.UserID, jwtClaims.SecurityContext,
-```
-
-`repository/user_repository.go:626` and the PUT at `:678` filter on
-`security_context_id`, so after a switch:
-
-1. `GET /me` answers 404 (`profile_handler.go:76-78`). The web re-reads
-   `/me` on every switch (`src/web-app/app.tsx:156-160`), logs the failure
-   to the console and keeps the stale profile, so nothing looks wrong.
-2. `PUT /me` hits zero rows and the existence check
-   (`user_repository.go:696-705`) misses too: `ErrNotFound`. Save on the
-   Profile page shows a red "User not found" toast; name, email and
-   preferences cannot change until the user switches back. The re-read
-   after the write (`profile_handler.go:168-170`) has the same scope.
-
-Correctness bug, not a security hole: the lookup uses the signed JWT's
-own `uid`. Nothing catches it: no seeded user holds groups in two tenants
-(`src/api-srv/sql/fixtures/local-seed.sql:85-116`) and no Go, pytest or
-Playwright test calls `/changeSecurityContext`.
-
-Doc correction: "200-char fields, preference shape check" are not GRC
-additions; PROTO has both (`profile_handler.go:126,139,190-198`). The
-only gap: PROTO counts bytes (`len`), so a 101-character non-ASCII name is
-refused though it fits `VARCHAR(200)`. GRC counts runes.
-
-#### What GRC changed
-
-GRC commit `62403fd` (RG0016) added the own-profile API. `PUT /me` reads
-the caller's row by JWT subject, which is tenant-free because `user_name`
-is unique installation-wide, and scopes the write by the row's own tenant
-(`src/internal/handler/own_profile_handler.go:189-212`):
-
-```go
-user, err := h.userRepo.RetrieveUserByUserName(r.Context(),
-    jwtClaims.Subject)
-if user.AppUserID != jwtClaims.UserID { // 401 SESSION_MISMATCH
-newUpdateTS, err := h.userRepo.UpdateOwnProfile(r.Context(),
-    user.AppUserID, profile, req.UpdateTS, user.SecurityContext)
-```
-
-`src/internal/repository/user_repository.go:40-43` records the rule;
-`UpdateOwnProfile` (`:521-556`) keeps `security_context_id` in the
-predicate. GRC's `GET /me` (`grc_custom_handler.go:49-64`) is GRC-shaped
-but reads the profile by user name too. Lengths use
-`utf8.RuneCountInString` (`own_profile_handler.go:82`). Tests in
-`src/internal/handler/own_profile_check_sequence_test.go`:
-`TestOwnProfileWritesTheCallerSOwnRow` (`:359`, the row's tenant is
-written, not the session's) and
-`TestOwnProfileSessionNamingTwoUsersWritesNothing` (`:435`).
-
-#### Proposed fix for PROTO
-
-1. **`handler/profile_handler.go`**: both handlers read the row with
-   `RetrieveUserByUserName(ctx, jwtClaims.Subject)`; if
-   `user.AppUserID != jwtClaims.UserID`, 401 `SESSION_MISMATCH`, no write.
-   Pass `user.SecurityContext` to `UpdateOwnProfile` and the re-read.
-2. **`ProfileRepositoryInterface`** (`:32-41`): swap `RetrieveUserByID`
-   for `RetrieveUserByUserName`; `/me` is its only caller, so delete it
-   from `user_repository.go:612-658`.
-3. **`repository/user_repository.go:61-62`** must return `ErrNotFound`:
-   B007's one-line wrap, or B028's full set. Land one first.
-4. Swap `len(...) > 200` at `profile_handler.go:126` for
-   `utf8.RuneCountInString`.
-5. Do not copy GRC's `GrcHandler.Me`, `personId`, roles, `account_status`
-   or the `AppUserOwnProfileModel` wire split.
-6. Tests. Go: extend `MockProfileRepository` in
-   `handler/profile_handler_test.go:19`; assert a JWT with
-   `SecurityContext` 1 and a row in tenant 2 gets 200 on GET and PUT and
-   the write carries tenant 2; assert the uid/subject mismatch writes
-   nothing. pytest: seed a user homed in tenant 2 with one group in a
-   second tenant, switch, then GET and PUT `/me`, expect 200 (depends on
-   B018's tenant-2 harness).
-
-#### Open question for Brandon
-
-Which tenant may the second group live in for the pytest, since tenant 2
-is the only one tests may touch and a switch needs two? Recommendation:
-seed a dedicated tenant (for example 3) used only by the context-switch
-test, and record it beside the tenant-2 rule in CLAUDE.md and doc/900.
-
 ### B031 — `LOG_LEVEL`; per-request and health lines to debug
 
 - **Priority:** P2  **Area:** go-api, etc, docs
@@ -8888,3 +8784,108 @@ Browser-session cookie (gone when the browser closes, as login is today)
 or persistent with `Max-Age = JWT_SESSION_EXPIRE_HOURS * 3600`?
 Recommendation: browser-session, as GRC chose; it matches login today and
 needs no new config.
+
+### B030 — COMPLETED — `/me` 404s after a context switch
+- **Completed:** 2026-10-02. `GET`/`PUT /me` (`handler/profile_handler.go`) read the row by the JWT subject via `RetrieveUserByUserName`, answer 401 `SESSION_MISMATCH` if its id is not the JWT uid, and write/re-read in the row's own tenant; `RetrieveUserByID` deleted (repo tests now read by user name); name/email lengths count runes. Open question answered by B018: test seed adds `switcher` / `basic123!` homed in tenant 2 with groups 1 (tenant 2) and 4 (tenant 3); doc/050, doc/902, doc/105 updated. Deviation: that fixture exposed a leak in `DeleteAppUserGroup` (a caller-tenant user holding a foreign group id made the delete 409, revealing the group); the member count now also requires the group to be in the caller's tenant, so it is 404 (new Go repo test). New tests: Go `TestOwnProfile_AfterContextSwitch`, `TestOwnProfile_SubjectAndUserIDMismatchIs401`, `TestUpdateOwnProfile_LengthCountsRunes`; pytest `TestOwnProfileAfterContextSwitch` (switch to 3, old cookie 401, GET/PUT /me same user, switch back, `/changeSecurityContext` Set-Cookie attributes). Tests: all green, go=311 unit=42 e2e=12 py=81
+
+- **Priority:** P2  **Area:** go-api, tests
+- **GRC:** `src/internal/handler/own_profile_handler.go:142-226` (:189, :211); `repository/user_repository.go:44-56,521-557`; `own_profile_check_sequence_test.go:155-454`   **PROTO:** `src/api-srv/internal/handler/profile_handler.go:55-90,92-178` (:72-73, :146, :168); `repository/user_repository.go:614-709`
+- **Ticket:** RG0016 / `62403fd`
+- **What:** `/me` reads and writes in the JWT's active tenant, so a switched
+user gets 404. GRC: row by subject, write in the row's tenant, 200-char
+fields, preference shape check.
+- **Port notes:** Keep PROTO's `ProfileHandler`; change lookup and scope.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+All PROTO paths are under `src/api-srv/internal/`. A user has one
+`app_user` row in one home tenant; groups can reach other tenants.
+`/changeSecurityContext` mints a JWT whose `SecurityContext` is the picked
+tenant (`handler/auth_handler.go:618-619`); the row stays home. `/me` then
+looks the row up in the JWT's active tenant:
+
+```go
+// handler/profile_handler.go:72-73 (GET), same at :146-147 (PUT)
+user, err := h.userRepo.RetrieveUserByID(
+    r.Context(), jwtClaims.UserID, jwtClaims.SecurityContext,
+```
+
+`repository/user_repository.go:626` and the PUT at `:678` filter on
+`security_context_id`, so after a switch:
+
+1. `GET /me` answers 404 (`profile_handler.go:76-78`). The web re-reads
+   `/me` on every switch (`src/web-app/app.tsx:156-160`), logs the failure
+   to the console and keeps the stale profile, so nothing looks wrong.
+2. `PUT /me` hits zero rows and the existence check
+   (`user_repository.go:696-705`) misses too: `ErrNotFound`. Save on the
+   Profile page shows a red "User not found" toast; name, email and
+   preferences cannot change until the user switches back. The re-read
+   after the write (`profile_handler.go:168-170`) has the same scope.
+
+Correctness bug, not a security hole: the lookup uses the signed JWT's
+own `uid`. Nothing catches it: no seeded user holds groups in two tenants
+(`src/api-srv/sql/fixtures/local-seed.sql:85-116`) and no Go, pytest or
+Playwright test calls `/changeSecurityContext`.
+
+Doc correction: "200-char fields, preference shape check" are not GRC
+additions; PROTO has both (`profile_handler.go:126,139,190-198`). The
+only gap: PROTO counts bytes (`len`), so a 101-character non-ASCII name is
+refused though it fits `VARCHAR(200)`. GRC counts runes.
+
+#### What GRC changed
+
+GRC commit `62403fd` (RG0016) added the own-profile API. `PUT /me` reads
+the caller's row by JWT subject, which is tenant-free because `user_name`
+is unique installation-wide, and scopes the write by the row's own tenant
+(`src/internal/handler/own_profile_handler.go:189-212`):
+
+```go
+user, err := h.userRepo.RetrieveUserByUserName(r.Context(),
+    jwtClaims.Subject)
+if user.AppUserID != jwtClaims.UserID { // 401 SESSION_MISMATCH
+newUpdateTS, err := h.userRepo.UpdateOwnProfile(r.Context(),
+    user.AppUserID, profile, req.UpdateTS, user.SecurityContext)
+```
+
+`src/internal/repository/user_repository.go:40-43` records the rule;
+`UpdateOwnProfile` (`:521-556`) keeps `security_context_id` in the
+predicate. GRC's `GET /me` (`grc_custom_handler.go:49-64`) is GRC-shaped
+but reads the profile by user name too. Lengths use
+`utf8.RuneCountInString` (`own_profile_handler.go:82`). Tests in
+`src/internal/handler/own_profile_check_sequence_test.go`:
+`TestOwnProfileWritesTheCallerSOwnRow` (`:359`, the row's tenant is
+written, not the session's) and
+`TestOwnProfileSessionNamingTwoUsersWritesNothing` (`:435`).
+
+#### Proposed fix for PROTO
+
+1. **`handler/profile_handler.go`**: both handlers read the row with
+   `RetrieveUserByUserName(ctx, jwtClaims.Subject)`; if
+   `user.AppUserID != jwtClaims.UserID`, 401 `SESSION_MISMATCH`, no write.
+   Pass `user.SecurityContext` to `UpdateOwnProfile` and the re-read.
+2. **`ProfileRepositoryInterface`** (`:32-41`): swap `RetrieveUserByID`
+   for `RetrieveUserByUserName`; `/me` is its only caller, so delete it
+   from `user_repository.go:612-658`.
+3. **`repository/user_repository.go:61-62`** must return `ErrNotFound`:
+   B007's one-line wrap, or B028's full set. Land one first.
+4. Swap `len(...) > 200` at `profile_handler.go:126` for
+   `utf8.RuneCountInString`.
+5. Do not copy GRC's `GrcHandler.Me`, `personId`, roles, `account_status`
+   or the `AppUserOwnProfileModel` wire split.
+6. Tests. Go: extend `MockProfileRepository` in
+   `handler/profile_handler_test.go:19`; assert a JWT with
+   `SecurityContext` 1 and a row in tenant 2 gets 200 on GET and PUT and
+   the write carries tenant 2; assert the uid/subject mismatch writes
+   nothing. pytest: seed a user homed in tenant 2 with one group in a
+   second tenant, switch, then GET and PUT `/me`, expect 200 (depends on
+   B018's tenant-2 harness).
+
+#### Open question for Brandon
+
+Which tenant may the second group live in for the pytest, since tenant 2
+is the only one tests may touch and a switch needs two? Recommendation:
+seed a dedicated tenant (for example 3) used only by the context-switch
+test, and record it beside the tenant-2 rule in CLAUDE.md and doc/900.

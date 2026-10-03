@@ -344,6 +344,11 @@ arrives once.
 - **Data Segregation**: All queries filter by `security_context`
 - **Grant Isolation**: Permissions scoped to security contexts, JWT contains only current context grants
 - **Context Switching**: `/changeSecurityContext` endpoint allows users to switch contexts
+- **Home tenant**: a user's `app_user` row stays in its home tenant when a
+  switch moves the JWT to another. `/me` therefore reads the row by the
+  JWT's subject (`user_name` is unique installation-wide), refuses it with
+  401 if its id is not the JWT's `uid`, and `PUT /me` writes it scoped by
+  the row's own tenant, not the session's.
 
 ## Configuration
 

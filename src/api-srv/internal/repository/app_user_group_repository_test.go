@@ -373,6 +373,34 @@ func (s *AppUserGroupRepositoryTestSuite) TestGroupWriteOtherSecurityContextIsNo
 	s.ErrorIs(err, ErrConflict)
 }
 
+// A member of the caller's tenant holding another tenant's group id does
+// not make that group's delete a 409: the id reads as absent (404).
+func (s *AppUserGroupRepositoryTestSuite) TestDeleteOtherTenantGroupWithOwnTenantMemberIsNotFound() {
+	ctx := context.Background()
+	userRepository := NewUserRepository(s.db)
+	other := s.createGroupIn("RepoTestForeignHeldGroup", otherTenant)
+	_, err := userRepository.CreateUser(ctx, &model.AppUserModel{
+		UserName:                   "RepoTestForeignGroupHolder",
+		PwHash:                     "$2a$10$test.hash",
+		SecurityContext:            testTenant,
+		AppUserGroupMembershipList: []int{other.AppUserGroupID},
+		CreateTS:                   CurrentTimestamp(),
+		CreateUserID:               1,
+		UpdateTS:                   CurrentTimestamp(),
+		UpdateUserID:               1,
+	}, testTenant)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() {
+		_, _ = s.db.Exec(context.Background(),
+			"DELETE FROM app_user WHERE user_name = $1",
+			"RepoTestForeignGroupHolder")
+	})
+
+	_, err = s.repo.DeleteAppUserGroup(ctx, other.AppUserGroupID, testTenant,
+		other.UpdateTS, CurrentTimestamp(), 1)
+	s.ErrorIs(err, ErrNotFound)
+}
+
 // The delete guard counts members in the group's tenant only: a login homed
 // in another tenant that still lists the id does not block the delete.
 func (s *AppUserGroupRepositoryTestSuite) TestDeleteAppUserGroupCountsOwnTenantMembersOnly() {

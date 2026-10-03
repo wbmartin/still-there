@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/mail"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/model"
@@ -28,8 +29,8 @@ const maxPreferenceBytes = 8 << 10
 
 // ProfileRepositoryInterface is the slice of the user repository /me needs.
 type ProfileRepositoryInterface interface {
-	RetrieveUserByID(
-		ctx context.Context, userID int, securityContext int,
+	RetrieveUserByUserName(
+		ctx context.Context, userName string,
 	) (*model.AppUserModel, error)
 	UpdateOwnProfile(
 		ctx context.Context, userID int, securityContext int,
@@ -65,13 +66,9 @@ func (h *ProfileHandler) RetrieveOwnProfile(
 	}
 
 	app.Info("ME_RD_START", "RetrieveOwnProfile invoked")
-	jwtClaims := app.GetClaims()
 
-	user, err := h.userRepo.RetrieveUserByID(
-		r.Context(), jwtClaims.UserID, jwtClaims.SecurityContext,
-	)
-	if err != nil {
-		mapRepoError(app, w, err, "Failed to retrieve profile", "ME_RD_FAIL")
+	user, ok := h.retrieveOwnRow(app, w, r, "ME_RD_FAIL")
+	if !ok {
 		return
 	}
 
@@ -96,7 +93,6 @@ func (h *ProfileHandler) UpdateOwnProfile(
 	}
 
 	app.Info("ME_UP_START", "UpdateOwnProfile invoked")
-	jwtClaims := app.GetClaims()
 
 	var req ProfileUpdateRequest
 	if !decodeJSONBody(app, w, r, maxAuthBodyBytes+maxPreferenceBytes, &req) {
@@ -112,7 +108,9 @@ func (h *ProfileHandler) UpdateOwnProfile(
 		app.WriteError(w, http.StatusBadRequest,
 			"firstName and lastName are required", "BAD_REQUEST", nil)
 		return
-	case len(req.FirstName) > 200 || len(req.LastName) > 200 || len(req.Email) > 200:
+	case utf8.RuneCountInString(req.FirstName) > 200 ||
+		utf8.RuneCountInString(req.LastName) > 200 ||
+		utf8.RuneCountInString(req.Email) > 200:
 		app.WriteError(w, http.StatusBadRequest,
 			"firstName, lastName and email are at most 200 characters",
 			"BAD_REQUEST", nil)
@@ -132,8 +130,15 @@ func (h *ProfileHandler) UpdateOwnProfile(
 		return
 	}
 
+	user, ok := h.retrieveOwnRow(app, w, r, "ME_UP_FAIL")
+	if !ok {
+		return
+	}
+
+	// The row's own tenant, not the session's: after a context switch the
+	// JWT names another tenant while the row stays home.
 	_, err := h.userRepo.UpdateOwnProfile(
-		r.Context(), jwtClaims.UserID, jwtClaims.SecurityContext,
+		r.Context(), user.AppUserID, user.SecurityContext,
 		req.FirstName, req.LastName, req.Email, req.PreferenceJSONB,
 		req.UpdateTS,
 	)
@@ -143,9 +148,7 @@ func (h *ProfileHandler) UpdateOwnProfile(
 	}
 
 	// Return the row as stored so the client's next PUT carries the lock.
-	user, err := h.userRepo.RetrieveUserByID(
-		r.Context(), jwtClaims.UserID, jwtClaims.SecurityContext,
-	)
+	user, err = h.userRepo.RetrieveUserByUserName(r.Context(), user.UserName)
 	if err != nil {
 		app.WriteError(w, http.StatusInternalServerError,
 			"Profile updated but could not be re-read", "ME_UP_FAIL", err)
@@ -153,6 +156,31 @@ func (h *ProfileHandler) UpdateOwnProfile(
 	}
 	app.WriteJSON(w, http.StatusOK, model.DataWrapper{Data: user})
 	app.Info("ME_UP_DONE", "UpdateOwnProfile completed")
+}
+
+// retrieveOwnRow reads the caller's row by the JWT's subject. user_name is
+// unique installation-wide, so the read is tenant-free: a user's row stays
+// in its home tenant while /changeSecurityContext moves the JWT to another.
+// A row whose id is not the JWT's uid is a session for someone else: 401,
+// nothing written.
+func (h *ProfileHandler) retrieveOwnRow(
+	app *security.AppHelper, w http.ResponseWriter, r *http.Request,
+	failCode string,
+) (*model.AppUserModel, bool) {
+	jwtClaims := app.GetClaims()
+	user, err := h.userRepo.RetrieveUserByUserName(
+		r.Context(), jwtClaims.Subject,
+	)
+	if err != nil {
+		mapRepoError(app, w, err, "Failed to retrieve profile", failCode)
+		return nil, false
+	}
+	if user.AppUserID != jwtClaims.UserID {
+		app.WriteError(w, http.StatusUnauthorized,
+			"Session does not match the user", "SESSION_MISMATCH", nil)
+		return nil, false
+	}
+	return user, true
 }
 
 // isPlainEmailAddress accepts "user@host" forms only, not "Name <user@host>".

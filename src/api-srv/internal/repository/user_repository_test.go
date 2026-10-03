@@ -700,7 +700,7 @@ func (s *UserRepositoryTestSuite) TestCurrentTimestamp() {
 	s.True(ts1 > 0, "Timestamp should be positive")
 }
 
-// GET/PUT /me round trip: read by id, narrow update of the profile columns
+// GET/PUT /me round trip: read by user name, narrow update of the profile columns
 // and the preferences document, optimistic lock, and nothing else touched.
 func (s *UserRepositoryTestSuite) TestOwnProfileRoundTrip() {
 	user := &model.AppUserModel{
@@ -719,7 +719,7 @@ func (s *UserRepositoryTestSuite) TestOwnProfileRoundTrip() {
 	created, err := s.repo.CreateUser(context.Background(), user, testTenant)
 	s.Require().NoError(err)
 
-	read, err := s.repo.RetrieveUserByID(context.Background(), created.AppUserID, testTenant)
+	read, err := s.repo.RetrieveUserByUserName(context.Background(), user.UserName)
 	s.Require().NoError(err)
 	s.Equal("Before", read.FirstName)
 	s.Nil(read.PreferenceJSONB) // no preferences yet: SQL NULL
@@ -730,7 +730,7 @@ func (s *UserRepositoryTestSuite) TestOwnProfileRoundTrip() {
 	s.Require().NoError(err)
 	s.Greater(newTS, read.UpdateTS)
 
-	updated, err := s.repo.RetrieveUserByID(context.Background(), created.AppUserID, testTenant)
+	updated, err := s.repo.RetrieveUserByUserName(context.Background(), user.UserName)
 	s.Require().NoError(err)
 	s.Equal("After", updated.FirstName)
 	s.Equal("after@example.com", updated.Email)
@@ -747,7 +747,7 @@ func (s *UserRepositoryTestSuite) TestOwnProfileRoundTrip() {
 	_, err = s.repo.UpdateOwnProfile(context.Background(),
 		created.AppUserID, 999, "X", "Y", "x@y.z", nil, newTS)
 	s.ErrorIs(err, ErrNotFound)
-	_, err = s.repo.RetrieveUserByID(context.Background(), created.AppUserID, 999)
+	_, err = s.repo.RetrieveUserByUserName(context.Background(), "NoSuchUser")
 	s.ErrorIs(err, ErrNotFound)
 }
 
@@ -808,7 +808,7 @@ func (s *UserRepositoryTestSuite) TestUserWriteOtherSecurityContextIsNotFound() 
 		[]float64{other.UpdateTS}, 1, testTenant)
 	s.ErrorIs(err, ErrConflict)
 
-	unchanged, err := s.repo.RetrieveUserByID(ctx, other.AppUserID, otherTenant)
+	unchanged, err := s.repo.RetrieveUserByUserName(ctx, other.UserName)
 	s.Require().NoError(err)
 	s.Equal(other.UserName, unchanged.UserName)
 	s.Equal(other.PwHash, unchanged.PwHash)
@@ -845,7 +845,7 @@ func (s *UserRepositoryTestSuite) TestMembershipWriteStaleUpdateTSIsConflict() {
 		[]float64{staleTS}, 1, testTenant)
 	s.ErrorIs(err, ErrConflict)
 
-	unchanged, err := s.repo.RetrieveUserByID(ctx, created.AppUserID, testTenant)
+	unchanged, err := s.repo.RetrieveUserByUserName(ctx, user.UserName)
 	s.Require().NoError(err)
 	s.Equal([]int{1}, unchanged.AppUserGroupMembershipList)
 }

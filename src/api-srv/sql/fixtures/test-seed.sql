@@ -1,6 +1,7 @@
 -- Seed data for the SCRATCH databases the test suites use
 -- (loc_<slug>_test_db and loc_<slug>_e2e_db): the fixture groups, an admin,
--- a basic and an MFA user, and two example rows -- all in the test tenants.
+-- a basic, an MFA and a two-tenant user, and two example rows -- all in the
+-- test tenants.
 --
 -- A FIXTURE, not a migration. bin/510-reset-test-db runs it after
 -- `migrate up`, then sql/fixtures/test-tenant-lock.sql; bin/515-reseed-db
@@ -9,7 +10,7 @@
 --
 -- TENANTS (security_context_id): 1 is the first real tenant and never
 -- appears in a test database -- the lock refuses it. 2 is the test tenant:
--- groups 1-3, the three users and the examples. 3 is the "other tenant"
+-- groups 1-3, the four users and the examples. 3 is the "other tenant"
 -- the isolation tests aim at: groups 4 and 5. Group ids 1-5 are fixed; the
 -- tests rely on them.
 --
@@ -18,7 +19,8 @@
 -- Grant ids must match src/api-srv/internal/model (user grants). That code is
 -- the source of truth; the arrays below are its projection into SQL.
 --
--- Passwords: admin / admin123!, basic / basic123!, mfa / basic123! (Argon2id).
+-- Passwords: admin / admin123!, basic / basic123!, mfa / basic123!,
+-- switcher / basic123! (Argon2id).
 
 -- User groups for the test tenant, 2 (explicit ids: the users below refer
 -- to them by id)
@@ -78,6 +80,8 @@ SELECT setval('app_user_group_app_user_group_id_seq',
 -- User group) are MFA exempt so the test suites can sign in with a password
 -- alone; mfa (Basic User group, password basic123!) is NOT exempt and starts
 -- with no seed, so the TOTP enrol → verify path is exercised end to end.
+-- switcher (MFA exempt) is homed in 2 with Basic User there and Basic2 User
+-- in 3, the one login that can /changeSecurityContext.
 WITH common_vars AS (
     SELECT EXTRACT(EPOCH FROM NOW()) AS ts, 0 AS system_id
 )
@@ -111,7 +115,10 @@ FROM common_vars,
      'Basic', 'User', 'basic@example.com', ARRAY[1], TRUE),
     ('mfa',
      '$argon2id$v=19$m=65536,t=3,p=4$kxssq7+N6Of3OSiUThJgrw$S+uHFwjOhp8daiHCYhyto7whkrDjDr2TD0+Y6Cq1kd4',
-     'Second', 'Factor', 'mfa@example.com', ARRAY[1], FALSE)
+     'Second', 'Factor', 'mfa@example.com', ARRAY[1], FALSE),
+    ('switcher',
+     '$argon2id$v=19$m=65536,t=3,p=4$kxssq7+N6Of3OSiUThJgrw$S+uHFwjOhp8daiHCYhyto7whkrDjDr2TD0+Y6Cq1kd4',
+     'Context', 'Switcher', 'switcher@example.com', ARRAY[1, 4], TRUE)
 ) AS data(user_name, pw_hash, first_name, last_name, email,
           app_user_group_membership_list, mfa_exempt)
 ON CONFLICT (user_name) DO NOTHING;

@@ -559,52 +559,6 @@ func removeDuplicates(slice []int) []int {
 	return resultList
 }
 
-// RetrieveUserByID reads one live user in the caller's security context. It
-// is the read behind GET /me; the id comes from the JWT, never the client.
-func (r *UserRepository) RetrieveUserByID(
-	ctx context.Context,
-	userID int,
-	securityContext int,
-) (*model.AppUserModel, error) {
-	query := `
-		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
-		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
-		       preference_jsonb,
-		       create_ts, create_user_id, update_ts, update_user_id,
-		       delete_ts, delete_user_id
-		FROM app_user
-		WHERE app_user_id = $1 AND security_context_id = $2 AND delete_user_id IS NULL`
-
-	var user model.AppUserModel
-	err := r.db.QueryRow(ctx, query, userID, securityContext).Scan(
-		&user.AppUserID,
-		&user.UserName,
-		&user.PwHash,
-		&user.FirstName,
-		&user.LastName,
-		&user.Email,
-		&user.SecurityContext,
-		&user.AppUserGroupMembershipList,
-		&user.MFAExempt,
-		&user.TOTPSeed,
-		&user.MFASetup,
-		&user.PreferenceJSONB,
-		&user.CreateTS,
-		&user.CreateUserID,
-		&user.UpdateTS,
-		&user.UpdateUserID,
-		&user.DeleteTS,
-		&user.DeleteUserID,
-	)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("failed to retrieve user by id: %w", err)
-	}
-	return &user, nil
-}
-
 // UpdateOwnProfile is the narrow write behind PUT /me: the columns a user
 // may change about themselves, nothing else (no user name, groups, MFA
 // flags). Optimistic lock on update_ts; the row's new update_ts is returned.

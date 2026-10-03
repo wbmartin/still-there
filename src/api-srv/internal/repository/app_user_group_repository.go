@@ -228,12 +228,17 @@ func (r *AppUserGroupRepository) DeleteAppUserGroup(
 ) (int, error) {
 	// Members are counted in the group's tenant only. A login homed in
 	// another tenant can still list the group; once it is deleted
-	// GetGrantsForGroups skips it, so that leftover id is inert.
+	// GetGrantsForGroups skips it, so that leftover id is inert. Another
+	// tenant's group counts nobody, so it reaches the 404 below rather than
+	// a 409 that would reveal it exists.
 	checkQuery := `
 		SELECT COUNT(*)
-		FROM app_user
-		WHERE $1 = ANY(app_user_group_membership_list)
-		  AND security_context_id = $2 AND delete_user_id IS NULL`
+		FROM app_user u
+		WHERE $1 = ANY(u.app_user_group_membership_list)
+		  AND u.security_context_id = $2 AND u.delete_user_id IS NULL
+		  AND EXISTS (SELECT 1 FROM app_user_group g
+		              WHERE g.app_user_group_id = $1
+		                AND g.security_context_id = $2)`
 	var count int
 	err := r.db.QueryRow(ctx, checkQuery, groupID, securityContext).
 		Scan(&count)
