@@ -852,63 +852,6 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
 
 # Bugs found in PROTO along the way
 
-### B088 — Broken comments: UAT env example and `.gitignore`
-
-- **Priority:** P3  **Area:** etc
-- **GRC:** n/a   **PROTO:** `etc/uat-api-srv.env.example:7` (ends "It intentionally omits"), `:38` (dangling `# --- logging / KV ---`); `.gitignore:23` (`bin/200-run-tests`)
-- **Ticket:** none
-- **What:** Cut sentence; header with no keys; wrong script name (`bin/300`).
-- **Port notes:** Fix with B016/B041.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Quality gap: three comments outlived what they described. No runtime
-effect; each misleads a reader.
-
-1. **Cut-off sentence.** `etc/uat-api-srv.env.example:6-7` ends "...at
-   $APP_ROOT/etc/api-srv.env). It intentionally omits" and stops. In
-   PS0001 (`5fac67d`) it went on: "the VAULT_* keys from
-   etc/loc-api-srv.env; LoadConfig() only calls the vault when all five
-   VAULT_* keys are present." PS0003 (`533a3bd`) removed vault support
-   and deleted those lines but kept the first half.
-2. **Header with no keys.** `etc/uat-api-srv.env.example:38` is
-   `# --- logging / KV ---` and the file ends. It used to hold
-   `KV_BACKEND` and `LOG_RECEIVER_HOST_PORT`, both removed in PS0003 (KV
-   is in-process, logs go to stderr). An operator copying the file
-   looks for logging keys that do not exist.
-3. **Wrong script.** `.gitignore:23` says "(bin/200-run-tests writes
-   tmp/test-logs/)". `bin/200-run-tests` was retired in PS0014
-   (`6b0ecf0`); `bin/300-run-tests:46` writes `tmp/test-logs`. The
-   comment also sits over `logs/` and `*.log`; `tmp/` is ignored at
-   `.gitignore:5`.
-
-#### What GRC changed
-
-Nothing equivalent; PROTO-only defects. GRC dropped the example file for
-`etc/uat-api-srv.env.template`, filled on the host with generated secrets
-(B027); its header (`:1-4`) is complete and it has no logging section.
-GRC's `.gitignore` has `tmp/` at `:6` with no script-name comment.
-
-#### Proposed fix for PROTO
-
-1. `etc/uat-api-srv.env.example:7`: delete "It intentionally omits" or
-   finish it, e.g. "Secrets are inline; there is no external store."
-2. `:38`: delete the header. If B031 (`LOG_LEVEL`) lands, use
-   `# --- logging ---` with `LOG_LEVEL=info` under it.
-3. `.gitignore:23`: move the comment beside `tmp/` (`:5`), say
-   `bin/300-run-tests`; leave `logs/` and `*.log` under `# Logs`.
-4. Same commit as B016 (adds `SERVER_BIND_ADDRESS` to this example) or
-   B041 (edits `.gitignore`), whichever lands first. GRC's template is
-   B027's scope; do not copy it here.
-5. Tests: none.
-
-#### Open question for Brandon
-
-None.
-
 ### B090 — Doc paths that do not exist
 
 - **Priority:** P3  **Area:** docs
@@ -9009,3 +8952,61 @@ GRC did not clean its `doc/310`; it still names the host. No tests.
 Scrub the two archived tickets too, or leave archive history as written?
 Recommend leaving the archive and fixing only live docs.
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). Docs only. `doc/902` was already fixed by B075 (`curl -s http://localhost:8080/health`, no `-k`, no other project's host). Remaining: `doc/310-api-srv-cert-renewal.md` named the other project's host five times, its ssh alias and an absolute `~/Code/ProtoStack-ReactGo/etc/crt/` path; rewritten with `<api-host>`, `<uat-vm>`, repo-relative `etc/crt/` and a title. Tree grep for the domain, the host label and the ssh alias (excluding doc/700) now finds nothing; the archived tickets were deleted by B091. No code, no test. Tests: all green, infra=15 docs=705 go=708 unit=105 e2e=70 py=103
+
+### B088 — COMPLETED — Broken comments: UAT env example and `.gitignore`
+
+- **Priority:** P3  **Area:** etc
+- **GRC:** n/a   **PROTO:** `etc/uat-api-srv.env.example:7` (ends "It intentionally omits"), `:38` (dangling `# --- logging / KV ---`); `.gitignore:23` (`bin/200-run-tests`)
+- **Ticket:** none
+- **What:** Cut sentence; header with no keys; wrong script name (`bin/300`).
+- **Port notes:** Fix with B016/B041.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Quality gap: three comments outlived what they described. No runtime
+effect; each misleads a reader.
+
+1. **Cut-off sentence.** `etc/uat-api-srv.env.example:6-7` ends "...at
+   $APP_ROOT/etc/api-srv.env). It intentionally omits" and stops. In
+   PS0001 (`5fac67d`) it went on: "the VAULT_* keys from
+   etc/loc-api-srv.env; LoadConfig() only calls the vault when all five
+   VAULT_* keys are present." PS0003 (`533a3bd`) removed vault support
+   and deleted those lines but kept the first half.
+2. **Header with no keys.** `etc/uat-api-srv.env.example:38` is
+   `# --- logging / KV ---` and the file ends. It used to hold
+   `KV_BACKEND` and `LOG_RECEIVER_HOST_PORT`, both removed in PS0003 (KV
+   is in-process, logs go to stderr). An operator copying the file
+   looks for logging keys that do not exist.
+3. **Wrong script.** `.gitignore:23` says "(bin/200-run-tests writes
+   tmp/test-logs/)". `bin/200-run-tests` was retired in PS0014
+   (`6b0ecf0`); `bin/300-run-tests:46` writes `tmp/test-logs`. The
+   comment also sits over `logs/` and `*.log`; `tmp/` is ignored at
+   `.gitignore:5`.
+
+#### What GRC changed
+
+Nothing equivalent; PROTO-only defects. GRC dropped the example file for
+`etc/uat-api-srv.env.template`, filled on the host with generated secrets
+(B027); its header (`:1-4`) is complete and it has no logging section.
+GRC's `.gitignore` has `tmp/` at `:6` with no script-name comment.
+
+#### Proposed fix for PROTO
+
+1. `etc/uat-api-srv.env.example:7`: delete "It intentionally omits" or
+   finish it, e.g. "Secrets are inline; there is no external store."
+2. `:38`: delete the header. If B031 (`LOG_LEVEL`) lands, use
+   `# --- logging ---` with `LOG_LEVEL=info` under it.
+3. `.gitignore:23`: move the comment beside `tmp/` (`:5`), say
+   `bin/300-run-tests`; leave `logs/` and `*.log` under `# Logs`.
+4. Same commit as B016 (adds `SERVER_BIND_ADDRESS` to this example) or
+   B041 (edits `.gitignore`), whichever lands first. GRC's template is
+   B027's scope; do not copy it here.
+5. Tests: none.
+
+#### Open question for Brandon
+
+None.
+- **Completed:** 2026-10-03. Already done by earlier items; doc move only, no file change. (1) The cut-off "It intentionally omits" sentence and (2) the empty `# --- logging / KV ---` header were fixed in B016 (see its note) and the example file was then replaced by `etc/uat-api-srv.env.template` in B027 (checked: complete header, no logging section, no dangling header; no `*.example` left under `etc/`). (3) `.gitignore` now reads "Logs (bin/300-run-tests writes its own under tmp/, ignored above)" over `logs/` and `*.log`, fixed by B041 (checked). Tree grep for `intentionally omits`, `logging / KV` and `200-run-tests` finds only doc/700. Tests: all green, infra=15 docs=705 go=708 unit=105 e2e=70 py=103
