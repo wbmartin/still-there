@@ -1,5 +1,48 @@
 # Project Commands
 
+One row per `bin/` script; a new script means a new row here. Numbers:
+`0xx` setup, `1xx` build, `2xx` run, `3xx` tests, `4xx` certs, `5xx`
+database, `6xx` deploy. Details follow in the sections below.
+
+| Script | What it does |
+|--------|--------------|
+| `bin/000-rebrand <slug> "<Name>"` | Rename the app when deriving from this template (`DERIVING.md`) |
+| `bin/100-build-api-server` | Build the API and migrator binaries into `dist/` |
+| `bin/110-build-web-app` | `vite build` and a timestamped tar.gz in `dist/` |
+| `bin/205-migrate-db [dbname]` | Create/migrate the developer database (`loc_proto_db`) |
+| `bin/215-run-api-srv` | Build and run the API on :8080 (foreground or background) |
+| `bin/216-stop-local-stack` | Stop this checkout's API and Vite |
+| `bin/220-run-web-app` | Vite dev server on :5173, proxying `/api` to :8080 |
+| `bin/230-run-web-app-e2e` | Playwright suite on its own API (:8082) and Vite (:5182) |
+| `bin/300-run-tests [mode]` | The test gate: infra, docs, go, govulncheck, unit, e2e, py |
+| `bin/305-update-grants-fixture` | Rewrite the Go/web grants mirror fixture |
+| `bin/330-test-load` | Load test a private API on the e2e database |
+| `bin/400-make-local-dev-certs [host]` | Self-signed cert in `etc/crt/` for testing `ENABLE_TLS=true` |
+| `bin/510-reset-test-db [dbname]` | DROP + rebuild a scratch `_test_db` / `_e2e_db` |
+| `bin/515-reseed-db [dbname]` | TRUNCATE + re-seed a scratch database |
+| `bin/600-bundle-uat` | Presales: build, dump, bundle and scp to UAT |
+| `bin/605-survey-host <ssh-host>` | Read-only post-sales host survey |
+| `bin/610-deploy-uat` | Presales: shipped in the bundle, run on the UAT host with sudo |
+| `bin/620-export-tenant-data <out-dir>` | Scrubbed dump of the local database for a host |
+
+## Setup and Build
+
+```
+./bin/000-rebrand <slug> "<Display Name>" [--module <go module path>]
+./bin/100-build-api-server
+./bin/400-make-local-dev-certs [host]   # default localhost; FORCE=1 overwrites
+```
+- `000`: the mechanical half of `DERIVING.md`. Reads the current identity
+  from `etc/app.env`, rewrites every tracked text file and the infra file
+  names that carry the slug, writes `etc/app.env`, prints the steps left to
+  a human. Refuses a dirty tree.
+- `100`: `dist/<slug>-api` and `dist/<slug>-migrate`. `bin/215` runs it
+  first, so a separate build is only for checking it compiles.
+- `400`: writes `etc/crt/api-srv-fullchain.pem` and
+  `etc/crt/api-srv-privkey.pem` (gitignored, 365 days); set
+  `ENABLE_TLS=true` in `etc/loc-api-srv.env` to use them. Dev is plain
+  HTTP otherwise; real hosts use certbot (doc/310-api-srv-cert-renewal.md).
+
 ## API Server Management
 
 To run the api server:
@@ -12,9 +55,10 @@ To run the api server:
 - **Force interactive**: `./bin/215-run-api-srv --interactive` or `./bin/215-run-api-srv -i`
 - **Force daemon**: `./bin/215-run-api-srv --daemon` or `./bin/215-run-api-srv -d`
 
-To check if api server is running:
+To check if api server is running (the port is `SERVER_PORT` in
+`etc/loc-api-srv.env`):
 ```
-curl -k https://local-atticus-snipper.teamtaggle.com:8443/health
+curl -s http://localhost:8080/health
 ```
 
 To view server logs (when running in background):

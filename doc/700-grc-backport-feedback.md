@@ -710,83 +710,6 @@ given it moves authorization differences into a matrix? Recommend an ADR
 that permits it only for derived apps past ~10 entities, never the
 template.
 
-### B075 — Dev docs: doc/050, doc/060, doc/902, doc/810
-
-- **Priority:** P3  **Area:** docs
-- **GRC:** `doc/050-dev-env-init.md:1-8,10-14,16-35,118-127`; `doc/060-dev-env-start.md:1-43`; `doc/902-project-commands.md:3-8,40-42,46-51,60-63,67`; `doc/810-create-new-entity-type-notes.md:23-24,85-101,130-131,147-151`   **PROTO:** `doc/050-dev-env-init.md:5,42-44`; `doc/060-dev-env-start.md:1-34` (:31); `doc/902-project-commands.md:1-140`; `doc/810-create-new-entity-type-notes.md:1,84-118`
-- **Ticket:** RG0011 / `06a1396`; RG0021 / `1663a3e`; RG0010; RG0006 / `719739b`; RG0016 / `5593a9a`; RG0020 / `c9ac1aa`; RG0008 / `48a557a`
-- **What:** 050: real dev topology replaces the nginx TODO, tools, Linux box.
-060: sections, repo-relative commands, `/health`. 902: one row per script,
-gate contract. 810: one column end-to-end as a layer table.
-- **Port notes:** Drop PowerShell/worker/imports. 810 feeds PS0010. Gate text
-after B040/B041/B018.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Four developer docs describe a stack that no longer exists. Docs gap;
-each item below makes a newcomer run the wrong command.
-
-- `doc/050-dev-env-init.md:43-44` ends on a stray TODO: "wil mayneed to
-  have a container running nginx". There is no nginx in dev (Vite proxies
-  `/api`). No tools list (Go, Node, Docker, Python versions), no Linux
-  notes.
-- `doc/060-dev-env-start.md:17-20` says "First time, or to rebuild the
-  schema: `bin/510-reset-test-db`". 510 builds `loc_proto_test_db` and
-  refuses any name not ending `_test_db`/`_e2e_db`; the dev API reads
-  `loc_proto_db` (`etc/loc-api-srv.env:7`), which stays empty (same bug
-  as B085). `:31` hardcodes `~/Code/ProtoStack-ReactGo/bin/220-run-web-app`.
-  No `/health` check, no headings that say which shell.
-- `doc/902-project-commands.md`: `:17` curls another project's real host
-  (B087); `:22` says `tmp/server.log`, but 215 writes
-  `tmp/api-srv/server.log` (`bin/215-run-api-srv:87-89`); `:71` says
-  `npm run test:unit`, which `package.json` does not define (bin/300 runs
-  `npx vitest run`, `:95`). `bin/000-rebrand`, `100-build-api-server`
-  and `400-make-local-dev-certs` have no entry.
-- `doc/810-create-new-entity-type-notes.md:1` flags itself "procedure ...
-  out of date" (PS0010). `:103-105` require `max<Entity>UpdateTs`; the
-  stores use `maxUpdateTs` (`stores/create-entity-store.ts:10`).
-
-Correction to B086: `./515-run-postgres.sh` (`doc/060:7`) is not a
-missing `bin/` script. `:5` first `cd`s into the external infrahub
-`loc-postgres` checkout, where the script exists. Only `:5`'s placeholder
-path and `:31` need fixing.
-
-#### What GRC changed
-
-RG0011 (`06a1396`), RG0021 (`1663a3e`), RG0006 (`719739b`), RG0020
-(`c9ac1aa`): `doc/050:1-8` states the dev topology (Postgres only,
-in-process KV, slog to stderr, loopback bind); `:10-14` tools;
-`:16-35` "A second machine (Linux)"; `:118-127` "no nginx in the dev
-path". `doc/060:1-43` has one section per shell, commands relative to the
-repo root, `curl -s http://localhost:8080/health` (`:22`).
-`doc/902:3-8` says "one line per script ... a new `bin/` script means a
-new row here", tables per number range, and `:60-63` the gate contract
-("`git status --short` is empty after a run"). `doc/810:85-101` walks
-one real column (`app_user.preference_jsonb`) through every layer as a
-table; `:130-151` lists conventions. No tests.
-
-#### Proposed fix for PROTO
-
-1. `doc/050`: replace `:42-44` with a "Files and the web app" note (Vite
-   proxy, no nginx); add Tools; keep a short Linux section. Drop GRC's
-   PowerShell, worker, import, `ADMIN_DATABASE_URL`, smoke paths.
-2. `doc/060`: three headed sections; dev DB via doc/050 or `bin/205` if
-   B073 adds it; `bin/220-run-web-app` relative; add the `/health` curl.
-3. `doc/902`: one table row per `bin/` script, fix `:17,22,71`, add
-   the three missing scripts. Gate text waits for B040/B041/B018.
-4. `doc/810`: remove the `:1` banner; add the layer table using PROTO
-   paths (`0003_app_user_preference_jsonb.sql`, `profile_handler.go`, not
-   GRC's `own_profile_handler.go`/`utils/preference.ts`, which PROTO
-   lacks); fix `maxUpdateTs`. Feeds PS0010; land with or after it.
-5. Optional guard: B053's path checker catches the next stale path.
-
-#### Open question for Brandon
-
-None.
-
 ### B076 — Web README: house patterns and small rules
 
 - **Priority:** P3  **Area:** docs, web-app
@@ -8998,3 +8921,81 @@ Rename the service account to `svc-<slug>` (GRC) or keep `<slug>`?
 Recommendation: `svc-<slug>`, and fix the uat/prd mismatch in the same
 change.
 - **Completed:** 2026-10-03. Pulled per Brandon (fix in the template; old hosts stay as they are); the open question taken as the recommendation: the service account is `svc-proto` on both hosts, which also fixes prd's `User=prd-proto` / `Group=proto` mismatch. Units (`infra/{uat,prd}/etc/<env>-proto-api.service`): a header naming the host path and the `/etc/systemd/system/` symlink, `User`/`Group=svc-proto`, `WorkingDirectory=/srv/<env>-proto`, `ReadWritePaths=.../log` dropped (the API writes no files), and the hardening from fix step 2 plus `PrivateDevices`, `ProtectKernelLogs`, `ProtectClock`, `ProtectHostname`, an empty `CapabilityBoundingSet`, `RestrictNamespaces`/`Realtime`/`SUIDSGID`, `LockPersonality`, `MemoryDenyWriteExecute`, `SystemCallArchitectures=native`, `SystemCallErrorNumber=EPERM` (deviation: more than step 2 listed; `~@resources` left out because the Go runtime calls `setrlimit` at start). The restart `.path`/`.service` pairs gain the same header. UAT's nackmon and pulsecheck files moved to `infra/prd/shrmpl-etc/` with a two-line placement header; `infra/README.md` states the rule (monitors on the monitoring host, never the host they watch; prod's own stay on prod for want of a third host), the unit sandbox, `svc-proto` in step 1 and the per-host step 7. Env headers: `*-api.env` gives the `openssl rand -hex 32` recipe and the TOTP-key warning (keep it with every backup, restore the two together), `chown root:svc-proto`; `*-migrate.env` the recipe; the loopback note was already there. `sslmode=disable` not added (optional per the fix; pgx `prefer` falls back on loopback). Docs: doc/330 (`svc-proto` in A2/A4 and both tables, `MON_SSH` never UAT, 0.2/0.3/B2 paths under `infra/prd`, `idof` and the A3 `ls` glob `infra/*/shrmpl-etc` so the nackmon id is found under either mirror, the two pending Lessons settled), doc/331 (A2, A3 chown, `MON_SSH` caveat), doc/320 table. `bin/000-rebrand` needs no change: its bare-slug rule turns `svc-proto` into `svc-<slug>` (checked with its substitutions on copies). Verified in a throwaway `ubuntu:24.04` running systemd, Postgres 16 set up with `infra/sql/proto-host-db.sql` and `proto-migrate up`, the linux/arm64 API from this tree: `systemd-analyze verify` clean on all six units; old unit active as `proto`, cwd `/`, exposure 8.3 EXPOSED; new unit active as `svc-proto`, cwd `/srv/uat-proto`, exposure 1.7 OK, `/health` 200, `/auth` 401 (DB query under the filter), path-unit restart changed `MainPID` and removed the request. Changed doc blocks: `bash -n` clean on all 65, shellcheck adds nothing (only the existing SC2010 `ls | grep`); `idof` glob tested on a scratch tree. No host touched. Tests: all green, infra=15 docs=547 (+6 path tokens) go=707 unit=101 e2e=68 py=103, govulncheck clean, gofmt clean (no Go change).
+
+### B075 — COMPLETED — Dev docs: doc/050, doc/060, doc/902, doc/810
+
+- **Priority:** P3  **Area:** docs
+- **GRC:** `doc/050-dev-env-init.md:1-8,10-14,16-35,118-127`; `doc/060-dev-env-start.md:1-43`; `doc/902-project-commands.md:3-8,40-42,46-51,60-63,67`; `doc/810-create-new-entity-type-notes.md:23-24,85-101,130-131,147-151`   **PROTO:** `doc/050-dev-env-init.md:5,42-44`; `doc/060-dev-env-start.md:1-34` (:31); `doc/902-project-commands.md:1-140`; `doc/810-create-new-entity-type-notes.md:1,84-118`
+- **Ticket:** RG0011 / `06a1396`; RG0021 / `1663a3e`; RG0010; RG0006 / `719739b`; RG0016 / `5593a9a`; RG0020 / `c9ac1aa`; RG0008 / `48a557a`
+- **What:** 050: real dev topology replaces the nginx TODO, tools, Linux box.
+060: sections, repo-relative commands, `/health`. 902: one row per script,
+gate contract. 810: one column end-to-end as a layer table.
+- **Port notes:** Drop PowerShell/worker/imports. 810 feeds PS0010. Gate text
+after B040/B041/B018.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Four developer docs describe a stack that no longer exists. Docs gap;
+each item below makes a newcomer run the wrong command.
+
+- `doc/050-dev-env-init.md:43-44` ends on a stray TODO: "wil mayneed to
+  have a container running nginx". There is no nginx in dev (Vite proxies
+  `/api`). No tools list (Go, Node, Docker, Python versions), no Linux
+  notes.
+- `doc/060-dev-env-start.md:17-20` says "First time, or to rebuild the
+  schema: `bin/510-reset-test-db`". 510 builds `loc_proto_test_db` and
+  refuses any name not ending `_test_db`/`_e2e_db`; the dev API reads
+  `loc_proto_db` (`etc/loc-api-srv.env:7`), which stays empty (same bug
+  as B085). `:31` hardcodes `~/Code/ProtoStack-ReactGo/bin/220-run-web-app`.
+  No `/health` check, no headings that say which shell.
+- `doc/902-project-commands.md`: `:17` curls another project's real host
+  (B087); `:22` says `tmp/server.log`, but 215 writes
+  `tmp/api-srv/server.log` (`bin/215-run-api-srv:87-89`); `:71` says
+  `npm run test:unit`, which `package.json` does not define (bin/300 runs
+  `npx vitest run`, `:95`). `bin/000-rebrand`, `100-build-api-server`
+  and `400-make-local-dev-certs` have no entry.
+- `doc/810-create-new-entity-type-notes.md:1` flags itself "procedure ...
+  out of date" (PS0010). `:103-105` require `max<Entity>UpdateTs`; the
+  stores use `maxUpdateTs` (`stores/create-entity-store.ts:10`).
+
+Correction to B086: `./515-run-postgres.sh` (`doc/060:7`) is not a
+missing `bin/` script. `:5` first `cd`s into the external infrahub
+`loc-postgres` checkout, where the script exists. Only `:5`'s placeholder
+path and `:31` need fixing.
+
+#### What GRC changed
+
+RG0011 (`06a1396`), RG0021 (`1663a3e`), RG0006 (`719739b`), RG0020
+(`c9ac1aa`): `doc/050:1-8` states the dev topology (Postgres only,
+in-process KV, slog to stderr, loopback bind); `:10-14` tools;
+`:16-35` "A second machine (Linux)"; `:118-127` "no nginx in the dev
+path". `doc/060:1-43` has one section per shell, commands relative to the
+repo root, `curl -s http://localhost:8080/health` (`:22`).
+`doc/902:3-8` says "one line per script ... a new `bin/` script means a
+new row here", tables per number range, and `:60-63` the gate contract
+("`git status --short` is empty after a run"). `doc/810:85-101` walks
+one real column (`app_user.preference_jsonb`) through every layer as a
+table; `:130-151` lists conventions. No tests.
+
+#### Proposed fix for PROTO
+
+1. `doc/050`: replace `:42-44` with a "Files and the web app" note (Vite
+   proxy, no nginx); add Tools; keep a short Linux section. Drop GRC's
+   PowerShell, worker, import, `ADMIN_DATABASE_URL`, smoke paths.
+2. `doc/060`: three headed sections; dev DB via doc/050 or `bin/205` if
+   B073 adds it; `bin/220-run-web-app` relative; add the `/health` curl.
+3. `doc/902`: one table row per `bin/` script, fix `:17,22,71`, add
+   the three missing scripts. Gate text waits for B040/B041/B018.
+4. `doc/810`: remove the `:1` banner; add the layer table using PROTO
+   paths (`0003_app_user_preference_jsonb.sql`, `profile_handler.go`, not
+   GRC's `own_profile_handler.go`/`utils/preference.ts`, which PROTO
+   lacks); fix `maxUpdateTs`. Feeds PS0010; land with or after it.
+5. Optional guard: B053's path checker catches the next stale path.
+
+#### Open question for Brandon
+
+None.
+- **Completed:** 2026-10-03. Pulled per the recommendation, each defect re-checked against the current text. Already fixed: doc/902 `tmp/server.log` -> `tmp/api-srv/server.log` (B070), doc/902 `npm run test:unit` (B041), gate contract text (B040/B041), doc/050 deleted SQL path and doc/810 paths (B053), dev DB command (`bin/205-migrate-db`, B073), PS0010 landed first (B028). Fixed here: doc/050 gets a title, "What runs in dev" (Postgres container, API on 127.0.0.1:8080 with the in-process KV, Vite proxying `/api`, no nginx), Tools (Go per go.mod, Node 22, Docker, Python venv, openssl for 400, `npm ci`), "Files and the web app" replacing the nginx TODO, a short Linux section (docker group, `python3-venv`, `playwright install-deps`); the stale `0001 ... applied` expectation now reads one applied line per migration. doc/060: title and doc/050 pointer, one headed section per shell, `bin/510` -> `./bin/205-migrate-db`, repo-relative `./bin/220-run-web-app`, `curl -s http://localhost:8080/health`. doc/902: one table row per `bin/` script (all 18) with the "new script, new row" rule, a Setup and Build section for the three missing scripts (000, 100, 400), and the health line now `curl -s http://localhost:8080/health` (B087 step 1 only; doc/310 and the tree grep stay with B087). doc/810: `:1` banner removed (its three complaints were already fixed), standard fields `<table>_id` / `security_context_id`, a "One column, every layer" table for `app_user.preference_jsonb` with PROTO paths, `max<Entity>UpdateTs` -> `maxUpdateTs`. Left alone: doc/060's infrahub `loc-postgres` block (B086's `docker run` replacement), README.md/api-srv README `bin/510` lines (B085), other doc/810 path tokens (B090); doc/810's grant-numbering prose (1xx0 READ vs the code's 1001 READ, 9001 CREATE) disagrees with `grants.go`, not in B075. Tests: all green, infra=15 docs=603 (+56: the new path tokens) go=707 unit=101 e2e=68 py=103; govulncheck clean; no new tests (docs only).
