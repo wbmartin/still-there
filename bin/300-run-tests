@@ -22,7 +22,8 @@ set -euo pipefail
 #                              #   the e2e database, a minute (not in all)
 #
 # Output: tmp/test-logs/ (logs, the private API's env and binary) and
-# tmp/test-reports/ (pytest HTML). Both gitignored.
+# tmp/test-reports/ (pytest HTML). Both gitignored. tmp/test-logs/
+# run-tests.result is the run's one-line outcome, for a caller to post.
 #
 # Everything environment-specific comes from ONE sourced file, so "it passed
 # for me" and "it passed on the host" mean the same thing:
@@ -30,10 +31,11 @@ set -euo pipefail
 #   TEST_ENV   which file; default etc/loc-test.env (a laptop). A build
 #                    host points it at its own copy with a CI role.
 #
-# Passing here is the last gate before anything is bundled or pushed, which
-# is why the Go integration suites are not allowed to skip: on a laptop they
-# skip when Postgres is down, and a green run with the repository tests
-# missing is worse than a red one.
+# Passing here is what lets a build reach prod (on the UAT host, the
+# sha-<commit>-passed tag prd-proto-promote-uat requires), which is why
+# the Go integration suites are not allowed to skip: on a laptop they skip
+# when Postgres is down, and a green run with the repository tests missing
+# is worse than a red one.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 MODE="${1:-all}"
@@ -71,6 +73,48 @@ done
 
 INFRA_COUNT=0; DOCS_COUNT=0; GO_COUNT=0; UNIT_COUNT=0; E2E_COUNT=0; PY_COUNT=0
 SUMMARY=()
+
+# The run's outcome as one line in LOG_DIR (TEST_LOG_DIR), rewritten on
+# every exit from here on: "passed (<mode>): <counts>", or "FAILED
+# (<mode>) at <step> ..." with the counts so far, up to five failing tests
+# and the step's log. The UAT build posts it to Slack. A run that dies
+# before this point leaves no file, so a caller deletes it first.
+RESULT_FILE="$LOG_DIR/run-tests.result"
+rm -f "$RESULT_FILE"
+STEP="setup"
+STEP_LOG=""
+API_PID=""
+stop_api() {
+    kill -TERM "$API_PID" 2>/dev/null || true
+    wait "$API_PID" 2>/dev/null || true
+}
+failing_test_list() {
+    [ -f "$STEP_LOG" ] || return 0
+    case "$STEP" in
+        "go test") grep -oE -- '--- FAIL: [^ ]+' "$STEP_LOG" \
+            | sed 's/^--- FAIL: //' ;;
+        vitest) grep -E '^ *FAIL ' "$STEP_LOG" | sed 's/^ *FAIL *//' ;;
+        e2e) grep -E '^ +[0-9]+\) ' "$STEP_LOG" \
+            | sed -E 's/^ *[0-9]+\) *//; s/ (─)+$//' ;;
+        py) grep -oE '^FAILED [^ ]+' "$STEP_LOG" | sed 's/^FAILED //' ;;
+    esac | awk '!seen[$0]++' | head -5 | paste -sd ';' - | sed 's/;/; /g'
+}
+write_result() {
+    local exit_code=$?
+    [ -z "$API_PID" ] || stop_api
+    local counts="${SUMMARY[*]:-none}"
+    if [ "$exit_code" -eq 0 ]; then
+        echo "passed ($MODE): $counts" > "$RESULT_FILE" || true
+        return 0
+    fi
+    local line="FAILED ($MODE) at $STEP (exit $exit_code); passed: $counts"
+    local failing
+    failing="$(failing_test_list 2>/dev/null || true)"
+    [ -z "$failing" ] || line+="; failing: $failing"
+    [ -z "$STEP_LOG" ] || line+="; log: $STEP_LOG"
+    echo "$line" > "$RESULT_FILE" || true
+}
+trap write_result EXIT
 
 # The tree as the run found it; compared again at the end. Start against
 # end rather than "must be empty", so the gate also runs on a dirty tree.
@@ -116,6 +160,7 @@ install_go_tool() {
 # and not the other fails here. Offline, no database.
 INFRA_SHARED_JOB_LIST=(install-api publish-web-client renew-web-certs)
 if [ "$MODE" = all ] || [ "$MODE" = infra ]; then
+    STEP="infra"
     echo "[INFO] infra scripts: bash -n, shared copies identical"
     for script in "$PROJECT_ROOT"/infra/*/bin/*; do
         [ -f "$script" ] || continue
@@ -149,7 +194,9 @@ fi
 # doc behind fails here. Offline, no database. The count is path tokens.
 if [ "$MODE" = all ] || [ "$MODE" = docs ]; then
     echo "[INFO] docs: backticked repo paths exist"
+    STEP="docs"
     DOCS_LOG="$LOG_DIR/check-doc-paths.log"
+    STEP_LOG="$DOCS_LOG"
     if ! "$PROJECT_ROOT/scripts/check-doc-paths.sh" > "$DOCS_LOG" 2>&1; then
         echo "[ERROR] doc paths missing (fix the doc, or list a real" \
             "non-repo name in scripts/doc-paths-allow.txt) -- $DOCS_LOG:"
@@ -168,6 +215,8 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
     # //lint:ignore <check> <reason> on the line above. Per module, because
     # each is its own go.mod and a root ./... would not reach it. gofmt is
     # the one in the toolchain go.mod selects.
+    STEP="go checks"
+    STEP_LOG=""
     install_go_tool staticcheck honnef.co/go/tools \
         honnef.co/go/tools/cmd/staticcheck "$STATICCHECK_VERSION"
     for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
@@ -188,6 +237,8 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
         popd > /dev/null
     done
 
+    STEP="go test"
+    STEP_LOG="$LOG_DIR/reset-test-db.log"
     echo "[INFO] Rebuilding $TEST_DB"
     "$SCRIPT_DIR/510-reset-test-db" "$TEST_DB" > "$LOG_DIR/reset-test-db.log" 2>&1 \
         || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-test-db.log:"; tail -20 "$LOG_DIR/reset-test-db.log"; exit 1; }
@@ -196,6 +247,7 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
     # message turns it into a failure. (A plain '--- SKIP' would also catch an
     # upstream subtest that skips on purpose.)
     GO_LOG="$LOG_DIR/go-test.log"
+    STEP_LOG="$GO_LOG"
     : > "$GO_LOG"
     for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
         echo "[INFO] go test $module_dir"
@@ -225,11 +277,14 @@ fi
 # loop stays offline. Fails on any vulnerability the code calls; an
 # advisory in a package the code never reaches is not a failure.
 if [ "$MODE" = all ]; then
+    STEP="govulncheck"
+    STEP_LOG=""
     install_go_tool govulncheck golang.org/x/vuln \
         golang.org/x/vuln/cmd/govulncheck "$GOVULNCHECK_VERSION"
     for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
         echo "[INFO] govulncheck $module_dir"
         VULN_LOG="$LOG_DIR/govulncheck-${module_dir##*/}.log"
+        STEP_LOG="$VULN_LOG"
         VULN_STATUS=0
         (cd "$PROJECT_ROOT/$module_dir" && "$TOOLS_BIN/govulncheck" ./...) \
             > "$VULN_LOG" 2>&1 || VULN_STATUS=$?
@@ -258,14 +313,18 @@ if [ "$MODE" = all ] || [ "$MODE" = unit ]; then
     # Check only, never --fix. Any error or warning fails: the app is at zero,
     # so there is no backlog to carve out.
     echo "[INFO] eslint"
+    STEP="eslint"
     LINT_LOG="$LOG_DIR/eslint.log"
+    STEP_LOG="$LINT_LOG"
     if ! npx eslint . --max-warnings 0 > "$LINT_LOG" 2>&1; then
         echo "[ERROR] eslint failed -- full log: $LINT_LOG"
         head -40 "$LINT_LOG"
         exit 1
     fi
     echo "[INFO] vitest"
+    STEP="vitest"
     UNIT_LOG="$LOG_DIR/vitest.log"
+    STEP_LOG="$UNIT_LOG"
     if ! NO_COLOR=1 npx vitest run > "$UNIT_LOG" 2>&1; then
         echo "[ERROR] vitest failed -- full log: $UNIT_LOG"
         grep -E 'FAIL|×|Error' "$UNIT_LOG" | head -30
@@ -279,6 +338,8 @@ fi
 
 # ------------------------------------------------------------------------------
 if [ "$MODE" = all ] || [ "$MODE" = e2e ]; then
+    STEP="e2e"
+    STEP_LOG="$LOG_DIR/reset-e2e-db.log"
     echo "[INFO] Rebuilding $E2E_DB"
     "$SCRIPT_DIR/510-reset-test-db" "$E2E_DB" > "$LOG_DIR/reset-e2e-db.log" 2>&1 \
         || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-e2e-db.log:"; tail -20 "$LOG_DIR/reset-e2e-db.log"; exit 1; }
@@ -289,6 +350,7 @@ if [ "$MODE" = all ] || [ "$MODE" = e2e ]; then
     echo "[INFO] playwright"
     npx playwright install chromium
     E2E_LOG="$LOG_DIR/playwright.log"
+    STEP_LOG="$E2E_LOG"
     # The database was just rebuilt and seeded; tell global setup not to
     # reseed it a second time (it does when Playwright runs on its own).
     if ! E2E_DB_SEEDED=1 "$SCRIPT_DIR/230-run-web-app-e2e" 2>&1 | tee "$E2E_LOG"; then
@@ -307,12 +369,15 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     # on the e2e port from the e2e config -- same database and fixtures
     # Playwright uses, rebuilt first so the suite never sees another run's
     # leftovers -- and stop it again whatever happens.
+    STEP="py"
+    STEP_LOG="$LOG_DIR/reset-e2e-db.log"
     command -v python3 >/dev/null 2>&1 || { echo "[ERROR] python3 not on PATH"; exit 1; }
     echo "[INFO] Rebuilding $E2E_DB"
     "$SCRIPT_DIR/510-reset-test-db" "$E2E_DB" > "$LOG_DIR/reset-e2e-db.log" 2>&1 \
         || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-e2e-db.log:"; tail -20 "$LOG_DIR/reset-e2e-db.log"; exit 1; }
 
     API_LOG="$LOG_DIR/py-api.log"
+    STEP_LOG="$API_LOG"
     # The e2e config lifts the rate limits so Playwright's page-load bursts
     # cannot fail the suite. The pytest suite asserts the opposite --
     # tests/test_z_error_scenarios.py drives a non-exempt login past the
@@ -349,12 +414,8 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     (cd "$PROJECT_ROOT/src/api-srv" && go build -o "$API_BIN" ./cmd/server)
     echo "[INFO] Starting the Go API from $PY_API_ENV (limits $USER_LIMIT/$UNAUTH_LIMIT per min)"
     "$API_BIN" "$PY_API_ENV" > "$API_LOG" 2>&1 &
+    # Stopped by write_result (the EXIT trap) if anything below fails.
     API_PID=$!
-    stop_api() {
-        kill -TERM "$API_PID" 2>/dev/null || true
-        wait "$API_PID" 2>/dev/null || true
-    }
-    trap stop_api EXIT
 
     for _ in $(seq 1 90); do
         curl -sf "$API_BASE_URL/health" >/dev/null 2>&1 && break
@@ -384,6 +445,7 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
 
     PY_LOG="$LOG_DIR/pytest.log"
     PY_REPORT="$REPORT_DIR/pytest_$(date +%Y%m%d_%H%M%S).html"
+    STEP_LOG="$PY_LOG"
     echo "[INFO] pytest against $API_BASE_URL (report: $PY_REPORT)"
     # conftest.py refuses to start unless TEST_BASE_URL is the URL in
     # TEST_API_ENV and that file serves a scratch database.
@@ -397,13 +459,15 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     echo "[INFO] py: $PY_COUNT passed"
     SUMMARY+=("py=$PY_COUNT")
     stop_api
-    trap - EXIT
+    API_PID=""
 fi
 
 # ------------------------------------------------------------------------------
 if [ "$MODE" = load ]; then
     # Not part of "all": it takes a minute by design. bin/330 starts and
     # stops its own private API on the e2e scratch database.
+    STEP="load"
+    STEP_LOG=""
     "$SCRIPT_DIR/330-test-load"
     SUMMARY+=("load=done")
 fi
@@ -411,6 +475,8 @@ fi
 # ------------------------------------------------------------------------------
 # A test that writes into the tree (an unignored report, a stray binary) or
 # rewrites a tracked file fails the run here, whichever suite did it.
+STEP="git status"
+STEP_LOG=""
 if [ "$IS_GIT_CHECKOUT" = 1 ]; then
     GIT_STATUS_END="$(git -C "$PROJECT_ROOT" status --porcelain \
         --untracked-files=all)"

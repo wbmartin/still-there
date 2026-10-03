@@ -1,4 +1,11 @@
 #!/bin/bash
+# The UAT build, run by the webhook on a push to BRANCH_TO_CHECKOUT: build,
+# push, install and publish the head commit, Slack "deployed", then run the
+# test gate against that deployed commit. A red suite does not undo the
+# deploy (UAT is where a change gets looked at); it withholds the registry
+# tag sha-<commit>-passed, without which prd-proto-promote-uat refuses the
+# commit. A deploy failure exits 1 and names its step; a test failure is
+# Slacked ("don't promote") and exits 0.
 
 set -euo pipefail
 
@@ -30,7 +37,9 @@ slack() {
 
 # Every failure from here on is reported with the step it died in and the
 # full commit (what the registry tag sha-<commit> and proto-api.revision
-# carry; never a short sha). Before install the service is untouched.
+# carry; never a short sha). Before install the service is untouched; from
+# the tests on it runs this commit. A red suite is not a failure here: it
+# is reported after the run, below.
 STEP="build lock"
 GIT_SHA="?"
 notify_failure() {
@@ -41,6 +50,9 @@ notify_failure() {
     case "$STEP" in
         install*|"web publish")
             state="$state; it may already run this commit, see the hook log" ;;
+        tests|"passed tag")
+            state="$state on this commit, which is NOT promotable (no"
+            state+=" sha-$GIT_SHA-passed tag)" ;;
         *)  state="$state, still on the previous build" ;;
     esac
     local message=":x: $APP_ENV build FAILED at *$STEP* (exit $exit_code)"
@@ -124,11 +136,6 @@ if [ "$(printf '%s\n' "go$NEED_GO" "$HAVE_GO" | sort -V | head -1)" \
 fi
 echo "[INFO] $HAVE_GO (src/api-srv/go.mod needs go $NEED_GO)"
 
-# Tests gate the registry push: nothing below runs on a red suite.
-STEP="tests"
-"$SRV_BIN/$APP_ENV-run-tests"
-GO_TESTS=$(grep -c '^--- PASS' "$SRV_ROOT/stg/go-test.log" 2>/dev/null || echo "?")
-
 echo "[INFO] Building Go API"
 STEP="go build"
 mkdir -p "$SRV_ROOT/stg"
@@ -197,16 +204,50 @@ STEP="install (migrate, swap, restart, health)"
 STEP="web publish"
 "$SRV_BIN/$APP_ENV-publish-web-client"
 
-trap - EXIT
-
 SUMMARY=":rocket: $APP_ENV deployed on $(hostname) -- $SUBJECT"
 SUMMARY+=$'\n'"api: ${API_BLOB}:sha-${GIT_SHA}"
 SUMMARY+=$'\n'"web: ${WEB_BLOB}:sha-${GIT_SHA}"
 SUMMARY+=$'\n'"commit: ${GIT_SHA}"
-SUMMARY+=$'\n'"tests: go ${GO_TESTS} passed, playwright green"
+SUMMARY+=$'\n'"tests: running now; not promotable until they pass"
 echo "[INFO] $SUMMARY"
 SLACK_RESPONSE=$(curl -sS -X POST -H 'Content-Type: application/json' --data "$(jq -n --arg text "$SUMMARY" '{text: $text}')" "$SLACK_WEBHOOK" 2>&1) || true
 echo "[INFO] slack: ${SLACK_RESPONSE:-no response}"
 
-echo "[INFO] Finished"
+# The checkout's own gate (bin/300-run-tests all) against the commit UAT
+# now runs. Its one-line result (counts; on red the step, failing tests
+# and log) goes to Slack either way.
+echo "[INFO] Testing the deployed commit $GIT_SHA"
+STEP="tests"
+RESULT_FILE="$SRV_ROOT/stg/run-tests.result"
+rm -f "$RESULT_FILE"
+TEST_STATUS=0
+"$SRV_BIN/$APP_ENV-run-tests" || TEST_STATUS=$?
+RESULT="$(cat "$RESULT_FILE" 2>/dev/null || true)"
+RESULT="${RESULT:-no result file, see the hook log}"
+echo "[INFO] tests: $RESULT"
+
+if [ "$TEST_STATUS" -ne 0 ]; then
+    trap - EXIT
+    MESSAGE=":x: $APP_ENV tests FAILED on the deployed commit $GIT_SHA"
+    MESSAGE+=" (exit $TEST_STATUS) on $(hostname): $RESULT"
+    MESSAGE+=$'\n'"UAT runs it; the deploy stands. Don't promote:"
+    MESSAGE+=" prd-proto-promote-uat refuses a commit with no"
+    MESSAGE+=" sha-<commit>-passed tag."
+    slack "$MESSAGE"
+    echo "[INFO] Finished (deployed; tests FAILED)"
+    exit 0
+fi
+
+# The mark promote checks. By tag name: the build lock keeps another build
+# of this commit from moving sha-$GIT_SHA since the push above.
+STEP="passed tag"
+PASSED_TAG="sha-$GIT_SHA-passed"
+oras tag "$API_BLOB:sha-$GIT_SHA" "$PASSED_TAG"
+oras tag "$WEB_BLOB:sha-$GIT_SHA" "$PASSED_TAG"
+trap - EXIT
+
+MESSAGE=":white_check_mark: $APP_ENV tests passed on $GIT_SHA: $RESULT"
+MESSAGE+=$'\n'"promotable: tagged $PASSED_TAG"
+slack "$MESSAGE"
+echo "[INFO] Finished (deployed; tests passed; tagged $PASSED_TAG)"
 exit 0

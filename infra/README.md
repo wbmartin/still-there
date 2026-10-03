@@ -130,7 +130,7 @@ push to BRANCH_TO_CHECKOUT
   → /srv/uat-proto/bin/uat-proto-build
        flock (waits up to 30 min for a running build; HOOK_TIMEOUT 3600)
        · git reset --hard origin/<branch> · Slack started (full sha)
-       · go toolchain check (GOTOOLCHAIN=auto) · uat-proto-run-tests (gate)
+       · go toolchain check (GOTOOLCHAIN=auto)
        static go build cmd/server + cmd/migrate · vite build + tar
        oras push  proto-api:sha-<commit> + proto-web:sha-<commit>, tag :uat
        uat-proto-install-api    (pull · the incoming proto-migrate, from the
@@ -139,13 +139,23 @@ push to BRANCH_TO_CHECKOUT
                                  · restart via path unit · MainPID change
                                  · /health; failure prints the rollback)
        uat-proto-publish-web-client
-       Slack deployed, or FAILED at <step> with the full sha
+       Slack deployed, or FAILED at <step> with the full sha (exit 1)
+       uat-proto-run-tests      (bin/300-run-tests all, on the deployed
+                                 commit; result line in stg/run-tests.result)
+       green: tag sha-<commit>-passed on both blobs · Slack tests passed
+       red:   Slack tests FAILED, don't promote · the deploy stands (exit 0)
 
 prod: /srv/prd-proto/bin/prd-proto-promote-uat-and-deploy [<commit>]
        prd-proto-promote-uat    retags the UAT digests as :prd — NEVER rebuilds;
-                                refuses if api and web revisions disagree
+                                refuses if api and web revisions disagree, or
+                                if sha-<commit>-passed is not on those digests
        prd-proto-install-api · prd-proto-publish-web-client --pull prd
 ```
+
+UAT deploys before it tests, so a change can be looked at on UAT while
+the suite runs, and one flaky test does not hold every deploy back. The
+price is that `:uat` can be a red build; the `-passed` tag is what keeps
+it off prod.
 
 The hook user (`shrmpl-hook`) has no sudo. Restarting the service is done
 by a root-owned systemd **path unit** (`<env>-proto-restart.path`) that

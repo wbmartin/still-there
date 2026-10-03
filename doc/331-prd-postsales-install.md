@@ -9,7 +9,7 @@ from UAT but the registry build A7 promotes.
 
 **Prod has no checkout and never builds.** The binaries and the web bundle
 come from the registry: `prd-proto-promote-uat` retags the digests UAT
-built and tested as `:prd`, and `prd-proto-install-api` /
+built, deployed and then tested green (`sha-<commit>-passed`) as `:prd`, and `prd-proto-install-api` /
 `prd-proto-publish-web-client` pull them. Everything else the host needs
 from the repo (`bin/`, env templates, units, nginx site, monitors,
 fail2ban stanza, `infra/sql/proto-host-db.sql`) arrives as a `git archive`
@@ -276,8 +276,8 @@ systemctl enable prd-proto-api
 ```
 
 The first deploy promotes whatever `:uat` is now and installs it — the
-command every later release runs. UAT's last build must have deployed with
-its tests green:
+command every later release runs. UAT's last build must have passed its
+tests after deploying (Slack *tests passed*); promote refuses it otherwise:
 
 ```bash
 sudo -u shrmpl-hook -H /srv/prd-proto/bin/prd-proto-promote-uat-and-deploy
@@ -448,7 +448,8 @@ Which branch is your release model's choice, so `HOOK_ALLOWED_BRANCHES` is
 what a push promotes: whatever `:uat` is **at that moment**, not the
 commit pushed. If the release branch is also the branch UAT builds
 (`BRANCH_TO_CHECKOUT`), every push promotes the build before it, while UAT
-is still building this one. Without a hook, every release is the by-hand
+is still building this one; and once UAT has deployed a push but not yet
+passed its tests, promote refuses `:uat` and the hook run fails. Without a hook, every release is the by-hand
 command in **Every later release**.
 
 ```bash
@@ -488,9 +489,9 @@ delete `dist/*-data-*.dump*` and `dist/*-infra-prd.tgz`.
 
 ## Every later release
 
-A push to `BRANCH_TO_CHECKOUT` builds UAT, gated by the tests, and deploys
-it there. Once UAT has that build and it has been looked at, promote it,
-on prod:
+A push to `BRANCH_TO_CHECKOUT` builds and deploys UAT, then runs the tests
+against that build. Once they have passed (Slack *tests passed*) and it
+has been looked at, promote it, on prod:
 
 ```bash
 sudo -u shrmpl-hook -H /srv/prd-proto/bin/prd-proto-promote-uat-and-deploy

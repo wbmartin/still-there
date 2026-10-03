@@ -564,72 +564,6 @@ moves on a deliberate release; GRC left this open too.
 
 # P3: nice to have
 
-### B058 — UAT order: deploy, then test the deployed commit
-
-- **Priority:** P3  **Area:** infra, docs
-- **GRC:** `infra/uat-unified001/bin/uat-grc-build:1-13,143-160`; `infra/uat-unified001/bin/uat-grc-run-tests:1-85` (result file :51-64, `_test_db` guard :41-42); `infra/README.md:39-40`; RG0013 md `:71-77`; RG0043 md `:941-952`   **PROTO:** `infra/uat/bin/uat-proto-build:62-66`; `infra/uat/bin/uat-proto-run-tests:1-14`; `infra/README.md:98-111` (:104)
-- **Ticket:** RG0013 / `da5eebd` (Brandon 2026-10-01); RG0043 / `518cec1`
-- **What:** PROTO: red tests block the deploy. GRC: build, push, install,
-publish, then test; failure Slacks "don't promote" and exits 0; runner from
-the checkout writes `stg/run-tests.result`.
-- **Port notes:** Brandon's call (ops P3, docs P2). Generic either way: result
-file, `_test_db` drop guard.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Nothing is broken; this is an ordering policy. A push to the UAT branch runs
-`infra/uat/bin/uat-proto-build`, which runs the whole test gate first:
-
-```bash
-# infra/uat/bin/uat-proto-build:63-64
-# Tests gate the registry push: nothing below runs on a red suite.
-"$SRV_BIN/uat-proto-run-tests"
-```
-
-`uat-proto-run-tests:13-14` execs the checkout's `bin/300-run-tests` in mode
-`all` (Go, vitest, Playwright, pytest). A red test aborts the run and UAT
-keeps the old build (`infra/README.md:104`, "(gate)"). One flaky Playwright
-test blocks every deploy, and nobody can look at a change on UAT until the
-suite is green. The lock is `flock -n` (`:24`), so a push landing during a
-long run is dropped, not queued. An ops/DX trade-off, not a bug.
-
-Two port notes are already true in PROTO: the runner comes from the checkout
-(`$BUILD_STG/bin/300-run-tests`), and the drop guard exists
-(`bin/510-reset-test-db:44-45` refuses names not ending `_test_db`/`_e2e_db`).
-
-#### What GRC changed
-
-RG0013 (`da5eebd`, Brandon 2026-10-01) reversed the order
-(`infra/uat-unified001/bin/uat-grc-build:1-14`): build, push, tag `:uat`,
-install, publish, Slack "deployed", then test. A deploy failure exits 1 and
-names its `STEP` (`:63-73`). A test failure is reported and exits 0 (`:149`,
-`:157` "the deploy stands; don't promote", `:160`). `uat-grc-run-tests:52-64`
-writes a one-line `stg/run-tests.result` (counts, failing step, first five
-failing tests) for Slack. RG0043 (`518cec1`) made the build call the
-checkout's runner. The lock waits 30 min (`:51-53`). GRC tests less on UAT:
-Go and vitest only (`run-tests:23-24`). GRC's own review (RG0043 item 8)
-found `prd-grc-promote-uat` never reads the result, so a red build can reach
-prd; Brandon marked it "by design" (2026-10-02). No tests pin this.
-
-#### Proposed fix for PROTO
-
-1. `infra/uat/bin/uat-proto-build`: move `:63-65` after install/publish
-   (`:127-128`); a `STEP`-naming deploy trap until publish, then `set +e`.
-2. Three Slack messages: deployed, tests passed, tests FAILED "don't
-   promote". Drop the hard-coded "playwright green" at `:132`.
-3. `bin/300-run-tests`: write `SUMMARY` to a caller-given result file.
-4. `flock -n` at `:24` becomes `flock -w 1800`.
-5. Keep PROTO's `all` mode; do not narrow to GRC's Go plus vitest.
-6. Update `infra/README.md:104`. Verify with one deliberately red UAT run.
-
-#### Open question for Brandon
-
-Should `prd-proto-promote-uat` refuse when `run-tests.result` says FAILED?
-Recommend yes: deploy-then-test is safe only if promote cannot ship red.
-
 ### B059 — API: CSP trimmed; `ip:` rate bucket; CSRF log without token
 
 - **Priority:** P3  **Area:** go-api
@@ -8927,3 +8861,70 @@ Skill or doc? Recommendation: a skill, because it is a procedure an agent
 runs on request ("review the tree"), and skills are where PROTO's other
 procedures live; keep the invariant list in one place inside it.
 - **Completed:** 2026-10-03. Pulled per the decision (no Brandon line; open question "skill or doc?" taken as recommended: a skill). New `.claude/skills/stale-and-insecure-review/SKILL.md`: read-only whole-tree review, four parallel subagent passes (Go `src/api-srv`, web `src/web-app`, infra/bin/scripts/tests/etc, docs incl. `tasks/` and `.claude/skills/`) plus a `git log -p --all` secret scan (secrets reported by path/commit/kind, never value); H/M/L severities as in RG0043; every finding cites `path:line` read; a gate run first; a checklist of PROTO invariants as counted assertions (check order and `Skip*` reasons at every `NewAppHelper`, tenant predicate and `buildScopedWhere`, body tenant overwritten, tenant 2/3 and `test-tenant-lock.sql` coverage, no FK/trigger/`DEFAULT`, no edited migration, no `os.Getenv`, `fooList`, 0 `innerHTML` family, raw `fetch`/`console.*` only in `utils/api.ts`/`utils/report-error.ts`, no secrets in browser storage, `set -euo pipefail` everywhere, `SERVERONLY` secrets in `infra/**/*.env`, B052 customer-data and show-only-verified rules); lines the gate already enforces are marked *(gate)* with their check: B039 route contract test, B053 `check-doc-paths.sh`, B054 grants/route mirror tests, eslint `no-console`/`no-restricted-globals`, `bin/300-run-tests infra`. Required report sections: Summary, Findings by severity, Checked and clean (with counts), Not covered (a report without it is incomplete), Suggested batches. Deviations: ticket parts dropped (B091) -- findings are delivered in the reply and kept, if Brandon wants, in `tasks/todo.md`, not a findings ticket, and the `lint-tickets.py` step is gone; GRC-only lines (matrix/permissions replay, blob, Entra, pwsh, goose, entity counts) left out; "every committed infra env value is SERVERONLY" narrowed to every secret (non-secret values such as hosts are real); names via `etc/app.env`. Not done (out of scope, first run would flag): the six `pipefail` gaps (`bin/100`, `215`, `216`, `220`, `510`, `515`) are still open. No tests (procedure). Tests: all green, infra=15 docs=499 go=688 unit=87 e2e=13 py=102, govulncheck clean, gofmt clean.
+
+### B058 — COMPLETED — UAT order: deploy, then test the deployed commit
+
+- **Priority:** P3  **Area:** infra, docs
+- **GRC:** `infra/uat-unified001/bin/uat-grc-build:1-13,143-160`; `infra/uat-unified001/bin/uat-grc-run-tests:1-85` (result file :51-64, `_test_db` guard :41-42); `infra/README.md:39-40`; RG0013 md `:71-77`; RG0043 md `:941-952`   **PROTO:** `infra/uat/bin/uat-proto-build:62-66`; `infra/uat/bin/uat-proto-run-tests:1-14`; `infra/README.md:98-111` (:104)
+- **Ticket:** RG0013 / `da5eebd` (Brandon 2026-10-01); RG0043 / `518cec1`
+- **What:** PROTO: red tests block the deploy. GRC: build, push, install,
+publish, then test; failure Slacks "don't promote" and exits 0; runner from
+the checkout writes `stg/run-tests.result`.
+- **Port notes:** Brandon's call (ops P3, docs P2). Generic either way: result
+file, `_test_db` drop guard.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Nothing is broken; this is an ordering policy. A push to the UAT branch runs
+`infra/uat/bin/uat-proto-build`, which runs the whole test gate first:
+
+```bash
+# infra/uat/bin/uat-proto-build:63-64
+# Tests gate the registry push: nothing below runs on a red suite.
+"$SRV_BIN/uat-proto-run-tests"
+```
+
+`uat-proto-run-tests:13-14` execs the checkout's `bin/300-run-tests` in mode
+`all` (Go, vitest, Playwright, pytest). A red test aborts the run and UAT
+keeps the old build (`infra/README.md:104`, "(gate)"). One flaky Playwright
+test blocks every deploy, and nobody can look at a change on UAT until the
+suite is green. The lock is `flock -n` (`:24`), so a push landing during a
+long run is dropped, not queued. An ops/DX trade-off, not a bug.
+
+Two port notes are already true in PROTO: the runner comes from the checkout
+(`$BUILD_STG/bin/300-run-tests`), and the drop guard exists
+(`bin/510-reset-test-db:44-45` refuses names not ending `_test_db`/`_e2e_db`).
+
+#### What GRC changed
+
+RG0013 (`da5eebd`, Brandon 2026-10-01) reversed the order
+(`infra/uat-unified001/bin/uat-grc-build:1-14`): build, push, tag `:uat`,
+install, publish, Slack "deployed", then test. A deploy failure exits 1 and
+names its `STEP` (`:63-73`). A test failure is reported and exits 0 (`:149`,
+`:157` "the deploy stands; don't promote", `:160`). `uat-grc-run-tests:52-64`
+writes a one-line `stg/run-tests.result` (counts, failing step, first five
+failing tests) for Slack. RG0043 (`518cec1`) made the build call the
+checkout's runner. The lock waits 30 min (`:51-53`). GRC tests less on UAT:
+Go and vitest only (`run-tests:23-24`). GRC's own review (RG0043 item 8)
+found `prd-grc-promote-uat` never reads the result, so a red build can reach
+prd; Brandon marked it "by design" (2026-10-02). No tests pin this.
+
+#### Proposed fix for PROTO
+
+1. `infra/uat/bin/uat-proto-build`: move `:63-65` after install/publish
+   (`:127-128`); a `STEP`-naming deploy trap until publish, then `set +e`.
+2. Three Slack messages: deployed, tests passed, tests FAILED "don't
+   promote". Drop the hard-coded "playwright green" at `:132`.
+3. `bin/300-run-tests`: write `SUMMARY` to a caller-given result file.
+4. `flock -n` at `:24` becomes `flock -w 1800`.
+5. Keep PROTO's `all` mode; do not narrow to GRC's Go plus vitest.
+6. Update `infra/README.md:104`. Verify with one deliberately red UAT run.
+
+#### Open question for Brandon
+
+Should `prd-proto-promote-uat` refuse when `run-tests.result` says FAILED?
+Recommend yes: deploy-then-test is safe only if promote cannot ship red.
+- **Completed:** 2026-10-03. Pulled per the decision (no Brandon line; open question "should promote refuse a red build?" taken as recommended: yes). `infra/uat/bin/uat-proto-build` now builds, pushes (`sha-<commit>`, `:uat`), installs, publishes, Slacks *deployed* ("tests: running now; not promotable until they pass"; the hard-coded "playwright green" and the broken `GO_TESTS` count, which read `^--- PASS` from a log path and always printed `?`, are gone), then runs `uat-proto-run-tests` (still `all`, not GRC's Go + vitest) on the deployed commit. Green: `oras tag` both blobs `sha-<commit>-passed`, Slack *tests passed* with the result line, exit 0. Red: Slack *tests FAILED on the deployed commit* with the result line, "the deploy stands. Don't promote", exit 0. B047 semantics kept: the EXIT trap covers lock through web publish with the same "still on the previous build" (before install) / "may already run this commit" (install, web publish) text and exit 1; a new `tests`/`passed tag` case says the service is on this commit and it is NOT promotable (only reachable if the `-passed` tag fails). Deviation from the port notes: GRC's `stg/run-tests.result` is not readable from prod, so the promotable mark lives in the registry: `infra/prd/bin/prd-proto-promote-uat` refuses unless `sha-<API_REV>-passed` resolves to the same api and web digests it is about to promote (a rebuild of the same commit that went red moves `sha-<commit>` off the passed digests and is refused too). No override flag; a build from before this change has no `-passed` tag, so it cannot be promoted by sha (none exists: post-sales hosts are not up). `bin/300-run-tests` writes `$LOG_DIR/run-tests.result` from one EXIT trap (`write_result`, which also stops pytest's private API, replacing the py section's own trap): `passed (<mode>): <counts>` or `FAILED (<mode>) at <step> (exit N); passed: <counts so far>; failing: <up to 5 go/vitest/playwright/pytest names>; log: <step log>`; `STEP` per section. UAT's `TEST_LOG_DIR` makes it `/srv/uat-proto/stg/run-tests.result`. The flock wait (fix step 4) already landed with B047. Docs: `infra/README.md` promotion flow + why, `doc/330` A7 (pending note dropped), `doc/331` (first deploy, B6 hook, every-later-release). Verified in ubuntu:24.04 with fake `/srv/uat-proto` and `/srv/prd-proto`, local bare origin, stubbed go/npm/systemctl/psql/pg_dump, a stub checkout `bin/300-run-tests`, a file-backed fake registry `oras` (push/tag/manifest fetch by tag or digest) and a payload-capturing curl, old vs new: happy path old tests -> build -> push -> install -> publish -> Slack "go ? passed, playwright green"; new build -> push -> install -> publish -> deployed -> tests -> `-passed` tags -> Slack passed. Tests red: old FAILED at *tests*, nothing deployed, exit 1; new deployed, Slack FAILED with the result line, no `-passed` tag, exit 0. Install fails: both FAILED at *install ...* "may already run this commit", new never runs the tests. `-passed` tag fails: new FAILED at *passed tag*, "NOT promotable". Promote after a red UAT build: old promotes `:uat`, new refuses (`-passed -> none`); after green both promote (default and by full sha); same commit rebuilt red: old promotes by sha, new refuses (digest mismatch). Laptop: a deliberately red pytest test gives `FAILED (py) at py ...; failing: tests/...::test_...; log: .../pytest.log`, :8082 freed, no orphan API; parser checked on sample go/vitest/playwright/pytest logs (bash 3.2 and C locale). shellcheck 0.9.0 `-S warning`: clean old and new; only SC2317 (trap functions) / pre-existing SC2015 notes. Host action (when post-sales hosts exist): recopy `bin/uat-proto-build` on UAT and `bin/prd-proto-promote-uat` on prod together (new promote refuses everything until UAT has run the new build once). Fix step 6's deliberately red real UAT run waits for that host. Tests: all green, `gofmt -l` empty (no Go change), govulncheck clean: infra=15 docs=499 go=688 unit=87 e2e=13 py=102.
