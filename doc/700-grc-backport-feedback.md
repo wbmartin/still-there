@@ -106,124 +106,6 @@ doc/105:199: "no row written" is no reason to skip.
 - **Decision:** \[ \] pull / \[ \] adapt / \[X \] skip
 - BRANDON: I said skip because it's a not changing SERVER side data so seems fine to skip CSRF
 
-### B014 — Go dependency bumps: three called vulnerabilities
-
-- **Priority:** P1  **Area:** go-api, bin
-- **GRC:** `src/go.mod:3-14`   **PROTO:** `src/api-srv/go.mod:3-30` (go :3, backoff :6, jwt :7, pgx :8, x/crypto :12, x/text :27)
-- **Ticket:** RG0043 item 15; RG0014 / `9ce276b`
-- **What:** govulncheck: jwt v5.2.1 GO-2025-3553 (`auth/jwt.go:69`, unauth); pgx
-v5.5.5 GO-2026-5004 (`migrate.go:152`); x/text v0.14.0 GO-2026-5970
-(`cmd/migrate/main.go:84`). GRC's versions clear all.
-- **Port notes:** Bump jwt 5.3.1, pgx 5.10.0, x/crypto 0.55.0, x/text; tidy; go
-1.26 vs host (B047); gate (B040).
-- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-PROTO pins three Go modules at versions a reviewer's `govulncheck` run
-reported as vulnerable, and nothing in the repo runs `govulncheck`, so no
-gate notices. The pins (`src/api-srv/go.mod`, 29 lines, not 30):
-
-```
-// src/api-srv/go.mod:3, 7-8, 12, 27
-go 1.25.4
-github.com/golang-jwt/jwt/v5 v5.2.1
-github.com/jackc/pgx/v5 v5.5.5
-golang.org/x/crypto v0.20.0
-golang.org/x/text v0.14.0 // indirect
-```
-
-**(1) jwt v5.2.1, GO-2025-3553. Security hole, reachable unauthenticated.**
-The advisory is excessive memory allocation while splitting a malformed
-token header (fixed in v5.2.2). PROTO parses every `auth` cookie it
-receives before it knows who the caller is:
-
-```go
-// internal/security/app_helper.go:280, 287
-cookie, err := sh.r.Cookie("auth")
-claims, err := auth.ValidateJWT(tokenString, sh.appServices.Config.JWTSecret)
-// internal/auth/jwt.go:69
-token, err := jwt.ParseWithClaims(tokenString, &Claims{},
-```
-
-Any client can send a crafted cookie to any JWT-checked route and make the
-API allocate memory. The consequence is a cheap memory-pressure DoS, not a
-signature bypass.
-
-**(2) pgx v5.5.5, GO-2026-5004.** Reported reachable through the migrator's
-query at `internal/migrate/migrate.go:152` (`m.conn.Query(ctx, ...`) and
-the API's pool. Inputs there are the operator's own migrations, so the
-exposure is lower than (1).
-
-**(3) x/text v0.14.0, GO-2026-5970.** Indirect (pulled in by pgx). Reported
-reachable via `pgx.Connect` at `cmd/migrate/main.go:84`.
-
-**Not verified here.** `govulncheck` is not installed on this machine, so
-the three advisory ids and their call paths are the reviewer's figures.
-GO-2025-3553 against jwt < 5.2.2 matches the public advisory; the two
-GO-2026 ids were not checked. `x/crypto v0.20.0` (`go.mod:12`, used by
-`internal/auth/password.go` for argon2) had no advisory called, but it is
-two years old. `cenkalti/backoff/v4` (`go.mod:6`) is used only by
-`internal/repository/retry.go`, which B028 deletes.
-
-Kind: security hole (1), dependency hygiene (2, 3), plus a DX gap: no
-vulnerability scan anywhere in `bin/300-run-tests` (Go gate is `go vet` at
-`:64-66` and `go test`).
-
-#### What GRC changed
-
-The doc's commit ref is partly wrong. `9ce276b` (RG0014) only deletes
-`retry.go` and the `backoff` dependency. The version bumps came in
-`5089ac0` (RG0043 item 15, "was 2.6"), and the motive was drift, not
-vulnerabilities: GRC's five modules pinned different pgx and x/crypto
-versions and a `go.work` workspace masked it. RG0043 md `:1019-1027`:
-
-> `go work sync` wrote the workspace's build list into every module
-> (pgx v5.10.0, x/crypto v0.55.0 ... so no runtime change), `go 1.26.0`
-> in all five, `GOWORK=off go mod tidy` each.
-
-Result in GRC `src/go.mod:3,7-8,13,29`: `go 1.26.0`, jwt `v5.3.1`, pgx
-`v5.10.0`, x/crypto `v0.55.0`, x/text `v0.41.0`. GRC added no test and no
-`govulncheck` gate (no file in GRC mentions it). Its UAT build copes with
-an old host Go by exporting `GOTOOLCHAIN=auto`
-(`infra/uat-unified001/bin/uat-grc-build:45`) and naming a toolchain
-mismatch by step (`:85-90`; host Debian go is 1.24.4).
-
-#### Proposed fix for PROTO
-
-1. In `src/api-srv`: `go get github.com/golang-jwt/jwt/v5@v5.3.1
-   github.com/jackc/pgx/v5@v5.10.0 golang.org/x/crypto@v0.55.0
-   golang.org/x/text@latest`, then `go mod tidy`. PROTO has no `go.work`;
-   do not copy GRC's `go work sync` step or its module path
-   (`github.com/Radley-House/radley-grc`). PROTO's is
-   `github.com/wbmartin/starter-api`.
-2. Keep `go 1.25.4` unless tidy raises it. pgx v5.10.0 declares
-   `go 1.25.0`, jwt v5.3.1 `go 1.21`, so neither forces 1.26. If x/crypto
-   v0.55.0 does, update `doc/105-api-srv-tech-spec.md:9` ("Go 1.25.4")
-   and `src/load-test/go.mod:3` to match.
-3. Leave `cenkalti/backoff` to B028; it drops out when `retry.go` goes.
-4. Run `govulncheck ./...` in `src/api-srv` and `src/load-test` and
-   record a clean result in the ticket. Re-check the two GO-2026 ids then.
-5. Gate: add `go run golang.org/x/vuln/cmd/govulncheck@<pinned> ./...`
-   after `go vet` in `bin/300-run-tests:64-66`, pinned like B040's
-   staticcheck. B040 owns the gate shape; do both together or add this
-   line in B040.
-6. Host toolchain: `infra/uat/bin/uat-proto-build:72-73` runs plain
-   `go build` and does not set `GOTOOLCHAIN`. Only matters if step 2 raises
-   the `go` line above the host's Go; then take B047's toolchain check.
-   Presales `bin/600-bundle-uat` builds on the laptop, so it is unaffected.
-7. Tests: none new. Existing Go suite (`bin/300 go`) proves pgx and jwt
-   still behave; `internal/auth/jwt_test.go:11,45` cover `ValidateJWT`
-   and `password_test.go` covers argon2 on the new x/crypto.
-
-#### Open question for Brandon
-
-Should `govulncheck` fail the `bin/300` gate (blocking a push on a new
-upstream advisory), or only warn? Recommendation: fail, since a template
-that ships known-vulnerable pins propagates them to every derived app.
-
 ### B015 — Literal service-account password shipped in `roles.sql`
 
 - **Priority:** P1  **Area:** go-api, bin
@@ -8855,3 +8737,123 @@ Tests to add:
 #### Open question for Brandon
 
 None.
+
+### B014 — COMPLETED — Go dependency bumps: three called vulnerabilities
+
+- **Completed:** 2026-10-02. `src/api-srv/go.mod`: jwt v5.2.1 -> v5.3.1, pgx v5.5.5 -> v5.10.0, x/crypto v0.20.0 -> v0.55.0, x/text v0.14.0 -> v0.41.0 (not `@latest`: v0.42.0 and x/crypto v0.56.0+ require `go 1.26`), tidy; `go 1.25.4` unchanged. Deviation: govulncheck (v1.8.0) also reported 19 called **standard-library** advisories against go1.25.4 (fixed by go1.25.5-go1.25.13), which the module bumps cannot clear, so `src/api-srv/go.mod` and `src/load-test/go.mod` gain `toolchain go1.25.14` (GOTOOLCHAIN=auto fetches it; the `go` minimum is unchanged; `doc/105-api-srv-tech-spec.md:9` says so). `bin/300-run-tests` `all` mode (not `go`) now runs a pinned govulncheck v1.7.0 (newest that builds on Go 1.25), installed into `tmp/tools/bin/`, over `src/api-srv` and `src/load-test`; exit 3 (called vulnerability) or any other failure (install, vuln.go.dev unreachable) fails the run with the log path; documented in `doc/902-project-commands.md`. govulncheck before: api-srv "Your code is affected by 22 vulnerabilities from 3 modules and the Go standard library" (GO-2025-3553 jwt, GO-2026-5004 pgx, GO-2026-5970 x/text, 19 stdlib); load-test "affected by 22 vulnerabilities from the Go standard library". After: both "No vulnerabilities found. Your code is affected by 0 vulnerabilities." (api-srv still lists 3 uncalled x/crypto advisories, ssh GO-2026-6354/6355 fixed only in go-1.26 v0.56.0, openpgp GO-2026-5932 no fix; neither package is imported). Not done here: a build host with `GOTOOLCHAIN=local` and an older Go ignores the toolchain line and its gate will fail on stdlib advisories (B047's toolchain check). Tests: all green, go=278 unit=42 e2e=10 py=79
+
+- **Priority:** P1  **Area:** go-api, bin
+- **GRC:** `src/go.mod:3-14`   **PROTO:** `src/api-srv/go.mod:3-30` (go :3, backoff :6, jwt :7, pgx :8, x/crypto :12, x/text :27)
+- **Ticket:** RG0043 item 15; RG0014 / `9ce276b`
+- **What:** govulncheck: jwt v5.2.1 GO-2025-3553 (`auth/jwt.go:69`, unauth); pgx
+v5.5.5 GO-2026-5004 (`migrate.go:152`); x/text v0.14.0 GO-2026-5970
+(`cmd/migrate/main.go:84`). GRC's versions clear all.
+- **Port notes:** Bump jwt 5.3.1, pgx 5.10.0, x/crypto 0.55.0, x/text; tidy; go
+1.26 vs host (B047); gate (B040).
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+PROTO pins three Go modules at versions a reviewer's `govulncheck` run
+reported as vulnerable, and nothing in the repo runs `govulncheck`, so no
+gate notices. The pins (`src/api-srv/go.mod`, 29 lines, not 30):
+
+```
+// src/api-srv/go.mod:3, 7-8, 12, 27
+go 1.25.4
+github.com/golang-jwt/jwt/v5 v5.2.1
+github.com/jackc/pgx/v5 v5.5.5
+golang.org/x/crypto v0.20.0
+golang.org/x/text v0.14.0 // indirect
+```
+
+**(1) jwt v5.2.1, GO-2025-3553. Security hole, reachable unauthenticated.**
+The advisory is excessive memory allocation while splitting a malformed
+token header (fixed in v5.2.2). PROTO parses every `auth` cookie it
+receives before it knows who the caller is:
+
+```go
+// internal/security/app_helper.go:280, 287
+cookie, err := sh.r.Cookie("auth")
+claims, err := auth.ValidateJWT(tokenString, sh.appServices.Config.JWTSecret)
+// internal/auth/jwt.go:69
+token, err := jwt.ParseWithClaims(tokenString, &Claims{},
+```
+
+Any client can send a crafted cookie to any JWT-checked route and make the
+API allocate memory. The consequence is a cheap memory-pressure DoS, not a
+signature bypass.
+
+**(2) pgx v5.5.5, GO-2026-5004.** Reported reachable through the migrator's
+query at `internal/migrate/migrate.go:152` (`m.conn.Query(ctx, ...`) and
+the API's pool. Inputs there are the operator's own migrations, so the
+exposure is lower than (1).
+
+**(3) x/text v0.14.0, GO-2026-5970.** Indirect (pulled in by pgx). Reported
+reachable via `pgx.Connect` at `cmd/migrate/main.go:84`.
+
+**Not verified here.** `govulncheck` is not installed on this machine, so
+the three advisory ids and their call paths are the reviewer's figures.
+GO-2025-3553 against jwt < 5.2.2 matches the public advisory; the two
+GO-2026 ids were not checked. `x/crypto v0.20.0` (`go.mod:12`, used by
+`internal/auth/password.go` for argon2) had no advisory called, but it is
+two years old. `cenkalti/backoff/v4` (`go.mod:6`) is used only by
+`internal/repository/retry.go`, which B028 deletes.
+
+Kind: security hole (1), dependency hygiene (2, 3), plus a DX gap: no
+vulnerability scan anywhere in `bin/300-run-tests` (Go gate is `go vet` at
+`:64-66` and `go test`).
+
+#### What GRC changed
+
+The doc's commit ref is partly wrong. `9ce276b` (RG0014) only deletes
+`retry.go` and the `backoff` dependency. The version bumps came in
+`5089ac0` (RG0043 item 15, "was 2.6"), and the motive was drift, not
+vulnerabilities: GRC's five modules pinned different pgx and x/crypto
+versions and a `go.work` workspace masked it. RG0043 md `:1019-1027`:
+
+> `go work sync` wrote the workspace's build list into every module
+> (pgx v5.10.0, x/crypto v0.55.0 ... so no runtime change), `go 1.26.0`
+> in all five, `GOWORK=off go mod tidy` each.
+
+Result in GRC `src/go.mod:3,7-8,13,29`: `go 1.26.0`, jwt `v5.3.1`, pgx
+`v5.10.0`, x/crypto `v0.55.0`, x/text `v0.41.0`. GRC added no test and no
+`govulncheck` gate (no file in GRC mentions it). Its UAT build copes with
+an old host Go by exporting `GOTOOLCHAIN=auto`
+(`infra/uat-unified001/bin/uat-grc-build:45`) and naming a toolchain
+mismatch by step (`:85-90`; host Debian go is 1.24.4).
+
+#### Proposed fix for PROTO
+
+1. In `src/api-srv`: `go get github.com/golang-jwt/jwt/v5@v5.3.1
+   github.com/jackc/pgx/v5@v5.10.0 golang.org/x/crypto@v0.55.0
+   golang.org/x/text@latest`, then `go mod tidy`. PROTO has no `go.work`;
+   do not copy GRC's `go work sync` step or its module path
+   (`github.com/Radley-House/radley-grc`). PROTO's is
+   `github.com/wbmartin/starter-api`.
+2. Keep `go 1.25.4` unless tidy raises it. pgx v5.10.0 declares
+   `go 1.25.0`, jwt v5.3.1 `go 1.21`, so neither forces 1.26. If x/crypto
+   v0.55.0 does, update `doc/105-api-srv-tech-spec.md:9` ("Go 1.25.4")
+   and `src/load-test/go.mod:3` to match.
+3. Leave `cenkalti/backoff` to B028; it drops out when `retry.go` goes.
+4. Run `govulncheck ./...` in `src/api-srv` and `src/load-test` and
+   record a clean result in the ticket. Re-check the two GO-2026 ids then.
+5. Gate: add `go run golang.org/x/vuln/cmd/govulncheck@<pinned> ./...`
+   after `go vet` in `bin/300-run-tests:64-66`, pinned like B040's
+   staticcheck. B040 owns the gate shape; do both together or add this
+   line in B040.
+6. Host toolchain: `infra/uat/bin/uat-proto-build:72-73` runs plain
+   `go build` and does not set `GOTOOLCHAIN`. Only matters if step 2 raises
+   the `go` line above the host's Go; then take B047's toolchain check.
+   Presales `bin/600-bundle-uat` builds on the laptop, so it is unaffected.
+7. Tests: none new. Existing Go suite (`bin/300 go`) proves pgx and jwt
+   still behave; `internal/auth/jwt_test.go:11,45` cover `ValidateJWT`
+   and `password_test.go` covers argon2 on the new x/crypto.
+
+#### Open question for Brandon
+
+Should `govulncheck` fail the `bin/300` gate (blocking a push on a new
+upstream advisory), or only warn? Recommendation: fail, since a template
+that ships known-vulnerable pins propagates them to every derived app.

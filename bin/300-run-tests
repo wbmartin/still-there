@@ -4,7 +4,7 @@ set -euo pipefail
 # script that runs tests; none of them writes to the source tree.
 #
 #   bin/300-run-tests          # all: rebuild both scratch DBs, go vet + test,
-#                              #      vitest, playwright, pytest
+#                              #      govulncheck, vitest, playwright, pytest
 #   bin/300-run-tests go       # the Go suites only (seconds; run before every commit)
 #   bin/300-run-tests unit     # vitest (src/web-app/tests), no database
 #   bin/300-run-tests e2e      # Playwright only (bin/230-run-web-app-e2e)
@@ -85,6 +85,55 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
     echo "[INFO] go: $GO_COUNT passed"
     SUMMARY+=("go=$GO_COUNT")
     popd > /dev/null
+fi
+
+# ------------------------------------------------------------------------------
+# Known vulnerabilities in the Go modules and in the standard library of the
+# toolchain go.mod selects. "all" only: it reads vuln.go.dev, so the "go"
+# loop stays offline. Fails on any vulnerability the code calls; an
+# advisory in a package the code never reaches is not a failure.
+# Pinned and installed under tmp/ so every machine runs the same scanner.
+GOVULNCHECK_VERSION=v1.7.0
+if [ "$MODE" = all ]; then
+    TOOLS_BIN="$PROJECT_ROOT/tmp/tools/bin"
+    GOVULNCHECK="$TOOLS_BIN/govulncheck"
+    if ! go version -m "$GOVULNCHECK" 2>/dev/null \
+            | grep -qE "^\s+mod\s+golang.org/x/vuln\s+$GOVULNCHECK_VERSION\s"; then
+        echo "[INFO] Installing govulncheck $GOVULNCHECK_VERSION into $TOOLS_BIN"
+        mkdir -p "$TOOLS_BIN"
+        INSTALL_LOG="$LOG_DIR/govulncheck-install.log"
+        if ! GOBIN="$TOOLS_BIN" go install \
+                "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION" \
+                > "$INSTALL_LOG" 2>&1; then
+            echo "[ERROR] cannot install govulncheck $GOVULNCHECK_VERSION" \
+                "(needs proxy.golang.org) -- $INSTALL_LOG:"
+            tail -20 "$INSTALL_LOG"
+            exit 1
+        fi
+    fi
+    for module in api-srv load-test; do
+        echo "[INFO] govulncheck src/$module"
+        VULN_LOG="$LOG_DIR/govulncheck-$module.log"
+        VULN_STATUS=0
+        (cd "$PROJECT_ROOT/src/$module" && "$GOVULNCHECK" ./...) \
+            > "$VULN_LOG" 2>&1 || VULN_STATUS=$?
+        case "$VULN_STATUS" in
+            0) ;;
+            3)
+                echo "[ERROR] govulncheck: src/$module calls a known" \
+                    "vulnerability -- full log: $VULN_LOG"
+                grep -E '^Vulnerability #|Found in:|Fixed in:' "$VULN_LOG" | head -60
+                exit 1
+                ;;
+            *)
+                echo "[ERROR] govulncheck could not scan src/$module" \
+                    "(exit $VULN_STATUS; needs vuln.go.dev) -- $VULN_LOG:"
+                tail -20 "$VULN_LOG"
+                exit 1
+                ;;
+        esac
+    done
+    echo "[INFO] govulncheck: no called vulnerabilities"
 fi
 
 # ------------------------------------------------------------------------------

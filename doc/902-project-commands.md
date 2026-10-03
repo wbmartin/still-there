@@ -52,7 +52,7 @@ To build and package the web app for deployment:
 
 The one command, on a laptop or a build host:
 ```
-./bin/300-run-tests            # all: go + unit + e2e + py (load is not part of all)
+./bin/300-run-tests            # all: go + govulncheck + unit + e2e + py (load is not part of all)
 ./bin/300-run-tests go         # go vet + go test (seconds; run before every commit)
 ./bin/300-run-tests unit       # vitest (src/web-app/tests)
 ./bin/300-run-tests e2e        # Playwright only
@@ -68,6 +68,13 @@ The one command, on a laptop or a build host:
   suite that cannot reach the database SKIPS (see
   `internal/repository/testdb_test.go`); the runner greps for that skip and
   fails the run, so a green run always includes the integration suites.
+- `all` only: after the Go suites, `govulncheck ./...` in `src/api-srv`
+  and `src/load-test`. The scanner is pinned (`GOVULNCHECK_VERSION` in
+  the script) and installed once into `tmp/tools/bin/`. Any vulnerability
+  the code calls, in a module or in the standard library of the toolchain
+  `go.mod` selects (its `toolchain` line), fails the run; so does being
+  unable to install it or reach vuln.go.dev. Not in `go` mode, which
+  stays offline. Logs: `govulncheck-<module>.log`.
 - `unit`: `npm run test:unit` (vitest) against `src/web-app/tests`.
 - `e2e`: rebuilds `loc_proto_e2e_db` via `bin/510`, installs Chromium if
   needed, runs `bin/230-run-web-app-e2e`.
