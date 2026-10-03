@@ -36,8 +36,17 @@ Three processes, no nginx:
 ## Create the database
 
 Requires a Postgres listening on 127.0.0.1:5432 whose `postgres` role can
-create databases (the `loc-postgres` container from doc/060-dev-env-start.md,
-or a native server). The schema is applied by the migrator, never by hand.
+create databases: the `loc-postgres` container below, or a native server.
+The schema is applied by the migrator, never by hand.
+
+Create the container once (use the `PGPASSWORD` value from
+`etc/loc-test.env`; on later days `docker start loc-postgres`, see
+doc/060-dev-env-start.md):
+
+```bash
+docker run -d --name loc-postgres -e POSTGRES_PASSWORD='<PGPASSWORD>' \
+  -p 127.0.0.1:5432:5432 postgres:17
+```
 
 Fastest path -- a scratch database, rebuilt from nothing every time:
 

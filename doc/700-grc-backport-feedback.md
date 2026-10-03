@@ -852,68 +852,6 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
 
 # Bugs found in PROTO along the way
 
-### B086 — doc/060 names a script that does not exist
-
-- **Priority:** P3  **Area:** docs
-- **GRC:** `doc/060-dev-env-start.md:1-43`   **PROTO:** `doc/060-dev-env-start.md:7` (`./515-run-postgres.sh`), `:31` (absolute `~/Code/...` path)
-- **Ticket:** none
-- **What:** `bin/515` is `reseed-db`; no `515-run-postgres.sh` exists.
-- **Port notes:** Fix now or in B075.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Docs/DX gap. The daily-start page starts Postgres like this
-(`doc/060-dev-env-start.md:5-7`):
-
-```
-cd path/to/infrahub/loc-postgres  # your local infrahub checkout, outside this repo
-source ./brandon_env_setup-mac1.sh
-./515-run-postgres.sh
-```
-
-The item says "no `515-run-postgres.sh` exists"; that overstates it. The
-script is not in PROTO, but `:5` says to `cd` into a separate "infrahub"
-repo first, and that repo exists on Brandon's machine. Its script runs
-`docker compose` to create container `loc-postgres` (Postgres 17, port
-5432). Corrected fact: the page depends on a private repo and a personal
-env file that nobody deriving the template has. The `515` prefix also
-reads like PROTO's own `bin/515-reseed-db`, which misled the review.
-A new developer cannot start Postgres from this page, yet the scripts
-need a container with that exact name (`bin/510-reset-test-db:49`,
-`doc/050-dev-env-init.md:4`).
-
-`:31` runs `~/Code/ProtoStack-ReactGo/bin/220-run-web-app`, an absolute
-path that breaks in any other checkout. `:17-19` is B085; no title.
-
-#### What GRC changed
-
-GRC rewrote the page under RG0011 (`06a1396`). `doc/060-dev-env-start.md`
-gains a title and "One-time setup ... is `doc/050-dev-env-init.md`" at
-`:1-3`, repo-relative script calls, a migrations note at `:15-16`, and
-`curl -s http://localhost:8080/health` at `:22`. It did NOT fix the
-database step: `:10-12` still runs `./515-run-postgres.sh` from the
-infrahub repo, now via an absolute personal path. No tests.
-
-#### Proposed fix for PROTO
-
-1. `doc/060:3-15`: replace the infrahub block with a self-contained
-   command that yields the expected container, e.g. `docker run -d
-   --name loc-postgres -e POSTGRES_PASSWORD=<pw> -p 127.0.0.1:5432:5432
-   postgres:17`, then `docker start loc-postgres` on later days.
-2. `:31`: `./bin/220-run-web-app`. `:1`: add a title and GRC's doc/050
-   pointer. `:17-19`: per B085.
-3. Do not copy GRC's `:10-12` (personal path) or its worker, three-binary
-   and `bin/211-stop-app` lines; PROTO has none of these.
-4. Tests: none. Overlaps B075 (dev docs); do it there if B075 is taken.
-
-#### Open question for Brandon
-
-Infrahub or a plain `docker run` for derived apps? Recommend `docker
-run`; a derived app's developers will not have infrahub.
-
 ### B087 — doc/902 health URL names another project's real host
 
 - **Priority:** P2  **Area:** docs
@@ -9007,3 +8945,66 @@ Fix the pointers now, or wait for B073's script? Recommend now: it is
 minutes of work and the current text sends every newcomer into a
 startup failure.
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). Docs only. B073's `bin/205-migrate-db` and B075's doc/060 had already fixed doc/060 and doc/050; the remaining `bin/510` pointers now name `bin/205-migrate-db`: `README.md` Key Commands (new 205 row with `loc_<slug>_db` and the doc/050 pointer; 510 relabelled "scratch test database"), `src/api-srv/README.md` Quick Start, `doc/105` Local Development (notes 510 is scratch only). No code, no test. Tests: all green, infra=15 docs=704 go=708 unit=105 e2e=70 py=103 (docs +3: the new `bin/205`, `doc/050` and README tokens)
+
+### B086 — COMPLETED — doc/060 names a script that does not exist
+
+- **Priority:** P3  **Area:** docs
+- **GRC:** `doc/060-dev-env-start.md:1-43`   **PROTO:** `doc/060-dev-env-start.md:7` (`./515-run-postgres.sh`), `:31` (absolute `~/Code/...` path)
+- **Ticket:** none
+- **What:** `bin/515` is `reseed-db`; no `515-run-postgres.sh` exists.
+- **Port notes:** Fix now or in B075.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Docs/DX gap. The daily-start page starts Postgres like this
+(`doc/060-dev-env-start.md:5-7`):
+
+```
+cd path/to/infrahub/loc-postgres  # your local infrahub checkout, outside this repo
+source ./brandon_env_setup-mac1.sh
+./515-run-postgres.sh
+```
+
+The item says "no `515-run-postgres.sh` exists"; that overstates it. The
+script is not in PROTO, but `:5` says to `cd` into a separate "infrahub"
+repo first, and that repo exists on Brandon's machine. Its script runs
+`docker compose` to create container `loc-postgres` (Postgres 17, port
+5432). Corrected fact: the page depends on a private repo and a personal
+env file that nobody deriving the template has. The `515` prefix also
+reads like PROTO's own `bin/515-reseed-db`, which misled the review.
+A new developer cannot start Postgres from this page, yet the scripts
+need a container with that exact name (`bin/510-reset-test-db:49`,
+`doc/050-dev-env-init.md:4`).
+
+`:31` runs `~/Code/ProtoStack-ReactGo/bin/220-run-web-app`, an absolute
+path that breaks in any other checkout. `:17-19` is B085; no title.
+
+#### What GRC changed
+
+GRC rewrote the page under RG0011 (`06a1396`). `doc/060-dev-env-start.md`
+gains a title and "One-time setup ... is `doc/050-dev-env-init.md`" at
+`:1-3`, repo-relative script calls, a migrations note at `:15-16`, and
+`curl -s http://localhost:8080/health` at `:22`. It did NOT fix the
+database step: `:10-12` still runs `./515-run-postgres.sh` from the
+infrahub repo, now via an absolute personal path. No tests.
+
+#### Proposed fix for PROTO
+
+1. `doc/060:3-15`: replace the infrahub block with a self-contained
+   command that yields the expected container, e.g. `docker run -d
+   --name loc-postgres -e POSTGRES_PASSWORD=<pw> -p 127.0.0.1:5432:5432
+   postgres:17`, then `docker start loc-postgres` on later days.
+2. `:31`: `./bin/220-run-web-app`. `:1`: add a title and GRC's doc/050
+   pointer. `:17-19`: per B085.
+3. Do not copy GRC's `:10-12` (personal path) or its worker, three-binary
+   and `bin/211-stop-app` lines; PROTO has none of these.
+4. Tests: none. Overlaps B075 (dev docs); do it there if B075 is taken.
+
+#### Open question for Brandon
+
+Infrahub or a plain `docker run` for derived apps? Recommend `docker
+run`; a derived app's developers will not have infrahub.
+- **Completed:** 2026-10-03. Pulled per the recommendation (plain `docker run`, not infrahub, as recommended). Docs only. B075 had already added the title, the doc/050 pointer and the repo-relative `./bin/220-run-web-app`; what remained was the infrahub block. `doc/060` Shell 1 now starts with `docker start loc-postgres` (no `cd` into the external loc-postgres repo, no personal env file, no `515-run-postgres.sh`). `doc/050` "Create the database" carried the circular claim that the container comes from doc/060, so it now holds the one-time `docker run -d --name loc-postgres -e POSTGRES_PASSWORD=... -p 127.0.0.1:5432:5432 postgres:17` (password from `etc/loc-test.env`). Not run: the command was not executed here (a `loc-postgres` container already exists). No code, no test. Tests: all green, infra=15 docs=705 go=708 unit=105 e2e=70 py=103

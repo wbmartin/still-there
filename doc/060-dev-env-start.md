@@ -6,9 +6,7 @@ step says otherwise; each section is its own shell.
 
 ## Shell 1: database
 ```bash
-cd path/to/infrahub/loc-postgres  # your local infrahub checkout, outside this repo
-source ./brandon_env_setup-mac1.sh
-./515-run-postgres.sh
+docker start loc-postgres        # create it once: doc/050-dev-env-init.md
 docker exec -it loc-postgres /bin/bash
 #inside the container
 su - postgres
