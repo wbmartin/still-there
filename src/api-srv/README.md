@@ -183,6 +183,18 @@ Go 1.25 (see `go.mod`). Schema changes are migrations only:
 never hand-run DDL. Also `sql/roles.sql` (the role the migrator and app
 connect as) and `sql/fixtures/` (seed data, e.g. `local-seed.sql`).
 
+## Testing
+
+`bin/300-run-tests go` runs gofmt, `go vet`, staticcheck and
+`go test -v ./...` with `TEST_DATABASE_URL` naming the scratch database
+(doc/902). Repository suites connect through `connectTestDB`
+(`internal/repository/testdb_test.go`), which refuses a non-scratch
+database and skips without one; the gate fails any skip, so a green run
+includes them. They act as `testTenant` (2) and prove isolation against
+`otherTenant` (3). How a test proves what it claims (negative
+assertions, OS probes, anchored detectors, no skips, `TestLive` tests):
+`tests/README.md`, "Writing tests".
+
 ## Dependencies
 
 No change runs a blanket `go get -u ./...`. A change with a security

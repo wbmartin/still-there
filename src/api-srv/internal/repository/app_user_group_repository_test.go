@@ -60,12 +60,9 @@ func (s *AppUserGroupRepositoryTestSuite) TestReadAppUserGroupList() {
 		existingGroupIDList = append(existingGroupIDList, id)
 	}
 
-	if len(existingGroupIDList) == 0 {
-		// No groups in database for the test tenant, skip this test
-		s.T().
-			Skip("No user groups found in database for the test tenant - skipping test")
-		return
-	}
+	// The seed has groups; none means the fixture broke, not a pass.
+	s.Require().NotEmpty(existingGroupIDList,
+		"no seeded user groups in the test tenant")
 
 	// Test retrieving existing groups
 	groups, err := s.repo.RetrieveAppUserGroupListByIDList(
@@ -129,13 +126,9 @@ func (s *AppUserGroupRepositoryTestSuite) TestRetrieveAppUserGroupListByIDListPa
 
 	var existingID int
 	var existingName string
-	if allGroups.Next() {
-		err := allGroups.Scan(&existingID, &existingName)
-		s.NoError(err)
-	} else {
-		s.T().Skip("No user groups found in database - skipping test")
-		return
-	}
+	s.Require().True(allGroups.Next(),
+		"no seeded user groups in the test tenant")
+	s.Require().NoError(allGroups.Scan(&existingID, &existingName))
 
 	// Test with mix of existing and non-existing IDs
 	groupIDList := []int{existingID, 99999}
@@ -304,9 +297,37 @@ func (s *AppUserGroupRepositoryTestSuite) TestUpdateAppUserGroup() {
 	)
 }
 
+// A delete at the current update_ts soft-deletes the group and returns its
+// id; the group then reads as absent and a second delete is not found.
 func (s *AppUserGroupRepositoryTestSuite) TestDeleteAppUserGroup() {
-	s.T().
-		Skip("Skipping due to test environment issues - functionality tested in integration tests")
+	ctx := context.Background()
+	group := s.createGroupIn("RepoTestDeleteGroup", testTenant)
+
+	_, err := s.repo.DeleteAppUserGroup(ctx, group.AppUserGroupID,
+		testTenant, group.UpdateTS-1, model.Now(), 1)
+	s.ErrorIs(err, ErrConflict)
+
+	deletedID, err := s.repo.DeleteAppUserGroup(ctx, group.AppUserGroupID,
+		testTenant, group.UpdateTS, model.Now(), 1)
+	s.Require().NoError(err)
+	s.Equal(group.AppUserGroupID, deletedID)
+
+	remaining, err := s.repo.RetrieveAppUserGroupListByIDList(
+		ctx, []int{group.AppUserGroupID}, testTenant)
+	s.Require().NoError(err)
+	s.Empty(remaining)
+
+	var deleteUserID *int
+	s.Require().NoError(s.db.QueryRow(ctx,
+		"SELECT delete_user_id FROM app_user_group"+
+			" WHERE app_user_group_id = $1", group.AppUserGroupID).
+		Scan(&deleteUserID))
+	s.Require().NotNil(deleteUserID, "row is soft-deleted, not removed")
+	s.Equal(1, *deleteUserID)
+
+	_, err = s.repo.DeleteAppUserGroup(ctx, group.AppUserGroupID,
+		testTenant, group.UpdateTS, model.Now(), 1)
+	s.ErrorIs(err, ErrNotFound)
 }
 
 func (s *AppUserGroupRepositoryTestSuite) TestRetrieveMemberUserNameList() {

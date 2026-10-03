@@ -710,78 +710,6 @@ given it moves authorization differences into a matrix? Recommend an ADR
 that permits it only for derived apps past ~10 entities, never the
 template.
 
-### B078 — Testing hygiene rules
-
-- **Priority:** P3  **Area:** docs, tests
-- **GRC:** `tickets/03-done/RG0037-batch-gate-stale-checks/RG0037-batch-gate-stale-checks.md:26-29,53-58,95-97`; `tickets/03-done/RG0021-entra-check-runtime/RG0021-entra-check-runtime.md:335,346,507`   **PROTO:** `tests/README.md:47-58`; `src/api-srv/README.md`; `bin/300-run-tests:24-27,74-78`
-- **Ticket:** RG0037 / `4ce1484`; RG0021
-- **What:** A "not in Y" assertion needs proof Y was read; macOS path for OS
-probes; anchored detectors; gates fail, not skip; `<X>_LIVE=1` for live tests.
-- **Port notes:** "Rebuild before pytest" is SKIP: bin/300 already rebuilds.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-PROTO has no written rules for how a test proves something. The pieces
-that exist are code, not guidance:
-
-- `bin/300-run-tests:24-27` explains why Go integration suites may not
-  skip, and `:74-78` greps for `connectTestDB`'s exact skip message and
-  fails the run. That is the "gates fail, not skip" rule, applied to one
-  message only, and written down only in this script.
-- `tests/README.md:47-58` is a file list; it has no "Writing tests"
-  section. `src/api-srv/README.md` has no testing section at all (its
-  headings stop at Architecture, `:128`).
-
-Nothing tells the next author that a negative assertion ("the token is
-not in the command line", "no secret in the log") must prove it read the
-thing it checked; that a probe of OS state must work on macOS as well as
-Linux; that a text detector must be anchored; or how to keep a test that
-needs a live outside service out of the gate. PROTO has no such test
-today (no `/proc` probes, no `_LIVE` tests), so this is a quality/DX gap
-that bites the first derived app that writes one.
-
-#### What GRC changed
-
-GRC wrote these down in tickets after a batch gate failed for reasons the
-batch did not cause. RG0037 md `:26-29`: a pwsh test read
-`/proc/$PID/cmdline`, which macOS lacks; it was "built on the Entra
-machine". The fix (`:53-58`) reads `ps -o command= -p $PID` off Linux and
-makes `runner_test.go` "also fail if the command-line row is empty.
-Without that, a read that silently failed would pass the 'token is not in
-it' check without having looked." `:95-97`: the smoke detector anchors
-"No such" to the start of a line "so data inside a row cannot trip it".
-RG0021 md `:335`: `bin/340` "fails (rather than skips) without pwsh, and
-fails if a subprocess test skips while pwsh is installed"; `:346`:
-`TestLiveTokenAgainstTheTenant` "skips unless `ENTRA_LIVE=1`, so the gate
-never depends on the tenant, the network or a consent". Commit `4ce1484`.
-The rules live in ticket bodies, not in a GRC README.
-
-#### Proposed fix for PROTO
-
-1. Add a "Writing tests" section to `tests/README.md` (pytest) and a
-   short "Testing" section to `src/api-srv/README.md` (Go), five bullets:
-   - A "not in Y" assertion first asserts Y is non-empty.
-   - An OS probe has a macOS path and a Linux path (dev is macOS, hosts
-     are Linux).
-   - Text detectors are anchored (`^`, word boundary), never bare
-     substrings over rendered data.
-   - A gate fails when a prerequisite is missing; it never skips. Cite
-     `bin/300-run-tests:74-78` as the pattern.
-   - A test that needs a live external service skips unless
-     `<SERVICE>_LIVE=1`, and the gate never sets it.
-2. Optional: generalise `bin/300:74-78` to fail on any Go `--- SKIP`
-   whose message is not on an allow list.
-3. Do not port "rebuild before pytest" (RG0021 `:507`): `bin/300 py`
-   already builds a fresh binary (`:165-167`).
-4. Do not copy GRC's pwsh, Entra or smoke specifics. Tests: none.
-
-#### Open question for Brandon
-
-None.
-
 ### B079 — Process rules: batched testing; readability over DRY
 
 - **Priority:** P3  **Area:** docs, skills
@@ -9001,3 +8929,76 @@ Should the template doc set a rule that `mfa_exempt` is forbidden on
 human accounts in production (GRC C-7)? Recommendation: yes, stated as
 policy now, enforced by a test once B010/B018 land.
 - **Completed:** 2026-10-03. New `doc/110-security-architecture.md`, every claim re-checked against code: deployment shape (nginx, loopback API as `svc-proto`, `proto_app` DML role, in-process KV); boundaries B1 internet-to-API, B2 API-to-Postgres, B3 operations (renumbered from GRC's B1/B2/B7, since B3-B6 are GRC features); tenant isolation is application code only (no RLS): JWT tenant, `scoped_query.go`, write predicates and `zeroRowOutcome` (404 never 409, B012), test-tenant lock, soft deletes (an app rule: `db_writer` holds ALL PRIVILEGES), integer keys with `example_uuid` as attribute only (A-047 vs PS0016); a per-table cross-tenant test list: `app_user`, `app_user_group`, `user_invite` met, `example` partial (no cross-tenant test). STRIDE rows met/partial/open: HS256 JWT (`iss` not checked), revocation lost on restart, lockout, TOTP replay, `mfa_exempt` (open), 12-bit CSRF with SameSite=Strict + HttpOnly as the real defence (B004/appendix 2.2 rationale), route contract (B039), block flag with B094 open, `ip:` bucket and CSP (B059), `admin` exemption / no server timeouts / 2x burst / HSTS preload / `totp_seed` select as appendix opens, XFF + required loopback bind (B007/B016/B061), invite links (B035), DML role and secrets at rest, systemd sandbox (B074; presales unit lighter: partial), TOTP key kept with backups, push backup open against the pull target (A-038), export scrub (B071; presales unscrubbed), monitors placement, fail2ban. Controls kept from C-1, C-6 (as invite links), C-7, C-10, C-4; C-14 dropped (B067 skipped), C-9 host-access logging listed as open. Open question taken as recommended: doc states the policy that `mfa_exempt` is never on a human account in production; not enforced by a test, since the API accepts it from ADD_USER/CHG_USER holders and a production policy has no in-repo test beyond the export scrub clearing it (follow-up for Brandon: refuse it in the API or report exempt logins on a host). Links: doc/105 Security intro, CSRF step and Multi-tenancy; `CLAUDE.md` Conventions; doc/900; README doc table. Appendix CSRF line marked documented. No code change, no new tests. Tests: all green, infra=15 docs=655 go=707 unit=105 e2e=70 py=103 (docs +44 path tokens), govulncheck clean, gofmt clean.
+
+### B078 — COMPLETED — Testing hygiene rules
+
+- **Priority:** P3  **Area:** docs, tests
+- **GRC:** `tickets/03-done/RG0037-batch-gate-stale-checks/RG0037-batch-gate-stale-checks.md:26-29,53-58,95-97`; `tickets/03-done/RG0021-entra-check-runtime/RG0021-entra-check-runtime.md:335,346,507`   **PROTO:** `tests/README.md:47-58`; `src/api-srv/README.md`; `bin/300-run-tests:24-27,74-78`
+- **Ticket:** RG0037 / `4ce1484`; RG0021
+- **What:** A "not in Y" assertion needs proof Y was read; macOS path for OS
+probes; anchored detectors; gates fail, not skip; `<X>_LIVE=1` for live tests.
+- **Port notes:** "Rebuild before pytest" is SKIP: bin/300 already rebuilds.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+PROTO has no written rules for how a test proves something. The pieces
+that exist are code, not guidance:
+
+- `bin/300-run-tests:24-27` explains why Go integration suites may not
+  skip, and `:74-78` greps for `connectTestDB`'s exact skip message and
+  fails the run. That is the "gates fail, not skip" rule, applied to one
+  message only, and written down only in this script.
+- `tests/README.md:47-58` is a file list; it has no "Writing tests"
+  section. `src/api-srv/README.md` has no testing section at all (its
+  headings stop at Architecture, `:128`).
+
+Nothing tells the next author that a negative assertion ("the token is
+not in the command line", "no secret in the log") must prove it read the
+thing it checked; that a probe of OS state must work on macOS as well as
+Linux; that a text detector must be anchored; or how to keep a test that
+needs a live outside service out of the gate. PROTO has no such test
+today (no `/proc` probes, no `_LIVE` tests), so this is a quality/DX gap
+that bites the first derived app that writes one.
+
+#### What GRC changed
+
+GRC wrote these down in tickets after a batch gate failed for reasons the
+batch did not cause. RG0037 md `:26-29`: a pwsh test read
+`/proc/$PID/cmdline`, which macOS lacks; it was "built on the Entra
+machine". The fix (`:53-58`) reads `ps -o command= -p $PID` off Linux and
+makes `runner_test.go` "also fail if the command-line row is empty.
+Without that, a read that silently failed would pass the 'token is not in
+it' check without having looked." `:95-97`: the smoke detector anchors
+"No such" to the start of a line "so data inside a row cannot trip it".
+RG0021 md `:335`: `bin/340` "fails (rather than skips) without pwsh, and
+fails if a subprocess test skips while pwsh is installed"; `:346`:
+`TestLiveTokenAgainstTheTenant` "skips unless `ENTRA_LIVE=1`, so the gate
+never depends on the tenant, the network or a consent". Commit `4ce1484`.
+The rules live in ticket bodies, not in a GRC README.
+
+#### Proposed fix for PROTO
+
+1. Add a "Writing tests" section to `tests/README.md` (pytest) and a
+   short "Testing" section to `src/api-srv/README.md` (Go), five bullets:
+   - A "not in Y" assertion first asserts Y is non-empty.
+   - An OS probe has a macOS path and a Linux path (dev is macOS, hosts
+     are Linux).
+   - Text detectors are anchored (`^`, word boundary), never bare
+     substrings over rendered data.
+   - A gate fails when a prerequisite is missing; it never skips. Cite
+     `bin/300-run-tests:74-78` as the pattern.
+   - A test that needs a live external service skips unless
+     `<SERVICE>_LIVE=1`, and the gate never sets it.
+2. Optional: generalise `bin/300:74-78` to fail on any Go `--- SKIP`
+   whose message is not on an allow list.
+3. Do not port "rebuild before pytest" (RG0021 `:507`): `bin/300 py`
+   already builds a fresh binary (`:165-167`).
+4. Do not copy GRC's pwsh, Entra or smoke specifics. Tests: none.
+
+#### Open question for Brandon
+
+None.
+- **Completed:** 2026-10-03. `tests/README.md` gains "Writing tests", the one rule list for every suite: a "not in Y" check first proves Y was read (citing `test_user_list_never_returns_totp_seed`); OS probes work on macOS and Linux (`/proc` vs `ps -o command=`, `stat -c`/`-f`); detectors anchored; a missing prerequisite fails, never skips; live tests skip unless `<SERVICE>_LIVE=1` and are named `TestLive...` / `test_live_...`. `src/api-srv/README.md` gains a short Testing section (connectTestDB, tenants 2/3, pointer); `CLAUDE.md` one bullet; doc/902 `go` paragraph. Step 2 taken and widened: `bin/300-run-tests` now fails any Go `--- SKIP` not named `TestLive...`, any pytest `SKIPPED` not `test_live_...`, and any vitest or Playwright skipped/todo test (the connectTestDB message check stays for its clearer error). Proved in one run with a temporary skip in each suite: all four steps failed, the `TestLive`/`test_live_` skips passed; shellcheck clean in `ubuntu:24.04`. The wider check found a real stub: `TestDeleteAppUserGroup` was a bare `Skip` ("test environment issues") and is now a real test (stale update_ts 409, delete returns the id, row soft-deleted and absent from reads, second delete 404); three data-dependent skips in the group/user repository suites became `Require` assertions. Negative-assertion spot fixes: `TestRetrieveUserList_OmitsSecrets` finds the row first; the MFA 409 check asserts an error body before "secret not in". Not ported: GRC's rebuild-before-pytest (bin/300 builds), pwsh/Entra/smoke specifics. No `_LIVE` unset in the gate: a hand run must be able to set one. Tests: all green, infra=15 docs=663 go=708 unit=105 e2e=70 py=103 (docs +8 path tokens, go +1: the former stub).

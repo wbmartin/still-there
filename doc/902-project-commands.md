@@ -136,6 +136,9 @@ The one command, on a laptop or a build host:
   A repository suite that cannot reach the database SKIPS (see
   `internal/repository/testdb_test.go`); the runner greps for that skip and
   fails the run, so a green run always includes the integration suites.
+  Any other `--- SKIP` fails it too, except a test named `TestLive...`
+  (pytest: `SKIPPED` except `test_live_...`; vitest and Playwright: any
+  skipped test). Rules: `tests/README.md`, "Writing tests".
 - `all` only: after the Go suites, `govulncheck ./...` in `src/api-srv`
   and `src/load-test`. The scanner is pinned (`GOVULNCHECK_VERSION` in
   the script) and installed once into `tmp/tools/bin/`. Any vulnerability

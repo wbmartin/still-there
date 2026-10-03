@@ -119,6 +119,41 @@ under 20 s of it remain (the limiter buckets per login per minute), then
 expects exactly that many 200s and one 429. It is the one known flaky
 test; rerun once if it alone fails.
 
+## Writing tests
+
+The rules for every suite in the repo (Go, pytest, vitest, Playwright).
+`bin/300-run-tests` enforces the skip rule; the rest are on the author.
+
+- A "not in Y" assertion proves it read Y. Assert first that Y is
+  non-empty, or that something which must be there is:
+  `test_user_list_never_returns_totp_seed` asserts `user_list` before
+  `"totpSeed" not in response.text`, and Go's
+  `TestRetrieveUserList_OmitsSecrets` finds the row in the body before
+  looking for the seed. Otherwise a read that silently came back empty
+  passes without having looked.
+- A probe of OS state works on macOS and on Linux: development is macOS,
+  hosts are Ubuntu. `/proc` is Linux only (`ps -o command= -p PID` reads
+  a command line on both); `stat -c` is GNU, `stat -f` is BSD. Use the
+  call both have, or branch on `uname`.
+- A text detector is anchored (`^`, `$`, a word boundary), never a bare
+  substring over output that carries data, which can contain any word.
+  `bin/300-run-tests` matches `^FAIL` and `--- SKIP: ` at a line start,
+  not "FAIL" anywhere.
+- A missing prerequisite fails; a test never skips. `bin/300-run-tests`
+  fails a step that reports a skipped test (Go `--- SKIP`, pytest
+  `SKIPPED`, vitest or Playwright `skipped`), and names the cause when a
+  Go suite skipped because `connectTestDB`
+  (`internal/repository/testdb_test.go`) found no database. Seed data a
+  test needs and does not find is a failed assertion
+  (`s.Require().NotEmpty(...)`), not a skip.
+- A test that needs a live outside service (a vendor API, a real
+  identity tenant, the internet) skips unless `<SERVICE>_LIVE=1` and is
+  named for it: Go `TestLive<Service>...`, pytest
+  `test_live_<service>_...`. Those are the only skips the gate allows.
+  Nothing in the gate or on a host sets a `_LIVE` variable, so a green
+  run never depends on that service; run one by hand with
+  `ENTRA_LIVE=1 bin/300-run-tests go` (or `py`). The template has none.
+
 ## Test files
 
 pytest collects alphabetically, so the prefixes order the run on purpose:

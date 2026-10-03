@@ -66,6 +66,11 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
   vitest; check only, never `--fix`.
 - A gate run leaves `git status` as it found it (checked at the end):
   test output goes under `tmp/` or is gitignored.
+- Tests (`tests/README.md`, Writing tests): a "not in Y" check first
+  proves Y was read; OS probes work on macOS and Linux; detectors are
+  anchored; a missing prerequisite fails. The gate fails any skipped
+  test but a live one (`TestLive...` / `test_live_...`, run only with
+  `<SERVICE>_LIVE=1`, which nothing in the gate sets).
 - Docs gate (`bin/300-run-tests docs`): a backticked repo path in a doc
   exists. A deleted file is named in prose without backticks; a real
   name outside the tree (bundle, host) goes in

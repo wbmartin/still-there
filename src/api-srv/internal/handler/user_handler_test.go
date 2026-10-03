@@ -673,6 +673,8 @@ func TestRetrieveUserList_OmitsSecrets(t *testing.T) {
 	}
 	body, err := json.Marshal(model.DataWrapper{Data: users})
 	assert.NoError(t, err)
+	// The body holds the row, so the absences below were looked for.
+	assert.Contains(t, string(body), `"userName":"user1"`)
 	assert.NotContains(t, string(body), "totpSeed")
 	assert.NotContains(t, string(body), seed)
 	assert.NotContains(t, string(body), "pwHash")

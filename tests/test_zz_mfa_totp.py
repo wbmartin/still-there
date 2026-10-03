@@ -173,6 +173,7 @@ class TestMFATOTP:
             session2, "/mfaSetup", client_ip, {"tempToken": temp_token2}
         )
         assert response.status_code == 409, response.text
+        assert response.json()["error"], response.text  # a body was read
         assert secret not in response.text
         assert "qrCodeImage" not in response.text
         response = _post(session2, "/mfaVerify", client_ip, {

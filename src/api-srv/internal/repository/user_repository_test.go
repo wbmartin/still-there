@@ -117,11 +117,8 @@ func (s *UserRepositoryTestSuite) TestGetGrantsForGroups() {
 		existingGroupIDList = append(existingGroupIDList, id)
 	}
 
-	if len(existingGroupIDList) == 0 {
-		// No groups in database, skip this test
-		s.T().Skip("No user groups found in database - skipping grants test")
-		return
-	}
+	// The seed has groups; none means the fixture broke, not a pass.
+	s.Require().NotEmpty(existingGroupIDList, "no seeded user groups")
 
 	// Test retrieving grants for existing groups
 	grantsMap, err := s.repo.GetGrantsForGroups(

@@ -36,9 +36,10 @@ set -euo pipefail
 #
 # Passing here is what lets a build reach prod (on the UAT host, the
 # sha-<commit>-passed tag prd-proto-promote-uat requires), which is why
-# the Go integration suites are not allowed to skip: on a laptop they skip
-# when Postgres is down, and a green run with the repository tests missing
-# is worse than a red one.
+# no suite may skip: on a laptop the Go integration suites skip when
+# Postgres is down, and a green run with tests missing is worse than a red
+# one. A skipped test fails its step; only a live test (tests/README.md
+# "Writing tests") may skip, and nothing here sets its <SERVICE>_LIVE=1.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 MODE="${1:-all}"
@@ -267,9 +268,11 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
     echo "[INFO] schema reference current"
     STEP="go test"
 
-    # -v so a skip is visible in the log; the grep for connectTestDB's exact
-    # message turns it into a failure. (A plain '--- SKIP' would also catch an
-    # upstream subtest that skips on purpose.)
+    # -v so a skip is visible in the log, and any skip fails the run: a
+    # green gate means every test ran. The one exception is a live test
+    # (named TestLive..., runs only when its <SERVICE>_LIVE=1 is set by
+    # hand; tests/README.md "Writing tests"). go test ./... runs only this
+    # repository's packages, so no upstream skip reaches the log.
     GO_LOG="$LOG_DIR/go-test.log"
     STEP_LOG="$GO_LOG"
     : > "$GO_LOG"
@@ -292,6 +295,14 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
     if grep -q '^FAIL' "$GO_LOG"; then
         echo "[ERROR] go test failed -- full log: $GO_LOG"
         grep -B2 -A12 -- '--- FAIL' "$GO_LOG" | head -60
+        exit 1
+    fi
+    GO_SKIP_LIST="$(grep -E -- '^\s*--- SKIP: ' "$GO_LOG" \
+        | grep -vE -- '--- SKIP: ([^ ]*/)?TestLive' || true)"
+    if [ -n "$GO_SKIP_LIST" ]; then
+        echo "[ERROR] go test skipped tests (a gate fails, never skips;" \
+            "make it run or delete it) -- $GO_LOG:"
+        echo "$GO_SKIP_LIST" | head -20
         exit 1
     fi
     for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
@@ -370,6 +381,12 @@ if [ "$MODE" = all ] || [ "$MODE" = unit ]; then
         grep -E 'FAIL|×|Error' "$UNIT_LOG" | head -30
         exit 1
     fi
+    if grep -qE '^ *Tests .*[0-9]+ (skipped|todo)' "$UNIT_LOG"; then
+        echo "[ERROR] vitest skipped tests (make them run or delete" \
+            "them) -- $UNIT_LOG:"
+        grep -E '^ *Tests |↓' "$UNIT_LOG" | head -20
+        exit 1
+    fi
     UNIT_COUNT=$(grep -oE 'Tests\s+[0-9]+ passed' "$UNIT_LOG" | grep -oE '[0-9]+' | head -1)
     echo "[INFO] unit: $UNIT_COUNT passed"
     SUMMARY+=("unit=$UNIT_COUNT")
@@ -395,6 +412,11 @@ if [ "$MODE" = all ] || [ "$MODE" = e2e ]; then
     # reseed it a second time (it does when Playwright runs on its own).
     if ! E2E_DB_SEEDED=1 "$SCRIPT_DIR/230-run-web-app-e2e" 2>&1 | tee "$E2E_LOG"; then
         echo "[ERROR] playwright failed -- full log: $E2E_LOG"
+        exit 1
+    fi
+    if grep -qE '^ +[0-9]+ skipped$' "$E2E_LOG"; then
+        echo "[ERROR] playwright skipped tests (make them run or delete" \
+            "them) -- full log: $E2E_LOG"
         exit 1
     fi
     E2E_COUNT=$(grep -oE '[0-9]+ passed' "$E2E_LOG" | tail -1 | grep -oE '[0-9]+' || echo 0)
@@ -493,6 +515,14 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
             TEST_BASE_URL="$API_BASE_URL" "$VENV_PY" -m pytest tests \
             --maxfail=1 -v --tb=short --html="$PY_REPORT" --self-contained-html) 2>&1 | tee "$PY_LOG"; then
         echo "[ERROR] pytest failed -- full log: $PY_LOG, API log: $API_LOG"
+        exit 1
+    fi
+    PY_SKIP_LIST="$(grep -E '^tests/[^ ]+ SKIPPED' "$PY_LOG" \
+        | grep -vE '::test_live_[^ ]* SKIPPED' || true)"
+    if [ -n "$PY_SKIP_LIST" ]; then
+        echo "[ERROR] pytest skipped tests (a gate fails, never skips;" \
+            "make it run or delete it) -- $PY_LOG:"
+        echo "$PY_SKIP_LIST" | head -20
         exit 1
     fi
     PY_COUNT=$(grep -oE '[0-9]+ passed' "$PY_LOG" | tail -1 | grep -oE '[0-9]+' || echo 0)
