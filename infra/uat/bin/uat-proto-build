@@ -22,20 +22,63 @@ API_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-api"
 WEB_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-web"
 SRV_BIN=$SRV_ROOT/bin
 
+slack() {
+    curl -fsS -X POST -H 'Content-Type: application/json' \
+        --data "$(jq -n --arg text "$1" '{text: $text}')" \
+        "$SLACK_WEBHOOK" > /dev/null || true
+}
+
+# Every failure from here on is reported with the step it died in and the
+# full commit (what the registry tag sha-<commit> and proto-api.revision
+# carry; never a short sha). Before install the service is untouched.
+STEP="build lock"
+GIT_SHA="?"
+notify_failure() {
+    local exit_code=$?
+    [ "$exit_code" -eq 0 ] && return 0
+    local state
+    state="$(systemctl is-active "$SERVICE" 2>/dev/null || echo unknown)"
+    case "$STEP" in
+        install*|"web publish")
+            state="$state; it may already run this commit, see the hook log" ;;
+        *)  state="$state, still on the previous build" ;;
+    esac
+    local message=":x: $APP_ENV build FAILED at *$STEP* (exit $exit_code)"
+    message+=" -- commit $GIT_SHA on $(hostname). $SERVICE is $state."
+    slack "$message"
+}
+trap notify_failure EXIT
+
+# A push that lands during a build waits for it instead of being dropped
+# (the running build checked out the head before this push existed).
+# HOOK_TIMEOUT (shrmpl-etc/hooks) allows for one build queued behind one.
 LOCK_FILE="/var/lock/$APP_ENV-build.lock"
 exec 200>"$LOCK_FILE"
-flock -n 200 || { echo "[ERROR] Another build is already running (lock: $LOCK_FILE)"; exit 1; }
+if ! flock -n 200; then
+    echo "[INFO] Another build is running; waiting for it (lock: $LOCK_FILE)"
+    flock -w 1800 200 || {
+        echo "[ERROR] $LOCK_FILE still held after 30 min"; exit 1
+    }
+fi
 
 echo "[INFO] Starting Build Script / Setting Vars"
+STEP="preflight"
 
-for tool in go npm oras jq; do
+# The host's packaged Go may be older than src/api-srv/go.mod; let it fetch
+# the toolchain go.mod names (and staticcheck's, in the test gate) into
+# shrmpl-hook's module cache. Checked by name after the checkout.
+export GOTOOLCHAIN=auto
+
+# git: checkout; psql: the test gate (PSQL in the test env); pg_dump:
+# install-api's pre-migrate dump.
+for tool in go npm oras jq git psql pg_dump; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "[ERROR] $tool is not installed or not on PATH for $TARGET_USER."
         exit 1
     }
 done
 
-for dir in "$SRV_ROOT" "$SRV_ROOT/stg" "$SRV_ROOT/libexec"; do
+for dir in "$SRV_ROOT" "$SRV_ROOT/stg" "$SRV_ROOT/libexec" "$SRV_ROOT/backup"; do
     mkdir -p "$dir" 2>/dev/null || true
     [ -w "$dir" ] || {
         echo "[ERROR] $dir is not writable by $TARGET_USER (infra/README.md step 1)."
@@ -47,31 +90,47 @@ for dir in "$SRV_ROOT" "$SRV_ROOT/stg" "$SRV_ROOT/libexec"; do
         exit 1
     }
 done
-
-notify_failure() {
-    local exit_code=$?
-    [ "$exit_code" -eq 0 ] && return 0
-
-    curl -fsS -X POST -H 'Content-Type: application/json' \
-      --data "$(jq -n --arg text ":x: proto UAT build FAILED on $(hostname) (exit $exit_code). Service state: $(systemctl is-active "$SERVICE" 2>/dev/null || echo unknown)" '{text: $text}')" \
-      "$SLACK_WEBHOOK" > /dev/null || true
+[ -w "$BUILD_STG" ] || {
+    echo "[ERROR] checkout $BUILD_STG missing or not writable by" \
+        "$TARGET_USER (infra/README.md step 1)."
+    echo "        chown -R $TARGET_USER:$TARGET_USER $BUILD_STG"
+    exit 1
 }
-trap notify_failure EXIT
 
 echo "[INFO] Refreshing git repo"
+STEP="checkout"
 pushd "$BUILD_STG" > /dev/null
 git fetch origin
 git checkout "$BRANCH_TO_CHECKOUT"
 git reset --hard "origin/$BRANCH_TO_CHECKOUT"
 
 GIT_SHA=$(git rev-parse "origin/$BRANCH_TO_CHECKOUT")
+SUBJECT=$(git log -1 --format=%s | cut -c1-90)
 echo "[INFO] Building from commit $GIT_SHA ($BRANCH_TO_CHECKOUT)"
+STARTED=":hammer_and_wrench: $APP_ENV build started -- $GIT_SHA"
+slack "$STARTED on $BRANCH_TO_CHECKOUT: $SUBJECT"
+
+# Fails here, by name, rather than as a compile error minutes in: a host Go
+# too old to switch toolchains, or a toolchain fetch that cannot reach the
+# proxy.
+STEP="go toolchain"
+NEED_GO="$(sed -n 's/^go //p' "$BUILD_STG/src/api-srv/go.mod")"
+HAVE_GO="$(cd "$BUILD_STG/src/api-srv" && go env GOVERSION)"
+if [ "$(printf '%s\n' "go$NEED_GO" "$HAVE_GO" | sort -V | head -1)" \
+        != "go$NEED_GO" ]; then
+    echo "[ERROR] src/api-srv/go.mod needs go $NEED_GO;" \
+        "$TARGET_USER gets $HAVE_GO (GOTOOLCHAIN=auto)"
+    exit 1
+fi
+echo "[INFO] $HAVE_GO (src/api-srv/go.mod needs go $NEED_GO)"
 
 # Tests gate the registry push: nothing below runs on a red suite.
+STEP="tests"
 "$SRV_BIN/$APP_ENV-run-tests"
 GO_TESTS=$(grep -c '^--- PASS' "$SRV_ROOT/stg/go-test.log" 2>/dev/null || echo "?")
 
 echo "[INFO] Building Go API"
+STEP="go build"
 mkdir -p "$SRV_ROOT/stg"
 pushd "$BUILD_STG/src/api-srv" > /dev/null
 
@@ -92,6 +151,7 @@ fi
 WEB_TARBALL="proto-web-client.tar.gz"
 
 echo "[INFO] Building web client"
+STEP="web build"
 pushd "$BUILD_STG/src/web-app" > /dev/null
 npm ci
 npm run build
@@ -107,6 +167,7 @@ fi
 (cd "$BUILD_STG/src/web-app/dist" && tar -czf "$SRV_ROOT/stg/$WEB_TARBALL" -- *)
 
 echo "[INFO] Logging in to registry"
+STEP="registry push"
 echo "$CONTAINER_REGISTRY_PASSWORD" | oras login -u "$CONTAINER_REGISTRY_USER" --password-stdin "$CONTAINER_REGISTRY_SERVER"
 
 pushd "$SRV_ROOT/stg" > /dev/null
@@ -131,12 +192,18 @@ popd > /dev/null
 popd > /dev/null
 
 echo "[INFO] Starting server deploy process"
+STEP="install (migrate, swap, restart, health)"
 "$SRV_BIN/$APP_ENV-install-api"
+STEP="web publish"
 "$SRV_BIN/$APP_ENV-publish-web-client"
 
 trap - EXIT
 
-SUMMARY=":rocket: proto UAT deployed on $(hostname)"$'\n'"api: ${API_BLOB}:sha-${GIT_SHA}"$'\n'"web: ${WEB_BLOB}:sha-${GIT_SHA}"$'\n'"commit: ${GIT_SHA}"$'\n'"tests: go ${GO_TESTS} passed, playwright green"
+SUMMARY=":rocket: $APP_ENV deployed on $(hostname) -- $SUBJECT"
+SUMMARY+=$'\n'"api: ${API_BLOB}:sha-${GIT_SHA}"
+SUMMARY+=$'\n'"web: ${WEB_BLOB}:sha-${GIT_SHA}"
+SUMMARY+=$'\n'"commit: ${GIT_SHA}"
+SUMMARY+=$'\n'"tests: go ${GO_TESTS} passed, playwright green"
 echo "[INFO] $SUMMARY"
 SLACK_RESPONSE=$(curl -sS -X POST -H 'Content-Type: application/json' --data "$(jq -n --arg text "$SUMMARY" '{text: $text}')" "$SLACK_WEBHOOK" 2>&1) || true
 echo "[INFO] slack: ${SLACK_RESPONSE:-no response}"

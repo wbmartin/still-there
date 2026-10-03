@@ -386,15 +386,18 @@ systemctl enable uat-proto-api
 sudo -u shrmpl-hook -H /srv/uat-proto/bin/uat-proto-build
 ```
 
-Expect, in order: the test suite (it gates the push: a red suite stops
-here and deploys nothing), the Go and web builds, `oras push` of
-`proto-api` and `proto-web`, then `uat-proto-install-api`: `verify:
-database matches the embedded migrations` and `migrate: nothing pending`
-(or, if the build carries a migration newer than the dump, a
-`backup/pre-migrate-*.dump` and then `up`), the restart, `uat-proto-api
-healthy` and the revision; the web publish; Slack *deployed*. The first
-run downloads Go modules and npm packages: allow several minutes. B058
-(pending) will deploy first and test the deployed commit after.
+Expect, in order: Slack *started* (full sha), the toolchain check
+(`GOTOOLCHAIN=auto` fetches the Go that `src/api-srv/go.mod` names), the
+test suite (it gates the push: a red suite stops here and deploys
+nothing), the Go and web builds, `oras push` of `proto-api` and
+`proto-web`, then `uat-proto-install-api`: `verify: database matches the
+embedded migrations` and `migrate: nothing pending` (or, if the build
+carries a migration newer than the dump, a `backup/pre-migrate-*.dump`
+and then `up`), the restart, `uat-proto-api healthy` and the revision;
+the web publish; Slack *deployed*. A failure Slacks *FAILED at <step>*
+with the commit; a second run waits for the first (up to 30 min). The
+first run downloads Go modules and npm packages: allow several minutes.
+B058 (pending) will deploy first and test the deployed commit after.
 
 ### A8. Certificates, then the new nginx site
 

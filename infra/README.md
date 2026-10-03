@@ -128,7 +128,9 @@ them as root. The build never uses them.
 push to BRANCH_TO_CHECKOUT
   → GitHub webhook → shrmpl-hook on the UAT host
   → /srv/uat-proto/bin/uat-proto-build
-       flock · git reset --hard origin/<branch> · uat-proto-run-tests (gate)
+       flock (waits up to 30 min for a running build; HOOK_TIMEOUT 3600)
+       · git reset --hard origin/<branch> · Slack started (full sha)
+       · go toolchain check (GOTOOLCHAIN=auto) · uat-proto-run-tests (gate)
        static go build cmd/server + cmd/migrate · vite build + tar
        oras push  proto-api:sha-<commit> + proto-web:sha-<commit>, tag :uat
        uat-proto-install-api    (pull · the incoming proto-migrate, from the
@@ -137,7 +139,7 @@ push to BRANCH_TO_CHECKOUT
                                  · restart via path unit · MainPID change
                                  · /health; failure prints the rollback)
        uat-proto-publish-web-client
-       Slack notify (success or failure)
+       Slack deployed, or FAILED at <step> with the full sha
 
 prod: /srv/prd-proto/bin/prd-proto-promote-uat-and-deploy [<commit>]
        prd-proto-promote-uat    retags the UAT digests as :prd — NEVER rebuilds;

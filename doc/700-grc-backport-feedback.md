@@ -242,114 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B047 — UAT build: lock waits, per-step failure report, full-sha Slack
-
-- **Priority:** P2  **Area:** infra
-- **GRC:** `infra/uat-unified001/bin/uat-grc-build:1-13,40-41,45,47-54,56-62,63-73,77-83,85-94,140-159`; `infra/uat-unified001/shrmpl-etc/hooks/build-grc_HOOKID.env:11-13`   **PROTO:** `infra/uat/bin/uat-proto-build:21-24,44-52,62-66,129-138`; `infra/uat/shrmpl-etc/hooks/build-proto_HOOKID.env:9`
-- **Ticket:** RG0013 / `da5eebd`; RG0043 / `535e7cb`, `b167658`
-- **What:** `flock -n` drops a push landing mid-build. GRC waits 30 min (hook
-3600), reports "FAILED at <step>", Slacks full sha at start/deploy/test,
-preflights `git psql pg_dump`, names a stale host Go.
-- **Port notes:** Toolchain check only if needed (B014). Replace "Radley GRC"
-and module path (:99-101).
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-`infra/uat/bin/uat-proto-build` is what the GitHub webhook runs on the UAT
-host for every push to `BRANCH_TO_CHECKOUT`: reset the checkout, run the
-test gate, build, push to the registry, install, publish, Slack.
-
-**(1) A push that lands during a build is dropped.** The lock is
-non-blocking: `flock -n 200 || { echo "[ERROR] Another build ..."; exit 1; }`
-(`:22-24`). A run includes `bin/300-run-tests` (Go, vitest, Playwright,
-pytest), so it takes minutes. Push A starts a build; push B arrives two
-minutes later; B's run exits 1 at once. A checked out the head before B
-existed, so B is never built and UAT sits one commit behind until the next
-push. The `notify_failure` trap is armed later (`:52`), so this exit sends
-no Slack. Whether shrmpl-hook reports a non-zero exit itself is not
-visible in this repo. This is a correctness bug.
-
-**(2) A failure does not say where or which commit.** `:49` sends
-`":x: proto UAT build FAILED on $(hostname) (exit $exit_code)..."`. The
-same message covers a red test suite, a compile error, a registry
-outage, a refused migration and a failed health check. The operator must
-log in and read hook output to learn which. The commit is missing too,
-so two failures in a row cannot be told apart. The success message
-(`:132`) does carry the full sha; there is no "started" message at all.
-This is an operability gap.
-
-**(3) Thin preflight.** `:28` checks `go npm oras jq`. The run also needs
-`git` (`:56-58`), `psql` (the test gate, via `PSQL` in
-`infra/uat/etc/uat-proto-test.env:12`) and `pg_dump` (install-api `:43`).
-A missing one fails mid-run with a shell "command not found".
-
-**(4) Host Go version.** `src/api-srv/go.mod:3` says `go 1.25.4`. A host
-whose packaged Go is older and does not auto-fetch toolchains fails at
-compile time with a version error, minutes in. B014 raises the `go` line
-again.
-
-**(5) Hook timeout.** `infra/uat/shrmpl-etc/hooks/build-proto_HOOKID.env:9`
-sets `HOOK_TIMEOUT=600`. Waiting on the lock (fix 1) needs more.
-
-#### What GRC changed
-
-RG0013 / `da5eebd` ("The build lock waits instead of dropping a push;
-HOOK_TIMEOUT 3600"), RG0043 / `b167658` (full sha in Slack), and the
-toolchain check from `a57d6ad`. In GRC's `uat-grc-build`:
-
-1. The lock waits up to 30 min (`:49-54`): try `flock -n`, print
-   "waiting", then `flock -w 1800 200`, and Slack if it gives up. The hook
-   timeout became 3600 (`build-grc_HOOKID.env:11-13`).
-2. Preflight adds `git psql pg_dump` (`:56-58`) and checks `stg`,
-   `libexec`, `backup` and `BUILD_STG` are writable (`:59-61`).
-3. A `STEP` variable is set before each phase (`:64`, `:88`, `:96`,
-   `:109`, `:115`, `:135`, `:138`). The trap (`:68-73`) sends "deploy
-   FAILED at *$STEP* (exit N)", the commit and the host.
-4. Slack at start (`:83`) with the full sha and commit subject, and again
-   after deploy. `b167658` replaced `git rev-parse --short` with the full
-   sha everywhere, because the registry tag (`sha-<commit>`), the revision
-   file and the prd promote all carry the full one.
-5. `GOTOOLCHAIN=auto` (`:45`) lets the host's older packaged Go fetch the
-   required toolchain; `:88-94` then compares `go env GOVERSION` with the
-   required version and fails by name.
-
-No tests (shell). GRC also moved the tests after the deploy: that is B058.
-
-#### Proposed fix for PROTO
-
-All in `infra/uat/bin/uat-proto-build` unless named.
-
-1. Replace `:24` with GRC's wait: `flock -n` then `flock -w 1800`, Slack
-   on give-up. Set `HOOK_TIMEOUT=3600` in `build-proto_HOOKID.env:9`.
-2. Add `git psql pg_dump` to the tool list at `:28`.
-3. Add a `slack()` helper; set `STEP` before checkout, tests, go build, web
-   build, registry push, install, publish. Put `$STEP` and `$GIT_SHA`
-   (initialised to `?`) in `notify_failure`.
-4. Slack "started" after `:61` with the full `GIT_SHA` and
-   `git log -1 --format=%s | cut -c1-90`. Never `--short`.
-5. Blind-copy trap: GRC's failure text says the service is "still on the
-   previous build". That is false once install has swapped the binary
-   (health failure) or for a publish failure. Say it only when `STEP` is
-   before install.
-6. Toolchain: export `GOTOOLCHAIN=auto`; check against
-   `sed -n 's/^go //p' src/api-srv/go.mod` (PROTO has no `go.work`).
-   Matters once B014 lifts `go` above the host's packaged Go.
-7. Do not copy GRC's `go build` lines (`:99-104`): they use GRC's module
-   path and three binaries. Keep PROTO's `./cmd/server`, `./cmd/migrate`.
-8. Message prefix: GRC hard-codes its display name. Use `$APP_ENV` from
-   B045 (`uat-proto`), so `bin/000-rebrand` has nothing to rewrite.
-9. Keep PROTO's order (tests gate the push) unless B058 is pulled.
-
-Tests: none automated. Rehearse: two pushes 60 s apart; expect the second
-build to log "waiting" and then build the second commit.
-
-#### Open question for Brandon
-
-None.
-
 ### B048 — nginx: keepalive actually used; plain redirect; IPv6
 
 - **Priority:** P2  **Area:** infra
@@ -8913,3 +8805,113 @@ install `libexec/api-srv`? Recommendation: yes, in this ticket, since it
 removes a row from the doc/330 name table and one rename step at cutover.
 
 - **Completed:** 2026-10-03. Pulled; Brandon's "yes" taken as yes to the open question too (post-sales installs `libexec/api-srv`). `infra/{uat,prd}/bin/*-install-api` (still byte-identical): header states the flow and the "rolling back across a migration is a restore from `backup/`, not a reinstall" rule; the stale "a failure leaves the old binary running" comment is gone. After the pull it refuses unless both `api-srv` and `proto-migrate` are present (the `[WARN]` no-migrator branch is deleted), `chmod 0755`s them in the pull dir, requires `etc/$APP_ENV-migrate.env`, and runs `verify` -> `pending` -> `pg_dump` -> `up` with `MIGRATE=("$PULL_DIR/proto-migrate" -config "$MIGRATE_ENV")`; `libexec/` is untouched until that succeeds. Then a loop over `BINARY_LIST=(api-srv proto-migrate)` copies each running binary to `<name>.prev` (`cp -p`) and swaps with install+mv. A health failure prints the paste-able rollback (`mv -f` each `.prev` back, touch `stg/restart.request`; schema stays). `proto-api.revision` kept (it is the blob's revision); no worker wait. Rename: `uat-proto-build` builds and pushes `api-srv` inside the `proto-api` blob (blob name unchanged); both `*-proto-api.service` units `ExecStart` `libexec/api-srv`. Docs: `infra/README.md` (path table, tell-apart rule now `proto-api.revision`, literal-slug names, promotion box "the incoming proto-migrate, from the pull dir", layout), `doc/320`, `doc/330` (signal table, name table row now "same name", intro), `doc/331`. Verified in ubuntu:24.04 against a fake `/srv/uat-proto` with stubbed oras/systemctl/curl/pg_dump and a fake migrator (run as root, so the re-exec path ran): install N+1 (migrates) then N: old fails verify with `libexec/proto-migrate` already swapped to N (sha256 differs); new fails verify, sha256 of libexec unchanged. Failing `up`: old swapped the migrator, new unchanged. Artifact without a migrator: old warns and swaps the API, new refuses, libexec unchanged. Health failure: new leaves `.prev` for both, prints the rollback, which runs as `shrmpl-hook` and restores. shellcheck 0.9.0: install-api clean before and after; build same pre-existing notes. Host action (when post-sales hosts exist): recopy `bin/` and the `*-proto-api.service` unit, `daemon-reload`; a tag built before this change has no `api-srv` and is refused. Tests: all green, `gofmt -l` empty (no Go change): infra=15 go=687 unit=82 e2e=13 py=102.
+
+### B047 — COMPLETED — UAT build: lock waits, per-step failure report, full-sha Slack
+
+- **Priority:** P2  **Area:** infra
+- **GRC:** `infra/uat-unified001/bin/uat-grc-build:1-13,40-41,45,47-54,56-62,63-73,77-83,85-94,140-159`; `infra/uat-unified001/shrmpl-etc/hooks/build-grc_HOOKID.env:11-13`   **PROTO:** `infra/uat/bin/uat-proto-build:21-24,44-52,62-66,129-138`; `infra/uat/shrmpl-etc/hooks/build-proto_HOOKID.env:9`
+- **Ticket:** RG0013 / `da5eebd`; RG0043 / `535e7cb`, `b167658`
+- **What:** `flock -n` drops a push landing mid-build. GRC waits 30 min (hook
+3600), reports "FAILED at <step>", Slacks full sha at start/deploy/test,
+preflights `git psql pg_dump`, names a stale host Go.
+- **Port notes:** Toolchain check only if needed (B014). Replace "Radley GRC"
+and module path (:99-101).
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+`infra/uat/bin/uat-proto-build` is what the GitHub webhook runs on the UAT
+host for every push to `BRANCH_TO_CHECKOUT`: reset the checkout, run the
+test gate, build, push to the registry, install, publish, Slack.
+
+**(1) A push that lands during a build is dropped.** The lock is
+non-blocking: `flock -n 200 || { echo "[ERROR] Another build ..."; exit 1; }`
+(`:22-24`). A run includes `bin/300-run-tests` (Go, vitest, Playwright,
+pytest), so it takes minutes. Push A starts a build; push B arrives two
+minutes later; B's run exits 1 at once. A checked out the head before B
+existed, so B is never built and UAT sits one commit behind until the next
+push. The `notify_failure` trap is armed later (`:52`), so this exit sends
+no Slack. Whether shrmpl-hook reports a non-zero exit itself is not
+visible in this repo. This is a correctness bug.
+
+**(2) A failure does not say where or which commit.** `:49` sends
+`":x: proto UAT build FAILED on $(hostname) (exit $exit_code)..."`. The
+same message covers a red test suite, a compile error, a registry
+outage, a refused migration and a failed health check. The operator must
+log in and read hook output to learn which. The commit is missing too,
+so two failures in a row cannot be told apart. The success message
+(`:132`) does carry the full sha; there is no "started" message at all.
+This is an operability gap.
+
+**(3) Thin preflight.** `:28` checks `go npm oras jq`. The run also needs
+`git` (`:56-58`), `psql` (the test gate, via `PSQL` in
+`infra/uat/etc/uat-proto-test.env:12`) and `pg_dump` (install-api `:43`).
+A missing one fails mid-run with a shell "command not found".
+
+**(4) Host Go version.** `src/api-srv/go.mod:3` says `go 1.25.4`. A host
+whose packaged Go is older and does not auto-fetch toolchains fails at
+compile time with a version error, minutes in. B014 raises the `go` line
+again.
+
+**(5) Hook timeout.** `infra/uat/shrmpl-etc/hooks/build-proto_HOOKID.env:9`
+sets `HOOK_TIMEOUT=600`. Waiting on the lock (fix 1) needs more.
+
+#### What GRC changed
+
+RG0013 / `da5eebd` ("The build lock waits instead of dropping a push;
+HOOK_TIMEOUT 3600"), RG0043 / `b167658` (full sha in Slack), and the
+toolchain check from `a57d6ad`. In GRC's `uat-grc-build`:
+
+1. The lock waits up to 30 min (`:49-54`): try `flock -n`, print
+   "waiting", then `flock -w 1800 200`, and Slack if it gives up. The hook
+   timeout became 3600 (`build-grc_HOOKID.env:11-13`).
+2. Preflight adds `git psql pg_dump` (`:56-58`) and checks `stg`,
+   `libexec`, `backup` and `BUILD_STG` are writable (`:59-61`).
+3. A `STEP` variable is set before each phase (`:64`, `:88`, `:96`,
+   `:109`, `:115`, `:135`, `:138`). The trap (`:68-73`) sends "deploy
+   FAILED at *$STEP* (exit N)", the commit and the host.
+4. Slack at start (`:83`) with the full sha and commit subject, and again
+   after deploy. `b167658` replaced `git rev-parse --short` with the full
+   sha everywhere, because the registry tag (`sha-<commit>`), the revision
+   file and the prd promote all carry the full one.
+5. `GOTOOLCHAIN=auto` (`:45`) lets the host's older packaged Go fetch the
+   required toolchain; `:88-94` then compares `go env GOVERSION` with the
+   required version and fails by name.
+
+No tests (shell). GRC also moved the tests after the deploy: that is B058.
+
+#### Proposed fix for PROTO
+
+All in `infra/uat/bin/uat-proto-build` unless named.
+
+1. Replace `:24` with GRC's wait: `flock -n` then `flock -w 1800`, Slack
+   on give-up. Set `HOOK_TIMEOUT=3600` in `build-proto_HOOKID.env:9`.
+2. Add `git psql pg_dump` to the tool list at `:28`.
+3. Add a `slack()` helper; set `STEP` before checkout, tests, go build, web
+   build, registry push, install, publish. Put `$STEP` and `$GIT_SHA`
+   (initialised to `?`) in `notify_failure`.
+4. Slack "started" after `:61` with the full `GIT_SHA` and
+   `git log -1 --format=%s | cut -c1-90`. Never `--short`.
+5. Blind-copy trap: GRC's failure text says the service is "still on the
+   previous build". That is false once install has swapped the binary
+   (health failure) or for a publish failure. Say it only when `STEP` is
+   before install.
+6. Toolchain: export `GOTOOLCHAIN=auto`; check against
+   `sed -n 's/^go //p' src/api-srv/go.mod` (PROTO has no `go.work`).
+   Matters once B014 lifts `go` above the host's packaged Go.
+7. Do not copy GRC's `go build` lines (`:99-104`): they use GRC's module
+   path and three binaries. Keep PROTO's `./cmd/server`, `./cmd/migrate`.
+8. Message prefix: GRC hard-codes its display name. Use `$APP_ENV` from
+   B045 (`uat-proto`), so `bin/000-rebrand` has nothing to rewrite.
+9. Keep PROTO's order (tests gate the push) unless B058 is pulled.
+
+Tests: none automated. Rehearse: two pushes 60 s apart; expect the second
+build to log "waiting" and then build the second commit.
+
+#### Open question for Brandon
+
+None.
+
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). `infra/uat/bin/uat-proto-build`: the lock tries `flock -n`, logs "waiting", then `flock -w 1800`; `build-proto_HOOKID.env` `HOOK_TIMEOUT=3600`. A `slack()` helper and `STEP` (`build lock`, `preflight`, `checkout`, `go toolchain`, `tests`, `go build`, `web build`, `registry push`, `install (migrate, swap, restart, health)`, `web publish`); the EXIT trap is armed before the lock, so a lock give-up or a preflight failure also Slacks (no separate give-up message). Failure text: `:x: $APP_ENV build FAILED at *<step>* (exit N) -- commit <full sha|?> on <host>. <service> is <state>`, plus "still on the previous build" only before install, "it may already run this commit, see the hook log" for install/web publish. Slack *started* after checkout with the full sha and `git log -1 --format=%s | cut -c1-90`; the deployed message gains `$APP_ENV` and the subject ("proto UAT" literal gone). Preflight adds `git psql pg_dump`, `backup/` to the writable dirs, and a `BUILD_STG` writable check with the chown hint (GRC :59-61; B049's note). `export GOTOOLCHAIN=auto` before the gate (also lets bin/300 `go install` staticcheck v0.8.1's Go 1.26, B040), then a `go toolchain` step compares `go env GOVERSION` in `src/api-srv` with `go.mod`'s `go` line by `sort -V` and fails by name. Docs: `infra/README.md` promotion flow, `doc/330` A7. Not done: prd promote has no lock and already Slacks the full sha; no prd build exists. Order unchanged (B058). Verified in ubuntu:24.04, fake `/srv/uat-proto`, local bare origin, stubbed go/npm/oras/systemctl/psql/pg_dump and a payload-capturing curl, old vs new: push landing mid-build, old B exits 1 at once with no Slack and the third commit is never built; new B logs waiting and builds and Slacks the third commit. Lock held past the wait (shortened to 3 s in a copy): old drops silently, new Slacks FAILED at *build lock*. Tests fail: old generic "FAILED (exit 1)", new FAILED at *tests* with full sha. Install fails: new FAILED at *install ...*, "may already run this commit". Host go1.22.0: old builds on, new fails at *go toolchain* by name. Missing pg_dump: old deploys, new fails at *preflight*. Happy path: started + deployed both carry the 40-char sha; `go env` sees `GOTOOLCHAIN=auto`. shellcheck 0.9.0: no warnings; only the same SC2317 (trap function) / pre-existing SC2015 notes. Host action (when post-sales UAT exists): recopy `bin/uat-proto-build`; set `HOOK_TIMEOUT=3600` in the server's `/srv/shrmpl/etc/build-proto_<hookid>.env`; install `postgresql-client` if `psql`/`pg_dump` are missing. Tests: all green, `gofmt -l` empty (no Go change): infra=15 go=687 unit=82 e2e=13 py=102.
