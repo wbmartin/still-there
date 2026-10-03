@@ -6,9 +6,10 @@ Go stdlib `net/http` + `pgx` API server. Local dev runs plain HTTP
 
 ## Quick Start
 
-1. Build the local database (from the repo root):
+1. Build or migrate the developer database (from the repo root; first
+   time, see `doc/050-dev-env-init.md`):
    ```bash
-   bin/510-reset-test-db
+   bin/205-migrate-db
    ```
 2. Run the server:
    ```bash

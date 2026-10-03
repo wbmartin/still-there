@@ -786,7 +786,8 @@ self-signup name check) use `errors.Is`, never the error's text.
 ## Development Workflow
 
 ### Local Development
-1. Build the database: `bin/510-reset-test-db`
+1. Build or migrate the developer database: `bin/205-migrate-db`
+   (`bin/510-reset-test-db` builds scratch test databases only)
 2. Run server: `bin/215-run-api-srv`
 3. Run tests: `go test ./...`
 

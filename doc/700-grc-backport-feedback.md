@@ -852,68 +852,6 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
 
 # Bugs found in PROTO along the way
 
-### B085 — READMEs say `bin/510` builds the local database
-
-- **Priority:** P2  **Area:** docs
-- **GRC:** `bin/205-migrate-db:1-17`; `src/web-app/README.md:12-18` (GRC's answer)   **PROTO:** `README.md:46`; `src/api-srv/README.md:9-12`; `bin/510-reset-test-db:43-45`; `doc/050-dev-env-init.md:21-31`
-- **Ticket:** none
-- **What:** Both READMEs send newcomers to `bin/510`, which refuses non-scratch
-names; the dev DB is built per doc/050.
-- **Port notes:** Point at doc/050; dev migrate script is B073.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Docs bug in onboarding. `README.md:46` ("`./bin/510-reset-test-db` |
-Rebuild the local database") and `src/api-srv/README.md:9-11` ("Build the
-local database: `bin/510-reset-test-db`") send newcomers to `bin/510`. So
-do `doc/105-api-srv-tech-spec.md:343` and `doc/060-dev-env-start.md:17-19`,
-which the item's refs miss.
-
-`bin/510` builds a scratch database only: no argument means
-`loc_<slug>_test_db` (`bin/510-reset-test-db:39`), and `:43-45` refuses
-any name not ending `_test_db`/`_e2e_db`. The API connects to
-`loc_proto_db` (`etc/loc-api-srv.env:7`). Following the README literally:
-`bin/510` succeeds and builds `loc_proto_test_db`; `bin/215-run-api-srv`
-then fails `Ping` and exits with `DBP0 Failed to ping database`
-(`src/api-srv/cmd/server/main.go:63-67`); passing `loc_proto_db` to
-`bin/510` is refused. Pointing `DATABASE_URL` at the test database is no
-escape, because `bin/300 go` drops it every run
-(`doc/902-project-commands.md:66`). The working steps are the "Manual
-path" in `doc/050-dev-env-init.md:20-33`, which no README links.
-
-#### What GRC changed
-
-GRC added a dev-database script and points its docs at it.
-`bin/205-migrate-db:3-4,16-18` bootstraps database and roles
-idempotently, runs `up`, and refreshes the schema reference.
-`src/web-app/README.md:12-15` says the app needs "the tenant seeded
-(`doc/050-dev-env-init.md`)" and runs `./bin/205-migrate-db &&
-./bin/206-seed-dev-tenant` once; `doc/105-api-srv-tech-spec.md:599`
-agrees. `bin/510` stays scratch-only (`src/api-srv/README.md:217`). No
-tests. The script wraps goose and `ADMIN_DATABASE_URL`, which PROTO lacks.
-
-#### Proposed fix for PROTO
-
-1. `README.md:46`: relabel "Rebuild a scratch test database"; add a line
-   above the table: "First-time dev database: `doc/050-dev-env-init.md`."
-2. `src/api-srv/README.md:9-12`, `doc/105:343`, `doc/060:17-19`: replace
-   the `bin/510` step with a pointer to doc/050's Manual path.
-3. When B073 adds a PROTO dev-migrate script (`cmd/migrate up` plus
-   `local-seed.sql`), point all four places at it. Do not copy GRC's
-   `bin/205`: it calls goose, `migrate-srv` and `bootstrap`.
-4. Write `loc_<slug>_db`, not `loc_proto_db`, so `bin/000-rebrand` has
-   nothing to rewrite.
-5. Tests: none; B053's doc-path check guards future drift.
-
-#### Open question for Brandon
-
-Fix the pointers now, or wait for B073's script? Recommend now: it is
-minutes of work and the current text sends every newcomer into a
-startup failure.
-
 ### B086 — doc/060 names a script that does not exist
 
 - **Priority:** P3  **Area:** docs
@@ -9006,3 +8944,66 @@ the stored type is re-sniffed on the way out (`evidence_file_handler.go:150`).
 
 None.
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line): docs only, since PROTO has no file route (step 1; steps 2-3 wait for a blob route). New `doc/105` subsection "Serving user files": five rules (framing override `X-Frame-Options: SAMEORIGIN` + `frame-ancestors 'self'` on that route only, set in the handler after its checks; inline only PDF/PNG/JPEG, never HTML/SVG/XML, `mime.FormatMediaType` on a cleaned name; size checked declared/`MaxBytesReader`/read, 413, under nginx 20M; type from magic bytes against an allowlist, 415, re-sniffed on the way out; `private, no-store` and every miss 404), the usual explicit checks and route-contract row, the tests the route lands with, and what is not carried from GRC. The Security Headers list notes the override. Deviation: the nginx `DENY` trap is already gone (B022 left `/api/` with no `add_header` and nothing at server level), so the doc says to keep it that way rather than describing a live trap; nginx sends no page CSP today, so the `object-src`/`frame-src 'self'` note applies when a derived app adds one. Pointers: `DERIVING.md` section 4, `doc/110` control 7 (user files judged by their bytes), and a comment in `security_headers.go`. No code, no test. Tests: all green, infra=15 docs=701 go=708 unit=105 e2e=70 py=103, govulncheck clean, gofmt clean.
+
+### B085 — COMPLETED — READMEs say `bin/510` builds the local database
+
+- **Priority:** P2  **Area:** docs
+- **GRC:** `bin/205-migrate-db:1-17`; `src/web-app/README.md:12-18` (GRC's answer)   **PROTO:** `README.md:46`; `src/api-srv/README.md:9-12`; `bin/510-reset-test-db:43-45`; `doc/050-dev-env-init.md:21-31`
+- **Ticket:** none
+- **What:** Both READMEs send newcomers to `bin/510`, which refuses non-scratch
+names; the dev DB is built per doc/050.
+- **Port notes:** Point at doc/050; dev migrate script is B073.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Docs bug in onboarding. `README.md:46` ("`./bin/510-reset-test-db` |
+Rebuild the local database") and `src/api-srv/README.md:9-11` ("Build the
+local database: `bin/510-reset-test-db`") send newcomers to `bin/510`. So
+do `doc/105-api-srv-tech-spec.md:343` and `doc/060-dev-env-start.md:17-19`,
+which the item's refs miss.
+
+`bin/510` builds a scratch database only: no argument means
+`loc_<slug>_test_db` (`bin/510-reset-test-db:39`), and `:43-45` refuses
+any name not ending `_test_db`/`_e2e_db`. The API connects to
+`loc_proto_db` (`etc/loc-api-srv.env:7`). Following the README literally:
+`bin/510` succeeds and builds `loc_proto_test_db`; `bin/215-run-api-srv`
+then fails `Ping` and exits with `DBP0 Failed to ping database`
+(`src/api-srv/cmd/server/main.go:63-67`); passing `loc_proto_db` to
+`bin/510` is refused. Pointing `DATABASE_URL` at the test database is no
+escape, because `bin/300 go` drops it every run
+(`doc/902-project-commands.md:66`). The working steps are the "Manual
+path" in `doc/050-dev-env-init.md:20-33`, which no README links.
+
+#### What GRC changed
+
+GRC added a dev-database script and points its docs at it.
+`bin/205-migrate-db:3-4,16-18` bootstraps database and roles
+idempotently, runs `up`, and refreshes the schema reference.
+`src/web-app/README.md:12-15` says the app needs "the tenant seeded
+(`doc/050-dev-env-init.md`)" and runs `./bin/205-migrate-db &&
+./bin/206-seed-dev-tenant` once; `doc/105-api-srv-tech-spec.md:599`
+agrees. `bin/510` stays scratch-only (`src/api-srv/README.md:217`). No
+tests. The script wraps goose and `ADMIN_DATABASE_URL`, which PROTO lacks.
+
+#### Proposed fix for PROTO
+
+1. `README.md:46`: relabel "Rebuild a scratch test database"; add a line
+   above the table: "First-time dev database: `doc/050-dev-env-init.md`."
+2. `src/api-srv/README.md:9-12`, `doc/105:343`, `doc/060:17-19`: replace
+   the `bin/510` step with a pointer to doc/050's Manual path.
+3. When B073 adds a PROTO dev-migrate script (`cmd/migrate up` plus
+   `local-seed.sql`), point all four places at it. Do not copy GRC's
+   `bin/205`: it calls goose, `migrate-srv` and `bootstrap`.
+4. Write `loc_<slug>_db`, not `loc_proto_db`, so `bin/000-rebrand` has
+   nothing to rewrite.
+5. Tests: none; B053's doc-path check guards future drift.
+
+#### Open question for Brandon
+
+Fix the pointers now, or wait for B073's script? Recommend now: it is
+minutes of work and the current text sends every newcomer into a
+startup failure.
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). Docs only. B073's `bin/205-migrate-db` and B075's doc/060 had already fixed doc/060 and doc/050; the remaining `bin/510` pointers now name `bin/205-migrate-db`: `README.md` Key Commands (new 205 row with `loc_<slug>_db` and the doc/050 pointer; 510 relabelled "scratch test database"), `src/api-srv/README.md` Quick Start, `doc/105` Local Development (notes 510 is scratch only). No code, no test. Tests: all green, infra=15 docs=704 go=708 unit=105 e2e=70 py=103 (docs +3: the new `bin/205`, `doc/050` and README tokens)

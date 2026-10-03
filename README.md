@@ -41,7 +41,8 @@ See [doc/060-dev-env-start.md](doc/060-dev-env-start.md) for day-to-day startup 
 |---------|---------|
 | `./bin/000-rebrand <slug> "<Name>"` | Rename the app when deriving from this template (see `DERIVING.md`) |
 | `./bin/100-build-api-server` | Build the Go API server |
-| `./bin/510-reset-test-db` | Rebuild the local database |
+| `./bin/205-migrate-db` | Create or migrate your developer database (`loc_<slug>_db`; first time: `doc/050-dev-env-init.md`) |
+| `./bin/510-reset-test-db` | Rebuild a scratch test database (`*_test_db`) |
 | `./bin/215-run-api-srv` | Run the API server (supports `--daemon`/`--interactive`) |
 | `./bin/220-run-web-app` | Run the web app dev server |
 | `./bin/216-stop-local-stack` | Stop the API server and web app dev server |
