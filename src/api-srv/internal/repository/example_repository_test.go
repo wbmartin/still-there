@@ -346,3 +346,76 @@ func (s *ExampleRepositoryTestSuite) TestJSONBAndUUIDRoundTrip() {
 	_, err = s.repo.CreateExample(context.Background(), dup, testTenant)
 	s.Error(err)
 }
+
+// B098: tenant isolation. A row of otherTenant (3) is invisible to testTenant
+// (2) through every repository entry point: reads, updates and deletes behave
+// as if the row did not exist, and the row is left exactly as it was.
+
+func (s *ExampleRepositoryTestSuite) createIn(
+	text string,
+	tenant int,
+) *model.ExampleModel {
+	created, err := s.repo.CreateExample(context.Background(),
+		&model.ExampleModel{
+			ExampleText: text, SecurityContext: tenant,
+			ExampleUUID: model.NewUUID(),
+			CreateTS:    1234567890.123, CreateUserID: 1,
+			UpdateTS: 1234567890.123, UpdateUserID: 1,
+		}, tenant)
+	s.Require().NoError(err)
+	return created
+}
+
+func (s *ExampleRepositoryTestSuite) TestCrossTenantIsolation() {
+	ctx := context.Background()
+	mine := s.createIn("RepoTest Tenant Mine", testTenant)
+	theirs := s.createIn("RepoTest Tenant Theirs", otherTenant)
+
+	// List: tenant 2 sees its own row and never the tenant-3 row, whether
+	// the list is asked for by id or in full.
+	byID, err := s.repo.RetrieveExampleList(ctx,
+		[]int{mine.ExampleID, theirs.ExampleID}, testTenant, 0)
+	s.Require().NoError(err)
+	s.Require().Len(byID, 1)
+	s.Equal(mine.ExampleID, byID[0].ExampleID)
+
+	full, err := s.repo.RetrieveExampleList(ctx, nil, testTenant, 0)
+	s.Require().NoError(err)
+	for _, example := range full {
+		s.Equal(testTenant, example.SecurityContext)
+		s.NotEqual(theirs.ExampleID, example.ExampleID)
+	}
+
+	// Get.
+	_, err = s.repo.RetrieveExample(ctx, theirs.ExampleID, testTenant)
+	s.True(errors.Is(err, ErrNotFound), "get: %v", err)
+
+	// Update: the tenant-3 id with tenant 2 as the caller's context.
+	attempt := *theirs
+	attempt.SecurityContext = testTenant
+	attempt.ExampleText = "RepoTest Tenant Hijacked"
+	attempt.UpdateTS = 1234567899.0
+	err = s.repo.UpdateExample(ctx, &attempt, theirs.UpdateTS)
+	s.True(errors.Is(err, ErrNotFound), "update: %v", err)
+
+	// Delete.
+	_, err = s.repo.DeleteExample(ctx, theirs.ExampleID, testTenant,
+		theirs.UpdateTS, 1234567899.0, 2)
+	s.True(errors.Is(err, ErrNotFound), "delete: %v", err)
+
+	// Batch update and delete leave it alone too.
+	err = s.repo.UpdateExampleList(ctx, []*model.ExampleModel{&attempt},
+		[]float64{theirs.UpdateTS}, testTenant)
+	s.True(errors.Is(err, ErrExpectationFailed), "update list: %v", err)
+	_, err = s.repo.DeleteExampleList(ctx, []int{theirs.ExampleID},
+		[]float64{theirs.UpdateTS}, testTenant, 1234567899.0, 2)
+	s.NoError(err)
+
+	// The tenant-3 row is unchanged and still live for its owner.
+	after, err := s.repo.RetrieveExample(ctx, theirs.ExampleID, otherTenant)
+	s.Require().NoError(err)
+	s.Equal("RepoTest Tenant Theirs", after.ExampleText)
+	s.Equal(theirs.UpdateTS, after.UpdateTS)
+	s.Nil(after.DeleteUserID)
+	s.Equal(otherTenant, after.SecurityContext)
+}

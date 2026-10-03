@@ -108,7 +108,7 @@ answer not-found), and at the API where a route reaches the table. Today:
 | `app_user` | `user_repository_test.go` (update, delete, password, MFA and status writes by another tenant's id) | met |
 | `app_user_group` | `app_user_group_repository_test.go`; pytest `test_cross_security_context_group_is_404_not_409` | met |
 | `user_invite` | `user_invite_repository_test.go` (reissue and revoke from another tenant) | met |
-| `example` | none: the repository scopes every query, but no test reads or writes a tenant-3 example | partial |
+| `example` | `example_repository_test.go` `TestCrossTenantIsolation` (list, get, update, delete and the batch writes against a tenant-3 row from tenant 2) | met |
 
 ## Threats and controls
 
@@ -138,7 +138,7 @@ test that shows it; the mechanics are in doc/105.
 
 | # | Threat | Control | Status |
 |---|---|---|---|
-| 2.1 | Missing tenant predicate | See Tenant isolation: app-layer only, `scoped_query.go`, write predicates, test tenant lock, per-table tests (`example` untested) | partial |
+| 2.1 | Missing tenant predicate | See Tenant isolation: app-layer only, `scoped_query.go`, write predicates, test tenant lock, per-table tests (`example_repository_test.go`) | met |
 | 2.2 | API used to change the schema | `proto_app` is `db_reader` + `db_writer`, owns nothing; migrations run as `proto_ddl` (`src/api-srv/cmd/migrate`), the only path for DDL | met |
 | 2.3 | Credentials read from a dump or a response | Passwords Argon2id; TOTP seeds AES-GCM under `TOTP_ENCRYPTION_KEY`; invite tokens SHA-256 only; `PwHash` and `TOTPSeed` are `json:"-"`. `RetrieveUserList` still selects `totp_seed` it never sends (doc/700 appendix) | met |
 | 2.4 | Database reached off the host | `DATABASE_URL` names `127.0.0.1:5432` in every server env file | met |

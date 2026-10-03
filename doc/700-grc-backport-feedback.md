@@ -866,20 +866,6 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
   returns the new status and the session cookie still works.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ X\] skip  (new, not yet decided)
 
-### B098 — `example` has no cross-tenant repository test
-- **Priority:** P3  **Area:** go-api, tests
-- **GRC:** not checked   **PROTO:** `src/api-srv/internal/repository/example_repository_test.go` (every call uses `testTenant`, lines 46-79), `doc/110-threat-model.md` (tenant table row `example`: "none", status partial; row 2.1)
-- **Ticket:** found while writing doc/110 for B077 (2026-10-03)
-- **What:** doc/110 requires one cross-tenant negative test per tenant
-  table. `app_user`, `app_user_group` and `user_invite` have one;
-  `example` is the only table without, though the repository scopes every
-  query.
-- **Port notes:** Add a test in `example_repository_test.go`: create an
-  example in tenant 2, then read, update and delete it as tenant 3 and
-  expect not-found; the reverse for a tenant-3 row. Tenants 2 and 3 only
-  (the test database holds no tenant 1). Flip the doc/110 row to met.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
-
 # SKIP / Brandon-veto list (tick to override)
 
 **Recommendations against porting**
@@ -9065,3 +9051,18 @@ None.
   behaviour change. Either way, update doc/110 rows 1.6 and 3.5.
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip  (option A; Brandon: as recommended, 2026-10-03)
 - **Completed:** 2026-10-03. Option A, config key only (no tenant-2 rule). New required key `ALLOW_MFA_EXEMPT_VIA_API`, exactly `true` or `false` (`config.go`; `TestLoadConfig_AllowMFAExemptViaAPI`). `true` only in `etc/e2e-api-srv.env` and `infra/uat/etc/uat-proto-e2e-api.env` (pytest `create_throwaway_login` and other tests, and Playwright `change-other-password.spec.ts`, create exempt logins through `POST /user` and `/userInvite`); `false` in `etc/loc-api-srv.env` (dev seeds its exempt logins in SQL, never through the API), `etc/uat-api-srv.env.template`, `infra/uat/etc/uat-proto-api.env`, `infra/prd/etc/prd-proto-api.env`. `TestLoadConfig_RepoEnvFiles` now also pins true-only-in-e2e-files. `POST /user` and `/userInvite` refuse `mfaExempt: true` with 403 `MFA_EXEMPT_REFUSED` (well-formed body, caller holds the grant; server policy refuses: 403 per doc/105, not 400) before any write; `PUT /user` refuses only turning it on (stored false, body true), so clearing it and saving a login already exempt (the seeded dev `admin`/`basic`) still work. Each handler checks explicitly; `writeMFAExemptRefused` in `common.go` is only the answer. `UpdateUser` now reads the stored row via new `storedUserOf` (`userNameOf` wraps it). `bin/610-deploy-uat` refuses a host env without the key, like `SERVER_BIND_ADDRESS`. Docs: doc/105 (Request bodies, Configuration), doc/110 row 1.6 met, row 3.5 note, Controls item 4 met, doc/905 required list (also added the missing `INVITE_TTL_HOURS`), `src/api-srv/README.md`, doc/320 hand-edit list (also `INVITE_TTL_HOURS=72`). No pytest added: the harness API runs with the key `true`, so a refusal is not reachable there; the Go handler tests cover both settings (`TestUserHandler_MFAExemptNeedsTheConfigKey`, `TestCreateInvitedUser_MFAExemptNeedsTheConfigKey`). The web user-edit page still shows the checkbox; on a `false` server ticking it shows the 403 message. Tests: all green, infra=15 docs=709 (was 707; new backticked paths) go=734 (was 715; +19: `TestLoadConfig_AllowMFAExemptViaAPI` and 7 subtests, `TestUserHandler_MFAExemptNeedsTheConfigKey` and 7, `TestCreateInvitedUser_MFAExemptNeedsTheConfigKey` and 2) unit=105 e2e=70 py=103, govulncheck clean, gofmt clean; `bin/610-deploy-uat` shellcheck clean in `ubuntu:24.04`.
+
+### B098 — COMPLETED — `example` has no cross-tenant repository test
+- **Priority:** P3  **Area:** go-api, tests
+- **GRC:** not checked   **PROTO:** `src/api-srv/internal/repository/example_repository_test.go` (every call uses `testTenant`, lines 46-79), `doc/110-threat-model.md` (tenant table row `example`: "none", status partial; row 2.1)
+- **Ticket:** found while writing doc/110 for B077 (2026-10-03)
+- **What:** doc/110 requires one cross-tenant negative test per tenant
+  table. `app_user`, `app_user_group` and `user_invite` have one;
+  `example` is the only table without, though the repository scopes every
+  query.
+- **Port notes:** Add a test in `example_repository_test.go`: create an
+  example in tenant 2, then read, update and delete it as tenant 3 and
+  expect not-found; the reverse for a tenant-3 row. Tenants 2 and 3 only
+  (the test database holds no tenant 1). Flip the doc/110 row to met.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip  (Brandon: as recommended, 2026-10-03)
+- **Completed:** 2026-10-03. Added `TestCrossTenantIsolation` to `example_repository_test.go`: a tenant-2 and a tenant-3 row; tenant 2 listing (by id and in full) excludes the tenant-3 row; get, update and delete of the tenant-3 id answer `ErrNotFound`; `UpdateExampleList` answers `ErrExpectationFailed`; `DeleteExampleList` returns no error for a foreign id (existing behaviour: it ignores rows affected) but the test shows it changes nothing; the tenant-3 row is unchanged afterwards (text, `update_ts`, not deleted). Proven to detect a leak: dropping the tenant predicate in `RetrieveExample`'s check query failed the test, and in `buildScopedWhere` failed the list assertion; both restored. doc/110 `example` row and row 2.1 now met. Tests: all green, go=735 (was 734; +1) infra=15 docs=ROLLDOCS unit=105 e2e=70 py=103.
