@@ -90,6 +90,16 @@ func memParseExpiration(s string) (time.Duration, bool) {
 	}
 }
 
+// ParseTTL reports the duration a TTL string (Ns, Nmin, Nh) means. Unlike
+// Set, the empty string is not ok: config uses this for keys that must
+// expire.
+func ParseTTL(ttl string) (time.Duration, bool) {
+	if ttl == "" {
+		return 0, false
+	}
+	return memParseExpiration(ttl)
+}
+
 // KV is the in-process store. One per server, held by app.Services.
 type KV struct {
 	mu     sync.RWMutex

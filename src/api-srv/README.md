@@ -22,28 +22,35 @@ argument and it exits with "Configuration file path is required".
 ## Configuration
 
 `etc/loc-api-srv.env` is self-contained and needs no edits for local dev.
-Keys read by `internal/config/config.go` `LoadConfig`:
+Keys read by `internal/config/config.go` `LoadConfig`; a missing required
+key or a bad value stops start-up with an error naming the key. File
+grammar (quoting, comments, no `$VAR`) is in `doc/905-config-guidance.md`.
 
-- `DATABASE_URL`, `JWT_SECRET`, `SERVER_NAME`, `APP_NAME` — required
-- `SERVER_PORT` — required, integer
-- `ENABLE_TLS` — required, boolean; when true, `TLS_CERT_PATH` and
-  `TLS_KEY_PATH` are required
-- `TOTP_ENCRYPTION_KEY` — required, 32 bytes as hex (AES-256)
-- `FAILED_LOGIN_ATTEMPT_THRESHOLD` — required, integer
-- `FAILED_LOGIN_ATTEMPT_WINDOW_DURATION`, `FAILED_LOGIN_LOCKOUT_DURATION` —
+Required:
+
+- `DATABASE_URL`, `JWT_SECRET`, `SERVER_NAME`, `APP_NAME`
+- `SERVER_PORT` — positive integer
+- `ENABLE_TLS` — boolean; when true, `TLS_CERT_PATH` and `TLS_KEY_PATH` are
   required
+- `TOTP_ENCRYPTION_KEY` — 32 bytes as hex (AES-256)
 - `JWT_SESSION_EXPIRE_HOURS`, `MAX_USER_REQ_PER_MIN`,
-  `MAX_UNAUTH_REQ_PER_MIN` — optional, integer
-- `SERVER_BIND_ADDRESS` — optional; empty listens on every interface
-- `TRUSTED_PROXY_COUNT` — optional, non-negative integer, default 0. How
+  `MAX_UNAUTH_REQ_PER_MIN`, `FAILED_LOGIN_ATTEMPT_THRESHOLD` — positive
+  integers
+- `FAILED_LOGIN_ATTEMPT_WINDOW_DURATION`, `FAILED_LOGIN_LOCKOUT_DURATION` —
+  KV durations above 0: `30s`, `5min`, `1h`
+- `LOG_LEVEL` — one of `debug`, `info`, `warn`, `error`; lines below it are
+  dropped. Per-request lines (`APP_HELPER_INIT`, `RLP0`) and health polls
+  are debug; deployed files set `info`, local dev `debug`
+
+Optional:
+
+- `SERVER_BIND_ADDRESS` — empty listens on every interface
+- `TRUSTED_PROXY_COUNT` — non-negative integer, default 0. How
   many proxies append to `X-Forwarded-For`; the client IP (rate limit and
   login lockout keys) is the entry that many hops from the right. 0 ignores
   the header (local dev, Playwright); 1 behind the host's nginx; the pytest
   copy `bin/300-run-tests` builds sets 1
-- `CORS_ALLOWED_ORIGINS` — optional, comma-separated; empty means no CORS
-- `LOG_LEVEL` — required, one of `debug`, `info`, `warn`, `error`; lines
-  below it are dropped. Per-request lines (`APP_HELPER_INIT`, `RLP0`) and
-  health polls are debug; deployed files set `info`, local dev `debug`
+- `CORS_ALLOWED_ORIGINS` — comma-separated; empty means no CORS
 
 `TEST_BASE_URL` is not part of `Config` — the server ignores it. It is read
 by `bin/330-test-load` and exported by the test runners for the pytest

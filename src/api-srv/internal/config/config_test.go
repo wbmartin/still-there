@@ -50,8 +50,7 @@ SPACED   =   padded
 	}
 }
 
-// validBase is every required key except LOG_LEVEL, which each test adds
-// or leaves out itself.
+// validBase is every required key; tests drop or append lines.
 const validBase = `DATABASE_URL=postgres://u:p@h/db
 JWT_SECRET=s
 SERVER_NAME=n
@@ -59,10 +58,25 @@ APP_NAME=a
 SERVER_PORT=8080
 ENABLE_TLS=false
 TOTP_ENCRYPTION_KEY=k
+JWT_SESSION_EXPIRE_HOURS=12
+MAX_USER_REQ_PER_MIN=200
+MAX_UNAUTH_REQ_PER_MIN=20
 FAILED_LOGIN_ATTEMPT_THRESHOLD=7
 FAILED_LOGIN_ATTEMPT_WINDOW_DURATION=5min
 FAILED_LOGIN_LOCKOUT_DURATION=5min
+LOG_LEVEL=info
 `
+
+// withoutKey returns validBase minus the line that sets key.
+func withoutKey(key string) string {
+	var kept []string
+	for _, line := range strings.SplitAfter(validBase, "\n") {
+		if !strings.HasPrefix(line, key+"=") {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "")
+}
 
 func writeEnv(t *testing.T, content string) string {
 	t.Helper()
@@ -94,7 +108,7 @@ func TestLoadConfig_LogLevel(t *testing.T) {
 	for _, testCase := range testCaseList {
 		t.Run(testCase.name, func(t *testing.T) {
 			config, err := LoadConfig(
-				writeEnv(t, validBase+testCase.line),
+				writeEnv(t, withoutKey("LOG_LEVEL")+testCase.line),
 			)
 			if testCase.wantErr != "" {
 				if err == nil ||
@@ -132,7 +146,7 @@ func TestLoadConfig_TrustedProxyCount(t *testing.T) {
 	for _, testCase := range testCaseList {
 		t.Run(testCase.name, func(t *testing.T) {
 			config, err := LoadConfig(writeEnv(
-				t, validBase+"LOG_LEVEL=info\n"+testCase.line,
+				t, validBase+testCase.line,
 			))
 			if testCase.wantErr {
 				if err == nil {
@@ -151,4 +165,136 @@ func TestLoadConfig_TrustedProxyCount(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A missing or non-positive integer used to load as 0, minting every JWT
+// already expired and 429ing every request. Each must now fail by name.
+func TestLoadConfig_PositiveIntKeys(t *testing.T) {
+	keyList := []string{
+		"JWT_SESSION_EXPIRE_HOURS", "MAX_USER_REQ_PER_MIN",
+		"MAX_UNAUTH_REQ_PER_MIN", "SERVER_PORT",
+		"FAILED_LOGIN_ATTEMPT_THRESHOLD",
+	}
+	testCaseList := []struct {
+		name    string
+		value   *string
+		wantErr string
+	}{
+		{"absent", nil, "is required"},
+		{"empty", ptr(""), "is required"},
+		{"zero", ptr("0"), "must be a positive integer"},
+		{"negative", ptr("-1"), "must be a positive integer"},
+		{"not a number", ptr("abc"), "must be a positive integer"},
+		{"unit suffix", ptr("200/min"), "must be a positive integer"},
+		{"valid", ptr("200"), ""},
+	}
+	for _, key := range keyList {
+		for _, testCase := range testCaseList {
+			t.Run(key+"/"+testCase.name, func(t *testing.T) {
+				content := withoutKey(key)
+				if testCase.value != nil {
+					content += key + "=" + *testCase.value + "\n"
+				}
+				config, err := LoadConfig(writeEnv(t, content))
+				if testCase.wantErr == "" {
+					if err != nil {
+						t.Fatal(err)
+					}
+					if got := intField(config, key); got != 200 {
+						t.Errorf("%s = %d, want 200", key, got)
+					}
+					return
+				}
+				wantErr := key + " " + testCase.wantErr
+				if err == nil || !strings.Contains(err.Error(), wantErr) {
+					t.Fatalf("err = %v, want %q", err, wantErr)
+				}
+			})
+		}
+	}
+}
+
+// The FAILED_LOGIN_* durations are KV TTLs; a bad one used to load and
+// then fail every failed login.
+func TestLoadConfig_DurationKeys(t *testing.T) {
+	keyList := []string{
+		"FAILED_LOGIN_ATTEMPT_WINDOW_DURATION",
+		"FAILED_LOGIN_LOCKOUT_DURATION",
+	}
+	testCaseList := []struct {
+		name    string
+		value   *string
+		wantErr string
+	}{
+		{"absent", nil, "is required"},
+		{"empty", ptr(""), "is required"},
+		{"no unit", ptr("5"), "must be a duration"},
+		{"zero", ptr("0min"), "must be a duration"},
+		{"word", ptr("never"), "must be a duration"},
+		{"go syntax", ptr("5m"), "must be a duration"},
+		{"seconds", ptr("30s"), ""},
+		{"minutes", ptr("5min"), ""},
+		{"hours", ptr("1h"), ""},
+	}
+	for _, key := range keyList {
+		for _, testCase := range testCaseList {
+			t.Run(key+"/"+testCase.name, func(t *testing.T) {
+				content := withoutKey(key)
+				if testCase.value != nil {
+					content += key + "=" + *testCase.value + "\n"
+				}
+				_, err := LoadConfig(writeEnv(t, content))
+				if testCase.wantErr == "" {
+					if err != nil {
+						t.Fatal(err)
+					}
+					return
+				}
+				wantErr := key + " " + testCase.wantErr
+				if err == nil || !strings.Contains(err.Error(), wantErr) {
+					t.Fatalf("err = %v, want %q", err, wantErr)
+				}
+			})
+		}
+	}
+}
+
+// Every API env file the repo ships loads through the real loader. Infra
+// copies hold SERVERONLY and the UAT template __PLACEHOLDERS__; LoadConfig
+// checks presence and shape, not secret content, so they load as-is.
+func TestLoadConfig_RepoEnvFiles(t *testing.T) {
+	repoRoot := filepath.Join("..", "..", "..", "..")
+	var pathList []string
+	for _, pattern := range []string{
+		"etc/*-api-srv.env",
+		"etc/*-api-srv.env.template",
+		"infra/*/etc/*-api.env",
+	} {
+		matchList, err := filepath.Glob(filepath.Join(repoRoot, pattern))
+		if err != nil {
+			t.Fatal(err)
+		}
+		pathList = append(pathList, matchList...)
+	}
+	if len(pathList) < 6 {
+		t.Fatalf("found %d API env files, want at least 6: %v",
+			len(pathList), pathList)
+	}
+	for _, path := range pathList {
+		if _, err := LoadConfig(path); err != nil {
+			t.Errorf("%s: %v", path, err)
+		}
+	}
+}
+
+func ptr(s string) *string { return &s }
+
+func intField(config *Config, key string) int {
+	return map[string]int{
+		"JWT_SESSION_EXPIRE_HOURS":       config.JWTSessionExpireHours,
+		"MAX_USER_REQ_PER_MIN":           config.MaxUserReqPerMin,
+		"MAX_UNAUTH_REQ_PER_MIN":         config.MaxUnauthReqPerMin,
+		"SERVER_PORT":                    config.ServerPort,
+		"FAILED_LOGIN_ATTEMPT_THRESHOLD": config.FailedLoginAttemptThreshold,
+	}[key]
 }

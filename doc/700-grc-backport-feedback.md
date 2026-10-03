@@ -242,133 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B032 — Config docs: env grammar and required-key policy
-
-- **Priority:** P2  **Area:** docs, go-api
-- **GRC:** `doc/905-config-guidance.md:6-50`; `src/api-srv/README.md:164-172`; `doc/105-api-srv-tech-spec.md:420-428`   **PROTO:** `doc/905-config-guidance.md:1-4`; `src/api-srv/README.md:22-42`; `src/api-srv/internal/config/config.go:64-70,118-193`
-- **Ticket:** RG0005 / `5453748`; RG0001; RG0009; RG0015
-- **What:** PROTO's 905 is four lines. GRC: grammar (first `=`, one quote pair,
-no `export`/`$VAR`/inline comments, last wins), missing keys rejected, only
-`TEST_DATABASE_URL` read from env.
-- **Port notes:** Grammar applies as-is (`unquote`). Brandon's call: make
-optional keys required? Ties to B061, appendix.
-- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Two things: the env-file grammar is undocumented, and three "optional"
-keys break the server when they are absent.
-
-**(1) Grammar lives only in code.** `doc/905-config-guidance.md:1-4` is the
-whole guide:
-
-```
-- use the simple env file format
-- don't worry about environment variables.  The config file has the value you need
-```
-
-The parser is already GRC's (RG0005 was ported):
-`src/api-srv/internal/config/config.go:52-55` splits on the first `=`,
-trims, and `unquote` (`:66-71`) strips one matching quote pair. A later
-duplicate key overwrites the earlier one in the map. Nothing tells the
-person editing a host file that `export KEY=v` makes a key named
-`export KEY`, that `KEY=v # note` keeps `# note` in the value, that
-`$VAR` is not expanded, or that a line with no `=` is silently dropped.
-A secret with a `#` or `$` in it is safe only because nothing interprets
-it, and no doc says so. DX gap.
-
-**(2) Missing integer keys become 0, and 0 breaks things.**
-`src/api-srv/README.md:35-36` calls `JWT_SESSION_EXPIRE_HOURS`,
-`MAX_USER_REQ_PER_MIN` and `MAX_UNAUTH_REQ_PER_MIN` "optional, integer".
-The loader ignores both absence and a parse error:
-
-```go
-// src/api-srv/internal/config/config.go:86-88
-if jwtHoursStr := env["JWT_SESSION_EXPIRE_HOURS"]; jwtHoursStr != "" {
-    if val, err := strconv.Atoi(jwtHoursStr); err == nil {
-        config.JWTSessionExpireHours = val
-```
-
-`MAX_*` at `:92` and `:98` are the same. The zero then reaches:
-
-- `src/api-srv/internal/auth/jwt.go:46-47`: `ExpiresAt` is `now + 0h`, so
-  every token is born expired; login succeeds and the next call 401s.
-- `src/api-srv/internal/security/app_helper.go:376`: `if count > limit`
-  with limit 0 refuses the first request of every minute with 429.
-
-A typo such as `MAX_USER_REQ_PER_MIN=200/min` does the same with no log
-line. Every env file in the repo sets all three keys today, so this bites
-only a new or hand-edited host. Correctness bug (fail-confusing, not a
-hole). The doc/700 appendix already lists "Numeric config keys silently
-0" and unchecked `FAILED_LOGIN_*_DURATION` grammar as open in both repos.
-
-**(3) Small:** the two `FAILED_LOGIN_*_DURATION` emptiness checks run
-twice (`config.go:145-155` and again `:205-214`).
-
-#### What GRC changed
-
-- RG0005 (`5453748`): the quote-stripping parser plus a table test. PROTO
-  already has both (`config_test.go:9`, `TestReadEnvFile_QuotesAndEdges`).
-- `doc/905-config-guidance.md:6-50` (GRC): one flat file per host; the
-  required-key list; the full grammar (first `=`, one quote pair, no
-  `export`, no `$VAR`, no escapes, no inline comments, last duplicate
-  wins); a migration note to grep host files for quoted values before
-  upgrading, because a quoted `JWT_SECRET` or `TOTP_ENCRYPTION_KEY` changes
-  value under the new parser; and "the only environment variable anything
-  here reads is `TEST_DATABASE_URL`".
-- RG0009: `SERVER_BIND_ADDRESS` required (`src/internal/config/config.go:284-290`).
-- RG0015: folded the duplicate `FAILED_LOGIN_*` checks.
-
-**Correction to the doc entry.** "Missing keys rejected" is overstated.
-GRC's `src/api-srv/README.md:164-169` says every key including
-`JWT_SESSION_EXPIRE_HOURS`, `MAX_*_REQ_PER_MIN` and `CORS_ALLOWED_ORIGINS`
-"is required", but GRC's code still reads those three integers exactly as
-PROTO does (`src/internal/config/config.go:177-193`) and defaults CORS to
-empty (`:267-275`). GRC's doc/905 list (`:8-14`) matches its code; its
-README does not. Do not copy the README sentence. No GRC test covers the
-integer keys.
-
-#### Proposed fix for PROTO
-
-1. **`doc/905-config-guidance.md`**: port GRC's `:6-50` text. Replace
-   "Radley GRC" with a neutral example, `migrate-srv`/`worker-srv` with
-   PROTO's `cmd/migrate` (PROTO has two binaries reading env files, not
-   three), and keep the `TEST_DATABASE_URL` line (PROTO reads it at
-   `internal/repository/testdb_test.go:31` and
-   `internal/migrate/migrate_test.go:83`). Keep the "grep host files for
-   quoted values" note only if a PROTO host predates the `unquote` port;
-   otherwise drop it.
-2. **`src/api-srv/README.md:22-42`**: make the key list match the code
-   after step 3, and point to doc/905 for grammar.
-3. **`config.go:86-102`** (if Brandon says required): a small
-   `requirePositiveInt(env, key)` that errors "KEY is required" when
-   absent and "KEY must be a positive integer" otherwise. Use it for the
-   three integer keys. Fold the duplicate checks at `:205-214`. PS0011's
-   "Config loader" section (table-driven spec, one error naming every
-   missing key) is the larger version; Brandon deferred PS0011, so keep
-   this narrow.
-4. Optional, appendix item: parse `FAILED_LOGIN_*_DURATION` at load with
-   the same parser `cache.KV` uses, so a bad value fails start-up instead
-   of each failed login.
-5. B061 is the same policy for `SERVER_BIND_ADDRESS`; B031 adds
-   `LOG_LEVEL`. Decide all three together and document them in one pass
-   of doc/905.
-
-Tests: Go table test in `config_test.go` for each integer key (absent,
-`0`, `abc`, `200`); Go test that duplicate `FAILED_LOGIN_*` errors still
-name the key. No web or pytest change.
-
-#### Open question for Brandon
-
-Should every key the API reads be required (no defaults at all, so
-`JWT_SESSION_EXPIRE_HOURS`, `MAX_*_REQ_PER_MIN`, `CORS_ALLOWED_ORIGINS`,
-`SERVER_BIND_ADDRESS` and `LOG_LEVEL` all fail start-up when absent)?
-Recommendation: yes for the integers and `LOG_LEVEL`, since every env
-file already sets them and their zero value breaks login; decide CORS
-and the bind address under B061.
-
 ### B033 — Remove anonymous `POST /error-report`
 
 - **Priority:** P2  **Area:** go-api, web-app, tests, docs
@@ -8890,3 +8763,131 @@ Should a missing `LOG_LEVEL` default to `info`, or be a required key
 like the others (B032/B061)? Recommendation: required, since every env
 file gets the line anyway and a silent default hides a typo'd file.
 Brandon: required
+
+### B032 — COMPLETED — Config docs: env grammar and required-key policy
+- **Completed:** 2026-10-02. No Brandon answer recorded; followed the recommendation (integers and `LOG_LEVEL` required; CORS and `SERVER_BIND_ADDRESS` left optional for B061). `config.LoadConfig` now reads `JWT_SESSION_EXPIRE_HOURS`, both `MAX_*_REQ_PER_MIN`, `SERVER_PORT` and `FAILED_LOGIN_ATTEMPT_THRESHOLD` through `requirePositiveInt` (missing: "KEY is required"; 0, negative or non-numeric: "KEY must be a positive integer"), and the two `FAILED_LOGIN_*_DURATION` keys through `requireDuration` using new `cache.ParseTTL` (optional step 4 taken: a bad TTL now fails start-up, not each failed login); the duplicate checks are gone. doc/905 ports GRC's grammar text (neutral example, `cmd/migrate`, quoted-value upgrade note kept and pinned to PS0019 `2b4f0e4`, `TEST_DATABASE_URL` set by `bin/300-run-tests go`); `src/api-srv/README.md` splits keys into Required/Optional; doc/105 Loading points at doc/905. New Go tests `TestLoadConfig_PositiveIntKeys` (absent, empty, 0, -1, abc, 200/min, 200 per key), `TestLoadConfig_DurationKeys`, and `TestLoadConfig_RepoEnvFiles`, which loads all six API env files in etc/ and infra/ through `LoadConfig` (SERVERONLY and `__PLACEHOLDER__` values are non-empty and LoadConfig checks presence and shape, not secret content, so they load as-is). Tests: all green, go=379 unit=42 e2e=12 py=81
+
+- **Priority:** P2  **Area:** docs, go-api
+- **GRC:** `doc/905-config-guidance.md:6-50`; `src/api-srv/README.md:164-172`; `doc/105-api-srv-tech-spec.md:420-428`   **PROTO:** `doc/905-config-guidance.md:1-4`; `src/api-srv/README.md:22-42`; `src/api-srv/internal/config/config.go:64-70,118-193`
+- **Ticket:** RG0005 / `5453748`; RG0001; RG0009; RG0015
+- **What:** PROTO's 905 is four lines. GRC: grammar (first `=`, one quote pair,
+no `export`/`$VAR`/inline comments, last wins), missing keys rejected, only
+`TEST_DATABASE_URL` read from env.
+- **Port notes:** Grammar applies as-is (`unquote`). Brandon's call: make
+optional keys required? Ties to B061, appendix.
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Two things: the env-file grammar is undocumented, and three "optional"
+keys break the server when they are absent.
+
+**(1) Grammar lives only in code.** `doc/905-config-guidance.md:1-4` is the
+whole guide:
+
+```
+- use the simple env file format
+- don't worry about environment variables.  The config file has the value you need
+```
+
+The parser is already GRC's (RG0005 was ported):
+`src/api-srv/internal/config/config.go:52-55` splits on the first `=`,
+trims, and `unquote` (`:66-71`) strips one matching quote pair. A later
+duplicate key overwrites the earlier one in the map. Nothing tells the
+person editing a host file that `export KEY=v` makes a key named
+`export KEY`, that `KEY=v # note` keeps `# note` in the value, that
+`$VAR` is not expanded, or that a line with no `=` is silently dropped.
+A secret with a `#` or `$` in it is safe only because nothing interprets
+it, and no doc says so. DX gap.
+
+**(2) Missing integer keys become 0, and 0 breaks things.**
+`src/api-srv/README.md:35-36` calls `JWT_SESSION_EXPIRE_HOURS`,
+`MAX_USER_REQ_PER_MIN` and `MAX_UNAUTH_REQ_PER_MIN` "optional, integer".
+The loader ignores both absence and a parse error:
+
+```go
+// src/api-srv/internal/config/config.go:86-88
+if jwtHoursStr := env["JWT_SESSION_EXPIRE_HOURS"]; jwtHoursStr != "" {
+    if val, err := strconv.Atoi(jwtHoursStr); err == nil {
+        config.JWTSessionExpireHours = val
+```
+
+`MAX_*` at `:92` and `:98` are the same. The zero then reaches:
+
+- `src/api-srv/internal/auth/jwt.go:46-47`: `ExpiresAt` is `now + 0h`, so
+  every token is born expired; login succeeds and the next call 401s.
+- `src/api-srv/internal/security/app_helper.go:376`: `if count > limit`
+  with limit 0 refuses the first request of every minute with 429.
+
+A typo such as `MAX_USER_REQ_PER_MIN=200/min` does the same with no log
+line. Every env file in the repo sets all three keys today, so this bites
+only a new or hand-edited host. Correctness bug (fail-confusing, not a
+hole). The doc/700 appendix already lists "Numeric config keys silently
+0" and unchecked `FAILED_LOGIN_*_DURATION` grammar as open in both repos.
+
+**(3) Small:** the two `FAILED_LOGIN_*_DURATION` emptiness checks run
+twice (`config.go:145-155` and again `:205-214`).
+
+#### What GRC changed
+
+- RG0005 (`5453748`): the quote-stripping parser plus a table test. PROTO
+  already has both (`config_test.go:9`, `TestReadEnvFile_QuotesAndEdges`).
+- `doc/905-config-guidance.md:6-50` (GRC): one flat file per host; the
+  required-key list; the full grammar (first `=`, one quote pair, no
+  `export`, no `$VAR`, no escapes, no inline comments, last duplicate
+  wins); a migration note to grep host files for quoted values before
+  upgrading, because a quoted `JWT_SECRET` or `TOTP_ENCRYPTION_KEY` changes
+  value under the new parser; and "the only environment variable anything
+  here reads is `TEST_DATABASE_URL`".
+- RG0009: `SERVER_BIND_ADDRESS` required (`src/internal/config/config.go:284-290`).
+- RG0015: folded the duplicate `FAILED_LOGIN_*` checks.
+
+**Correction to the doc entry.** "Missing keys rejected" is overstated.
+GRC's `src/api-srv/README.md:164-169` says every key including
+`JWT_SESSION_EXPIRE_HOURS`, `MAX_*_REQ_PER_MIN` and `CORS_ALLOWED_ORIGINS`
+"is required", but GRC's code still reads those three integers exactly as
+PROTO does (`src/internal/config/config.go:177-193`) and defaults CORS to
+empty (`:267-275`). GRC's doc/905 list (`:8-14`) matches its code; its
+README does not. Do not copy the README sentence. No GRC test covers the
+integer keys.
+
+#### Proposed fix for PROTO
+
+1. **`doc/905-config-guidance.md`**: port GRC's `:6-50` text. Replace
+   "Radley GRC" with a neutral example, `migrate-srv`/`worker-srv` with
+   PROTO's `cmd/migrate` (PROTO has two binaries reading env files, not
+   three), and keep the `TEST_DATABASE_URL` line (PROTO reads it at
+   `internal/repository/testdb_test.go:31` and
+   `internal/migrate/migrate_test.go:83`). Keep the "grep host files for
+   quoted values" note only if a PROTO host predates the `unquote` port;
+   otherwise drop it.
+2. **`src/api-srv/README.md:22-42`**: make the key list match the code
+   after step 3, and point to doc/905 for grammar.
+3. **`config.go:86-102`** (if Brandon says required): a small
+   `requirePositiveInt(env, key)` that errors "KEY is required" when
+   absent and "KEY must be a positive integer" otherwise. Use it for the
+   three integer keys. Fold the duplicate checks at `:205-214`. PS0011's
+   "Config loader" section (table-driven spec, one error naming every
+   missing key) is the larger version; Brandon deferred PS0011, so keep
+   this narrow.
+4. Optional, appendix item: parse `FAILED_LOGIN_*_DURATION` at load with
+   the same parser `cache.KV` uses, so a bad value fails start-up instead
+   of each failed login.
+5. B061 is the same policy for `SERVER_BIND_ADDRESS`; B031 adds
+   `LOG_LEVEL`. Decide all three together and document them in one pass
+   of doc/905.
+
+Tests: Go table test in `config_test.go` for each integer key (absent,
+`0`, `abc`, `200`); Go test that duplicate `FAILED_LOGIN_*` errors still
+name the key. No web or pytest change.
+
+#### Open question for Brandon
+
+Should every key the API reads be required (no defaults at all, so
+`JWT_SESSION_EXPIRE_HOURS`, `MAX_*_REQ_PER_MIN`, `CORS_ALLOWED_ORIGINS`,
+`SERVER_BIND_ADDRESS` and `LOG_LEVEL` all fail start-up when absent)?
+Recommendation: yes for the integers and `LOG_LEVEL`, since every env
+file already sets them and their zero value breaks login; decide CORS
+and the bind address under B061.

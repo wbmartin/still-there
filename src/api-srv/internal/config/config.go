@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/wbmartin/starter-api/internal/cache"
 	"github.com/wbmartin/starter-api/internal/logging"
 )
 
@@ -88,22 +89,21 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	config.DatabaseURL = env["DATABASE_URL"]
 	config.JWTSecret = env["JWT_SECRET"]
 
-	if jwtHoursStr := env["JWT_SESSION_EXPIRE_HOURS"]; jwtHoursStr != "" {
-		if val, err := strconv.Atoi(jwtHoursStr); err == nil {
-			config.JWTSessionExpireHours = val
-		}
+	// 0 here would mint every JWT already expired or 429 every request.
+	if config.JWTSessionExpireHours, err = requirePositiveInt(
+		env, "JWT_SESSION_EXPIRE_HOURS",
+	); err != nil {
+		return nil, err
 	}
-
-	if maxUserStr := env["MAX_USER_REQ_PER_MIN"]; maxUserStr != "" {
-		if val, err := strconv.Atoi(maxUserStr); err == nil {
-			config.MaxUserReqPerMin = val
-		}
+	if config.MaxUserReqPerMin, err = requirePositiveInt(
+		env, "MAX_USER_REQ_PER_MIN",
+	); err != nil {
+		return nil, err
 	}
-
-	if maxUnauthStr := env["MAX_UNAUTH_REQ_PER_MIN"]; maxUnauthStr != "" {
-		if val, err := strconv.Atoi(maxUnauthStr); err == nil {
-			config.MaxUnauthReqPerMin = val
-		}
+	if config.MaxUnauthReqPerMin, err = requirePositiveInt(
+		env, "MAX_UNAUTH_REQ_PER_MIN",
+	); err != nil {
+		return nil, err
 	}
 
 	logLevelStr := env["LOG_LEVEL"]
@@ -126,14 +126,10 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	// test harness, whose instance carries a well-known password.
 	config.ServerBindAddress = env["SERVER_BIND_ADDRESS"]
 
-	if serverPortStr := env["SERVER_PORT"]; serverPortStr != "" {
-		if val, err := strconv.Atoi(serverPortStr); err == nil {
-			config.ServerPort = val
-		} else {
-			return nil, fmt.Errorf("SERVER_PORT must be a valid integer")
-		}
-	} else {
-		return nil, fmt.Errorf("SERVER_PORT is required")
+	if config.ServerPort, err = requirePositiveInt(
+		env, "SERVER_PORT",
+	); err != nil {
+		return nil, err
 	}
 
 	if enableTLSStr := env["ENABLE_TLS"]; enableTLSStr != "" {
@@ -150,26 +146,21 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	config.TLSKeyPath = env["TLS_KEY_PATH"]
 	config.TOTPEncryptionKey = env["TOTP_ENCRYPTION_KEY"]
 
-	if thresholdStr := env["FAILED_LOGIN_ATTEMPT_THRESHOLD"]; thresholdStr != "" {
-		if val, err := strconv.Atoi(thresholdStr); err == nil {
-			config.FailedLoginAttemptThreshold = val
-		} else {
-			return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_THRESHOLD must be a valid integer")
-		}
-	} else {
-		return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_THRESHOLD is required")
+	if config.FailedLoginAttemptThreshold, err = requirePositiveInt(
+		env, "FAILED_LOGIN_ATTEMPT_THRESHOLD",
+	); err != nil {
+		return nil, err
 	}
-
-	config.FailedLoginAttemptWindowDuration = env["FAILED_LOGIN_ATTEMPT_WINDOW_DURATION"]
-	if config.FailedLoginAttemptWindowDuration == "" {
-		return nil, fmt.Errorf(
-			"FAILED_LOGIN_ATTEMPT_WINDOW_DURATION is required",
-		)
+	// Checked here so a bad value fails start-up, not every failed login.
+	if config.FailedLoginAttemptWindowDuration, err = requireDuration(
+		env, "FAILED_LOGIN_ATTEMPT_WINDOW_DURATION",
+	); err != nil {
+		return nil, err
 	}
-
-	config.FailedLoginLockoutDuration = env["FAILED_LOGIN_LOCKOUT_DURATION"]
-	if config.FailedLoginLockoutDuration == "" {
-		return nil, fmt.Errorf("FAILED_LOGIN_LOCKOUT_DURATION is required")
+	if config.FailedLoginLockoutDuration, err = requireDuration(
+		env, "FAILED_LOGIN_LOCKOUT_DURATION",
+	); err != nil {
+		return nil, err
 	}
 
 	// Optional, default 0: no proxy, so X-Forwarded-For is ignored. Behind
@@ -223,25 +214,36 @@ func LoadConfig(configFilePath string) (*Config, error) {
 		return nil, fmt.Errorf("TOTP_ENCRYPTION_KEY is required")
 	}
 
-	if config.FailedLoginAttemptThreshold <= 0 {
-		return nil, fmt.Errorf(
-			"FAILED_LOGIN_ATTEMPT_THRESHOLD must be greater than 0",
-		)
-	}
-
-	if config.ServerPort <= 0 {
-		return nil, fmt.Errorf("SERVER_PORT must be greater than 0")
-	}
-
-	if config.FailedLoginAttemptWindowDuration == "" {
-		return nil, fmt.Errorf(
-			"FAILED_LOGIN_ATTEMPT_WINDOW_DURATION is required",
-		)
-	}
-
-	if config.FailedLoginLockoutDuration == "" {
-		return nil, fmt.Errorf("FAILED_LOGIN_LOCKOUT_DURATION is required")
-	}
-
 	return &config, nil
+}
+
+// requirePositiveInt reads a key that must be a whole number above 0.
+func requirePositiveInt(env map[string]string, key string) (int, error) {
+	raw := env[key]
+	if raw == "" {
+		return 0, fmt.Errorf("%s is required", key)
+	}
+	val, err := strconv.Atoi(raw)
+	if err != nil || val <= 0 {
+		return 0, fmt.Errorf(
+			"%s must be a positive integer, got %q", key, raw,
+		)
+	}
+	return val, nil
+}
+
+// requireDuration reads a key that must be a cache.KV TTL above 0 (30s,
+// 5min, 1h); the string is kept because KV takes it in that form.
+func requireDuration(env map[string]string, key string) (string, error) {
+	raw := env[key]
+	if raw == "" {
+		return "", fmt.Errorf("%s is required", key)
+	}
+	if d, ok := cache.ParseTTL(raw); !ok || d <= 0 {
+		return "", fmt.Errorf(
+			"%s must be a duration such as 30s, 5min or 1h, got %q",
+			key, raw,
+		)
+	}
+	return raw, nil
 }

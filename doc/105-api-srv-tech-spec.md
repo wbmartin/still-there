@@ -357,8 +357,10 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
 
 ### Loading
 - Command-line argument specifies config file path
-- Simple environment variable parsing (no external libraries)
-- Validation of required fields
+- Flat `KEY=VALUE` file, no environment-variable lookups; grammar and the
+  required-key policy in `doc/905-config-guidance.md`
+- Every required key is checked for presence and shape at load; start-up
+  fails with an error naming the key
 
 ## Logging
 
