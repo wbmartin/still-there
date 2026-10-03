@@ -145,7 +145,7 @@ in `grants.go` but no route checks them: group membership is checked with
 - **Content-Type**: `application/json`
 - **Field Naming**: camelCase in JSON, snake_case in database
 - **Timestamps**: seconds since the Unix epoch as a float64 with a
-  fractional part (`CurrentTimestamp`, `numeric(17,7)` in the database)
+  fractional part (`model.Now()`, `numeric(17,7)` in the database)
 - **Success body**: `{"data": ...}`. The session routes (`/auth`,
   `/mfaVerify`, `/refresh`, `/changeSecurityContext`) answer
   `{"user": {...}, "csrfToken": "..."}` instead.

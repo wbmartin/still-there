@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/model"
@@ -289,12 +288,6 @@ func GetOptionalFloatFromQuery(r *http.Request, key string) (float64, error) {
 		return 0, fmt.Errorf("invalid %s: must be number", key)
 	}
 	return num, nil
-}
-
-// CurrentTimestamp returns the current timestamp as a float64
-// (seconds since Unix epoch with nanosecond precision)
-func CurrentTimestamp() float64 {
-	return float64(time.Now().UnixNano()) / 1e9
 }
 
 // GetOptionalIntFromQuery reads an integer query parameter, returning 0 when it

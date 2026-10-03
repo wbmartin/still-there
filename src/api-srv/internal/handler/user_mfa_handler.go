@@ -109,7 +109,7 @@ func UserSelfCreateHandler(
 		}
 
 		// Create user
-		now := CurrentTimestamp()
+		now := model.Now()
 		defaultSecurityContext := 1 // Default security context for self-created users
 		defaultSecurityGroupId := 3 // "New User" group ID
 		newUser := &model.AppUserModel{

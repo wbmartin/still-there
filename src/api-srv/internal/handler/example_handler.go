@@ -155,7 +155,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set security context and creation metadata
-	now := CurrentTimestamp()
+	now := model.Now()
 	example.SecurityContext = jwtClaims.SecurityContext
 	example.ExampleUUID = model.NewUUID() // server-assigned; a client value is ignored
 	example.CreateTS = now
@@ -265,7 +265,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 
 	// Set update metadata
 	clientUpdateTS := example.UpdateTS
-	now := CurrentTimestamp()
+	now := model.Now()
 	example.SecurityContext = jwtClaims.SecurityContext
 	example.UpdateTS = now
 	example.UpdateUserID = jwtClaims.UserID
@@ -344,7 +344,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	// Caller information automatically added to log messages
 
 	// Delete example with optimistic locking
-	now := CurrentTimestamp()
+	now := model.Now()
 	deletedID, err := h.exampleRepo.DeleteExample(
 		r.Context(),
 		exampleID,
@@ -512,7 +512,7 @@ func (h *ExampleHandler) CreateExampleList(
 	}
 
 	// Generate timestamps once
-	now := CurrentTimestamp()
+	now := model.Now()
 	createTS := now
 	updateTS := now
 
@@ -607,7 +607,7 @@ func (h *ExampleHandler) UpdateExampleList(
 	}
 
 	// Generate update timestamp
-	now := CurrentTimestamp()
+	now := model.Now()
 
 	// Collect original update timestamps, validate, and set new values
 	originalUpdateTSList := make([]float64, len(exampleList))
@@ -727,7 +727,7 @@ func (h *ExampleHandler) DeleteExampleList(
 	}
 
 	// Generate delete timestamp
-	now := CurrentTimestamp()
+	now := model.Now()
 
 	// Delete in transaction
 	deletedIDList, err := h.exampleRepo.DeleteExampleList(

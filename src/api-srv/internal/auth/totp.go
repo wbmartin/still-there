@@ -54,11 +54,14 @@ func ValidateTOTPSecret(secret string) bool {
 	return true
 }
 
+// totpLabelDisallowed is what formatTOTPLabel strips from an issuer:
+// anything not alphanumeric, underscore or dash. Compiled once at package
+// load rather than on every MFA setup.
+var totpLabelDisallowed = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+
 // formatTOTPLabel creates a properly formatted TOTP label
 func formatTOTPLabel(issuer, account string) string {
-	// Clean issuer for label (allow alphanumeric, underscore, dash)
-	cleanIssuer := regexp.MustCompile(`[^a-zA-Z0-9_-]`).
-		ReplaceAllString(issuer, "")
+	cleanIssuer := totpLabelDisallowed.ReplaceAllString(issuer, "")
 	return cleanIssuer + ":" + account
 }
 

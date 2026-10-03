@@ -564,77 +564,6 @@ moves on a deliberate release; GRC left this open too.
 
 # P3: nice to have
 
-### B060 — Go hygiene: one `model.Now()`; RG0015 small fixes
-
-- **Priority:** P3  **Area:** go-api
-- **GRC:** `src/internal/model/time.go:1-40`; `model/time_test.go`; `src/internal/auth/totp.go:60-73`; `src/internal/config/config.go:236-252`; `src/api-srv/cmd/server/main.go:246-254`; `src/internal/handler/app_user_group_handler.go:29,52-56,88,176,267`   **PROTO:** `src/api-srv/internal/handler/common.go:158-162`; `repository/user_repository.go:18-21,508,567`; `auth/totp.go:55-60`; `config/config.go:135-205`; `cmd/server/main.go:201-204`; `handler/app_user_group_handler.go:55-56`
-- **Ticket:** RG0015 / `1fc6e86`, `6ee3abc`; RG0043 items 31, 35; PS0011
-- **What:** Three timestamp spellings (UnixNano/1e9 drifts) become
-`model.Now()`; TOTP regexp compiled once; threshold checked once;
-`net.JoinHostPort`; `WriteError`; stale comments.
-- **Port notes:** One mechanical hygiene ticket.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Six small quality gaps under `src/api-srv/`. One is a real, rare bug.
-
-**(1) Three timestamp spellings, one racy.** `create_ts`/`update_ts` are
-epoch seconds in `NUMERIC(17,7)` (`sql/migrations/0001_initial_schema.sql:36`);
-`update_ts` is the optimistic lock. `handler/common.go:161` uses
-`float64(time.Now().UnixNano()) / 1e9`, as do inline copies at
-`repository/user_repository.go:511,570`. A second function differs:
-
-```go
-// internal/repository/user_repository.go:20
-return float64(time.Now().Unix()) + float64(time.Now().Nanosecond())/1e9
-```
-
-It reads the clock twice. If the second rolls over between the two reads,
-the result is up to one second in the past (`…00.999` read as `…00` +
-`0.001`). The `UnixNano()/1e9`
-form loses up to ~128 ns at today's magnitudes. A rare correctness bug.
-**(2)** `auth/totp.go:57` compiles a regexp per MFA setup. **(3)**
-`config/config.go:146` and `:206` both require the window duration; the
-threshold is parsed at `:135` and range-checked apart at `:196`. **(4)**
-`cmd/server/main.go:202` uses `fmt.Sprintf("%s:%d", ...)`, so an IPv6 bind
-`::1` yields the invalid `::1:8080`. **(5)**
-`handler/app_user_group_handler.go:56` uses bare `http.Error`, not
-`app.WriteError`. **(6)** Comments at
-`:31,90,174,283` name `/userGroup*`; routes are `/appUserGroup*`
-(`cmd/server/main.go:187`). Open ticket PS0011 already lists (1) and (2).
-
-#### What GRC changed
-
-RG0015 (`1fc6e86`, `6ee3abc`) added `model.Now()` over
-`EpochSeconds(t) = float64(t.Unix()) + float64(t.Nanosecond())/1e9`, one
-`time.Time` read (`src/internal/model/time.go:26-34`); the comment at
-`:5-23` gives the reasoning. Tests: `TestEpochSecondsIsExactForAWholeSecond`,
-`TestEpochSecondsKeepsSubSecondDetail`, `TestNowMovesForward`
-(`model/time_test.go:13,22,33`). Also a package-level `totpLabelDisallowed`
-(`auth/totp.go:65`), one read-and-check for each `FAILED_LOGIN_*` key
-(`config/config.go:235-253`), `net.JoinHostPort` (`cmd/server/main.go:248`),
-`WriteError` and corrected route comments
-(`handler/app_user_group_handler.go:29,52-56,89,176,267`).
-
-#### Proposed fix for PROTO
-
-1. Add `internal/model/time.go` with `EpochSeconds` and `Now`; port the three
-   tests. Module path is `github.com/wbmartin/starter-api`.
-2. Replace both `CurrentTimestamp` functions and the inline copies with
-   `model.Now()`; delete the two functions (about 20 call sites, mechanical).
-3. `auth/totp.go:57`: hoist the regexp to a package `var`.
-4. `config/config.go`: fold `:196-200` into `:135-143`; delete `:206-210`.
-5. `cmd/server/main.go:202`: `net.JoinHostPort` (pairs with B061).
-6. `app_user_group_handler.go`: `WriteError` at `:56`, fix four comments.
-7. Do it as PS0011's first slice and refresh that ticket's line numbers.
-
-#### Open question for Brandon
-
-None.
-
 ### B061 — `SERVER_BIND_ADDRESS` required (fail-closed bind)
 
 - **Priority:** P3  **Area:** go-api
@@ -8929,3 +8858,76 @@ test.
 
 None.
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). Confirmed no bundle is served: no `FileServer` or `/assets` route in `src/api-srv`. `security_headers.go`: CSP is GRC's four directives (`default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`), `X-Frame-Options: DENY` on every path, `strings` import dropped; no document-route relaxation. `app_helper.go`: `anonRateIdentifier` returns `"ip:"+ClientIP` and keys the anonymous bucket in both `CheckRateLimit` and `CheckRateLimitAndUserBlock` (anonymous key now `RPM*ip:<client IP>*<minute>`; signed-in key and the `admin` exemption unchanged); the CSRF mismatch logs `"CSRF token mismatch"` only. Tests: `TestHeadersMiddleware_SkipsFrameOptionsForAssets` replaced by `TestHeadersMiddleware_ExactCSPAndFrameDenyEverywhere` (exact CSP and DENY on `/example` and `/assets/app.js`); `TestAnonRateIdentifierIsPerAddress` ported (with the `trustedProxyCount` argument PROTO's `ClientIP` takes); added `TestCheckCSRF_MismatchLogsNoToken` (beyond the fix steps). Docs: doc/105 rate keys, CSRF log note and the header list (exact CSP, DENY everywhere); `src/api-srv/README.md` check list gives both key shapes and the CSRF log rule. B039 route contract unchanged and green (it does not pin the key); B043 pytest unaffected (signed-in key). Tests: all green, infra=15 docs=499 go=690 unit=87 e2e=13 py=102 (go +2: one test replaced, two added), govulncheck clean, gofmt clean.
+
+### B060 — COMPLETED — Go hygiene: one `model.Now()`; RG0015 small fixes
+
+- **Priority:** P3  **Area:** go-api
+- **GRC:** `src/internal/model/time.go:1-40`; `model/time_test.go`; `src/internal/auth/totp.go:60-73`; `src/internal/config/config.go:236-252`; `src/api-srv/cmd/server/main.go:246-254`; `src/internal/handler/app_user_group_handler.go:29,52-56,88,176,267`   **PROTO:** `src/api-srv/internal/handler/common.go:158-162`; `repository/user_repository.go:18-21,508,567`; `auth/totp.go:55-60`; `config/config.go:135-205`; `cmd/server/main.go:201-204`; `handler/app_user_group_handler.go:55-56`
+- **Ticket:** RG0015 / `1fc6e86`, `6ee3abc`; RG0043 items 31, 35; PS0011
+- **What:** Three timestamp spellings (UnixNano/1e9 drifts) become
+`model.Now()`; TOTP regexp compiled once; threshold checked once;
+`net.JoinHostPort`; `WriteError`; stale comments.
+- **Port notes:** One mechanical hygiene ticket.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Six small quality gaps under `src/api-srv/`. One is a real, rare bug.
+
+**(1) Three timestamp spellings, one racy.** `create_ts`/`update_ts` are
+epoch seconds in `NUMERIC(17,7)` (`sql/migrations/0001_initial_schema.sql:36`);
+`update_ts` is the optimistic lock. `handler/common.go:161` uses
+`float64(time.Now().UnixNano()) / 1e9`, as do inline copies at
+`repository/user_repository.go:511,570`. A second function differs:
+
+```go
+// internal/repository/user_repository.go:20
+return float64(time.Now().Unix()) + float64(time.Now().Nanosecond())/1e9
+```
+
+It reads the clock twice. If the second rolls over between the two reads,
+the result is up to one second in the past (`…00.999` read as `…00` +
+`0.001`). The `UnixNano()/1e9`
+form loses up to ~128 ns at today's magnitudes. A rare correctness bug.
+**(2)** `auth/totp.go:57` compiles a regexp per MFA setup. **(3)**
+`config/config.go:146` and `:206` both require the window duration; the
+threshold is parsed at `:135` and range-checked apart at `:196`. **(4)**
+`cmd/server/main.go:202` uses `fmt.Sprintf("%s:%d", ...)`, so an IPv6 bind
+`::1` yields the invalid `::1:8080`. **(5)**
+`handler/app_user_group_handler.go:56` uses bare `http.Error`, not
+`app.WriteError`. **(6)** Comments at
+`:31,90,174,283` name `/userGroup*`; routes are `/appUserGroup*`
+(`cmd/server/main.go:187`). Open ticket PS0011 already lists (1) and (2).
+
+#### What GRC changed
+
+RG0015 (`1fc6e86`, `6ee3abc`) added `model.Now()` over
+`EpochSeconds(t) = float64(t.Unix()) + float64(t.Nanosecond())/1e9`, one
+`time.Time` read (`src/internal/model/time.go:26-34`); the comment at
+`:5-23` gives the reasoning. Tests: `TestEpochSecondsIsExactForAWholeSecond`,
+`TestEpochSecondsKeepsSubSecondDetail`, `TestNowMovesForward`
+(`model/time_test.go:13,22,33`). Also a package-level `totpLabelDisallowed`
+(`auth/totp.go:65`), one read-and-check for each `FAILED_LOGIN_*` key
+(`config/config.go:235-253`), `net.JoinHostPort` (`cmd/server/main.go:248`),
+`WriteError` and corrected route comments
+(`handler/app_user_group_handler.go:29,52-56,89,176,267`).
+
+#### Proposed fix for PROTO
+
+1. Add `internal/model/time.go` with `EpochSeconds` and `Now`; port the three
+   tests. Module path is `github.com/wbmartin/starter-api`.
+2. Replace both `CurrentTimestamp` functions and the inline copies with
+   `model.Now()`; delete the two functions (about 20 call sites, mechanical).
+3. `auth/totp.go:57`: hoist the regexp to a package `var`.
+4. `config/config.go`: fold `:196-200` into `:135-143`; delete `:206-210`.
+5. `cmd/server/main.go:202`: `net.JoinHostPort` (pairs with B061).
+6. `app_user_group_handler.go`: `WriteError` at `:56`, fix four comments.
+7. Do it as PS0011's first slice and refresh that ticket's line numbers.
+
+#### Open question for Brandon
+
+None.
+
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). New `src/api-srv/internal/model/time.go`: `EpochSeconds(t)` (one clock read, `Unix()` + `Nanosecond()/1e9`) and `Now()`; GRC's three tests ported in `model/time_test.go`. Both `CurrentTimestamp` functions (handler `UnixNano()/1e9`, repository's racy two-read form) deleted; every call site, the two inline `UnixNano()/1e9` in `AddUserListToGroup`/`RemoveUserListFromGroup` and the invite expiry (`model.EpochSeconds(time.Now().Add(ttl))`) use `model`; repository `TestCurrentTimestamp` dropped (superseded by `TestNowMovesForward`). `auth/totp.go`: `totpLabelDisallowed` package var. `cmd/server/main.go`: `net.JoinHostPort` (IPv6 bind bracketed; empty address still `:8080`, B061 still owns requiring the key). `app_user_group_handler.go`: the bare `http.Error` is `WriteError` with GRC's message and code (400 is now the JSON `{"error"}` shape; the duplicate `app.Error` log went with it); four route comments say `/appUserGroup*`. Item 3 (config) was already done by B032 (`requirePositiveInt`/`requireDuration`, one read-and-check per `FAILED_LOGIN_*` key); nothing left. Item 7 is moot: B091 removed the ticket system, PS0011 no longer exists. Also folded in (leftovers from earlier items): `AddUserListToGroup`/`RemoveUserListFromGroup` parameters `userIds`/`groupId` renamed `userIdList`/`appUserGroupId`, and the dead `Auth2RequestModel` and `ChangeCurrentUserPasswordRequest` removed from `model/security_model.go`. Not done: `interface{}` to `any` (36 sites, outside RG0015's list; left for the cleanup pass). doc/105 timestamp line names `model.Now()`. New pytest `test_bad_user_group_id_list_is_json_400`. B039 route contract and B054 grants fixture green. Tests: all green, infra=15 docs=499 go=692 unit=87 e2e=13 py=103 (go +2: three time tests, one superseded test removed; py +1), govulncheck clean, gofmt/vet/staticcheck clean.

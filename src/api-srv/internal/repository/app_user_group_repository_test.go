@@ -330,9 +330,9 @@ func (s *AppUserGroupRepositoryTestSuite) createGroupIn(
 		GroupName:       groupName,
 		UserGrantList:   []int{},
 		SecurityContext: securityContext,
-		CreateTS:        CurrentTimestamp(),
+		CreateTS:        model.Now(),
 		CreateUserID:    1,
-		UpdateTS:        CurrentTimestamp(),
+		UpdateTS:        model.Now(),
 		UpdateUserID:    1,
 	}
 	created, err := s.repo.CreateAppUserGroup(
@@ -354,12 +354,12 @@ func (s *AppUserGroupRepositoryTestSuite) TestGroupWriteOtherSecurityContextIsNo
 
 	err := s.repo.UpdateAppUserGroup(ctx, &model.AppUserGroupModel{
 		AppUserGroupID: other.AppUserGroupID, GroupName: "RepoTestRenamed",
-		UserGrantList: []int{}, UpdateTS: CurrentTimestamp(), UpdateUserID: 1,
+		UserGrantList: []int{}, UpdateTS: model.Now(), UpdateUserID: 1,
 	}, other.UpdateTS, testTenant)
 	s.ErrorIs(err, ErrNotFound)
 
 	_, err = s.repo.DeleteAppUserGroup(ctx, other.AppUserGroupID, testTenant,
-		other.UpdateTS, CurrentTimestamp(), 1)
+		other.UpdateTS, model.Now(), 1)
 	s.ErrorIs(err, ErrNotFound)
 
 	unchanged, err := s.repo.RetrieveAppUserGroupListByIDList(
@@ -369,7 +369,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestGroupWriteOtherSecurityContextIsNo
 	s.Equal("RepoTestOtherCtxGroup", unchanged[0].GroupName)
 
 	_, err = s.repo.DeleteAppUserGroup(ctx, other.AppUserGroupID,
-		otherTenant, other.UpdateTS-1, CurrentTimestamp(), 1)
+		otherTenant, other.UpdateTS-1, model.Now(), 1)
 	s.ErrorIs(err, ErrConflict)
 }
 
@@ -384,9 +384,9 @@ func (s *AppUserGroupRepositoryTestSuite) TestDeleteOtherTenantGroupWithOwnTenan
 		PwHash:                     "$2a$10$test.hash",
 		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{other.AppUserGroupID},
-		CreateTS:                   CurrentTimestamp(),
+		CreateTS:                   model.Now(),
 		CreateUserID:               1,
-		UpdateTS:                   CurrentTimestamp(),
+		UpdateTS:                   model.Now(),
 		UpdateUserID:               1,
 	}, testTenant)
 	s.Require().NoError(err)
@@ -397,7 +397,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestDeleteOtherTenantGroupWithOwnTenan
 	})
 
 	_, err = s.repo.DeleteAppUserGroup(ctx, other.AppUserGroupID, testTenant,
-		other.UpdateTS, CurrentTimestamp(), 1)
+		other.UpdateTS, model.Now(), 1)
 	s.ErrorIs(err, ErrNotFound)
 }
 
@@ -414,9 +414,9 @@ func (s *AppUserGroupRepositoryTestSuite) TestDeleteAppUserGroupCountsOwnTenantM
 			PwHash:                     "$2a$10$test.hash",
 			SecurityContext:            securityContext,
 			AppUserGroupMembershipList: []int{group.AppUserGroupID},
-			CreateTS:                   CurrentTimestamp(),
+			CreateTS:                   model.Now(),
 			CreateUserID:               1,
-			UpdateTS:                   CurrentTimestamp(),
+			UpdateTS:                   model.Now(),
 			UpdateUserID:               1,
 		}, securityContext)
 		s.Require().NoError(err)
@@ -429,7 +429,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestDeleteAppUserGroupCountsOwnTenantM
 	createMember("RepoTestForeignMember", otherTenant)
 	createMember("RepoTestOwnMember", testTenant)
 	_, err := s.repo.DeleteAppUserGroup(ctx, group.AppUserGroupID, testTenant,
-		group.UpdateTS, CurrentTimestamp(), 1)
+		group.UpdateTS, model.Now(), 1)
 	s.Require().Error(err)
 	s.ErrorIs(err, ErrInUse)
 	s.Equal("cannot delete group: 1 users are assigned to it", err.Error())
@@ -439,7 +439,7 @@ func (s *AppUserGroupRepositoryTestSuite) TestDeleteAppUserGroupCountsOwnTenantM
 	s.Require().NoError(err)
 	deletedID, err := s.repo.DeleteAppUserGroup(ctx, group.AppUserGroupID,
 		testTenant,
-		group.UpdateTS, CurrentTimestamp(), 1)
+		group.UpdateTS, model.Now(), 1)
 	s.NoError(err)
 	s.Equal(group.AppUserGroupID, deletedID)
 }

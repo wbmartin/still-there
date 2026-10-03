@@ -7,18 +7,12 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/wbmartin/starter-api/internal/model"
 )
-
-// CurrentTimestamp returns the current timestamp as float64
-func CurrentTimestamp() float64 {
-	return float64(time.Now().Unix()) + float64(time.Now().Nanosecond())/1e9
-}
 
 // UserRepository handles database operations for users
 type UserRepository struct {
@@ -226,7 +220,7 @@ func (r *UserRepository) UpdateUserTOTPSeed(
 	ctx context.Context, userID int, totpSeed string,
 	expectedUpdateTS float64, updateUserID int, securityContext int,
 ) (newUpdateTS float64, err error) {
-	newUpdateTS = CurrentTimestamp()
+	newUpdateTS = model.Now()
 	query := `
 		UPDATE app_user
 		SET totp_seed = $1, mfa_setup = false, update_ts = $2, update_user_id = $3
@@ -267,7 +261,7 @@ func (r *UserRepository) UpdateUserAccountStatus(
 			accountStatus, ErrValidation,
 		)
 	}
-	newUpdateTS = CurrentTimestamp()
+	newUpdateTS = model.Now()
 	query := `
 		UPDATE app_user
 		SET account_status = $1, update_ts = $2, update_user_id = $3
@@ -321,7 +315,7 @@ func (r *UserRepository) UpdateUserMFASetup(
 	ctx context.Context, userID int, mfaSetup bool,
 	expectedUpdateTS float64, updateUserID int, securityContext int,
 ) (newUpdateTS float64, err error) {
-	newUpdateTS = CurrentTimestamp()
+	newUpdateTS = model.Now()
 	query := `
 		UPDATE app_user
 		SET mfa_setup = $1, update_ts = $2, update_user_id = $3
@@ -348,7 +342,7 @@ func (r *UserRepository) UpdateUserMFAExempt(
 	ctx context.Context, userID int, mfaExempt bool,
 	expectedUpdateTS float64, updateUserID int, securityContext int,
 ) (newUpdateTS float64, err error) {
-	newUpdateTS = CurrentTimestamp()
+	newUpdateTS = model.Now()
 	query := `
 		UPDATE app_user
 		SET mfa_exempt = $1, update_ts = $2, update_user_id = $3
@@ -513,15 +507,15 @@ func (r *UserRepository) DeleteUser(
 // AddUserListToGroup adds multiple users to a group with optimistic locking
 func (r *UserRepository) AddUserListToGroup(
 	ctx context.Context,
-	userIds []int,
-	groupId int,
+	userIdList []int,
+	appUserGroupId int,
 	updateTsList []float64,
 	updateUserId int,
 	securityContext int,
 ) ([]*model.AppUserModel, error) {
-	if len(userIds) != len(updateTsList) {
+	if len(userIdList) != len(updateTsList) {
 		return nil, fmt.Errorf(
-			"userIds and updateTsList must have the same length",
+			"userIdList and updateTsList must have the same length",
 		)
 	}
 
@@ -533,7 +527,7 @@ func (r *UserRepository) AddUserListToGroup(
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Update each user (only if group not already in membership list)
-	for i, userId := range userIds {
+	for i, userId := range userIdList {
 		result, err := tx.Exec(
 			ctx,
 			`
@@ -545,8 +539,8 @@ func (r *UserRepository) AddUserListToGroup(
 			  AND security_context_id = $6 AND delete_user_id IS NULL
 			  AND $2 != ALL(app_user_group_membership_list)`,
 			userId,
-			groupId,
-			float64(time.Now().UnixNano())/1e9,
+			appUserGroupId,
+			model.Now(),
 			updateUserId,
 			updateTsList[i],
 			securityContext,
@@ -571,21 +565,21 @@ func (r *UserRepository) AddUserListToGroup(
 	}
 
 	// Return updated users; rescan required for updated group membership
-	return r.RetrieveUserList(ctx, securityContext, userIds, 0)
+	return r.RetrieveUserList(ctx, securityContext, userIdList, 0)
 }
 
 // RemoveUserListFromGroup removes multiple users from a group with optimistic locking
 func (r *UserRepository) RemoveUserListFromGroup(
 	ctx context.Context,
-	userIds []int,
-	groupId int,
+	userIdList []int,
+	appUserGroupId int,
 	updateTsList []float64,
 	updateUserId int,
 	securityContext int,
 ) ([]*model.AppUserModel, error) {
-	if len(userIds) != len(updateTsList) {
+	if len(userIdList) != len(updateTsList) {
 		return nil, fmt.Errorf(
-			"userIds and updateTsList must have the same length",
+			"userIdList and updateTsList must have the same length",
 		)
 	}
 
@@ -597,7 +591,7 @@ func (r *UserRepository) RemoveUserListFromGroup(
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Update each user
-	for i, userId := range userIds {
+	for i, userId := range userIdList {
 		result, err := tx.Exec(
 			ctx,
 			`
@@ -608,8 +602,8 @@ func (r *UserRepository) RemoveUserListFromGroup(
 			WHERE app_user_id = $1 AND update_ts = $5
 			  AND security_context_id = $6 AND delete_user_id IS NULL`,
 			userId,
-			groupId,
-			float64(time.Now().UnixNano())/1e9,
+			appUserGroupId,
+			model.Now(),
 			updateUserId,
 			updateTsList[i],
 			securityContext,
@@ -632,7 +626,7 @@ func (r *UserRepository) RemoveUserListFromGroup(
 	}
 
 	// Return updated users; rescan required for updated group membership
-	return r.RetrieveUserList(ctx, securityContext, userIds, 0)
+	return r.RetrieveUserList(ctx, securityContext, userIdList, 0)
 }
 
 // removeDuplicates removes duplicate integers from a slice
@@ -665,7 +659,7 @@ func (r *UserRepository) UpdateOwnProfile(
 	preference json.RawMessage,
 	expectedUpdateTS float64,
 ) (newUpdateTS float64, err error) {
-	newUpdateTS = CurrentTimestamp()
+	newUpdateTS = model.Now()
 	query := `
 		UPDATE app_user
 		SET first_name = $1, last_name = $2, email = $3, preference_jsonb = $4,

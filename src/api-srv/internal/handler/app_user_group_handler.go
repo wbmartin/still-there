@@ -25,7 +25,7 @@ func NewAppUserGroupHandler(appServices *app.Services,
 	}
 }
 
-// RetrieveAppUserGroupList handles GET /userGroupList
+// RetrieveAppUserGroupList handles GET /appUserGroupList
 func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
@@ -49,8 +49,9 @@ func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 		"appUserGroupIdList",
 	)
 	if err != nil {
-		app.Error("RD_UGRP_LST_PARSE_ER", "Failed to parse appUserGroupIdList")
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		app.WriteError(w, http.StatusBadRequest,
+			"appUserGroupIdList must be comma-separated integers",
+			"RD_UGRP_LST_PARSE_ER", err)
 		return
 	}
 
@@ -84,7 +85,7 @@ func (h *AppUserGroupHandler) RetrieveAppUserGroupList(w http.ResponseWriter,
 	app.Info("UGRP_LST_DONE", "User group list retrieval completed")
 }
 
-// CreateAppUserGroup handles POST /userGroup
+// CreateAppUserGroup handles POST /appUserGroup
 func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
@@ -123,7 +124,7 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 	}
 
 	// Set creation and update metadata
-	now := CurrentTimestamp()
+	now := model.Now()
 	group.SecurityContext = jwtClaims.SecurityContext
 	group.CreateTS = now
 	group.CreateUserID = jwtClaims.UserID
@@ -155,7 +156,7 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 	)
 }
 
-// UpdateAppUserGroup handles PUT /userGroup
+// UpdateAppUserGroup handles PUT /appUserGroup
 func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
@@ -199,7 +200,7 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 
 	// Set update metadata
 	clientUpdateTS := group.UpdateTS
-	now := CurrentTimestamp()
+	now := model.Now()
 	group.SecurityContext = jwtClaims.SecurityContext
 	group.UpdateTS = now
 	group.UpdateUserID = jwtClaims.UserID
@@ -247,7 +248,7 @@ func (h *AppUserGroupHandler) UpdateAppUserGroup(w http.ResponseWriter,
 	)
 }
 
-// DeleteAppUserGroup handles DELETE /userGroup
+// DeleteAppUserGroup handles DELETE /appUserGroup
 func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 	r *http.Request) {
 	// Security checks
@@ -296,7 +297,7 @@ func (h *AppUserGroupHandler) DeleteAppUserGroup(w http.ResponseWriter,
 	)
 
 	// Delete user group with optimistic locking and assignment check
-	now := CurrentTimestamp()
+	now := model.Now()
 	deletedID, err := h.appUserGroupRepo.DeleteAppUserGroup(
 		r.Context(),
 		groupID,

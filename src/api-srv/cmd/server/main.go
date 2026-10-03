@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -241,7 +243,11 @@ func main() {
 
 	// Create server
 	server := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", config.ServerBindAddress, config.ServerPort),
+		// JoinHostPort brackets an IPv6 bind ("[::1]:8080"); an empty
+		// address is still every interface (":8080").
+		Addr: net.JoinHostPort(
+			config.ServerBindAddress, strconv.Itoa(config.ServerPort),
+		),
 		Handler: securedMux,
 	}
 

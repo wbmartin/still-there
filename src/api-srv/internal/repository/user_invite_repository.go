@@ -88,7 +88,7 @@ func (r *UserInviteRepository) ReissueInvite(
 	actorUserID int,
 ) error {
 	return pgx.BeginFunc(ctx, r.db, func(tx pgx.Tx) error {
-		ts := CurrentTimestamp()
+		ts := model.Now()
 		if err := lockInvitedUser(
 			ctx, tx, appUserID, securityContext,
 		); err != nil {
@@ -115,7 +115,7 @@ func (r *UserInviteRepository) RevokeInvite(
 	actorUserID int,
 ) error {
 	return pgx.BeginFunc(ctx, r.db, func(tx pgx.Tx) error {
-		ts := CurrentTimestamp()
+		ts := model.Now()
 		if err := lockInvitedUser(
 			ctx, tx, appUserID, securityContext,
 		); err != nil {
@@ -171,7 +171,7 @@ func (r *UserInviteRepository) RedeemInvite(
 ) (string, error) {
 	var userName string
 	err := pgx.BeginFunc(ctx, r.db, func(tx pgx.Tx) error {
-		ts := CurrentTimestamp()
+		ts := model.Now()
 		var inviteID, securityContext, appUserID int
 		err := tx.QueryRow(ctx, `
 			SELECT ui.user_invite_id, ui.security_context_id,

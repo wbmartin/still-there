@@ -255,6 +255,14 @@ class TestUserManagement:
             if other_created:
                 delete_user(test_client, other_created["appUserId"])
 
+    def test_bad_user_group_id_list_is_json_400(self, test_client):
+        """A malformed id list answers in the JSON error shape."""
+        response = test_client.make_request(
+            "GET", "/appUserGroupList?appUserGroupIdList=abc"
+        )
+        assert response.status_code == 400, response.text
+        assert "appUserGroupIdList" in response.json()["error"]
+
     def test_duplicate_user_group_name_returns_409(self, test_client):
         """A group name taken in the tenant is 409; reuses a seed group."""
         existing = test_client.make_request("GET", "/appUserGroupList")

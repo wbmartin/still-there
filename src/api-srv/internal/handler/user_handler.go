@@ -424,7 +424,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AppUserModel from request
-	now := CurrentTimestamp()
+	now := model.Now()
 	user := model.AppUserModel{
 		UserName:                   req.UserName,
 		FirstName:                  req.FirstName,
@@ -548,7 +548,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Set update metadata
 	clientUpdateTS := user.UpdateTS
-	now := CurrentTimestamp()
+	now := model.Now()
 	user.SecurityContext = jwtClaims.SecurityContext
 	user.UpdateTS = now
 	user.UpdateUserID = jwtClaims.UserID
@@ -652,7 +652,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete user with optimistic locking
-	now := CurrentTimestamp()
+	now := model.Now()
 	deletedID, err := h.userRepo.DeleteUser(
 		r.Context(),
 		userID,
@@ -985,7 +985,7 @@ func (h *UserHandler) ChangeOtherUserPassword(
 	}
 
 	// Update password
-	now := CurrentTimestamp()
+	now := model.Now()
 	err = h.userRepo.UpdateUserPassword(
 		r.Context(),
 		req.UserID,

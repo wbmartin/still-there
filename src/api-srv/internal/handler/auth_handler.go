@@ -838,7 +838,7 @@ func ChangeOwnPasswordHandler(
 		}
 
 		// Update password
-		now := CurrentTimestamp()
+		now := model.Now()
 		err = userRepo.UpdateUserPassword(
 			r.Context(),
 			jwtClaims.UserID,

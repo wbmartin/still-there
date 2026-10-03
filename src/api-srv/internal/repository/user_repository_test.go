@@ -665,9 +665,9 @@ func (s *UserRepositoryTestSuite) TestAddUserListToGroup() {
 		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{}, // Start with no groups
 		MFAExempt:                  false,
-		CreateTS:                   CurrentTimestamp(),
+		CreateTS:                   model.Now(),
 		CreateUserID:               1,
-		UpdateTS:                   CurrentTimestamp(),
+		UpdateTS:                   model.Now(),
 		UpdateUserID:               1,
 	}
 
@@ -748,15 +748,6 @@ func (s *UserRepositoryTestSuite) TestRemoveUserListFromGroup() {
 	s.Len(updatedUsers2, 1)
 }
 
-func (s *UserRepositoryTestSuite) TestCurrentTimestamp() {
-	ts1 := CurrentTimestamp()
-	time.Sleep(10 * time.Millisecond) // Longer delay to ensure difference
-	ts2 := CurrentTimestamp()
-
-	s.True(ts2 > ts1, "Second timestamp should be greater than first")
-	s.True(ts1 > 0, "Timestamp should be positive")
-}
-
 // GET/PUT /me round trip: read by user name, narrow update of the profile columns
 // and the preferences document, optimistic lock, and nothing else touched.
 func (s *UserRepositoryTestSuite) TestOwnProfileRoundTrip() {
@@ -820,9 +811,9 @@ func (s *UserRepositoryTestSuite) otherTenantUser(
 		Email:                      "other@example.com",
 		SecurityContext:            otherTenant,
 		AppUserGroupMembershipList: []int{},
-		CreateTS:                   CurrentTimestamp(),
+		CreateTS:                   model.Now(),
 		CreateUserID:               1,
-		UpdateTS:                   CurrentTimestamp(),
+		UpdateTS:                   model.Now(),
 		UpdateUserID:               1,
 	}
 	created, err := s.repo.CreateUser(context.Background(), user, otherTenant)
@@ -839,17 +830,17 @@ func (s *UserRepositoryTestSuite) TestUserWriteOtherSecurityContextIsNotFound() 
 
 	err := s.repo.UpdateUser(ctx, &model.AppUserModel{
 		AppUserID: other.AppUserID, UserName: "RepoTestOtherCtxRenamed",
-		AppUserGroupMembershipList: []int{}, UpdateTS: CurrentTimestamp(),
+		AppUserGroupMembershipList: []int{}, UpdateTS: model.Now(),
 		UpdateUserID: 1,
 	}, other.UpdateTS, testTenant)
 	s.ErrorIs(err, ErrNotFound)
 
 	_, err = s.repo.DeleteUser(
-		ctx, other.AppUserID, testTenant, other.UpdateTS, CurrentTimestamp(), 1)
+		ctx, other.AppUserID, testTenant, other.UpdateTS, model.Now(), 1)
 	s.ErrorIs(err, ErrNotFound)
 
 	err = s.repo.UpdateUserPassword(
-		ctx, other.AppUserID, "changed", CurrentTimestamp(), 1, testTenant)
+		ctx, other.AppUserID, "changed", model.Now(), 1, testTenant)
 	s.ErrorIs(err, ErrNotFound)
 	_, err = s.repo.UpdateUserTOTPSeed(
 		ctx, other.AppUserID, "SEED", other.UpdateTS, 1, testTenant)
@@ -874,7 +865,7 @@ func (s *UserRepositoryTestSuite) TestUserWriteOtherSecurityContextIsNotFound() 
 
 	// The row's own tenant still writes.
 	_, err = s.repo.DeleteUser(
-		ctx, other.AppUserID, otherTenant, other.UpdateTS, CurrentTimestamp(), 1)
+		ctx, other.AppUserID, otherTenant, other.UpdateTS, model.Now(), 1)
 	s.NoError(err)
 }
 
@@ -886,9 +877,9 @@ func (s *UserRepositoryTestSuite) TestMembershipWriteStaleUpdateTSIsConflict() {
 		PwHash:                     "$2a$10$test.hash",
 		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1},
-		CreateTS:                   CurrentTimestamp(),
+		CreateTS:                   model.Now(),
 		CreateUserID:               1,
-		UpdateTS:                   CurrentTimestamp(),
+		UpdateTS:                   model.Now(),
 		UpdateUserID:               1,
 	}
 	created, err := s.repo.CreateUser(ctx, user, testTenant)

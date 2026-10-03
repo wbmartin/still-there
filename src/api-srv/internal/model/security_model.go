@@ -27,12 +27,6 @@ type AuthResponseWrapper struct {
 	CsrfToken string            `json:"csrfToken,omitempty"`
 }
 
-// Auth2RequestModel represents the request body for MFA authentication
-type Auth2RequestModel struct {
-	TempToken string `json:"tempToken"`
-	TOTP      string `json:"totp"`
-}
-
 // Auth2ResponseModel represents the response for successful MFA authentication
 type Auth2ResponseModel struct {
 	AppUserID                    int    `json:"appUserId"`
@@ -79,12 +73,6 @@ type ChangeSecurityContextResponseWrapper struct {
 // DataWrapper wraps non-user data responses for consistency
 type DataWrapper struct {
 	Data interface{} `json:"data"`
-}
-
-// ChangeCurrentUserPasswordRequest for changing password
-type ChangeCurrentUserPasswordRequest struct {
-	CurrentPassword string `json:"currentPassword"`
-	NewPassword     string `json:"newPassword"`
 }
 
 // BlockUserRequest represents the request body for blocking a user

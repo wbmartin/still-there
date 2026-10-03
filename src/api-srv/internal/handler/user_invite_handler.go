@@ -160,7 +160,7 @@ func (h *UserInviteHandler) CreateInvitedUser(
 		return
 	}
 
-	now := CurrentTimestamp()
+	now := model.Now()
 	user := model.AppUserModel{
 		UserName:                   req.UserName,
 		FirstName:                  req.FirstName,
@@ -308,7 +308,7 @@ func (h *UserInviteHandler) CheckInvite(
 		return
 	}
 	preview, err := h.userInviteRepository.RetrieveLiveInvite(
-		r.Context(), tokenHash, CurrentTimestamp(),
+		r.Context(), tokenHash, model.Now(),
 	)
 	if err != nil {
 		h.refuseInvite(app, w, r, tokenHash, err)
@@ -353,7 +353,7 @@ func (h *UserInviteHandler) RedeemInvite(
 	// dead tokens must not buy one each. RedeemInvite looks again under a
 	// row lock, so this is a filter, not the decision.
 	if _, err := h.userInviteRepository.RetrieveLiveInvite(
-		r.Context(), tokenHash, CurrentTimestamp(),
+		r.Context(), tokenHash, model.Now(),
 	); err != nil {
 		h.refuseInvite(app, w, r, tokenHash, err)
 		return
@@ -457,7 +457,7 @@ func (h *UserInviteHandler) newInvite(
 		return "", "", 0, false
 	}
 	ttl := time.Duration(h.appsrv.Config.InviteTTLHours) * time.Hour
-	expiresTS = float64(time.Now().Add(ttl).UnixNano()) / 1e9
+	expiresTS = model.EpochSeconds(time.Now().Add(ttl))
 	return token, auth.HashInviteToken(token), expiresTS, true
 }
 

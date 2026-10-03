@@ -51,7 +51,7 @@ func (s *UserInviteRepositoryTestSuite) wipe() {
 func (s *UserInviteRepositoryTestSuite) invitee(
 	userName string,
 ) *model.AppUserModel {
-	now := CurrentTimestamp()
+	now := model.Now()
 	return &model.AppUserModel{
 		UserName: userName, FirstName: "Ivy", LastName: "Vine",
 		Email: userName + "@example.com", SecurityContext: testTenant,
@@ -73,7 +73,7 @@ func (s *UserInviteRepositoryTestSuite) accountStatus(userName string) string {
 // hash, and the redeeming address is recorded.
 func (s *UserInviteRepositoryTestSuite) TestInviteThenRedeem() {
 	ctx := context.Background()
-	now := CurrentTimestamp()
+	now := model.Now()
 	created, err := s.userInviteRepository.CreateInvitedUser(ctx,
 		s.invitee("RepoTestInvitee1"), testTenant, "hash-1", now+3600,
 		inviteAdminUserID)
@@ -112,7 +112,7 @@ func (s *UserInviteRepositoryTestSuite) TestInviteThenRedeem() {
 // Past expires_ts, neither public read can use it.
 func (s *UserInviteRepositoryTestSuite) TestExpiredLinkIsDead() {
 	ctx := context.Background()
-	now := CurrentTimestamp()
+	now := model.Now()
 	_, err := s.userInviteRepository.CreateInvitedUser(ctx,
 		s.invitee("RepoTestInvitee2"), testTenant, "hash-2", now-1,
 		inviteAdminUserID)
@@ -130,7 +130,7 @@ func (s *UserInviteRepositoryTestSuite) TestExpiredLinkIsDead() {
 // revoke is a conflict, and another tenant's id is not found.
 func (s *UserInviteRepositoryTestSuite) TestReissueAndRevoke() {
 	ctx := context.Background()
-	now := CurrentTimestamp()
+	now := model.Now()
 	created, err := s.userInviteRepository.CreateInvitedUser(ctx,
 		s.invitee("RepoTestInvitee3"), testTenant, "hash-3a", now+3600,
 		inviteAdminUserID)
@@ -167,14 +167,14 @@ func (s *UserInviteRepositoryTestSuite) TestActiveLoginHasNoInvite() {
 		testTenant)
 	s.Require().NoError(err)
 	s.ErrorIs(s.userInviteRepository.ReissueInvite(ctx, created.AppUserID,
-		testTenant, "hash-4", CurrentTimestamp()+3600, inviteAdminUserID),
+		testTenant, "hash-4", model.Now()+3600, inviteAdminUserID),
 		ErrNotFound)
 }
 
 // A taken user name is ErrDuplicate and leaves no invite behind.
 func (s *UserInviteRepositoryTestSuite) TestDuplicateUserNameWritesNothing() {
 	ctx := context.Background()
-	now := CurrentTimestamp()
+	now := model.Now()
 	_, err := s.userInviteRepository.CreateInvitedUser(ctx,
 		s.invitee("RepoTestInvitee5"), testTenant, "hash-5a", now+3600,
 		inviteAdminUserID)
