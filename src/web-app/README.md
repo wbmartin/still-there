@@ -48,6 +48,17 @@ browser.
   its own dev pair on ports 5182/8082, separate from the ordinary dev
   stack)
 
+## Page Header and Filter Row
+
+`AppLayout` (`app.tsx`) renders every page inside
+`<div className="app-page">`. The page root's child that is, or holds, the
+page's one `<h1>` (a `Title order={1}` alone or in a `Group` with its
+buttons) stays pinned under the shell header while the page scrolls
+(`index.css`). `hooks/use-pinned-page-header.ts` measures that block into
+`--app-page-header-height`, and `components/sticky-filters.tsx` uses it: a
+list page that adds a filter row wraps it in `<StickyFilters>` so the row
+pins just below the title. No template list page has a filter row yet.
+
 ## Entity Stores
 
 `stores/create-entity-store.ts` factors out the CRUD/cache pattern every

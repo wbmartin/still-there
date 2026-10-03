@@ -564,78 +564,6 @@ moves on a deliberate release; GRC left this open too.
 
 # P3: nice to have
 
-### B063 — Web: pinned page header and sticky filter row
-
-- **Priority:** P3  **Area:** web-app
-- **GRC:** `index.css:53-76`; `hooks/use-pinned-page-header.ts:1-41`; `components/grc/sticky-filters.tsx:1-37`; `components/grc/shell.tsx:164`   **PROTO:** `index.css`; new `hooks/use-pinned-page-header.ts`, `components/sticky-filters.tsx`
-- **Ticket:** `b52fa25`, `3d48e65`
-- **What:** Title block and filters stay visible while long tables scroll.
-- **Port notes:** After B025; rename `grc-page`/`--grc-*`.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-A UX gap, not a bug, and a small one in PROTO today. The shell is a plain
-flex row (`src/web-app/app.tsx:176-196`): a 200 px `<nav>` and a `<main>`,
-with no fixed top bar. Each page opens with a heading row that scrolls away
-with the content:
-
-```tsx
-// src/web-app/pages/app-user-list-page.tsx:121-122
-<Group justify="space-between" mb="lg">
-  <Title order={1}>User Admin</Title>
-```
-
-On a long table the title and the "Add User" button leave the screen.
-PROTO's three list pages have no filter row at all (no `TextInput` or
-`Select` in `pages/*list-page.tsx`), and they paginate at 15 rows by default
-(`types/profile-type.ts:14`), so tables are short. The problem grows in a
-derived app that adds filters and long pages; the template barely shows it.
-
-#### What GRC changed
-
-The shell wraps the routed page in `<div className="grc-page">`
-(`components/grc/shell.tsx:164`), inside Mantine's `AppShell` with a fixed
-header (B025). Two pieces build on that.
-
-1. **Pinned header** (`b52fa25`, Brandon 2026-09-29). CSS pins the page
-   root's first child that is, or holds, the `<h2>`
-   (`src/web-app/index.css:58-66`): `position: sticky`,
-   `top: var(--app-shell-header-offset, 56px)`, body background, `z-index:
-   3`. A `scroll-state(stuck: top)` container query hides the subtitle
-   `<p>` once pinned (`:72-76`); browsers without it keep the subtitle.
-   `hooks/use-pinned-page-header.ts:17-41` measures that block with a
-   `ResizeObserver` and `MutationObserver` and writes
-   `--grc-page-header-height` on the page element.
-2. **Sticky filters** (`988b62e`, 2026-09-23). `<StickyFilters>`
-   (`components/grc/sticky-filters.tsx:21-37`) is a sticky `Box` at
-   `calc(header offset + --grc-page-header-height)`, `z-index: 2`, so a
-   Select dropdown still opens above it.
-
-The doc cites `3d48e65` for this; that commit put the title in the top bar
-and `b52fa25` replaced it. Sticky filters came from `988b62e`. No tests.
-
-#### Proposed fix for PROTO
-
-1. Depends on B025: no `AppShell` header means no
-   `--app-shell-header-offset`; without it, pin to `top: 0`.
-2. `index.css`: add the two rules under a PROTO class (`app-page`,
-   `--app-page-header-height`), not `grc-page` / `--grc-*`.
-3. Trap: GRC's selector keys on `h2`; PROTO pages use `Title order={1}`.
-   Change the selector to `h1`, or move pages to `order={2}`.
-4. Add `hooks/use-pinned-page-header.ts` (renamed variables) and
-   `components/sticky-filters.tsx`; call the hook in `AppLayout`.
-5. No list page gains `StickyFilters` until it has a filter row.
-6. Playwright: scroll the example list; the title stays in the viewport.
-
-#### Open question for Brandon
-
-Port now, or wait until a derived app has filter rows and long pages?
-Recommend porting the pinned header with B025 and `StickyFilters` only
-when the first filter row lands.
-
 ### B064 — Web: colour scheme only when signed in; list-page URL fixes
 
 - **Priority:** P3  **Area:** web-app
@@ -8984,3 +8912,78 @@ Rows per page as a fixed list (GRC: 10/20/25/50/100) instead of 5-200?
 Recommend the list; "valid" becomes a one-line check.
 
 - **Completed:** 2026-10-03. No Brandon line; took the recommendation (a fixed rows-per-page list). Go: `AppUserModel.PreferenceJSONB` is `json:"-"` (comment says why), so `/userList` and `/user` never carry it; new `model.AppUserOwnProfileModel` (appUserId, userName, firstName, lastName, email, securityContext, preferenceJsonb omitempty, updateTs, updateUserId; no GRC `profile` wrapper, no accountStatus) built by `AppUserModel.OwnProfile()` is what `GET`/`PUT /me` return; `RetrieveUserList` no longer selects `preference_jsonb`. Web: `types/profile-type.ts` allow-lists both fields (`colorSchemeList`, `rowsPerPageList`, `isColorScheme`, `isRowsPerPage`), `resolvePreference` takes `unknown` and falls back per field; `Profile.preferenceJsonb` is `unknown`; the profile page's rows `NumberInput` (5-200) is a `Select`. Deviation: the list is `[10, 15, 25, 50, 100]`, not GRC's `[10, 20, 25, 50, 100]`, to keep PROTO's default of 15 (GRC's is 25). `/me` no longer carries the admin fields (mfaSetup, mfaExempt, accountStatus, group list, create*/delete*); nothing in the web app read them there (`Profile` type never had them); `tests/test_zz_mfa_totp.py` now reads `mfaSetup` from the admin `/userList` instead of `/me`. Tests: new Go `TestAppUserModelWireShapes` (admin shape lacks preferences and secrets; own shape has preferences, lacks admin fields; NULL omits the key) and a handler subtest (GET /me carries preferences, not accountStatus); vitest `tests/profile-type.test.ts` ports GRC's six cases; pytest `test_profile_round_trip` checks the admin `/userList` row lacks `preferenceJsonb` while `/me` has it; e2e profile spec picks 10/15 from the Select. Docs: doc/105 and `src/api-srv/README.md` say preferences travel only on `/me`. All green, infra=15 docs=499 go=700 unit=93 e2e=13 py=103 (go +2, unit +6), govulncheck clean, gofmt clean.
+
+### B063 — COMPLETED — Web: pinned page header and sticky filter row
+
+- **Priority:** P3  **Area:** web-app
+- **GRC:** `index.css:53-76`; `hooks/use-pinned-page-header.ts:1-41`; `components/grc/sticky-filters.tsx:1-37`; `components/grc/shell.tsx:164`   **PROTO:** `index.css`; new `hooks/use-pinned-page-header.ts`, `components/sticky-filters.tsx`
+- **Ticket:** `b52fa25`, `3d48e65`
+- **What:** Title block and filters stay visible while long tables scroll.
+- **Port notes:** After B025; rename `grc-page`/`--grc-*`.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+A UX gap, not a bug, and a small one in PROTO today. The shell is a plain
+flex row (`src/web-app/app.tsx:176-196`): a 200 px `<nav>` and a `<main>`,
+with no fixed top bar. Each page opens with a heading row that scrolls away
+with the content:
+
+```tsx
+// src/web-app/pages/app-user-list-page.tsx:121-122
+<Group justify="space-between" mb="lg">
+  <Title order={1}>User Admin</Title>
+```
+
+On a long table the title and the "Add User" button leave the screen.
+PROTO's three list pages have no filter row at all (no `TextInput` or
+`Select` in `pages/*list-page.tsx`), and they paginate at 15 rows by default
+(`types/profile-type.ts:14`), so tables are short. The problem grows in a
+derived app that adds filters and long pages; the template barely shows it.
+
+#### What GRC changed
+
+The shell wraps the routed page in `<div className="grc-page">`
+(`components/grc/shell.tsx:164`), inside Mantine's `AppShell` with a fixed
+header (B025). Two pieces build on that.
+
+1. **Pinned header** (`b52fa25`, Brandon 2026-09-29). CSS pins the page
+   root's first child that is, or holds, the `<h2>`
+   (`src/web-app/index.css:58-66`): `position: sticky`,
+   `top: var(--app-shell-header-offset, 56px)`, body background, `z-index:
+   3`. A `scroll-state(stuck: top)` container query hides the subtitle
+   `<p>` once pinned (`:72-76`); browsers without it keep the subtitle.
+   `hooks/use-pinned-page-header.ts:17-41` measures that block with a
+   `ResizeObserver` and `MutationObserver` and writes
+   `--grc-page-header-height` on the page element.
+2. **Sticky filters** (`988b62e`, 2026-09-23). `<StickyFilters>`
+   (`components/grc/sticky-filters.tsx:21-37`) is a sticky `Box` at
+   `calc(header offset + --grc-page-header-height)`, `z-index: 2`, so a
+   Select dropdown still opens above it.
+
+The doc cites `3d48e65` for this; that commit put the title in the top bar
+and `b52fa25` replaced it. Sticky filters came from `988b62e`. No tests.
+
+#### Proposed fix for PROTO
+
+1. Depends on B025: no `AppShell` header means no
+   `--app-shell-header-offset`; without it, pin to `top: 0`.
+2. `index.css`: add the two rules under a PROTO class (`app-page`,
+   `--app-page-header-height`), not `grc-page` / `--grc-*`.
+3. Trap: GRC's selector keys on `h2`; PROTO pages use `Title order={1}`.
+   Change the selector to `h1`, or move pages to `order={2}`.
+4. Add `hooks/use-pinned-page-header.ts` (renamed variables) and
+   `components/sticky-filters.tsx`; call the hook in `AppLayout`.
+5. No list page gains `StickyFilters` until it has a filter row.
+6. Playwright: scroll the example list; the title stays in the viewport.
+
+#### Open question for Brandon
+
+Port now, or wait until a derived app has filter rows and long pages?
+Recommend porting the pinned header with B025 and `StickyFilters` only
+when the first filter row lands.
+
+- **Completed:** 2026-10-03. No Brandon line; took the recommendation (pin the header now, no page gains `StickyFilters` until it has a filter row) while still adding the component per fix step 4, so a derived app has it. `AppLayout` (`src/web-app/app.tsx`) wraps the routed page, and the `UNREACHABLE` notice, in an always-mounted `<div className="app-page">` and calls the new `usePinnedPageHeader(pageRef)` (`src/web-app/hooks/use-pinned-page-header.ts`), which writes `--app-page-header-height`; `src/web-app/index.css` pins `.app-page > * > :is(h1, :has(h1))` (sticky at `var(--app-shell-header-offset, 0px)`, body background, z-index 3) and hides a subtitle `<p>` under `@container scroll-state(stuck: top)`; new `src/web-app/components/sticky-filters.tsx` (sticky at shell offset plus page-header height, z-index 2), unused by the template pages. Pages keep `Title order={1}`; the selector keys on `h1` (trap 3). Deviations: the selector is `:is(h1, :has(h1))`, not GRC's `:nth-child(1 of h2, :has(h2))` (jsdom cannot parse the `of` list, and a page has one `<h1>`); the hook drops GRC's `pageKey` argument because the page element never unmounts, so its MutationObserver sees every route; the CSS cancels only the top padding (`mb` on the title rows is an inline style, so a bottom negative margin would never apply); fallback offset is `0px` (fix step 1), not GRC's `56px`. `src/web-app/README.md` gains a "Page Header and Filter Row" section. Tests: e2e `app-shell.spec.ts` "the page title block stays pinned under the header" (1280x260, scroll the example list to the bottom: the table moves by `scrollY`, the title block stops at y=56, title and Add Example stay in the viewport, the height variable is set); vitest `tests/pinned-page-header.test.tsx` (hook measures and rounds up, re-measures on route change, matches a bare `<h1>`; `StickyFilters` offset). All green, infra=15 docs=503 go=700 unit=97 e2e=14 py=103 (docs +4 from new paths, unit +4, e2e +1), govulncheck clean, gofmt clean.
+

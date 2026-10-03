@@ -25,6 +25,35 @@ h1 {
     line-height: 1.1;
 }
 
+/* The page's header block (its <h1> and the buttons beside it) stays pinned
+   under the shell's fixed header while a long page scrolls. AppLayout wraps
+   the routed page in .app-page; the selector matches
+   PAGE_HEADER_SELECTOR in hooks/use-pinned-page-header.ts, which measures
+   the block for StickyFilters. The background is Mantine's body variable, so
+   rows scroll under an opaque bar in either scheme; the negative top margin
+   cancels the top padding. zIndex 3 sits above StickyFilters (2) and below
+   Mantine's overlay range. Signed out there is no shell header and the
+   offset falls back to 0. */
+.app-page > * > :is(h1, :has(h1)) {
+    position: sticky;
+    top: var(--app-shell-header-offset, 0px);
+    z-index: 3;
+    background: var(--mantine-color-body);
+    padding-block: var(--mantine-spacing-xs);
+    margin-top: calc(var(--mantine-spacing-xs) * -1);
+    container-type: scroll-state;
+}
+
+/* Once pinned, a subtitle (a <p> after the <h1>, or after the row holding
+   it) drops out so the bar stays short; buttons stay. No template page has
+   one; a derived page that adds one gets this. A browser without
+   scroll-state queries keeps the whole block pinned. */
+@container scroll-state(stuck: top) {
+    :is(h1, :has(> h1)) ~ p {
+        display: none;
+    }
+}
+
 /* Sortable list-page column headers */
 .sortable-column {
     cursor: pointer;

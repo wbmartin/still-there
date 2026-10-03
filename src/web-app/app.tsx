@@ -27,10 +27,11 @@ import {
   IconSettings,
   IconUserCircle,
 } from '@tabler/icons-react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useProfileStore } from './stores/profile-store'
 import { useApiStatusStore } from './stores/api-status-store'
 import { usePreference } from './hooks/use-preference'
+import { usePinnedPageHeader } from './hooks/use-pinned-page-header'
 import { reportError } from './utils/report-error'
 import Login from './pages/login'
 import Dashboard from './pages/dashboard'
@@ -197,7 +198,8 @@ setRouteNavigator((path) => void router.navigate(path))
 const HEADER_HEIGHT = 56;
 
 // Fixed header, a navbar whose link list scrolls on its own (a long list or
-// a short window never pushes it off screen), and the routed page in main.
+// a short window never pushes it off screen), and the routed page in main,
+// whose title block stays pinned under the header (.app-page in index.css).
 // Below `sm` the navbar is a drawer opened by the burger. Signed out (login,
 // MFA) the shell is disabled: no header, no navbar.
 function AppLayout() {
@@ -215,6 +217,10 @@ function AppLayout() {
   const { setColorScheme } = useMantineColorScheme();
   const [navOpened, { toggle: toggleNav, close: closeNav }] =
     useDisclosure();
+  // Always mounted, whatever the route or session state, so the hook's one
+  // effect run sees every page that renders into it.
+  const pageRef = useRef<HTMLDivElement>(null);
+  usePinnedPageHeader(pageRef);
 
   // The profile (and with it the preferences) follows the session: loaded
   // when it is known, again after a security-context switch. The caches
@@ -311,14 +317,10 @@ function AppLayout() {
         </AppShell.Section>
       </AppShell.Navbar>
       <AppShell.Main>
-        {authState === 'UNREACHABLE' ? (
-          <ApiUnreachableNotice />
-        ) : (
-          <>
-            {authState === 'YES' && apiUnreachable && <ApiUnreachableBanner />}
-            <Outlet />
-          </>
-        )}
+        {authState === 'YES' && apiUnreachable && <ApiUnreachableBanner />}
+        <div className="app-page" ref={pageRef}>
+          {authState === 'UNREACHABLE' ? <ApiUnreachableNotice /> : <Outlet />}
+        </div>
       </AppShell.Main>
     </AppShell>
   )
