@@ -44,7 +44,7 @@ breaks.
 |---|---|---|---|
 | API binary | `api-srv` | `proto-api` | locally `bin/100` builds `dist/<slug>-api` (`etc/app.env`); B046 (pending) makes post-sales install `api-srv` too |
 | Migrator binary | `proto-migrate` | `proto-migrate` | same |
-| API env on host | `etc/api-srv.env` (from `etc/uat-api-srv.env.example`) | `etc/uat-proto-api.env` | same keys; secrets regenerated in A4 |
+| API env on host | `etc/api-srv.env` (written by `610` from `etc/uat-api-srv.env.template`) | `etc/uat-proto-api.env` | same keys; secrets regenerated in A4 |
 | Migrator env | — | `etc/uat-proto-migrate.env` | |
 | Deploy settings | `etc/uat-deploy.env` → bundle `deploy.env` → host `etc/deploy.env` | `etc/uat-proto-deploy.env` | different keys entirely |
 | DML role (API login) | `proto_app` (`DB_APP_ROLE`) | `proto_app` | same role, **new password** (A5) |
@@ -553,9 +553,10 @@ file back, `fail2ban-client reload`, and fix the stanza in the repo first.
 ### B5. Local checkouts
 
 `bin/600` / `bin/610` must never run against this host again: `610` would
-`DROP DATABASE` and hand ownership back to `proto_app` (B027, pending,
-makes `610` refuse a post-sales host). Point `UAT_HOST` in
-`etc/uat-deploy.env` elsewhere, on every laptop that has it.
+`DROP DATABASE` and hand ownership back to `proto_app`. `610` now refuses:
+`etc/uat-proto-deploy.env` exists, so `deploy.sh` exits 1 before any
+change. Point `UAT_HOST` in `etc/uat-deploy.env` elsewhere anyway, on every
+laptop that has it.
 
 ## C. A day later
 

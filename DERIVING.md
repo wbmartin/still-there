@@ -41,7 +41,7 @@ Postgres cluster is the safe default for every derived app.
 | `src/api-srv/sql/fixtures/test-seed.sql`, `local-seed.sql` | `admin` / `admin123!`, `basic` / `basic123!` | the pytest and Playwright suites log in with these (test seed, tenant 2); the dev seed has the same logins in tenant 1; change the suites' fixtures with them |
 | `etc/loc-test.env` | docker `postgres` superuser password | must match the container |
 | `etc/loc-api-srv.env`, `etc/e2e-api-srv.env` | `JWT_SECRET`, `TOTP_ENCRYPTION_KEY` (32 bytes hex) | local-only, but make them yours |
-| `etc/uat-api-srv.env.example`, `infra/*/etc/*-api.env` | `SERVERONLY` placeholders | stay placeholders in git; real values only on the host |
+| `etc/uat-api-srv.env.template`, `infra/*/etc/*-api.env` | `__SECRET__` / `SERVERONLY` placeholders | stay placeholders in git; real values are generated on the host (presales by `610`, post-sales by doc/330 / doc/331) |
 
 ## 3. Hosts
 

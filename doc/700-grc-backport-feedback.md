@@ -242,111 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B027 — Presales deploy: refuse post-sales hosts; generate secrets on host
-
-- **Priority:** P2  **Area:** bin, etc, docs
-- **GRC:** `bin/610-deploy-uat:7-8,34-41,46-72`; `bin/600-bundle-uat:13-15,92`; `etc/uat-api-srv.env.template:1-41`; `doc/330-uat-postsales-cutover.md:282-283`   **PROTO:** `bin/610-deploy-uat:11,19-36,51`; `etc/uat-api-srv.env.example:1-38`; `doc/320-presales-uat-deploy.md:76-79,135-137`; `doc/330-presales-to-postsales-migration.md:294-297`
-- **Ticket:** RG0012 / `2890e8a`, `55b0066`; RG0013 / `3a3fc94`
-- **What:** (a) PROTO only documents "never on a post-sales host"; GRC's 610
-exits if `etc/*-<app>-deploy.env` exists. (b) PROTO needs a hand-made env with
-three secrets; GRC fills a template on the host once (`openssl rand -hex 32`,
-0640).
-- **Port notes:** Glob `*-${APP_SLUG}-deploy.env` (not `etc/deploy.env`); names
-from `etc/uat-deploy.env`; password only (B015).
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-`bin/600-bundle-uat` builds a bundle on the laptop; `bin/610-deploy-uat`
-runs from it as root on the host (`deploy.sh`). Every run does
-`DROP DATABASE IF EXISTS $DB_NAME` and recreates it from the laptop dump
-(`bin/610-deploy-uat:112-115`).
-
-**(a) Nothing stops it on a post-sales host.** A host on the `infra/`
-pipeline keeps a persistent, DDL-owned database.
-`doc/320-presales-uat-deploy.md:135-137` and
-`doc/330-presales-to-postsales-migration.md:294-297` forbid 600/610 there,
-in prose only. 610 checks root, bundle files and env file (`:49-51`),
-then drops. One stale `UAT_HOST` on any laptop destroys UAT data.
-Operational safety gap.
-
-**(b) The host env file is hand-made and its DB password cannot work.**
-`doc/320-presales-uat-deploy.md:76-79` tells the operator to copy
-`etc/uat-api-srv.env.example` and replace each `SERVERONLY` (DB password,
-`JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, lines `:11,14,15`) by hand. 610 only
-checks the file exists (`:51`). But 610 creates the role from
-`000-roles.sql` (`:110`), which is `src/api-srv/sql/roles.sql:36-37`:
-`CREATE USER proto_app WITH PASSWORD 'reallygoodPSQLpassword'`.
-Nothing sets the role to the operator's password, so either the API
-cannot connect or the operator copies the repo literal: UAT runs on a
-password published in git (B015). The other two secrets are only as
-strong as the operator makes them. The example also hardcodes
-`proto-api`, `"Proto App"` and `uat_proto_db` (`:11,18-19`) instead of
-deriving from `etc/app.env`. Security and DX gap.
-
-#### What GRC changed
-
-RG0013 (`3a3fc94`) added a guard before any work
-(`bin/610-deploy-uat:34-40`):
-
-```bash
-if ls "$APP_ROOT"/etc/*-grc-deploy.env >/dev/null 2>&1; then
-  echo "...; presales deploy.sh refuses."; exit 1
-```
-
-The post-sales deploy env is the marker;
-`doc/330-uat-postsales-cutover.md:282-283` expects the refusal.
-
-RG0012 (`2890e8a`) generates the env file on the host, once
-(`bin/610-deploy-uat:48-58`): if `etc/api-srv.env` is missing it fills
-`api-srv.env.template` (shipped by `bin/600-bundle-uat:92`) with
-`openssl rand -hex 32` for DB password, JWT secret and TOTP key (`55b0066`),
-sets `root:www-data 0640`, and creates or re-passwords the role with the
-same value via a psql heredoc (`:60-71`). Never overwritten after;
-`bin/600:13-14`: the bundle carries no secret. No tests.
-
-#### Proposed fix for PROTO
-
-1. **Guard** in `bin/610-deploy-uat`, right after the root check at
-   `:49`: refuse when `"$APP_ROOT"/etc/*-"$APP_NAME"-deploy.env` exists
-   (`APP_NAME` is `$APP_SLUG` via `etc/uat-deploy.env:12`). Trap: do not
-   glob `etc/deploy.env` or `etc/*deploy.env`; `$APP_ROOT/etc/deploy.env`
-   is PROTO's own presales override (`:25-30`, doc/320 step 5). The
-   post-sales marker is `uat-proto-deploy.env` (`infra/uat/etc/`).
-2. **Template**: rename `etc/uat-api-srv.env.example` to
-   `etc/uat-api-srv.env.template` with `__DB_PASSWORD__`, `__JWT_SECRET__`,
-   `__TOTP_KEY__`. Have `bin/600` fill the non-secret names (role, DB
-   name, `SERVER_NAME`, `APP_NAME`) from `etc/app.env` and
-   `etc/uat-deploy.env` at bundle time, and ship the result.
-3. **First run in 610**: if `$ENV_FILE` is missing, generate the three
-   secrets with `openssl rand -hex 32`, write the file `0640
-   root:$SVC_USER`, and replace the `[ -f "$ENV_FILE" ]` exit at `:51`.
-   Trap: GRC passes secrets as `sed -e` arguments (`:55-57`), which puts
-   them in `ps` output; fill with a heredoc or `awk` reading `ENVIRON`.
-4. **Role password**: with B015, `roles.sql` takes `:'svc_pw'`. Feed it on
-   stdin (`printf '\\set svc_pw %s\n' ...; cat 000-roles.sql`), not
-   `psql -v` on argv. Read the password back from `DATABASE_URL` on every
-   run so `roles.sql` and the env file cannot disagree.
-5. Leave out GRC's worker, blobs, `BLOB_ROOT`, Entra keys,
-   `INVITE_TTL_HOURS` (B035) and the nginx site (B072).
-6. Docs: doc/320 `:76-79` becomes "610 writes it on first run";
-   doc/330 `:294-297` cites the guard.
-7. Tests. Shell test: 610 against a temp `APP_ROOT` holding
-   `etc/uat-proto-deploy.env` exits 1 before any `psql`; with no env file
-   it writes three distinct 64-hex secrets, mode 0640.
-8. Depends on B015. Pairs with B016/B061 (`SERVER_BIND_ADDRESS=127.0.0.1`
-   belongs in the template).
-
-#### Open question for Brandon
-
-A presales host built from this template has the repo-literal role
-password unless its operator changed it. Rotate by hand once (`ALTER
-ROLE` plus the env file), or leave such hosts until cutover?
-Recommendation: rotate now via a short step in doc/320; the literal is
-public.
-
 ### B028 — PS0010: one sentinel set + `mapRepoError`; delete `retry.go`
 
 - **Priority:** P2  **Area:** go-api, tests, docs
@@ -8870,3 +8765,110 @@ Recommendation: dump and restore the presales data, so UAT testers keep
 their work and rollback is still one rename.
 
 Brandon: Every project will be different, but in general when we go from presales to post sales, we setup UAT and Prod with whatever we've been working on our locals.
+
+### B027 — COMPLETED — Presales deploy: refuse post-sales hosts; generate secrets on host
+
+- **Completed:** 2026-10-02. `bin/610-deploy-uat` exits 1 with `[REFUSED]` before any write or `psql` when `$APP_ROOT/etc/*-$APP_NAME-deploy.env` (post-sales marker, e.g. `uat-proto-deploy.env`) exists; `etc/deploy.env` does not match. `etc/uat-api-srv.env.example` became `etc/uat-api-srv.env.template` (`__DB_APP_ROLE__`, `__DB_NAME__`, `__SERVER_NAME__`, `__APP_DISPLAY_NAME__` filled by `bin/600` from `etc/app.env` + `etc/uat-deploy.env`, which gains `DB_NAME`; `__DB_PASSWORD__`/`__JWT_SECRET__`/`__TOTP_KEY__` left for the host); on first run 610 writes `etc/api-srv.env` root:$SVC_USER 0640 (temp file 0600 until filled) with three 32-byte `/dev/urandom` hex values passed to awk via its environment, never overwrites it after, and on every run sets the role password from `DATABASE_URL` via `psql` stdin (`\set` + `ALTER ROLE ... \gexec`), checking the URL's user is `DB_APP_ROLE`. Deviations: B015 skipped, so `roles.sql` keeps its literal and 610 overrides it with ALTER ROLE rather than `:'svc_pw'`; secrets from `od /dev/urandom` instead of `openssl rand`; no committed shell test (verified in an ubuntu:24.04 + PG17 container: distinct 64-hex secrets, 0 secret hits in a 128-exec `strace -e execve` trace, generated password logs in and the literal does not, second run byte-identical, post-sales host refused with 0 `psql` execs while the old 610 dropped the DB). Open question took the recommendation: doc/320 has a one-time rotation step for hosts still on the literal (tested). Also doc/320, doc/330 (B5 cites the guard), DERIVING.md, `etc/loc-api-srv.env` comment, presales-deploy skill (verify step passes the DB password as `PGPASSWORD`, not argv); three pre-existing shellcheck notes in 610 fixed. Pre-existing, not fixed: `bin/600` vite step fails unless `VITE_API_PROXY_URL` is set (vite.config.ts throws in production mode). Tests: all green, go=279 unit=42 e2e=12 py=79
+
+- **Priority:** P2  **Area:** bin, etc, docs
+- **GRC:** `bin/610-deploy-uat:7-8,34-41,46-72`; `bin/600-bundle-uat:13-15,92`; `etc/uat-api-srv.env.template:1-41`; `doc/330-uat-postsales-cutover.md:282-283`   **PROTO:** `bin/610-deploy-uat:11,19-36,51`; `etc/uat-api-srv.env.example:1-38`; `doc/320-presales-uat-deploy.md:76-79,135-137`; `doc/330-presales-to-postsales-migration.md:294-297`
+- **Ticket:** RG0012 / `2890e8a`, `55b0066`; RG0013 / `3a3fc94`
+- **What:** (a) PROTO only documents "never on a post-sales host"; GRC's 610
+exits if `etc/*-<app>-deploy.env` exists. (b) PROTO needs a hand-made env with
+three secrets; GRC fills a template on the host once (`openssl rand -hex 32`,
+0640).
+- **Port notes:** Glob `*-${APP_SLUG}-deploy.env` (not `etc/deploy.env`); names
+from `etc/uat-deploy.env`; password only (B015).
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+`bin/600-bundle-uat` builds a bundle on the laptop; `bin/610-deploy-uat`
+runs from it as root on the host (`deploy.sh`). Every run does
+`DROP DATABASE IF EXISTS $DB_NAME` and recreates it from the laptop dump
+(`bin/610-deploy-uat:112-115`).
+
+**(a) Nothing stops it on a post-sales host.** A host on the `infra/`
+pipeline keeps a persistent, DDL-owned database.
+`doc/320-presales-uat-deploy.md:135-137` and
+`doc/330-presales-to-postsales-migration.md:294-297` forbid 600/610 there,
+in prose only. 610 checks root, bundle files and env file (`:49-51`),
+then drops. One stale `UAT_HOST` on any laptop destroys UAT data.
+Operational safety gap.
+
+**(b) The host env file is hand-made and its DB password cannot work.**
+`doc/320-presales-uat-deploy.md:76-79` tells the operator to copy
+`etc/uat-api-srv.env.example` and replace each `SERVERONLY` (DB password,
+`JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, lines `:11,14,15`) by hand. 610 only
+checks the file exists (`:51`). But 610 creates the role from
+`000-roles.sql` (`:110`), which is `src/api-srv/sql/roles.sql:36-37`:
+`CREATE USER proto_app WITH PASSWORD 'reallygoodPSQLpassword'`.
+Nothing sets the role to the operator's password, so either the API
+cannot connect or the operator copies the repo literal: UAT runs on a
+password published in git (B015). The other two secrets are only as
+strong as the operator makes them. The example also hardcodes
+`proto-api`, `"Proto App"` and `uat_proto_db` (`:11,18-19`) instead of
+deriving from `etc/app.env`. Security and DX gap.
+
+#### What GRC changed
+
+RG0013 (`3a3fc94`) added a guard before any work
+(`bin/610-deploy-uat:34-40`):
+
+```bash
+if ls "$APP_ROOT"/etc/*-grc-deploy.env >/dev/null 2>&1; then
+  echo "...; presales deploy.sh refuses."; exit 1
+```
+
+The post-sales deploy env is the marker;
+`doc/330-uat-postsales-cutover.md:282-283` expects the refusal.
+
+RG0012 (`2890e8a`) generates the env file on the host, once
+(`bin/610-deploy-uat:48-58`): if `etc/api-srv.env` is missing it fills
+`api-srv.env.template` (shipped by `bin/600-bundle-uat:92`) with
+`openssl rand -hex 32` for DB password, JWT secret and TOTP key (`55b0066`),
+sets `root:www-data 0640`, and creates or re-passwords the role with the
+same value via a psql heredoc (`:60-71`). Never overwritten after;
+`bin/600:13-14`: the bundle carries no secret. No tests.
+
+#### Proposed fix for PROTO
+
+1. **Guard** in `bin/610-deploy-uat`, right after the root check at
+   `:49`: refuse when `"$APP_ROOT"/etc/*-"$APP_NAME"-deploy.env` exists
+   (`APP_NAME` is `$APP_SLUG` via `etc/uat-deploy.env:12`). Trap: do not
+   glob `etc/deploy.env` or `etc/*deploy.env`; `$APP_ROOT/etc/deploy.env`
+   is PROTO's own presales override (`:25-30`, doc/320 step 5). The
+   post-sales marker is `uat-proto-deploy.env` (`infra/uat/etc/`).
+2. **Template**: rename `etc/uat-api-srv.env.example` to
+   `etc/uat-api-srv.env.template` with `__DB_PASSWORD__`, `__JWT_SECRET__`,
+   `__TOTP_KEY__`. Have `bin/600` fill the non-secret names (role, DB
+   name, `SERVER_NAME`, `APP_NAME`) from `etc/app.env` and
+   `etc/uat-deploy.env` at bundle time, and ship the result.
+3. **First run in 610**: if `$ENV_FILE` is missing, generate the three
+   secrets with `openssl rand -hex 32`, write the file `0640
+   root:$SVC_USER`, and replace the `[ -f "$ENV_FILE" ]` exit at `:51`.
+   Trap: GRC passes secrets as `sed -e` arguments (`:55-57`), which puts
+   them in `ps` output; fill with a heredoc or `awk` reading `ENVIRON`.
+4. **Role password**: with B015, `roles.sql` takes `:'svc_pw'`. Feed it on
+   stdin (`printf '\\set svc_pw %s\n' ...; cat 000-roles.sql`), not
+   `psql -v` on argv. Read the password back from `DATABASE_URL` on every
+   run so `roles.sql` and the env file cannot disagree.
+5. Leave out GRC's worker, blobs, `BLOB_ROOT`, Entra keys,
+   `INVITE_TTL_HOURS` (B035) and the nginx site (B072).
+6. Docs: doc/320 `:76-79` becomes "610 writes it on first run";
+   doc/330 `:294-297` cites the guard.
+7. Tests. Shell test: 610 against a temp `APP_ROOT` holding
+   `etc/uat-proto-deploy.env` exits 1 before any `psql`; with no env file
+   it writes three distinct 64-hex secrets, mode 0640.
+8. Depends on B015. Pairs with B016/B061 (`SERVER_BIND_ADDRESS=127.0.0.1`
+   belongs in the template).
+
+#### Open question for Brandon
+
+A presales host built from this template has the repo-literal role
+password unless its operator changed it. Rotate by hand once (`ALTER
+ROLE` plus the env file), or leave such hosts until cutover?
+Recommendation: rotate now via a short step in doc/320; the literal is
+public.

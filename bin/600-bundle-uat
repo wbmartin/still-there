@@ -5,6 +5,8 @@
 #   3. Web app (vite production build)          -> web-pub.tar.gz
 #   4. Local Postgres dump (plain SQL)          -> db.sql
 #   5. src/api-srv/sql/roles.sql + server-side deploy script
+#   6. etc/uat-api-srv.env.template, names filled  -> api-srv.env.template
+#      (no secrets: 610 generates them on the host, once)
 # Output: dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz, scp'd to $UAT_HOST:/tmp/
 #
 # This is the presales (pre-agreement) quick-deploy path: local build + local DB dump
@@ -28,9 +30,10 @@ PRESALES_ENV="${PRESALES_ENV:-$PROJECT_ROOT/etc/uat-deploy.env}"
 [ -r "$PRESALES_ENV" ] || { echo "[ERROR] $PRESALES_ENV missing or unreadable"; exit 1; }
 # shellcheck disable=SC1090
 source "$PRESALES_ENV"
-for var in APP_NAME UAT_HOST PG_CONTAINER LOCAL_ENV_FILE APP_ROOT SERVICE SVC_USER DB_APP_ROLE; do
+for var in APP_NAME UAT_HOST PG_CONTAINER LOCAL_ENV_FILE APP_ROOT SERVICE SVC_USER DB_APP_ROLE DB_NAME; do
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $PRESALES_ENV"; exit 1; }
 done
+[ -n "${APP_DISPLAY_NAME:-}" ] || { echo "[ERROR] APP_DISPLAY_NAME not set by etc/app.env"; exit 1; }
 case "$LOCAL_ENV_FILE" in /*) ;; *) LOCAL_ENV_FILE="$PROJECT_ROOT/$LOCAL_ENV_FILE" ;; esac
 [ -r "$LOCAL_ENV_FILE" ] || { echo "[ERROR] LOCAL_ENV_FILE not readable: $LOCAL_ENV_FILE"; exit 1; }
 DO_SCP=1; DO_DB=1
@@ -44,6 +47,8 @@ done
 
 # --- preflight: everything the dump step needs, before any build --------------
 ROLES_SQL="$PROJECT_ROOT/src/api-srv/sql/roles.sql"
+ENV_TEMPLATE="$PROJECT_ROOT/etc/uat-api-srv.env.template"
+[ -f "$ENV_TEMPLATE" ] || { echo "[ERROR] $ENV_TEMPLATE missing"; exit 1; }
 LOCAL_DB=""
 if [ "$DO_DB" = 1 ]; then
   LOCAL_DB="$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$LOCAL_ENV_FILE" | head -1)"
@@ -105,6 +110,17 @@ cp "$SCRIPT_DIR/610-deploy-uat" "$STAGE/deploy.sh"; chmod +x "$STAGE/deploy.sh"
 # server-side settings for deploy.sh; $APP_ROOT/etc/deploy.env on the host overrides
 printf 'APP_NAME=%s\nAPP_ROOT=%s\nSERVICE=%s\nSVC_USER=%s\nDB_APP_ROLE=%s\n' \
     "$APP_NAME" "$APP_ROOT" "$SERVICE" "$SVC_USER" "$DB_APP_ROLE" > "$STAGE/deploy.env"
+# names only; the __DB_PASSWORD__/__JWT_SECRET__/__TOTP_KEY__ placeholders
+# stay for 610 to fill on the host (literal replace: no regex, no & expansion)
+DB_APP_ROLE="$DB_APP_ROLE" DB_NAME="$DB_NAME" SERVER_NAME="$SERVICE" \
+APP_DISPLAY_NAME="$APP_DISPLAY_NAME" awk '
+  function put(key,   token, i) {
+    token = "__" key "__"
+    while ((i = index($0, token)) > 0)
+      $0 = substr($0, 1, i - 1) ENVIRON[key] substr($0, i + length(token))
+  }
+  { put("DB_APP_ROLE"); put("DB_NAME"); put("SERVER_NAME")
+    put("APP_DISPLAY_NAME"); print }' "$ENV_TEMPLATE" > "$STAGE/api-srv.env.template"
 {
   echo "bundle=$NAME"
   echo "app=$APP_NAME"

@@ -39,7 +39,8 @@ post-agreement upgrade adds a webhook/registry-driven deploy and a real migrator
     proto-migrate      # installed if built into the bundle (used for --no-db verify only)
   web-pub/             # nginx serves this directly
   etc/
-    api-srv.env        # real secrets — created once by hand, never shipped in the bundle
+    api-srv.env        # written by 610 on the first deploy, secrets generated on the host;
+                       # never overwritten, never in the bundle
     uat-<app>-api.service
   log/                 # nginx only; API logs to journald
 ```
@@ -60,6 +61,7 @@ written in terms of `$APP_SLUG`:
 | `SERVICE` | server | `uat-$APP_SLUG-api` |
 | `SVC_USER` | server | `www-data` |
 | `DB_APP_ROLE` | server | `${APP_SLUG}_app`; owns the restored DB and is the API's login. Must be a role `src/api-srv/sql/roles.sql` creates (`600` checks) |
+| `DB_NAME` | server, first deploy | `uat_${APP_SLUG}_db`; goes into the generated `api-srv.env`, read back from its `DATABASE_URL` after that |
 
 `600` sources it (`PRESALES_ENV=<file>` to use another) and stops, naming the key, if
 anything is missing — there are no inline defaults — and checks the local database,
@@ -70,19 +72,50 @@ into the bundle as `deploy.env`; `610` (`deploy.sh`) sources that and then
 no run. This is the same "scripts carry no per-host values" model the post-sales
 `infra/<host>/` placeholders use (`infra/README.md`).
 
+`600` also fills the names in `etc/uat-api-srv.env.template` (`DB_APP_ROLE`,
+`DB_NAME`, `SERVER_NAME=$SERVICE`, `APP_NAME=$APP_DISPLAY_NAME`) and ships it as
+`api-srv.env.template`. It holds no secrets: `__DB_PASSWORD__`, `__JWT_SECRET__`
+and `__TOTP_KEY__` stay placeholders until `610` fills them on the host.
+
 ## One-time host prep
 
 1. Create `/srv/uat-<app>/{libexec,web-pub,etc,log}`.
-2. Copy `etc/uat-api-srv.env.example` to `/srv/uat-<app>/etc/api-srv.env` and replace
-   every `SERVERONLY` placeholder with a real value (DB password, `JWT_SECRET`,
-   `TOTP_ENCRYPTION_KEY`). This file is never overwritten by a deploy.
+2. Nothing to write for the API env: the first deploy writes
+   `/srv/uat-<app>/etc/api-srv.env` (root:`$SVC_USER` 0640) from the bundle's
+   `api-srv.env.template`, with the DB password, `JWT_SECRET` and
+   `TOTP_ENCRYPTION_KEY` each 32 bytes from `/dev/urandom` (64 hex). They reach
+   the file through `awk`'s environment, never a command line. Later deploys
+   never touch the file; edit it on the host to change a setting.
 3. Point nginx at `web-pub/` for static files and proxy `/api/` to
    `127.0.0.1:$SERVER_PORT/`, stripping the `/api` prefix.
-4. Make sure a `proto_app`-owned Postgres instance is reachable at the
-   `DATABASE_URL` in that env file — `bin/610-deploy-uat` creates the role and database
-   itself on first deploy (see `000-roles.sql` in the bundle).
+4. Install Postgres on the host, listening on `127.0.0.1:5432`.
+   `bin/610-deploy-uat` creates the role and database itself (`000-roles.sql` in
+   the bundle), then on every run sets `$DB_APP_ROLE`'s password to the one in
+   `DATABASE_URL`, fed to `psql` on stdin. The repo literal in `roles.sql` never
+   survives a deploy.
 5. Optional: `/srv/uat-<app>/etc/deploy.env` with any of `APP_NAME`, `APP_ROOT`,
    `SERVICE`, `SVC_USER`, `DB_APP_ROLE` to override what the bundle carries.
+
+### A host set up before 610 generated secrets
+
+Its `api-srv.env` was made by hand and may still carry the repo's public
+`roles.sql` password. Rotate it once, as root, then deploy with `--no-db` (which
+sets the role to the new password and restarts the API):
+
+```bash
+E=/srv/uat-<app>/etc/api-srv.env
+grep -c ':reallygoodPSQLpassword@' "$E"     # 1 = still the repo literal
+( umask 077
+  PW=$(od -An -vtx1 -N32 /dev/urandom | tr -d ' \n') awk '/^DATABASE_URL=/ {
+      i = index($0, "//"); r = substr($0, i + 2)
+      $0 = substr($0, 1, i + 1) substr(r, 1, index(r, ":")) ENVIRON["PW"] substr(r, index(r, "@")) }
+    { print }' "$E" > "$E.new" ) && cat "$E.new" > "$E" && rm "$E.new"
+sudo /tmp/<app>_bundle_YYYYMMDD_hhmm/deploy.sh --no-db
+```
+
+`cat >` keeps the file's owner and mode. Leave `JWT_SECRET` (rotating it signs
+everyone out) and `TOTP_ENCRYPTION_KEY` (rotating it breaks every enrolled
+authenticator) unless they are weak.
 
 ## The two commands
 
@@ -98,9 +131,11 @@ sudo ./<app>_bundle_YYYYMMDD_hhmm/deploy.sh              # replaces DB + binary 
 sudo ./<app>_bundle_YYYYMMDD_hhmm/deploy.sh --no-db      # keep the server's current DB
 ```
 
-`610-deploy-uat` stops the service, optionally drops/recreates/restores the DB from
-`db.sql`, installs `api-srv` (and `proto-migrate`, if it was built into the bundle) into
-`libexec/`, replaces `web-pub/`, starts the service, and polls `/health` for 15s.
+`610-deploy-uat` first refuses a post-sales host (below), writes `api-srv.env` if
+it is missing, then stops the service, optionally drops/recreates/restores the DB
+from `db.sql`, sets the role password from `api-srv.env`, installs `api-srv` (and
+`proto-migrate`, if it was built into the bundle) into `libexec/`, replaces
+`web-pub/`, starts the service, and polls `/health` for 15s.
 
 Because a normal deploy restores the whole local dump, the `schema_migration` table (if
 present) travels with it — there is no separate migrate-apply step. When `--no-db` is
@@ -133,6 +168,8 @@ time. The placeholder for it is already staged under `infra/{uat,prd}/` — see
 migration** — binary name, env file, unit, and above all the database's owner all
 change — and the ordered runbook, with rollback, is
 `doc/330-uat-postsales-cutover.md`; prod is installed fresh, from the same local
-dump, by `doc/331-prd-postsales-install.md`. Once a host has been migrated, never run
-`bin/600`/`bin/610` against it again: `610` would drop the database and hand it back
-to `proto_app`.
+dump, by `doc/331-prd-postsales-install.md`. Once a host has been migrated, `610`
+refuses it: when `$APP_ROOT/etc/*-<app>-deploy.env` exists (the post-sales deploy
+env, e.g. `uat-proto-deploy.env`) it exits 1 before touching anything, since it
+would drop the database and hand it back to `proto_app`. `etc/deploy.env`, the
+presales override, does not match.

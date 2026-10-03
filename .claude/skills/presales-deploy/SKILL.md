@@ -9,14 +9,15 @@ Two scripts do the work; this skill is the procedure around them.
 
 | | |
 |---|---|
-| `bin/600-bundle-uat` | local: build `api-srv` (static linux/amd64) + `proto-migrate` (if `src/api-srv/cmd/migrate` exists) + `web-pub.tar.gz` + `db.sql` (pg_dump run *inside* the `$PG_CONTAINER` container) + `deploy.env` → `dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz` → scp to `$UAT_HOST:/tmp/` |
-| `bin/610-deploy-uat` | server, shipped in the bundle as `deploy.sh`: stop `$SERVICE` → drop/recreate the UAT DB from `db.sql` → replace `$APP_ROOT/libexec/api-srv` (+ `proto-migrate`) → replace `$APP_ROOT/web-pub` → start → poll `/health` |
+| `bin/600-bundle-uat` | local: build `api-srv` (static linux/amd64) + `proto-migrate` (if `src/api-srv/cmd/migrate` exists) + `web-pub.tar.gz` + `db.sql` (pg_dump run *inside* the `$PG_CONTAINER` container) + `deploy.env` + `api-srv.env.template` (names filled, no secrets) → `dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz` → scp to `$UAT_HOST:/tmp/` |
+| `bin/610-deploy-uat` | server, shipped in the bundle as `deploy.sh`: refuse a post-sales host → first run only, write `etc/api-srv.env` with secrets generated on the host → stop `$SERVICE` → drop/recreate the UAT DB from `db.sql` → set the role password from `api-srv.env` → replace `$APP_ROOT/libexec/api-srv` (+ `proto-migrate`) → replace `$APP_ROOT/web-pub` → start → poll `/health` |
 
 **All settings come from `etc/uat-deploy.env`** (committed, no secrets), with the
 app's identity from `etc/app.env` (`APP_SLUG=proto`, sourced first): `APP_NAME=$APP_SLUG`,
 `UAT_HOST=uat-server` (ssh alias), `PG_CONTAINER=loc-postgres`,
 `LOCAL_ENV_FILE=etc/loc-api-srv.env`, and the server-side `APP_ROOT=/srv/uat-$APP_SLUG`,
-`SERVICE=uat-$APP_SLUG-api`, `SVC_USER=www-data`, `DB_APP_ROLE=${APP_SLUG}_app`. `600` sources it (`PRESALES_ENV=<file>`
+`SERVICE=uat-$APP_SLUG-api`, `SVC_USER=www-data`, `DB_APP_ROLE=${APP_SLUG}_app`, and
+`DB_NAME=uat_${APP_SLUG}_db` (first deploy only). `600` sources it (`PRESALES_ENV=<file>`
 to use another) and dies naming any missing key; there are no inline defaults and no
 per-variable env overrides. `600` writes the server-side keys into the bundle as
 `deploy.env`; `610` sources that, then `$APP_ROOT/etc/deploy.env` if the host keeps one
@@ -57,10 +58,15 @@ ssh -o BatchMode=yes "$UAT_HOST" '
 systemctl is-active '"$SERVICE"'; ps -o pid,user,etime,cmd -C api-srv | tail -1
 stat -c "%s %y %n" '"$APP_ROOT"'/libexec/api-srv
 URL=$(sed -nE "s/^DATABASE_URL=(.*)/\1/p" '"$APP_ROOT"'/etc/api-srv.env)
-psql "$URL" -Atc "select (select count(*) from information_schema.tables where table_schema='"'"'public'"'"') tables,(select count(*) from app_user) app_users,(select count(*) from app_user_group) app_user_groups,(select count(*) from example) examples,(select pg_size_pretty(pg_database_size(current_database())))"
+PGPASSWORD=$(echo "$URL" | sed -E "s#^postgres://[^:]+:([^@]*)@.*#\1#") \
+psql "$(echo "$URL" | sed -E "s#^(postgres://[^:]+):[^@]*@#\1@#")" -Atc "select (select count(*) from information_schema.tables where table_schema='"'"'public'"'"') tables,(select count(*) from app_user) app_users,(select count(*) from app_user_group) app_user_groups,(select count(*) from example) examples,(select pg_size_pretty(pg_database_size(current_database())))"
 curl -s -m 3 http://127.0.0.1:${SERVER_PORT:-8088}/health; echo
 find '"$APP_ROOT"'/web-pub -name "._*" | wc -l'
 ```
+
+The password goes to `psql` as `PGPASSWORD`, not on its command line (`ps` shows
+argv). `api-srv.env` is root:`$SVC_USER` 0640: if the ssh user cannot read it, the DB
+row is the operator's to check.
 
 Pass = service `active` as `$SVC_USER`, binary mtime ≈ deploy time, `/health` returns
 200, DB counts plausible, `0` junk files. Report as a short table. Claude cannot log in
@@ -69,15 +75,23 @@ to the UI (no typing passwords) — the UI eyeball is the operator's.
 ## Server facts
 
 - App root `$APP_ROOT` (`/srv/uat-${APP_NAME}`) — `libexec/api-srv` (+ `libexec/proto-migrate`
-  if built), `web-pub/` (owned by `$SVC_USER`), `etc/api-srv.env` (DB URL, `SERVER_PORT`;
-  **never overwritten by deploy**), `etc/uat-${APP_NAME}-api.service` (symlinked into
+  if built), `web-pub/` (owned by `$SVC_USER`), `etc/api-srv.env` (DB URL, `SERVER_PORT`,
+  secrets; root:`$SVC_USER` 0640; written once by the first deploy from the bundle's
+  template with secrets from `/dev/urandom`, **never overwritten by deploy**, never in a
+  bundle), `etc/uat-${APP_NAME}-api.service` (symlinked into
   `/etc/systemd/system`), `log/` (nginx only; API logs to journald —
   `sudo journalctl -u uat-${APP_NAME}-api -f`).
 - DB role `$DB_APP_ROLE` (`proto_app`) owns the database; `db_reader`/`db_writer`
   grant roles. `000-roles.sql` in the bundle is the repo's `src/api-srv/sql/roles.sql`
   verbatim (idempotent); `600` refuses to bundle if it is missing or does not name
-  `$DB_APP_ROLE`. Never run 600/610 against a host that has been migrated to the
-  `infra/` path — see doc/330-uat-postsales-cutover.md.
+  `$DB_APP_ROLE`. Every deploy then sets the role's password to the one in
+  `api-srv.env`'s `DATABASE_URL` (via `psql` stdin), so the repo literal never holds.
+  A host set up before this may still carry the literal: rotate it once
+  (doc/320, "A host set up before 610 generated secrets").
+- `deploy.sh` exits 1 with `[REFUSED]` on a host migrated to the `infra/` path
+  (`$APP_ROOT/etc/*-${APP_NAME}-deploy.env` exists) — see
+  doc/330-uat-postsales-cutover.md. If the operator reports that, stop: `UAT_HOST`
+  points at a post-sales host.
 - Previous binaries/web kept as `.prev` (`api-srv.prev`, `proto-migrate.prev`,
   `web-pub.prev`) for a quick manual rollback — see doc/320-presales-uat-deploy.md.
 - A normal deploy restores the whole local dump, so `schema_migration` (if present)
