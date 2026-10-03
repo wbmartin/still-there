@@ -308,3 +308,64 @@ func TestAuthHandler_CompletedLoginClearsTheUserCounterOnly(t *testing.T) {
 		})
 	}
 }
+
+// A locked address or name is answered 429 before the repository and before
+// Argon2id: the lockout is /auth's stand-in for the rate limit
+// (route_check_contract_test.go).
+func TestAuthHandler_LockoutAnswersBeforeTheRepository(t *testing.T) {
+	for _, lockKey := range []string{
+		"loginlock-ip-192.0.2.30", "loginlock-user-alice",
+	} {
+		t.Run(lockKey, func(t *testing.T) {
+			s := lockoutServices(t)
+			require.NoError(t, s.KV.Set(lockKey, "1", "5min"))
+			repo := new(MockUserRepository) // unprimed: a lookup panics
+			w := authAttempt(t, AuthHandler(s, repo),
+				"192.0.2.30:1", "alice", "right")
+			assert.Equal(t, http.StatusTooManyRequests, w.Code)
+			assert.Contains(t, w.Body.String(), "temporarily locked")
+			assert.Empty(t, w.Result().Cookies())
+		})
+	}
+}
+
+// The wrong-password answer is pinned byte for byte, and a login that is
+// not active (invited, B035; blocked, B034) gets exactly that answer with
+// the right password, counted, with no session. The unknown-name path (B007)
+// is proved equal to it in
+// TestAuthHandler_UnknownLoginIsCountedLikeABadPassword.
+func TestAuthHandler_WrongPasswordAnswer(t *testing.T) {
+	hash, err := auth.HashPassword("right")
+	require.NoError(t, err)
+	testCaseList := []struct {
+		name, status, password string
+	}{
+		{"active login, wrong password", model.AccountStatusActive, "wrong"},
+		{"invited login, right password", model.AccountStatusInvited,
+			"right"},
+		{"blocked login, right password", model.AccountStatusBlocked,
+			"right"},
+	}
+	for _, testCase := range testCaseList {
+		t.Run(testCase.name, func(t *testing.T) {
+			s := lockoutServices(t)
+			repo := new(MockUserRepository)
+			repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+				Return(&model.AppUserModel{
+					AppUserID: 1, UserName: "alice", PwHash: hash,
+					SecurityContext: 2, MFAExempt: true,
+					AccountStatus: testCase.status,
+				}, nil)
+			w := authAttempt(t, AuthHandler(s, repo),
+				"192.0.2.31:1", "alice", testCase.password)
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.Equal(t, "{\"error\":\"Invalid credentials\"}\n",
+				w.Body.String())
+			assert.Empty(t, w.Result().Cookies())
+			count, err := s.KV.Get("loginfail-user-alice")
+			require.NoError(t, err)
+			assert.Equal(t, "1", count, "the failure is counted")
+			repo.AssertExpectations(t) // and no grant lookup
+		})
+	}
+}

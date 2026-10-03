@@ -3,12 +3,19 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"github.com/wbmartin/starter-api/internal/app"
+	"github.com/wbmartin/starter-api/internal/auth"
 	"github.com/wbmartin/starter-api/internal/model"
+	"github.com/wbmartin/starter-api/internal/repository"
 )
 
 // Mock repositories for testing
@@ -161,6 +168,20 @@ func (m *MockUserRepository) GetGrantsForGroups(
 ) (map[int][]int, error) {
 	args := m.Called(ctx, groupIDs)
 	return args.Get(0).(map[int][]int), args.Error(1)
+}
+
+// UpdateUserAccountStatus makes the mock a UserBlockRepository too.
+func (m *MockUserRepository) UpdateUserAccountStatus(
+	ctx context.Context,
+	userID int,
+	accountStatus string,
+	expectedUpdateTS float64,
+	updateUserID int,
+	securityContext int,
+) (float64, error) {
+	args := m.Called(ctx, userID, accountStatus, expectedUpdateTS,
+		updateUserID, securityContext)
+	return args.Get(0).(float64), args.Error(1)
 }
 
 type MockAppUserGroupRepository struct {
@@ -385,461 +406,261 @@ func TestValidateUsersSecurityContext(t *testing.T) {
 	}
 }
 
+// The user-admin routes driven through the handler (B039; these replace
+// tests that called the mock directly). The admin is alice, login 7 of the
+// test tenant (2): the tenant and actor written are the JWT's, never the
+// body's. Each route's check sequence is proved in
+// route_check_contract_test.go; an unexpected repository call panics.
+
+const userAdminTenant = 2
+
+// userAdminRequest is <method> target as alice holding grant.
+func userAdminRequest(
+	t *testing.T,
+	s *app.Services,
+	method, target, body string,
+	grant int,
+) *http.Request {
+	t.Helper()
+	token, err := auth.GenerateJWT(
+		"Test", "alice", 7, "session-adm", userAdminTenant, []int{grant},
+		s.Config.JWTSecret, s.Config.JWTSessionExpireHours,
+	)
+	require.NoError(t, err)
+	return sessionRequest(method, target, body, token, "session-adm")
+}
+
+// bobRow is the target login's row as the repository returns it.
+func bobRow() []*model.AppUserModel {
+	return []*model.AppUserModel{{AppUserID: 9, UserName: "bob",
+		SecurityContext: userAdminTenant}}
+}
+
 func TestCreateUser(t *testing.T) {
-	tests := []struct {
-		name           string
-		inputUser      model.AppUserModel
-		mockResult     *model.AppUserModel
-		mockError      error
-		expectedError  bool
-		expectedUserID int
-		expectCall     bool
-	}{
-		{
-			name: "successful user creation",
-			inputUser: model.AppUserModel{
-				UserName:        "testuser",
-				FirstName:       "Test",
-				LastName:        "User",
-				Email:           "test@example.com",
-				SecurityContext: 1,
-			},
-			mockResult: &model.AppUserModel{
-				AppUserID:       123,
-				UserName:        "testuser",
-				FirstName:       "Test",
-				LastName:        "User",
-				Email:           "test@example.com",
-				SecurityContext: 1,
-			},
-			mockError:      nil,
-			expectedError:  false,
-			expectedUserID: 123,
-			expectCall:     true,
-		},
-		{
-			name: "repository error - duplicate user",
-			inputUser: model.AppUserModel{
-				UserName:  "existinguser",
-				FirstName: "Existing",
-				LastName:  "User",
-				Email:     "existing@example.com",
-			},
-			mockResult:     nil,
-			mockError:      assert.AnError, // Simulates unique constraint violation
-			expectedError:  true,
-			expectedUserID: 0,
-			expectCall:     true,
-		},
-		{
-			name: "database connection error",
-			inputUser: model.AppUserModel{
-				UserName:  "testuser",
-				FirstName: "Test",
-				LastName:  "User",
-				Email:     "test@example.com",
-			},
-			mockResult:     nil,
-			mockError:      assert.AnError, // Simulates connection failure
-			expectedError:  true,
-			expectedUserID: 0,
-			expectCall:     true,
-		},
-		{
-			name: "user with empty required fields",
-			inputUser: model.AppUserModel{
-				UserName:  "", // Empty username
-				FirstName: "Test",
-				LastName:  "User",
-				Email:     "test@example.com",
-			},
-			mockResult:     nil,
-			mockError:      nil,
-			expectedError:  false, // Repository would handle validation, but we're testing the interface
-			expectedUserID: 0,
-			expectCall:     true,
-		},
-		{
-			name: "user with special characters in username",
-			inputUser: model.AppUserModel{
-				UserName:  "test_user@123",
-				FirstName: "Test",
-				LastName:  "User",
-				Email:     "test@example.com",
-			},
-			mockResult: &model.AppUserModel{
-				AppUserID:       124,
-				UserName:        "test_user@123",
-				FirstName:       "Test",
-				LastName:        "User",
-				Email:           "test@example.com",
-				SecurityContext: 1,
-			},
-			mockError:      nil,
-			expectedError:  false,
-			expectedUserID: 124,
-			expectCall:     true,
-		},
+	const validBody = `{"userName":"bob","password":"long-enough-1",` +
+		`"firstName":"Bob","lastName":"B","email":"b@example.com",` +
+		`"securityContext":1}`
+	createUser := func(
+		t *testing.T, repo *MockUserRepository, body string,
+	) *httptest.ResponseRecorder {
+		t.Helper()
+		s := testServices(t)
+		handler := NewUserHandler(s, repo, new(MockAppUserGroupRepository))
+		w := httptest.NewRecorder()
+		handler.CreateUser(w, userAdminRequest(t, s, http.MethodPost,
+			"/user", body, model.GrantUserCreate))
+		repo.AssertExpectations(t)
+		return w
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockUserRepo := new(MockUserRepository)
-			if tt.expectCall {
-				mockUserRepo.On("CreateUser", mock.Anything, &tt.inputUser, mock.AnythingOfType("int")).
-					Return(tt.mockResult, tt.mockError)
-			}
+	t.Run("valid → 201, the JWT's tenant and login", func(t *testing.T) {
+		repo := new(MockUserRepository)
+		repo.On("CreateUser", mock.Anything,
+			mock.MatchedBy(func(user *model.AppUserModel) bool {
+				return user.UserName == "bob" &&
+					user.SecurityContext == userAdminTenant &&
+					user.CreateUserID == 7 && user.UpdateUserID == 7
+			}), userAdminTenant).
+			Return(&model.AppUserModel{AppUserID: 51, UserName: "bob",
+				SecurityContext: userAdminTenant}, nil)
+		w := createUser(t, repo, validBody)
+		assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), `"appUserId":51`)
+	})
 
-			handler := &UserHandler{
-				userRepo: mockUserRepo,
-			}
+	refusalList := []struct{ name, body string }{
+		{"malformed JSON", `{`},
+		{"no email", `{"userName":"bob","password":"long-enough-1",` +
+			`"firstName":"Bob","lastName":"B"}`},
+		{"password under 8 characters", `{"userName":"bob",` +
+			`"password":"short","firstName":"Bob","lastName":"B",` +
+			`"email":"b@example.com"}`},
+	}
+	for _, refusal := range refusalList {
+		t.Run(refusal.name+" → 400, repository untouched",
+			func(t *testing.T) {
+				w := createUser(t, new(MockUserRepository), refusal.body)
+				assert.Equal(t, http.StatusBadRequest, w.Code,
+					w.Body.String())
+			})
+	}
 
-			// Simulate HTTP request for context
-			req := httptest.NewRequest("POST", "/user", nil)
-			result, err := handler.userRepo.CreateUser(
-				req.Context(),
-				&tt.inputUser,
-				1,
-			)
+	t.Run("duplicate name → 409", func(t *testing.T) {
+		repo := new(MockUserRepository)
+		repo.On("CreateUser", mock.Anything, mock.Anything,
+			userAdminTenant).
+			Return((*model.AppUserModel)(nil),
+				fmt.Errorf("insert: %w", repository.ErrDuplicate))
+		w := createUser(t, repo, validBody)
+		assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	})
 
-			if tt.expectedError {
-				assert.Error(t, err)
-				if tt.mockResult == nil {
-					assert.Nil(t, result)
-				}
-			} else {
-				assert.NoError(t, err)
-				if tt.expectedUserID > 0 {
-					assert.NotNil(t, result)
-					assert.Equal(t, tt.expectedUserID, result.AppUserID)
-					assert.Equal(t, tt.inputUser.UserName, result.UserName)
-				}
-			}
-			if tt.expectCall {
-				mockUserRepo.AssertExpectations(t)
-			}
+	t.Run("other repository error → 500 without its text",
+		func(t *testing.T) {
+			repo := new(MockUserRepository)
+			repo.On("CreateUser", mock.Anything, mock.Anything,
+				userAdminTenant).
+				Return((*model.AppUserModel)(nil), errors.New("conn reset"))
+			w := createUser(t, repo, validBody)
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
+			assert.NotContains(t, w.Body.String(), "conn reset")
 		})
-	}
 }
 
 func TestUpdateUser(t *testing.T) {
-	tests := []struct {
-		name           string
-		inputUser      model.AppUserModel
-		clientUpdateTS float64
-		mockError      error
-		expectedError  bool
-		expectCall     bool
-	}{
-		{
-			name: "successful user update",
-			inputUser: model.AppUserModel{
-				AppUserID:       123,
-				UserName:        "testuser",
-				FirstName:       "Updated",
-				LastName:        "User",
-				Email:           "updated@example.com",
-				SecurityContext: 1,
-			},
-			clientUpdateTS: 1234567890.123,
-			mockError:      nil,
-			expectedError:  false,
-			expectCall:     true,
-		},
-		{
-			name: "repository error - concurrent modification",
-			inputUser: model.AppUserModel{
-				AppUserID: 123,
-				UserName:  "testuser",
-				FirstName: "Updated",
-			},
-			clientUpdateTS: 1234567890.123,
-			mockError:      assert.AnError, // Simulates concurrent update conflict
-			expectedError:  true,
-			expectCall:     true,
-		},
-		{
-			name: "update non-existent user",
-			inputUser: model.AppUserModel{
-				AppUserID: 999,
-				UserName:  "missinguser",
-			},
-			clientUpdateTS: 1234567890.123,
-			mockError:      assert.AnError, // Simulates user not found
-			expectedError:  true,
-			expectCall:     true,
-		},
-		{
-			name: "update with stale timestamp",
-			inputUser: model.AppUserModel{
-				AppUserID: 123,
-				UserName:  "testuser",
-			},
-			clientUpdateTS: 1234567800.000, // Old timestamp
-			mockError:      assert.AnError, // Simulates optimistic locking failure
-			expectedError:  true,
-			expectCall:     true,
-		},
+	const validBody = `{"appUserId":9,"userName":"bob","firstName":"Bob",` +
+		`"securityContext":1,"updateTs":12.5}`
+	updateUser := func(
+		t *testing.T, repo *MockUserRepository, body string,
+	) *httptest.ResponseRecorder {
+		t.Helper()
+		s := testServices(t)
+		handler := NewUserHandler(s, repo, new(MockAppUserGroupRepository))
+		w := httptest.NewRecorder()
+		handler.UpdateUser(w, userAdminRequest(t, s, http.MethodPut,
+			"/user", body, model.GrantUserUpdate))
+		repo.AssertExpectations(t)
+		return w
+	}
+	primedRepo := func(updateErr error) *MockUserRepository {
+		repo := new(MockUserRepository)
+		repo.On("RetrieveUserList", mock.Anything, userAdminTenant,
+			[]int{9}, float64(0)).Return(bobRow(), nil)
+		repo.On("UpdateUser", mock.Anything,
+			mock.MatchedBy(func(user *model.AppUserModel) bool {
+				return user.AppUserID == 9 &&
+					user.SecurityContext == userAdminTenant &&
+					user.UpdateUserID == 7 && user.UpdateTS != 12.5
+			}), 12.5, userAdminTenant).Return(updateErr)
+		return repo
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockUserRepo := new(MockUserRepository)
-			if tt.expectCall {
-				mockUserRepo.On("UpdateUser", mock.Anything, &tt.inputUser, tt.clientUpdateTS, mock.AnythingOfType("int")).
-					Return(tt.mockError)
-			}
+	t.Run("valid → 200; the client's updateTs is the lock, the JWT's "+
+		"tenant and login are written", func(t *testing.T) {
+		w := updateUser(t, primedRepo(nil), validBody)
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	})
 
-			handler := &UserHandler{
-				userRepo: mockUserRepo,
-			}
+	t.Run("stale updateTs → 409", func(t *testing.T) {
+		w := updateUser(t, primedRepo(
+			fmt.Errorf("update: %w", repository.ErrConflict)), validBody)
+		assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	})
 
-			// Simulate HTTP request for context
-			req := httptest.NewRequest("PUT", "/user", nil)
-			err := handler.userRepo.UpdateUser(
-				req.Context(),
-				&tt.inputUser,
-				tt.clientUpdateTS,
-				1,
-			)
-
-			if tt.expectedError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-			if tt.expectCall {
-				mockUserRepo.AssertExpectations(t)
-			}
-		})
+	refusalList := []struct{ name, body string }{
+		{"malformed JSON", `{`},
+		{"no appUserId", `{"userName":"bob","updateTs":12.5}`},
+		{"no userName", `{"appUserId":9,"updateTs":12.5}`},
+	}
+	for _, refusal := range refusalList {
+		t.Run(refusal.name+" → 400, repository untouched",
+			func(t *testing.T) {
+				w := updateUser(t, new(MockUserRepository), refusal.body)
+				assert.Equal(t, http.StatusBadRequest, w.Code,
+					w.Body.String())
+			})
 	}
 }
 
 func TestDeleteUser(t *testing.T) {
-	tests := []struct {
-		name            string
-		userID          int
-		securityContext int
-		updateTS        float64
-		now             float64
-		updateUserID    int
-		mockResult      int
-		mockError       error
-		expectedError   bool
-		expectedID      int
-		expectCall      bool
-	}{
-		{
-			name:            "successful user deletion",
-			userID:          123,
-			securityContext: 1,
-			updateTS:        1234567890.123,
-			now:             1234567891.456,
-			updateUserID:    1,
-			mockResult:      123,
-			mockError:       nil,
-			expectedError:   false,
-			expectedID:      123,
-			expectCall:      true,
-		},
-		{
-			name:            "delete non-existent user",
-			userID:          999,
-			securityContext: 1,
-			updateTS:        1234567890.123,
-			now:             1234567891.456,
-			updateUserID:    1,
-			mockResult:      0,
-			mockError:       assert.AnError, // Simulates user not found
-			expectedError:   true,
-			expectedID:      0,
-			expectCall:      true,
-		},
-		{
-			name:            "concurrent deletion conflict",
-			userID:          123,
-			securityContext: 1,
-			updateTS:        1234567890.123,
-			now:             1234567891.456,
-			updateUserID:    1,
-			mockResult:      0,
-			mockError:       assert.AnError, // Simulates already deleted or concurrent modification
-			expectedError:   true,
-			expectedID:      0,
-			expectCall:      true,
-		},
-		{
-			name:            "delete with wrong security context",
-			userID:          123,
-			securityContext: 2, // Wrong context
-			updateTS:        1234567890.123,
-			now:             1234567891.456,
-			updateUserID:    1,
-			mockResult:      0,
-			mockError:       assert.AnError, // Simulates security context violation
-			expectedError:   true,
-			expectedID:      0,
-			expectCall:      true,
-		},
+	deleteUser := func(
+		t *testing.T, repo *MockUserRepository, target string,
+	) *httptest.ResponseRecorder {
+		t.Helper()
+		s := testServices(t)
+		handler := NewUserHandler(s, repo, new(MockAppUserGroupRepository))
+		w := httptest.NewRecorder()
+		handler.DeleteUser(w, userAdminRequest(t, s, http.MethodDelete,
+			target, "", model.GrantUserDelete))
+		repo.AssertExpectations(t)
+		return w
+	}
+	primedRepo := func(deletedID int, deleteErr error) *MockUserRepository {
+		repo := new(MockUserRepository)
+		repo.On("RetrieveUserList", mock.Anything, userAdminTenant,
+			[]int{9}, float64(0)).Return(bobRow(), nil)
+		repo.On("DeleteUser", mock.Anything, 9, userAdminTenant, 12.5,
+			mock.AnythingOfType("float64"), 7).Return(deletedID, deleteErr)
+		return repo
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockUserRepo := new(MockUserRepository)
-			if tt.expectCall {
-				mockUserRepo.On("DeleteUser", mock.Anything, tt.userID, tt.securityContext, tt.updateTS, tt.now, tt.updateUserID).
-					Return(tt.mockResult, tt.mockError)
-			}
+	t.Run("valid → 200, deleted in the JWT's tenant by its login",
+		func(t *testing.T) {
+			w := deleteUser(t, primedRepo(9, nil),
+				"/user?appUserId=9&updateTs=12.5")
+			assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), `"appUserId":9`)
+		})
 
-			handler := &UserHandler{
-				userRepo: mockUserRepo,
-			}
+	t.Run("no such login in the tenant → 404", func(t *testing.T) {
+		w := deleteUser(t, primedRepo(0,
+			fmt.Errorf("delete: %w", repository.ErrNotFound)),
+			"/user?appUserId=9&updateTs=12.5")
+		assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+	})
 
-			// Simulate HTTP request for context
-			req := httptest.NewRequest("DELETE", "/user", nil)
-			result, err := handler.userRepo.DeleteUser(
-				req.Context(),
-				tt.userID,
-				tt.securityContext,
-				tt.updateTS,
-				tt.now,
-				tt.updateUserID,
-			)
-
-			if tt.expectedError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedID, result)
-			}
-			if tt.expectCall {
-				mockUserRepo.AssertExpectations(t)
-			}
+	for _, target := range []string{
+		"/user?updateTs=12.5", "/user?appUserId=9", "/user?appUserId=x",
+	} {
+		t.Run(target+" → 400, repository untouched", func(t *testing.T) {
+			w := deleteUser(t, new(MockUserRepository), target)
+			assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 		})
 	}
 }
 
 func TestRetrieveUserList(t *testing.T) {
-	tests := []struct {
-		name            string
-		securityContext int
-		idList          []int
-		updateTS        float64
-		mockResult      []*model.AppUserModel
-		mockError       error
-		expectedError   bool
-		expectedCount   int
-		expectCall      bool
-	}{
-		{
-			name:            "successful user list retrieval",
-			securityContext: 1,
-			idList:          []int{1, 2, 3},
-			updateTS:        0,
-			mockResult: []*model.AppUserModel{
-				{AppUserID: 1, UserName: "user1", SecurityContext: 1},
-				{AppUserID: 2, UserName: "user2", SecurityContext: 1},
-				{AppUserID: 3, UserName: "user3", SecurityContext: 1},
-			},
-			mockError:     nil,
-			expectedError: false,
-			expectedCount: 3,
-			expectCall:    true,
-		},
-		{
-			name:            "retrieve empty user list",
-			securityContext: 1,
-			idList:          []int{},
-			updateTS:        0,
-			mockResult:      []*model.AppUserModel{},
-			mockError:       nil,
-			expectedError:   false,
-			expectedCount:   0,
-			expectCall:      true,
-		},
-		{
-			name:            "partial user retrieval - some not found",
-			securityContext: 1,
-			idList:          []int{1, 999, 3}, // 999 doesn't exist
-			updateTS:        0,
-			mockResult: []*model.AppUserModel{
-				{AppUserID: 1, UserName: "user1", SecurityContext: 1},
-				{AppUserID: 3, UserName: "user3", SecurityContext: 1},
-			},
-			mockError:     nil,
-			expectedError: false,
-			expectedCount: 2,
-			expectCall:    true,
-		},
-		{
-			name:            "database connection error",
-			securityContext: 1,
-			idList:          []int{1, 2},
-			updateTS:        0,
-			mockResult:      nil,
-			mockError:       assert.AnError,
-			expectedError:   true,
-			expectedCount:   0,
-			expectCall:      true,
-		},
-		{
-			name:            "filtered by update timestamp",
-			securityContext: 1,
-			idList:          []int{1, 2},
-			updateTS:        1234567890.123,
-			mockResult: []*model.AppUserModel{
-				{
-					AppUserID:       1,
-					UserName:        "user1",
-					SecurityContext: 1,
-					UpdateTS:        1234567891.456,
-				},
-			},
-			mockError:     nil,
-			expectedError: false,
-			expectedCount: 1,
-			expectCall:    true,
-		},
+	retrieveUserList := func(
+		t *testing.T, repo *MockUserRepository, target string,
+	) *httptest.ResponseRecorder {
+		t.Helper()
+		s := testServices(t)
+		handler := NewUserHandler(s, repo, new(MockAppUserGroupRepository))
+		w := httptest.NewRecorder()
+		handler.RetrieveUserList(w, userAdminRequest(t, s, http.MethodGet,
+			target, "", model.GrantUserRead))
+		repo.AssertExpectations(t)
+		return w
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockUserRepo := new(MockUserRepository)
-			if tt.expectCall {
-				mockUserRepo.On("RetrieveUserList", mock.Anything, tt.securityContext, tt.idList, tt.updateTS).
-					Return(tt.mockResult, tt.mockError)
-			}
+	t.Run("id list and afterUpdateTs reach the repository with the "+
+		"JWT's tenant → 200", func(t *testing.T) {
+		repo := new(MockUserRepository)
+		repo.On("RetrieveUserList", mock.Anything, userAdminTenant,
+			[]int{1, 9}, 5.5).Return(bobRow(), nil)
+		w := retrieveUserList(t, repo,
+			"/userList?appUserIdList=1,9&afterUpdateTs=5.5")
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), `"userName":"bob"`)
+	})
 
-			handler := &UserHandler{
-				userRepo: mockUserRepo,
-			}
-
-			// Simulate HTTP request for context
-			req := httptest.NewRequest("GET", "/userList", nil)
-			result, err := handler.userRepo.RetrieveUserList(
-				req.Context(),
-				tt.securityContext,
-				tt.idList,
-				tt.updateTS,
-			)
-
-			if tt.expectedError {
-				assert.Error(t, err)
-				assert.Nil(t, result)
-			} else {
-				assert.NoError(t, err)
-				assert.Len(t, result, tt.expectedCount)
-				if tt.expectedCount > 0 {
-					for _, user := range result {
-						assert.Equal(t, tt.securityContext, user.SecurityContext)
-					}
-				}
-			}
-			if tt.expectCall {
-				mockUserRepo.AssertExpectations(t)
-			}
+	t.Run("nothing found → 200 with an empty list, not null",
+		func(t *testing.T) {
+			repo := new(MockUserRepository)
+			repo.On("RetrieveUserList", mock.Anything, userAdminTenant,
+				[]int{9}, float64(0)).
+				Return(([]*model.AppUserModel)(nil), nil)
+			w := retrieveUserList(t, repo, "/userList?appUserIdList=9")
+			assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			assert.JSONEq(t, `{"data":[]}`, w.Body.String())
 		})
-	}
+
+	t.Run("malformed id list → 400, repository untouched",
+		func(t *testing.T) {
+			w := retrieveUserList(t, new(MockUserRepository),
+				"/userList?appUserIdList=1,x")
+			assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+		})
+
+	t.Run("repository error → 500 without its text", func(t *testing.T) {
+		repo := new(MockUserRepository)
+		repo.On("RetrieveUserList", mock.Anything, userAdminTenant,
+			[]int{9}, float64(0)).
+			Return(([]*model.AppUserModel)(nil), errors.New("conn reset"))
+		w := retrieveUserList(t, repo, "/userList?appUserIdList=9")
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.NotContains(t, w.Body.String(), "conn reset")
+	})
 }
 
 // TestRetrieveUserList_OmitsSecrets proves the /userList body — the

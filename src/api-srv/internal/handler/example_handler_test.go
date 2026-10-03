@@ -140,6 +140,18 @@ func TestExampleHandler_CheckSequence(t *testing.T) {
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
+			name: "rate limit spent → 429 from CheckRateLimitAndUserBlock, " +
+				"before CSRF and authorization",
+			request: func(t *testing.T, s *app.Services) *http.Request {
+				s.Config.MaxUserReqPerMin = 0
+				// no CSRF header, no grant: the limit must be what answers
+				r := signedRequest(t, s, http.MethodDelete, nil)
+				r.Header.Del("X-CSRF-Token")
+				return r
+			},
+			wantStatus: http.StatusTooManyRequests,
+		},
+		{
 			name: "DELETE with valid JWT but no CSRF header → 403 from CheckCSRF",
 			request: func(t *testing.T, s *app.Services) *http.Request {
 				r := signedRequest(t, s, http.MethodDelete, []int{model.GrantExampleDelete})

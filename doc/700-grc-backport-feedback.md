@@ -242,124 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B039 — Go handler tests that prove the check contract
-
-- **Priority:** P2  **Area:** tests, go-api
-- **GRC:** `src/internal/handler/auth_handler_test.go:49-546`; `user_route_check_sequence_test.go:115-275`; `own_profile_check_sequence_test.go:155-454`; `map_repo_error_test.go:16-125`; `session_revocation_test.go:14-37`; `user_mfa_handler_test.go:235-752`; `user_block_handler_test.go`; `src/internal/security/client_ip_test.go:9-82`; `src/internal/model/app_user_model_test.go:12-65`; `auth_handler.go:182-186,633-636`   **PROTO:** new `src/api-srv/internal/handler/auth_handler_test.go`; `user_mfa_handler_test.go:47-169`; `user_handler_test.go`; `profile_handler_test.go`; `internal/security/`; `internal/model/`
-- **Ticket:** RG0004 `d761d42`; RG0003 `eb4340b`; RG0014; RG0042; RG0043
-- **What:** Fakes that panic if reached prove each route runs JWT, rate, CSRF,
-authz, gate before the repository, plus lockout, temp token, 9020, 409,
-refresh id, logoff, no secrets serialized. PROTO has no auth handler test.
-- **Port notes:** Port beside each fix; handlers take `UserRepositoryInterface`
-(GRC :182-186, :633-636).
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Each handler must run JWT, rate limit, CSRF, authorization and
-`CheckAllChecksComplete` before it reads the body or the repository. Only
-a test proves the order. PROTO proves it for two handlers, not the login
-layer. Quality gap: no known hole, but a login-layer regression ships
-green. PROTO paths are under `src/api-srv/internal/`.
-
-**(1) The auth handlers have no test at all.** There is no
-`handler/auth_handler_test.go`. `AuthHandler`, `RefreshHandler`,
-`ChangeSecurityContextHandler` and `ChangeOwnPasswordHandler` take the
-concrete repository, so a test cannot swap in a fake:
-
-```go
-// handler/auth_handler.go:112-114 (same at :383-385, :504-506, :711-713)
-func AuthHandler(
-	appServices *app.Services,
-	userRepo *repository.UserRepository,
-```
-
-A forgotten `Skip*` in `AuthHandler` (`:132-137`) would 500 every login;
-a call moved after the body read in `ChangeSecurityContextHandler` (which
-B005 already found skipping CSRF at `:530`) would pass CI.
-
-**(2) The user-admin tests never call a handler.** `TestCreateUser`,
-`TestUpdateUser`, `TestDeleteUser` and `TestRetrieveUserList` in
-`handler/user_handler_test.go:380,517,610,714` set a mock expectation and
-then call the mock directly:
-
-```go
-// handler/user_handler_test.go:691-692
-req := httptest.NewRequest("DELETE", "/user", nil)
-result, err := handler.userRepo.DeleteUser(
-```
-
-They test testify, not `UserHandler`. Nothing proves `/userList` or
-`DELETE /user` refuse before the repository.
-
-**Already in PROTO.** `handler/example_handler_test.go:127` and
-`handler/profile_handler_test.go:70` walk 401/403 refusals with an
-unprimed testify mock (a premature call fails); neither has a 429 case.
-`user_mfa_handler_test.go:47,144` cover the MFA token paths.
-`user_handler_test.go:840` already pins "no secrets serialized", so that
-part of the doc's What is done.
-
-#### What GRC changed
-
-RG0004 (`d761d42`) made `AuthHandler` and `ChangeSecurityContextHandler`
-take `UserRepositoryInterface` "so the check sequence can be proved with a
-panicking repository" (`src/internal/handler/auth_handler.go:179-182,
-633-636`). RG0003 (`eb4340b`) added 409 lines of MFA handler tests. The fake,
-`panicUserRepository` (`src/internal/handler/user_mfa_handler_test.go:120`),
-embeds the interface and its named methods panic "repository reached after
-a failed security check".
-
-Tests that pin each behaviour (all under `src/internal/`):
-- `handler/user_route_check_sequence_test.go:115`: 401, 429, blocked,
-  CSRF, grant refusals on `/userList`, `DELETE /user`; `:255` all pass.
-- `handler/auth_handler_test.go`: `:49` login completes the gate and sets
-  a session cookie (HttpOnly, Secure, Strict, no Max-Age); `:184` lockout
-  answers before the repository; `:285` change-context sequence; `:457`
-  reissue keeps the session id; `:529` unknown login counted.
-- `handler/own_profile_check_sequence_test.go:155-454`: sequence, 413,
-  stale `updateTs` 409, writes only the caller's row.
-- `handler/user_mfa_handler_test.go:235-752`: temp token single use,
-  reset needs grant 9020, sentinels mapped, enrolled `/mfaSetup` refused.
-- `handler/session_revocation_test.go:14` token refused after logoff;
-  `handler/map_repo_error_test.go:16,91`; `security/client_ip_test.go:9`;
-  `model/app_user_model_test.go:12` secrets never serialized.
-
-#### Proposed fix for PROTO
-
-1. Change `AuthHandler`, `RefreshHandler`, `ChangeSecurityContextHandler`
-   and `ChangeOwnPasswordHandler` (`handler/auth_handler.go:112,383,504,
-   711`) to take `UserRepositoryInterface` (`handler/user_handler.go:19`).
-   Check that the interface has every method they call; add any missing.
-2. Fake: GRC's `panicUserRepository`, or PROTO's testify mock with no
-   expectations (fails on an unexpected call). See the open question.
-3. New `handler/auth_handler_test.go`: login completes the gate; lockout
-   before the repository; wrong password 401 body unchanged.
-4. New user-route sequence test, and replace the four mock-only tests in
-   `user_handler_test.go` with ones that call the handler.
-5. Add a 429 case to the example and profile sequence tests.
-6. Port the rest only beside its fix, because each asserts that fix:
-   change-context (B005), reissue session id (B004), logoff revocation
-   (B003), unknown login (B007), client IP (B007 XFF), 9020 (B010), 409
-   (B012), `mapRepoError` (B028), block (B034), body 413 (B011).
-
-Traps: GRC's module path `github.com/Radley-House/radley-grc` and its
-`appHelper` / `newTestAppServices` names; PROTO uses `app` and
-`testServices` (`handler/example_handler_test.go:88`). Leave out
-`AccountStatus` (`auth_handler_test.go:65`) and the invited-login test
-(`:146`) unless B035 lands. GRC's cookie test expects no `Max-Age`; that
-holds only after B029.
-
-Tests: Go only; this item is the tests.
-
-#### Open question for Brandon
-
-One fake style for "repository must not be reached": GRC's
-`panicUserRepository` or PROTO's testify mock? Recommendation: keep
-testify for consistency, and add a comment on each sequence test that an
-unexpected call is the failure.
-
 ### B040 — Go gate: `gofmt -l` + pinned staticcheck; delete `.golangci.yml`
 
 - **Priority:** P2  **Area:** bin, go-api, docs, skills
@@ -8900,3 +8782,123 @@ GRC fixed the keys with its B038 wire rename (`720f5e1`, RG0043 section 2):
 #### Open question for Brandon
 
 None.
+
+### B039 — COMPLETED — Go handler tests that prove the check contract
+- **Completed:** 2026-10-03. Pulled; testify per the recommendation (no Brandon line): unprimed mocks, an unexpected call panics, said in the contract and user-admin test headers. Step 1 was already done (B007-B035 moved the four auth handlers to `UserRepositoryInterface`); `MockUserRepository` gained `UpdateUserAccountStatus` so it is also a `UserBlockRepository`. Deviation: GRC's per-route `user_route_check_sequence_test.go` became one table over every route, new `handler/route_check_contract_test.go`: each row of `routeContractList` says which checks the handler runs (session, rate, block, CSRF, grant) and why any is skipped; each row is sent a request failing one check at a time and must answer 401/429/403/403/403 with that check's message before any repository (fail-on-contact repos: unprimed testify, B035's `panicInviteRepository`, a nil group repository), a skipped check must not answer, the grant refusal must name the row's grant, and with every check passed nothing refuses. `TestRouteContract_EveryRouteIsListed` parses `cmd/server/main.go` so a new route fails until it has a row; covers B034 `/admin/blockUser`, `/admin/unblockUser`, B035 `/userInvite*`, `/inviteCheck`, `/inviteRedeem`. Mutation-checked: SkipCSRF in the block handler, a wrong invite grant, CSRF added to `/logoff`, a dropped gate return in `/userList` each fail it. The four mock-only tests in `user_handler_test.go` now call `CreateUser`, `UpdateUser`, `DeleteUser`, `RetrieveUserList` (tenant and actor from the JWT, body tenant ignored, 400s before the repo, 409/404 via `mapRepoError`, 500 without the error text, empty list not null). Example and profile sequence tests gained a 429 case. `auth_handler_test.go`: lockout (address and name) answers 429 before the repo; wrong-password 401 pinned byte for byte, invited and blocked logins with the right password get the same body (GRC's invited test, since B035 landed). "Login completes the gate" was already `TestAuthCookie_LoginIsASessionCookie` (B029). Step 6 items landed with their fixes; B005 is open, so the `/changeSecurityContext` row pins "no CSRF until B005" and B005 must flip it. Found, not fixed: `/mfaSetup` and `/mfaVerify` call `CheckRateLimitAndUserBlock` before the JWT is read, so on their session path the `BLOCKED*` flag is never consulted (row pins it; only matters after a restart, when revocations are lost). All green, govulncheck clean, `gofmt -l` empty: go=676 unit=82 e2e=13 py=96 (go up from 437: subtests of the contract table).
+
+
+- **Priority:** P2  **Area:** tests, go-api
+- **GRC:** `src/internal/handler/auth_handler_test.go:49-546`; `user_route_check_sequence_test.go:115-275`; `own_profile_check_sequence_test.go:155-454`; `map_repo_error_test.go:16-125`; `session_revocation_test.go:14-37`; `user_mfa_handler_test.go:235-752`; `user_block_handler_test.go`; `src/internal/security/client_ip_test.go:9-82`; `src/internal/model/app_user_model_test.go:12-65`; `auth_handler.go:182-186,633-636`   **PROTO:** new `src/api-srv/internal/handler/auth_handler_test.go`; `user_mfa_handler_test.go:47-169`; `user_handler_test.go`; `profile_handler_test.go`; `internal/security/`; `internal/model/`
+- **Ticket:** RG0004 `d761d42`; RG0003 `eb4340b`; RG0014; RG0042; RG0043
+- **What:** Fakes that panic if reached prove each route runs JWT, rate, CSRF,
+authz, gate before the repository, plus lockout, temp token, 9020, 409,
+refresh id, logoff, no secrets serialized. PROTO has no auth handler test.
+- **Port notes:** Port beside each fix; handlers take `UserRepositoryInterface`
+(GRC :182-186, :633-636).
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Each handler must run JWT, rate limit, CSRF, authorization and
+`CheckAllChecksComplete` before it reads the body or the repository. Only
+a test proves the order. PROTO proves it for two handlers, not the login
+layer. Quality gap: no known hole, but a login-layer regression ships
+green. PROTO paths are under `src/api-srv/internal/`.
+
+**(1) The auth handlers have no test at all.** There is no
+`handler/auth_handler_test.go`. `AuthHandler`, `RefreshHandler`,
+`ChangeSecurityContextHandler` and `ChangeOwnPasswordHandler` take the
+concrete repository, so a test cannot swap in a fake:
+
+```go
+// handler/auth_handler.go:112-114 (same at :383-385, :504-506, :711-713)
+func AuthHandler(
+	appServices *app.Services,
+	userRepo *repository.UserRepository,
+```
+
+A forgotten `Skip*` in `AuthHandler` (`:132-137`) would 500 every login;
+a call moved after the body read in `ChangeSecurityContextHandler` (which
+B005 already found skipping CSRF at `:530`) would pass CI.
+
+**(2) The user-admin tests never call a handler.** `TestCreateUser`,
+`TestUpdateUser`, `TestDeleteUser` and `TestRetrieveUserList` in
+`handler/user_handler_test.go:380,517,610,714` set a mock expectation and
+then call the mock directly:
+
+```go
+// handler/user_handler_test.go:691-692
+req := httptest.NewRequest("DELETE", "/user", nil)
+result, err := handler.userRepo.DeleteUser(
+```
+
+They test testify, not `UserHandler`. Nothing proves `/userList` or
+`DELETE /user` refuse before the repository.
+
+**Already in PROTO.** `handler/example_handler_test.go:127` and
+`handler/profile_handler_test.go:70` walk 401/403 refusals with an
+unprimed testify mock (a premature call fails); neither has a 429 case.
+`user_mfa_handler_test.go:47,144` cover the MFA token paths.
+`user_handler_test.go:840` already pins "no secrets serialized", so that
+part of the doc's What is done.
+
+#### What GRC changed
+
+RG0004 (`d761d42`) made `AuthHandler` and `ChangeSecurityContextHandler`
+take `UserRepositoryInterface` "so the check sequence can be proved with a
+panicking repository" (`src/internal/handler/auth_handler.go:179-182,
+633-636`). RG0003 (`eb4340b`) added 409 lines of MFA handler tests. The fake,
+`panicUserRepository` (`src/internal/handler/user_mfa_handler_test.go:120`),
+embeds the interface and its named methods panic "repository reached after
+a failed security check".
+
+Tests that pin each behaviour (all under `src/internal/`):
+- `handler/user_route_check_sequence_test.go:115`: 401, 429, blocked,
+  CSRF, grant refusals on `/userList`, `DELETE /user`; `:255` all pass.
+- `handler/auth_handler_test.go`: `:49` login completes the gate and sets
+  a session cookie (HttpOnly, Secure, Strict, no Max-Age); `:184` lockout
+  answers before the repository; `:285` change-context sequence; `:457`
+  reissue keeps the session id; `:529` unknown login counted.
+- `handler/own_profile_check_sequence_test.go:155-454`: sequence, 413,
+  stale `updateTs` 409, writes only the caller's row.
+- `handler/user_mfa_handler_test.go:235-752`: temp token single use,
+  reset needs grant 9020, sentinels mapped, enrolled `/mfaSetup` refused.
+- `handler/session_revocation_test.go:14` token refused after logoff;
+  `handler/map_repo_error_test.go:16,91`; `security/client_ip_test.go:9`;
+  `model/app_user_model_test.go:12` secrets never serialized.
+
+#### Proposed fix for PROTO
+
+1. Change `AuthHandler`, `RefreshHandler`, `ChangeSecurityContextHandler`
+   and `ChangeOwnPasswordHandler` (`handler/auth_handler.go:112,383,504,
+   711`) to take `UserRepositoryInterface` (`handler/user_handler.go:19`).
+   Check that the interface has every method they call; add any missing.
+2. Fake: GRC's `panicUserRepository`, or PROTO's testify mock with no
+   expectations (fails on an unexpected call). See the open question.
+3. New `handler/auth_handler_test.go`: login completes the gate; lockout
+   before the repository; wrong password 401 body unchanged.
+4. New user-route sequence test, and replace the four mock-only tests in
+   `user_handler_test.go` with ones that call the handler.
+5. Add a 429 case to the example and profile sequence tests.
+6. Port the rest only beside its fix, because each asserts that fix:
+   change-context (B005), reissue session id (B004), logoff revocation
+   (B003), unknown login (B007), client IP (B007 XFF), 9020 (B010), 409
+   (B012), `mapRepoError` (B028), block (B034), body 413 (B011).
+
+Traps: GRC's module path `github.com/Radley-House/radley-grc` and its
+`appHelper` / `newTestAppServices` names; PROTO uses `app` and
+`testServices` (`handler/example_handler_test.go:88`). Leave out
+`AccountStatus` (`auth_handler_test.go:65`) and the invited-login test
+(`:146`) unless B035 lands. GRC's cookie test expects no `Max-Age`; that
+holds only after B029.
+
+Tests: Go only; this item is the tests.
+
+#### Open question for Brandon
+
+One fake style for "repository must not be reached": GRC's
+`panicUserRepository` or PROTO's testify mock? Recommendation: keep
+testify for consistency, and add a comment on each sequence test that an
+unexpected call is the failure.

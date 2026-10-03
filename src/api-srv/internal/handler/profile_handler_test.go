@@ -95,6 +95,17 @@ func TestProfileHandler_CheckSequence(t *testing.T) {
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
+			name:   "rate limit spent → 429, before CSRF and authorization",
+			method: http.MethodPut,
+			request: func(t *testing.T, s *app.Services) *http.Request {
+				s.Config.MaxUserReqPerMin = 0
+				r := meRequest(t, s, http.MethodPut, []int{}, validProfileBody)
+				r.Header.Del("X-CSRF-Token")
+				return r
+			},
+			wantStatus: http.StatusTooManyRequests,
+		},
+		{
 			name:   "PUT without CSRF header → 403 from CheckCSRF",
 			method: http.MethodPut,
 			request: func(t *testing.T, s *app.Services) *http.Request {
