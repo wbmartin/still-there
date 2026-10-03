@@ -106,122 +106,6 @@ doc/105:199: "no row written" is no reason to skip.
 - **Decision:** \[ \] pull / \[ \] adapt / \[X \] skip
 - BRANDON: I said skip because it's a not changing SERVER side data so seems fine to skip CSRF
 
-### B013 — Admin "Change Password" for another user always 400s
-
-- **Priority:** P1  **Area:** web-app
-- **GRC:** `stores/app-user-store.ts:346-356`; `stores/app-user-store.test.ts:39`; `tickets/03-done/RG0036-change-other-password-field/RG0036-change-other-password-field.md:28-38`   **PROTO:** `stores/app-user-store.ts:112-116`; `src/api-srv/internal/handler/user_handler.go:986`; `stores/app-user-store.ts:24-27`
-- **Ticket:** RG0036 / `e6588b5`
-- **What:** Store posts `userId`; handler reads `appUserId`, gets 0, 400s every
-time. pytest posts `appUserId`, so only the web is wrong.
-- **Port notes:** One line + fetch-stubbing vitest in `tests/`. README rule in
-B076.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Web paths are under `src/web-app/`; Go paths under `src/api-srv/internal/`.
-An admin with `GrantChangeOtherUserPassword` opens `/appUserEdit` for
-another user and clicks "Change Password". The page calls the store
-(`pages/app-user-edit-page.tsx:202`):
-
-```ts
-await changeOtherUserPassword(numericId, newPassword);
-```
-
-The store posts the id under the key `userId`
-(`stores/app-user-store.ts:112-116`):
-
-```ts
-changeOtherUserPassword: (userId, newPassword) =>
-  postOrThrow(API_ENDPOINTS.CHANGE_OTHER_USER_PASSWORD, {
-    userId,
-    newPassword,
-```
-
-The handler reads a different key (`handler/user_handler.go:985-987`):
-
-```go
-var req struct {
-    UserID      int    `json:"appUserId"`
-    NewPassword string `json:"newPassword"`
-```
-
-Go's JSON decoder ignores the unknown `userId` key, so `req.UserID` stays
-0. The required-field check at `handler/user_handler.go:1001-1008` then
-answers 400 "appUserId and newPassword are required" on every call. The
-store's `postOrThrow` (`stores/app-user-store.ts:69-77`) puts that text in
-the store error and rethrows; the page shows it in the modal
-(`pages/app-user-edit-page.tsx:209-212`). The password never changes.
-
-Consequence: the admin feature has never worked from the web. This is a
-correctness bug, not a security hole. It fails safe: no password is set
-and no other user is touched.
-
-Why nothing caught it. The API side is right, and pytest proves it:
-`tests/test_user_management.py:113` posts `{"appUserId": ...}` and gets
-200. vitest only runs `tests/**/*.test.ts` (`vitest.config.ts:11`), and no
-test there covers this store. No Playwright spec under `tests/e2e/`
-exercises "Change Password". The `userId` key dates to before PS0001
-(`8559400` carried it into the entity store factory unchanged).
-
-The other bodies in the same store match their handlers:
-`userIds`/`groupId`/`updateTsList` (`handler/user_handler.go:756-758`,
-`:877-879`) and `userId` for `resetUserMFA`
-(`handler/user_mfa_handler.go:694`). That handler does not read the
-`updateTs` the store also sends (`stores/app-user-store.ts:119`); it is
-ignored, harmless.
-
-#### What GRC changed
-
-GRC commit `e6588b5` (RG0036) changed one key and added a test.
-
-1. `src/web-app/stores/app-user-store.ts:353-356` sends the key the
-   handler reads:
-   ```ts
-   await apiJson<void>(API_ENDPOINTS.CHANGE_OTHER_USER_PASSWORD, {
-     method: "POST",
-     ...jsonBody({ appUserId: userId, newPassword }),
-   ```
-   The comment at `:351-352` names RG0036. The function shape is GRC's own
-   (no `postOrThrow` there); only the key matters.
-2. `src/web-app/stores/app-user-store.test.ts:38-46` replaces `fetch` with
-   a recorder, calls `changeOtherUserPassword(51, ...)`, and asserts the
-   body equals `{ appUserId: 51, newPassword: ... }`.
-
-The ticket (`RG0036-change-other-password-field.md:28-38`) confirms the API
-is correct and the web caller is the only fault. It also notes that
-`resetUserMFA` sending `userId` is correct.
-
-#### Proposed fix for PROTO
-
-1. **`stores/app-user-store.ts:113-116`**: send `{ appUserId: userId,
-   newPassword }`. Keep `postOrThrow`; do not copy GRC's function body,
-   which predates PROTO's PS0013 `apiJson`/`postOrThrow` shape. Optionally
-   rename the parameter at `:24` and `:112` to `appUserId` so the key and
-   the name agree.
-2. **vitest** in `tests/app-user-store.test.ts` (new). Trap: GRC keeps the
-   test beside the store at `stores/`, where PROTO's
-   `vitest.config.ts:11` would never run it. Import from
-   `../stores/app-user-store` and stub `fetch` with `vi.stubGlobal`, as
-   `tests/entity-store-cache.test.ts` already does.
-3. No Go, pytest or doc change. `src/api-srv/README.md:71` lists the
-   endpoint without a body; leave it.
-4. **B076** (P3, docs) carries the general rule "a body key equals the Go
-   json tag" into `src/web-app/README.md` and points at this test as the
-   example. B013 does not wait for it.
-
-Tests to add:
-- vitest `tests/app-user-store.test.ts`: the recorded POST body is
-  `{ appUserId: 51, newPassword }` to `/changeOtherUserPassword`.
-- Optional Playwright in `tests/e2e/`: admin changes another user's
-  password and sees the success notification.
-
-#### Open question for Brandon
-
-None.
-
 ### B014 — Go dependency bumps: three called vulnerabilities
 
 - **Priority:** P1  **Area:** go-api, bin
@@ -8853,3 +8737,121 @@ A user homed in tenant A can hold a tenant B group (how
 The scoped count lets B's admin delete that group while A's user still
 lists it. Accept that, as GRC does? Recommendation: yes; the group is B's
 and `GetGrantsForGroups` skips deleted groups, so the leftover id is inert.
+
+### B013 — COMPLETED — Admin "Change Password" for another user always 400s
+
+- **Completed:** 2026-10-02. `src/web-app/stores/app-user-store.ts` now posts `{ appUserId, newPassword }` to `/changeOtherUserPassword` (the handler's json tag); the parameter is renamed `appUserId` in the interface and implementation, `postOrThrow` kept. New vitest `src/web-app/tests/app-user-store.test.ts` stubs `fetch` and asserts the recorded body. New Playwright `src/web-app/tests/e2e/change-other-password.spec.ts` creates an MFA-exempt user through the API, changes its password from `/appUserEdit` via the modal, sees the success notification, signs in as that user with the new password, and deletes the user in `finally`; both tests fail on the old store (the e2e one on the API's 400 "appUserId and newPassword are required"). Tests: all green, go=278 unit=42 e2e=10 py=79
+
+- **Priority:** P1  **Area:** web-app
+- **GRC:** `stores/app-user-store.ts:346-356`; `stores/app-user-store.test.ts:39`; `tickets/03-done/RG0036-change-other-password-field/RG0036-change-other-password-field.md:28-38`   **PROTO:** `stores/app-user-store.ts:112-116`; `src/api-srv/internal/handler/user_handler.go:986`; `stores/app-user-store.ts:24-27`
+- **Ticket:** RG0036 / `e6588b5`
+- **What:** Store posts `userId`; handler reads `appUserId`, gets 0, 400s every
+time. pytest posts `appUserId`, so only the web is wrong.
+- **Port notes:** One line + fetch-stubbing vitest in `tests/`. README rule in
+B076.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Web paths are under `src/web-app/`; Go paths under `src/api-srv/internal/`.
+An admin with `GrantChangeOtherUserPassword` opens `/appUserEdit` for
+another user and clicks "Change Password". The page calls the store
+(`pages/app-user-edit-page.tsx:202`):
+
+```ts
+await changeOtherUserPassword(numericId, newPassword);
+```
+
+The store posts the id under the key `userId`
+(`stores/app-user-store.ts:112-116`):
+
+```ts
+changeOtherUserPassword: (userId, newPassword) =>
+  postOrThrow(API_ENDPOINTS.CHANGE_OTHER_USER_PASSWORD, {
+    userId,
+    newPassword,
+```
+
+The handler reads a different key (`handler/user_handler.go:985-987`):
+
+```go
+var req struct {
+    UserID      int    `json:"appUserId"`
+    NewPassword string `json:"newPassword"`
+```
+
+Go's JSON decoder ignores the unknown `userId` key, so `req.UserID` stays
+0. The required-field check at `handler/user_handler.go:1001-1008` then
+answers 400 "appUserId and newPassword are required" on every call. The
+store's `postOrThrow` (`stores/app-user-store.ts:69-77`) puts that text in
+the store error and rethrows; the page shows it in the modal
+(`pages/app-user-edit-page.tsx:209-212`). The password never changes.
+
+Consequence: the admin feature has never worked from the web. This is a
+correctness bug, not a security hole. It fails safe: no password is set
+and no other user is touched.
+
+Why nothing caught it. The API side is right, and pytest proves it:
+`tests/test_user_management.py:113` posts `{"appUserId": ...}` and gets
+200. vitest only runs `tests/**/*.test.ts` (`vitest.config.ts:11`), and no
+test there covers this store. No Playwright spec under `tests/e2e/`
+exercises "Change Password". The `userId` key dates to before PS0001
+(`8559400` carried it into the entity store factory unchanged).
+
+The other bodies in the same store match their handlers:
+`userIds`/`groupId`/`updateTsList` (`handler/user_handler.go:756-758`,
+`:877-879`) and `userId` for `resetUserMFA`
+(`handler/user_mfa_handler.go:694`). That handler does not read the
+`updateTs` the store also sends (`stores/app-user-store.ts:119`); it is
+ignored, harmless.
+
+#### What GRC changed
+
+GRC commit `e6588b5` (RG0036) changed one key and added a test.
+
+1. `src/web-app/stores/app-user-store.ts:353-356` sends the key the
+   handler reads:
+   ```ts
+   await apiJson<void>(API_ENDPOINTS.CHANGE_OTHER_USER_PASSWORD, {
+     method: "POST",
+     ...jsonBody({ appUserId: userId, newPassword }),
+   ```
+   The comment at `:351-352` names RG0036. The function shape is GRC's own
+   (no `postOrThrow` there); only the key matters.
+2. `src/web-app/stores/app-user-store.test.ts:38-46` replaces `fetch` with
+   a recorder, calls `changeOtherUserPassword(51, ...)`, and asserts the
+   body equals `{ appUserId: 51, newPassword: ... }`.
+
+The ticket (`RG0036-change-other-password-field.md:28-38`) confirms the API
+is correct and the web caller is the only fault. It also notes that
+`resetUserMFA` sending `userId` is correct.
+
+#### Proposed fix for PROTO
+
+1. **`stores/app-user-store.ts:113-116`**: send `{ appUserId: userId,
+   newPassword }`. Keep `postOrThrow`; do not copy GRC's function body,
+   which predates PROTO's PS0013 `apiJson`/`postOrThrow` shape. Optionally
+   rename the parameter at `:24` and `:112` to `appUserId` so the key and
+   the name agree.
+2. **vitest** in `tests/app-user-store.test.ts` (new). Trap: GRC keeps the
+   test beside the store at `stores/`, where PROTO's
+   `vitest.config.ts:11` would never run it. Import from
+   `../stores/app-user-store` and stub `fetch` with `vi.stubGlobal`, as
+   `tests/entity-store-cache.test.ts` already does.
+3. No Go, pytest or doc change. `src/api-srv/README.md:71` lists the
+   endpoint without a body; leave it.
+4. **B076** (P3, docs) carries the general rule "a body key equals the Go
+   json tag" into `src/web-app/README.md` and points at this test as the
+   example. B013 does not wait for it.
+
+Tests to add:
+- vitest `tests/app-user-store.test.ts`: the recorded POST body is
+  `{ appUserId: 51, newPassword }` to `/changeOtherUserPassword`.
+- Optional Playwright in `tests/e2e/`: admin changes another user's
+  password and sees the success notification.
+
+#### Open question for Brandon
+
+None.

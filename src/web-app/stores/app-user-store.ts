@@ -21,7 +21,7 @@ interface AppUserExtras {
     updateTsList: number[],
   ) => Promise<void>;
   changeOtherUserPassword: (
-    userId: number,
+    appUserId: number,
     newPassword: string,
   ) => Promise<void>;
   resetUserMFA: (userId: number, updateTs: number) => Promise<void>;
@@ -109,9 +109,10 @@ export const useAppUserStore = createEntityStore<User, AppUserExtras>(
           updateTsList,
         }),
 
-      changeOtherUserPassword: (userId, newPassword) =>
+      // The key is the handler's json tag; tests/app-user-store.test.ts.
+      changeOtherUserPassword: (appUserId, newPassword) =>
         postOrThrow(API_ENDPOINTS.CHANGE_OTHER_USER_PASSWORD, {
-          userId,
+          appUserId,
           newPassword,
         }),
 
