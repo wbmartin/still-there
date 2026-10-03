@@ -580,7 +580,10 @@ are listed in `src/api-srv/README.md` (Configuration); among them
 - **401**: Unauthorized (invalid/missing auth)
 - **403**: Forbidden (insufficient permissions)
 - **404**: Not Found (missing, soft-deleted, or another tenant's row)
-- **409**: Conflict (stale `updateTs`, duplicate name, row still in use)
+- **409**: Conflict (stale `updateTs`, duplicate name, row still in use),
+  and any well-formed request the record's current state refuses (wrong
+  starting state, already enrolled, nothing left to revoke). 400 is for a
+  malformed request; 409 when the request is fine and the record says no
 - **413**: Request body over the route's cap (see Request Body Limits)
 - **417**: Expectation Failed (a bulk update whose rows did not all match)
 - **429**: Too Many Requests: the per-minute rate limit, or a login

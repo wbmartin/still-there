@@ -786,70 +786,6 @@ Adopt batched testing in the template, or keep `bin/300-run-tests all`
 per ticket? Recommendation: keep per ticket in the template, since PROTO
 has no 440-check smoke to make it slow; a derived app can batch.
 
-### B080 — CLAUDE.md structure rules and small conventions
-
-- **Priority:** P3  **Area:** docs
-- **GRC:** `CLAUDE.md:21-25,33-34`; `src/api-srv/README.md:223-224`; RG0043 md `:806-829`; `tickets/03-done/RG0027-pdf-of-record-required/RG0027-pdf-of-record-required.md:134`; `tickets/03-done/RG0009-split-app-lib-by-role/RG0009-split-app-lib-by-role.md:144-150`; `tickets/02-working/RG0033-evidence-capture-set-design/RG0033-evidence-capture-set-design.md:183`   **PROTO:** `CLAUDE.md:11-12,18-24`; `doc/900-database-guidelines.md`; `doc/105-api-srv-tech-spec.md`; `src/api-srv/internal/handler/*.go` (33 `app :=` sites)
-- **Ticket:** RG0006; RG0013; RG0043 1.1; RG0027; RG0009; RG0015 ruling 3; RG0033
-- **What:** `cmd/` only shipped binaries; Layout links doc/902 and runbooks;
-fixtures never in migrations; 409 when record state refuses; `app :=` shadows
-package `app` (33 sites); pin deps that raise `go`.
-- **Port notes:** One docs ticket; the `app` rename is code.
-- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (per recommendation, minus every ticket rule (B091), 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Six small rules; five are doc gaps, one is a code smell (DX, not a bug).
-1. `cmd/` holds only shipped binaries: already true (`cmd/` is `migrate`,
-   `server`; the load tester is `src/load-test`) but unwritten.
-2. `CLAUDE.md:11-12` lists `bin/` ranges and `:25` says only "`doc/` -
-   reference docs"; nothing points at `doc/902` (script list) or the
-   runbooks `doc/320`/`330`/`340`.
-3. Fixtures never in migrations: PROTO already obeys it (no `INSERT` in
-   `sql/migrations/`) and `doc/900-database-guidelines.md:60` says so. The
-   doc entry overstates the gap; only a `CLAUDE.md` line is missing.
-4. `doc/105-api-srv-tech-spec.md:268` defines 409 only as "Conflict
-   (optimistic locking)", so a refusal driven by record state has no rule.
-5. 33 handler sites shadow the imported package `app`:
-   `handler/app_user_group_handler.go:10` imports `.../internal/app`;
-   `:35` has `app := security.NewAppHelper(w, r, h.appsrv, ...)`. It
-   compiles only because `*app.Services` appears outside function bodies.
-6. `src/api-srv/go.mod:3` is `go 1.25.4`; one `go get` can silently raise it.
-
-#### What GRC changed
-
-- `CLAUDE.md:21-25` links `doc/902` and names its runbooks; `:33-34` says
-  "`cmd/` holds only shipped binaries, RG0006" (also README `:223-224`).
-- RG0043 item 1 (`:806-829`): shipped seed migrations had created
-  `admin`/`admin123!` on every host; GRC commented them out and moved the
-  logins to a test-DB fixture.
-- RG0027 `:133-135`: "409 rather than 400 because the request is well
-  formed and it is the state of the record that refuses it."
-- RG0009 `:143-149` found the shadow; RG0015 ruling 3 renamed all sites to
-  `appHelper` via `gopls rename`, no behaviour change.
-- RG0033 `:183-184` pinned pdfcpu v0.15.0 to avoid `go 1.26`. GRC's
-  `src/go.mod:3` is now `go 1.26.0` anyway, by a later deliberate bump.
-
-#### Proposed fix for PROTO
-
-1. `CLAUDE.md` Layout: `bin/` line names `doc/902`; `doc/` line names the
-   runbooks; `src/api-srv` line adds "`cmd/` holds only shipped binaries".
-2. `CLAUDE.md` Conventions: "fixtures in `sql/fixtures/`, never in a
-   migration"; "pin a dependency below a release that raises `go`, unless
-   the bump is the point".
-3. `doc/105:268`: 409 also when record state refuses a valid request.
-4. Code: `gopls rename` every `app :=` in `internal/handler/*.go` to
-   `appHelper`; rewrap past 80 cols. Separate commit.
-5. Traps: PROTO's module is `src/api-srv/go.mod`, not `src/go.mod`; leave
-   out goose, `migrate-srv`, `go.work`. Tests: none new; `go build`.
-
-#### Open question for Brandon
-
-Should the 33-site `appHelper` rename ride this docs ticket or its own?
-Recommend its own, so the mechanical diff does not bury the doc lines.
-
 ### B081 — DERIVING.md: paste-ready "Template lineage" block
 
 - **Priority:** P3  **Area:** docs
@@ -9002,3 +8938,68 @@ The rules live in ticket bodies, not in a GRC README.
 
 None.
 - **Completed:** 2026-10-03. `tests/README.md` gains "Writing tests", the one rule list for every suite: a "not in Y" check first proves Y was read (citing `test_user_list_never_returns_totp_seed`); OS probes work on macOS and Linux (`/proc` vs `ps -o command=`, `stat -c`/`-f`); detectors anchored; a missing prerequisite fails, never skips; live tests skip unless `<SERVICE>_LIVE=1` and are named `TestLive...` / `test_live_...`. `src/api-srv/README.md` gains a short Testing section (connectTestDB, tenants 2/3, pointer); `CLAUDE.md` one bullet; doc/902 `go` paragraph. Step 2 taken and widened: `bin/300-run-tests` now fails any Go `--- SKIP` not named `TestLive...`, any pytest `SKIPPED` not `test_live_...`, and any vitest or Playwright skipped/todo test (the connectTestDB message check stays for its clearer error). Proved in one run with a temporary skip in each suite: all four steps failed, the `TestLive`/`test_live_` skips passed; shellcheck clean in `ubuntu:24.04`. The wider check found a real stub: `TestDeleteAppUserGroup` was a bare `Skip` ("test environment issues") and is now a real test (stale update_ts 409, delete returns the id, row soft-deleted and absent from reads, second delete 404); three data-dependent skips in the group/user repository suites became `Require` assertions. Negative-assertion spot fixes: `TestRetrieveUserList_OmitsSecrets` finds the row first; the MFA 409 check asserts an error body before "secret not in". Not ported: GRC's rebuild-before-pytest (bin/300 builds), pwsh/Entra/smoke specifics. No `_LIVE` unset in the gate: a hand run must be able to set one. Tests: all green, infra=15 docs=663 go=708 unit=105 e2e=70 py=103 (docs +8 path tokens, go +1: the former stub).
+
+### B080 — COMPLETED — CLAUDE.md structure rules and small conventions
+
+- **Priority:** P3  **Area:** docs
+- **GRC:** `CLAUDE.md:21-25,33-34`; `src/api-srv/README.md:223-224`; RG0043 md `:806-829`; `tickets/03-done/RG0027-pdf-of-record-required/RG0027-pdf-of-record-required.md:134`; `tickets/03-done/RG0009-split-app-lib-by-role/RG0009-split-app-lib-by-role.md:144-150`; `tickets/02-working/RG0033-evidence-capture-set-design/RG0033-evidence-capture-set-design.md:183`   **PROTO:** `CLAUDE.md:11-12,18-24`; `doc/900-database-guidelines.md`; `doc/105-api-srv-tech-spec.md`; `src/api-srv/internal/handler/*.go` (33 `app :=` sites)
+- **Ticket:** RG0006; RG0013; RG0043 1.1; RG0027; RG0009; RG0015 ruling 3; RG0033
+- **What:** `cmd/` only shipped binaries; Layout links doc/902 and runbooks;
+fixtures never in migrations; 409 when record state refuses; `app :=` shadows
+package `app` (33 sites); pin deps that raise `go`.
+- **Port notes:** One docs ticket; the `app` rename is code.
+- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (per recommendation, minus every ticket rule (B091), 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Six small rules; five are doc gaps, one is a code smell (DX, not a bug).
+1. `cmd/` holds only shipped binaries: already true (`cmd/` is `migrate`,
+   `server`; the load tester is `src/load-test`) but unwritten.
+2. `CLAUDE.md:11-12` lists `bin/` ranges and `:25` says only "`doc/` -
+   reference docs"; nothing points at `doc/902` (script list) or the
+   runbooks `doc/320`/`330`/`340`.
+3. Fixtures never in migrations: PROTO already obeys it (no `INSERT` in
+   `sql/migrations/`) and `doc/900-database-guidelines.md:60` says so. The
+   doc entry overstates the gap; only a `CLAUDE.md` line is missing.
+4. `doc/105-api-srv-tech-spec.md:268` defines 409 only as "Conflict
+   (optimistic locking)", so a refusal driven by record state has no rule.
+5. 33 handler sites shadow the imported package `app`:
+   `handler/app_user_group_handler.go:10` imports `.../internal/app`;
+   `:35` has `app := security.NewAppHelper(w, r, h.appsrv, ...)`. It
+   compiles only because `*app.Services` appears outside function bodies.
+6. `src/api-srv/go.mod:3` is `go 1.25.4`; one `go get` can silently raise it.
+
+#### What GRC changed
+
+- `CLAUDE.md:21-25` links `doc/902` and names its runbooks; `:33-34` says
+  "`cmd/` holds only shipped binaries, RG0006" (also README `:223-224`).
+- RG0043 item 1 (`:806-829`): shipped seed migrations had created
+  `admin`/`admin123!` on every host; GRC commented them out and moved the
+  logins to a test-DB fixture.
+- RG0027 `:133-135`: "409 rather than 400 because the request is well
+  formed and it is the state of the record that refuses it."
+- RG0009 `:143-149` found the shadow; RG0015 ruling 3 renamed all sites to
+  `appHelper` via `gopls rename`, no behaviour change.
+- RG0033 `:183-184` pinned pdfcpu v0.15.0 to avoid `go 1.26`. GRC's
+  `src/go.mod:3` is now `go 1.26.0` anyway, by a later deliberate bump.
+
+#### Proposed fix for PROTO
+
+1. `CLAUDE.md` Layout: `bin/` line names `doc/902`; `doc/` line names the
+   runbooks; `src/api-srv` line adds "`cmd/` holds only shipped binaries".
+2. `CLAUDE.md` Conventions: "fixtures in `sql/fixtures/`, never in a
+   migration"; "pin a dependency below a release that raises `go`, unless
+   the bump is the point".
+3. `doc/105:268`: 409 also when record state refuses a valid request.
+4. Code: `gopls rename` every `app :=` in `internal/handler/*.go` to
+   `appHelper`; rewrap past 80 cols. Separate commit.
+5. Traps: PROTO's module is `src/api-srv/go.mod`, not `src/go.mod`; leave
+   out goose, `migrate-srv`, `go.work`. Tests: none new; `go build`.
+
+#### Open question for Brandon
+
+Should the 33-site `appHelper` rename ride this docs ticket or its own?
+Recommend its own, so the mechanical diff does not bury the doc lines.
+- **Completed:** 2026-10-03. `CLAUDE.md` Layout: the `bin/` line points at doc/902, a new `src/api-srv/cmd/` line says only shipped binaries live there (`src/load-test` is outside), the `sql/` line says seed and test data are `fixtures/`, never a migration, and the `doc/` line names the runbooks (310, 320, 330, 331, 340). Conventions: pin a Go dependency below a release that raises `go` in `src/api-srv/go.mod` unless the bump is the point. doc/105 HTTP status codes: 409 also when a well-formed request is refused by the record's state (400 stays for malformed). `src/api-srv/README.md` Architecture notes the `cmd/` rule. Code, in its own commit per the recommendation (open question): every `app := security.NewAppHelper` in `internal/handler/` (41 sites incl. two tests, not 33) renamed to `appHelper` with `gopls rename`, changed lines past 80 columns rewrapped, the `app_helper.go` and doc/105 examples follow; no behaviour change. No length cap or other structure rule: the item sets none. Tests: none new (per item); all green, infra=15 docs=673 go=708 unit=105 e2e=70 py=103 (docs +10: the new backticked paths).

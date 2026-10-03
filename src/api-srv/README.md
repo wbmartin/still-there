@@ -244,6 +244,9 @@ sql/roles.sql       # database roles
 sql/fixtures/       # seed data
 ```
 
+`cmd/` holds only shipped binaries; a tool or load generator lives outside
+it (`src/load-test`, a module of its own).
+
 Repository errors are sentinels (`internal/repository/errors.go`:
 `ErrNotFound`, `ErrDeleted`, `ErrConflict`, `ErrDuplicate`, `ErrInUse`,
 `ErrValidation`, `ErrExpectationFailed`), returned bare or wrapped with
