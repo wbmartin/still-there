@@ -17,7 +17,9 @@ test.describe("profile page", () => {
     await firstName.fill("Playwright");
     await page.getByRole("textbox", { name: "Colour scheme" }).click();
     await page.getByRole("option", { name: "Dark" }).click();
-    await page.getByLabel("Rows per page").fill("5");
+    const rowsPerPage = page.getByRole("textbox", { name: "Rows per page" });
+    await rowsPerPage.click();
+    await page.getByRole("option", { name: "10", exact: true }).click();
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Profile and preferences saved")).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute(
@@ -34,13 +36,14 @@ test.describe("profile page", () => {
 
     await page.goto("/userPreferences");
     await expect(page.getByLabel("First name")).toHaveValue("Playwright");
-    await expect(page.getByLabel("Rows per page")).toHaveValue("5");
+    await expect(rowsPerPage).toHaveValue("10");
 
     // Put the fixture user back.
     await page.getByLabel("First name").fill(originalFirstName);
     await page.getByRole("textbox", { name: "Colour scheme" }).click();
     await page.getByRole("option", { name: "Follow the system" }).click();
-    await page.getByLabel("Rows per page").fill("15");
+    await rowsPerPage.click();
+    await page.getByRole("option", { name: "15", exact: true }).click();
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Profile and preferences saved")).toBeVisible();
     await expect(page.locator("html")).not.toHaveAttribute(

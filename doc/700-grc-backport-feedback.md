@@ -564,81 +564,6 @@ moves on a deliberate release; GRC left this open too.
 
 # P3: nice to have
 
-### B062 — Preferences: off the admin list; validated against options
-
-- **Priority:** P3  **Area:** go-api, web-app
-- **GRC:** `src/internal/model/app_user_model.go:5-37,60-76`; `src/internal/repository/user_repository.go:399-465`; `src/internal/model/app_user_model_test.go:12-44`; `utils/preference.ts:14-59`; `utils/preference.test.ts`; RG0016 md `:128,145`   **PROTO:** `src/api-srv/internal/model/app_user_model.go:19`; `repository/user_repository.go:302-373` (:308); `types/profile-type.ts:5-25` (:21-26)
-- **Ticket:** RG0016 / `62403fd`, `47fa7c4`
-- **What:** `READ_USER` on `/userList` returns others' preferences; GRC serves
-them only on `/me`. PROTO's `resolvePreference` trusts any `rowsPerPage`
-(100000 renders every row); GRC allow-lists.
-- **Port notes:** Keep PROTO naming. Docs rated P2.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Two small gaps around `app_user.preference_jsonb`, the UI settings (colour
-scheme, rows per page) a user saves through `PUT /me`.
-
-**(1) Admins read everyone's preferences.** The admin wire shape carries it:
-
-```go
-// src/api-srv/internal/model/app_user_model.go:19
-PreferenceJSONB json.RawMessage `json:"preferenceJsonb,omitempty" ...
-```
-
-`RetrieveUserList` selects it (`repository/user_repository.go:308`), so a
-`READ_USER` holder gets every user's document from `GET /userList`. Nothing
-in it is secret today. A least-privilege gap: a derived app that stores
-more there leaks that too.
-
-**(2) The web app trusts any stored value.** The API checks only "JSON
-object, at most 8 KiB" (`handler/profile_handler.go:190-194`). The form
-limits rows to 5-200 (`pages/user-preferences-page.tsx:74-77`), but a direct
-`PUT /me` skips the form, and the reader takes any positive number and any
-colour string (`types/profile-type.ts:20-24`):
-
-```ts
-colorScheme: preference?.colorScheme ?? defaultPreference.colorScheme,
-  preference?.rowsPerPage && preference.rowsPerPage > 0
-```
-
-A stored `rowsPerPage: 100000` renders every row of every list; a stored
-`"purple"` reaches Mantine. A user can write only their own row, so this is
-a robustness bug, not a hole.
-
-#### What GRC changed
-
-RG0016 (`62403fd`, `47fa7c4`) tagged the field `json:"-"` with the reason
-(`src/internal/model/app_user_model.go:13-17,31`), dropped it from the list
-query (`repository/user_repository.go:402-408`), and serves it only through
-`AppUserOwnProfileModel` on `/me` (`model/app_user_model.go:59-76`).
-`src/web-app/utils/preference.ts:15-59` allow-lists both fields
-(`ROWS_PER_PAGE_LIST = [10, 20, 25, 50, 100]`) and falls back per field.
-Tests: six cases in `utils/preference.test.ts` (`:37` "refuses a page size
-outside the offered list"). No Go test pins that preferences stay off
-`/userList`.
-
-#### Proposed fix for PROTO
-
-1. Trap: PROTO's `GET`/`PUT /me` serialise `AppUserModel` itself
-   (`handler/profile_handler.go:86,176`), so `json:"-"` alone empties `/me`.
-   Add an own-profile struct for those two responses (PROTO naming, no GRC
-   `profile` wrapper, no `AccountStatus`), then tag the admin field.
-2. `user_repository.go:308,351`: drop the column from `RetrieveUserList`.
-3. `types/profile-type.ts`: allow-list `resolvePreference`; the form's
-   `NumberInput` becomes a `Select` over the same list.
-4. vitest: port GRC's six `resolvePreference` cases.
-5. pytest `tests/test_own_profile.py`: `/userList` rows lack
-   `preferenceJsonb`; `/me` keeps it.
-
-#### Open question for Brandon
-
-Rows per page as a fixed list (GRC: 10/20/25/50/100) instead of 5-200?
-Recommend the list; "valid" becomes a one-line check.
-
 ### B063 — Web: pinned page header and sticky filter row
 
 - **Priority:** P3  **Area:** web-app
@@ -8982,3 +8907,80 @@ Require the key everywhere, dev included? Recommend yes: dev works on
 loopback, and fail-closed protects every env file a derived app adds.
 
 - **Completed:** 2026-10-03. No Brandon line; took the recommendation (required everywhere, dev included). `config.LoadConfig` refuses an empty or missing `SERVER_BIND_ADDRESS` with GRC's message ("SERVER_BIND_ADDRESS is required (the interface to listen on, e.g. 127.0.0.1; 0.0.0.0 for every interface)"); `cmd/server/main.go` comment drops the empty-means-`:8080` note (`net.JoinHostPort` came with B060). `etc/loc-api-srv.env` sets `127.0.0.1` (comment: loopback serves the vite proxy, 0.0.0.0 publishes the API; checked that Node 22 reaches a 127.0.0.1-only listener at `localhost`, which resolves to ::1 first). Every other API env file already carried it (e2e, the pytest copy `bin/300-run-tests` derives from e2e, the UAT template from B016, the three infra API files); `TestLoadConfig_RepoEnvFiles` loads them all. Step 3 was done by B016 (the file is now `etc/uat-api-srv.env.template`). Added beyond the steps: `bin/610-deploy-uat` refuses an existing host `api-srv.env` without the key before it stops the service (shellcheck clean in ubuntu:24.04; a file without the key refused, with it passed); `doc/320-presales-uat-deploy.md` hand-edit section names the key; tasks/todo.md hand-edit bullet updated. Docs: `src/api-srv/README.md` moves the key to Required, doc/905 lists it as required. doc/330 had no bind line to change (step 5's ref is stale). New Go test `TestLoadConfig_ServerBindAddress` (absent, empty, 127.0.0.1, 0.0.0.0, ::1); `validBase` carries the key. Built binary on a dev env without the key exits 1 with the message. Existing presales UAT host `api-srv.env` must get `SERVER_BIND_ADDRESS=127.0.0.1` by hand (already listed under B016). Tests: all green, infra=15 docs=499 go=698 unit=87 e2e=13 py=103 (go +6: one test, five cases), govulncheck clean, gofmt clean.
+
+### B062 — COMPLETED — Preferences: off the admin list; validated against options
+
+- **Priority:** P3  **Area:** go-api, web-app
+- **GRC:** `src/internal/model/app_user_model.go:5-37,60-76`; `src/internal/repository/user_repository.go:399-465`; `src/internal/model/app_user_model_test.go:12-44`; `utils/preference.ts:14-59`; `utils/preference.test.ts`; RG0016 md `:128,145`   **PROTO:** `src/api-srv/internal/model/app_user_model.go:19`; `repository/user_repository.go:302-373` (:308); `types/profile-type.ts:5-25` (:21-26)
+- **Ticket:** RG0016 / `62403fd`, `47fa7c4`
+- **What:** `READ_USER` on `/userList` returns others' preferences; GRC serves
+them only on `/me`. PROTO's `resolvePreference` trusts any `rowsPerPage`
+(100000 renders every row); GRC allow-lists.
+- **Port notes:** Keep PROTO naming. Docs rated P2.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Two small gaps around `app_user.preference_jsonb`, the UI settings (colour
+scheme, rows per page) a user saves through `PUT /me`.
+
+**(1) Admins read everyone's preferences.** The admin wire shape carries it:
+
+```go
+// src/api-srv/internal/model/app_user_model.go:19
+PreferenceJSONB json.RawMessage `json:"preferenceJsonb,omitempty" ...
+```
+
+`RetrieveUserList` selects it (`repository/user_repository.go:308`), so a
+`READ_USER` holder gets every user's document from `GET /userList`. Nothing
+in it is secret today. A least-privilege gap: a derived app that stores
+more there leaks that too.
+
+**(2) The web app trusts any stored value.** The API checks only "JSON
+object, at most 8 KiB" (`handler/profile_handler.go:190-194`). The form
+limits rows to 5-200 (`pages/user-preferences-page.tsx:74-77`), but a direct
+`PUT /me` skips the form, and the reader takes any positive number and any
+colour string (`types/profile-type.ts:20-24`):
+
+```ts
+colorScheme: preference?.colorScheme ?? defaultPreference.colorScheme,
+  preference?.rowsPerPage && preference.rowsPerPage > 0
+```
+
+A stored `rowsPerPage: 100000` renders every row of every list; a stored
+`"purple"` reaches Mantine. A user can write only their own row, so this is
+a robustness bug, not a hole.
+
+#### What GRC changed
+
+RG0016 (`62403fd`, `47fa7c4`) tagged the field `json:"-"` with the reason
+(`src/internal/model/app_user_model.go:13-17,31`), dropped it from the list
+query (`repository/user_repository.go:402-408`), and serves it only through
+`AppUserOwnProfileModel` on `/me` (`model/app_user_model.go:59-76`).
+`src/web-app/utils/preference.ts:15-59` allow-lists both fields
+(`ROWS_PER_PAGE_LIST = [10, 20, 25, 50, 100]`) and falls back per field.
+Tests: six cases in `utils/preference.test.ts` (`:37` "refuses a page size
+outside the offered list"). No Go test pins that preferences stay off
+`/userList`.
+
+#### Proposed fix for PROTO
+
+1. Trap: PROTO's `GET`/`PUT /me` serialise `AppUserModel` itself
+   (`handler/profile_handler.go:86,176`), so `json:"-"` alone empties `/me`.
+   Add an own-profile struct for those two responses (PROTO naming, no GRC
+   `profile` wrapper, no `AccountStatus`), then tag the admin field.
+2. `user_repository.go:308,351`: drop the column from `RetrieveUserList`.
+3. `types/profile-type.ts`: allow-list `resolvePreference`; the form's
+   `NumberInput` becomes a `Select` over the same list.
+4. vitest: port GRC's six `resolvePreference` cases.
+5. pytest `tests/test_own_profile.py`: `/userList` rows lack
+   `preferenceJsonb`; `/me` keeps it.
+
+#### Open question for Brandon
+
+Rows per page as a fixed list (GRC: 10/20/25/50/100) instead of 5-200?
+Recommend the list; "valid" becomes a one-line check.
+
+- **Completed:** 2026-10-03. No Brandon line; took the recommendation (a fixed rows-per-page list). Go: `AppUserModel.PreferenceJSONB` is `json:"-"` (comment says why), so `/userList` and `/user` never carry it; new `model.AppUserOwnProfileModel` (appUserId, userName, firstName, lastName, email, securityContext, preferenceJsonb omitempty, updateTs, updateUserId; no GRC `profile` wrapper, no accountStatus) built by `AppUserModel.OwnProfile()` is what `GET`/`PUT /me` return; `RetrieveUserList` no longer selects `preference_jsonb`. Web: `types/profile-type.ts` allow-lists both fields (`colorSchemeList`, `rowsPerPageList`, `isColorScheme`, `isRowsPerPage`), `resolvePreference` takes `unknown` and falls back per field; `Profile.preferenceJsonb` is `unknown`; the profile page's rows `NumberInput` (5-200) is a `Select`. Deviation: the list is `[10, 15, 25, 50, 100]`, not GRC's `[10, 20, 25, 50, 100]`, to keep PROTO's default of 15 (GRC's is 25). `/me` no longer carries the admin fields (mfaSetup, mfaExempt, accountStatus, group list, create*/delete*); nothing in the web app read them there (`Profile` type never had them); `tests/test_zz_mfa_totp.py` now reads `mfaSetup` from the admin `/userList` instead of `/me`. Tests: new Go `TestAppUserModelWireShapes` (admin shape lacks preferences and secrets; own shape has preferences, lacks admin fields; NULL omits the key) and a handler subtest (GET /me carries preferences, not accountStatus); vitest `tests/profile-type.test.ts` ports GRC's six cases; pytest `test_profile_round_trip` checks the admin `/userList` row lacks `preferenceJsonb` while `/me` has it; e2e profile spec picks 10/15 from the Select. Docs: doc/105 and `src/api-srv/README.md` say preferences travel only on `/me`. All green, infra=15 docs=499 go=700 unit=93 e2e=13 py=103 (go +2, unit +6), govulncheck clean, gofmt clean.

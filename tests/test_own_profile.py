@@ -26,7 +26,7 @@ class TestOwnProfile:
     with LOGON only; the row is always the caller's, never one named in
     the body. Runs on a throwaway login (own_login)."""
 
-    def test_profile_round_trip(self, own_login):
+    def test_profile_round_trip(self, own_login, test_client):
         client, created = own_login
 
         response = client.make_request("GET", "/me")
@@ -77,6 +77,17 @@ class TestOwnProfile:
         # (absent → NULL → absent).
         response = client.make_request("GET", "/me")
         assert response.json()["data"]["preferenceJsonb"]["rowsPerPage"] == 25
+
+        # Preferences travel only on /me (B062): an admin's /userList row
+        # for the same user leaves them off.
+        response = test_client.make_request(
+            "GET", "/userList",
+            params={"appUserIdList": str(created["appUserId"])},
+        )
+        assert response.status_code == 200, response.text
+        row_list = response.json()["data"]
+        assert [row["appUserId"] for row in row_list] == [created["appUserId"]]
+        assert "preferenceJsonb" not in row_list[0]
         response = client.make_request(
             "PUT", "/me", json={**original, "updateTs": saved["updateTs"]}
         )

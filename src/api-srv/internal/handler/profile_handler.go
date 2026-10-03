@@ -72,7 +72,7 @@ func (h *ProfileHandler) RetrieveOwnProfile(
 		return
 	}
 
-	app.WriteJSON(w, http.StatusOK, model.DataWrapper{Data: user})
+	app.WriteJSON(w, http.StatusOK, model.DataWrapper{Data: user.OwnProfile()})
 	app.Info("ME_RD_DONE", "RetrieveOwnProfile completed")
 }
 
@@ -154,7 +154,7 @@ func (h *ProfileHandler) UpdateOwnProfile(
 			"Profile updated but could not be re-read", "ME_UP_FAIL", err)
 		return
 	}
-	app.WriteJSON(w, http.StatusOK, model.DataWrapper{Data: user})
+	app.WriteJSON(w, http.StatusOK, model.DataWrapper{Data: user.OwnProfile()})
 	app.Info("ME_UP_DONE", "UpdateOwnProfile completed")
 }
 

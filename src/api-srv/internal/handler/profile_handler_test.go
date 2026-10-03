@@ -242,6 +242,25 @@ func TestOwnProfile_AfterContextSwitch(t *testing.T) {
 		repo.AssertExpectations(t)
 	})
 
+	t.Run("GET → 200 carries the preferences, not admin fields", func(t *testing.T) {
+		s := testServices(t)
+		repo := new(MockProfileRepository)
+		row := homeRow(1.5)
+		row.PreferenceJSONB = json.RawMessage(`{"colorScheme":"dark"}`)
+		row.AccountStatus = model.AccountStatusActive
+		repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+			Return(row, nil)
+		w := httptest.NewRecorder()
+		NewProfileHandler(s, repo).RetrieveOwnProfile(w,
+			meRequestAs(t, s, http.MethodGet, []int{model.GrantLogon}, "",
+				42, 2))
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(),
+			`"preferenceJsonb":{"colorScheme":"dark"}`)
+		assert.NotContains(t, w.Body.String(), "accountStatus")
+		assert.NotContains(t, w.Body.String(), "appUserGroupMembershipList")
+	})
+
 	t.Run("PUT → 200, written in tenant 2", func(t *testing.T) {
 		s := testServices(t)
 		repo := new(MockProfileRepository)

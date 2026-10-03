@@ -74,7 +74,8 @@ password is always sent as `password`; group membership bodies are
 - `GET /refresh` — refresh session
 - `POST /changeSecurityContext`
 - `POST /changeOwnPassword`
-- `GET /me`, `PUT /me` — the caller's own row (profile + preferences)
+- `GET /me`, `PUT /me` — the caller's own row (profile + preferences;
+  preferences travel only here, never on `/userList`)
 - `POST /logoff`
 - `POST /userSelfCreate` — public self-registration
 - `POST /mfaSetup`, `POST /mfaVerify` — `/auth`'s `mfaEnrolled` sends an

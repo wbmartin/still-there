@@ -365,14 +365,15 @@ func (r *UserRepository) UpdateUserMFAExempt(
 }
 
 // RetrieveUserList retrieves users for a security context,
-// optionally filtered by idList
+// optionally filtered by idList. preference_jsonb is not read: the list
+// is the admin shape, and preferences travel only on /me.
 func (r *UserRepository) RetrieveUserList(
 	ctx context.Context, securityContext int, idList []int, updateTs float64,
 ) ([]*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, first_name, last_name, email,
 		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
-		       account_status, preference_jsonb,
+		       account_status,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
@@ -414,7 +415,6 @@ func (r *UserRepository) RetrieveUserList(
 			&user.TOTPSeed,
 			&user.MFASetup,
 			&user.AccountStatus,
-			&user.PreferenceJSONB,
 			&user.CreateTS,
 			&user.CreateUserID,
 			&user.UpdateTS,

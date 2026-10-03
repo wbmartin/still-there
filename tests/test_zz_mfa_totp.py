@@ -150,7 +150,13 @@ class TestMFATOTP:
         )
         assert response.status_code == 200
         assert response.json()["data"]["userName"] == MFA_USER
-        assert response.json()["data"]["mfaSetup"] is True
+        # The enrolment is stored. /me carries only the own profile (B062),
+        # so the flag is read from the admin list.
+        response = admin.make_request(
+            "GET", "/userList", params={"appUserIdList": str(app_user_id)}
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"][0]["mfaSetup"] is True
 
         # The temp token is single-use: replaying it with a fresh code fails.
         response = _post(requests, "/mfaVerify", client_ip, {

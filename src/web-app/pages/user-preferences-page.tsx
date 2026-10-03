@@ -10,7 +10,6 @@ import {
   Stack,
   Loader,
   TextInput,
-  NumberInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
@@ -23,7 +22,11 @@ import { grants } from "../constants/grants";
 import { ChangePasswordModal } from "../components/change-password-modal";
 import { useProfileStore } from "../stores/profile-store";
 import {
+  defaultPreference,
+  isColorScheme,
+  isRowsPerPage,
   resolvePreference,
+  rowsPerPageList,
   type ColorScheme,
   type Profile,
 } from "../types/profile-type";
@@ -35,8 +38,8 @@ const colorSchemeOptions: { value: ColorScheme; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
-const isColorScheme = (value: string): value is ColorScheme =>
-  colorSchemeOptions.some((option) => option.value === value);
+// Select values are strings; the stored preference is a number.
+const rowsPerPageOptions = rowsPerPageList.map((rows) => rows.toString());
 
 const profileFormValues = (profile: Profile) => {
   const preference = resolvePreference(profile.preferenceJsonb);
@@ -45,7 +48,7 @@ const profileFormValues = (profile: Profile) => {
     lastName: profile.lastName,
     email: profile.email,
     colorScheme: preference.colorScheme as string,
-    rowsPerPage: preference.rowsPerPage,
+    rowsPerPage: preference.rowsPerPage.toString(),
   };
 };
 
@@ -64,7 +67,7 @@ function UserPreferencesPage() {
       lastName: "",
       email: "",
       colorScheme: "auto",
-      rowsPerPage: 15,
+      rowsPerPage: defaultPreference.rowsPerPage.toString(),
     },
     validate: {
       firstName: (value) => (value.trim() ? null : "First name is required"),
@@ -72,9 +75,7 @@ function UserPreferencesPage() {
       email: (value) =>
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? null : "Invalid email address",
       rowsPerPage: (value) =>
-        Number.isInteger(value) && value >= 5 && value <= 200
-          ? null
-          : "Between 5 and 200",
+        isRowsPerPage(Number(value)) ? null : "Pick a page size",
     },
   });
   const hasFetched = useRef(false);
@@ -164,6 +165,7 @@ function UserPreferencesPage() {
 
   const handleProfileSave = async (values: typeof profileForm.values) => {
     if (!profile) return;
+    const rowsPerPage = Number(values.rowsPerPage);
     try {
       const saved = await updateProfile({
         firstName: values.firstName.trim(),
@@ -172,8 +174,10 @@ function UserPreferencesPage() {
         preferenceJsonb: {
           colorScheme: isColorScheme(values.colorScheme)
             ? values.colorScheme
-            : "auto",
-          rowsPerPage: values.rowsPerPage,
+            : defaultPreference.colorScheme,
+          rowsPerPage: isRowsPerPage(rowsPerPage)
+            ? rowsPerPage
+            : defaultPreference.rowsPerPage,
         },
         updateTs: profile.updateTs,
       });
@@ -230,11 +234,11 @@ function UserPreferencesPage() {
             allowDeselect={false}
             {...profileForm.getInputProps("colorScheme")}
           />
-          <NumberInput
+          <Select
             label="Rows per page"
             description="List pages"
-            min={5}
-            max={200}
+            data={rowsPerPageOptions}
+            allowDeselect={false}
             {...profileForm.getInputProps("rowsPerPage")}
           />
         </Group>
