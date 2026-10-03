@@ -34,11 +34,14 @@ func (u *AppUserModel) MFAEnrolled() bool {
 	return u.MFASetup && u.TOTPSeed != nil && *u.TOTPSeed != ""
 }
 
-// The account_status values (B034). An active login signs in; a blocked one
+// The account_status values. An active login signs in. A blocked one (B034)
 // was active until an admin blocked it, and neither signs in (/auth refuses
 // anything not active) nor, through the BLOCKED* KV flag, keeps a live
-// session until unblocked.
+// session until unblocked. An invited one (B035) was created by an admin
+// with no password; it cannot sign in until its holder redeems the invite
+// link, which makes it active.
 const (
 	AccountStatusActive  = "active"
 	AccountStatusBlocked = "blocked"
+	AccountStatusInvited = "invited"
 )

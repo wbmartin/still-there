@@ -74,6 +74,7 @@ func main() {
 	userRepo := repository.NewUserRepository(dbPool)
 	appUserGroupRepo := repository.NewAppUserGroupRepository(dbPool)
 	exampleRepo := repository.NewExampleRepository(dbPool)
+	userInviteRepository := repository.NewUserInviteRepository(dbPool)
 
 	// Initialize app dependencies
 	appServices := &app.Services{
@@ -126,6 +127,11 @@ func main() {
 		appServices,
 		userRepo,
 	)
+	userInviteHandler := handler.NewUserInviteHandler(
+		appServices,
+		appUserGroupRepo,
+		userInviteRepository,
+	)
 	mfaSetupHandler := handler.MFASetupHandler(appServices, userRepo)
 	mfaVerifyHandler := handler.MFAVerifyHandler(appServices, userRepo)
 
@@ -171,6 +177,11 @@ func main() {
 	// User self-create (public)
 	mux.HandleFunc("POST /userSelfCreate", userSelfCreateHandler)
 
+	// Invite links (public half): read and redeem a link, no session
+	// (user_invite_handler.go)
+	mux.HandleFunc("POST /inviteCheck", userInviteHandler.CheckInvite)
+	mux.HandleFunc("POST /inviteRedeem", userInviteHandler.RedeemInvite)
+
 	// MFA
 	mux.HandleFunc("POST /mfaSetup", mfaSetupHandler)
 	mux.HandleFunc("POST /mfaVerify", mfaVerifyHandler)
@@ -188,6 +199,12 @@ func main() {
 		userHandler.AddUserListToGroupHandler)
 	mux.HandleFunc("POST /removeUserListFromGroup",
 		userHandler.RemoveUserListFromGroupHandler)
+
+	// Invite links (admin half): an invited login and its one-time link
+	mux.HandleFunc("POST /userInvite", userInviteHandler.CreateInvitedUser)
+	mux.HandleFunc("POST /userInviteReissue",
+		userInviteHandler.ReissueInvite)
+	mux.HandleFunc("POST /userInviteRevoke", userInviteHandler.RevokeInvite)
 
 	// Admin reset MFA
 	adminResetMFAHandler := handler.AdminResetUserMFAHandler(

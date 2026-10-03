@@ -193,6 +193,8 @@ function UserAdminPage() {
               <Table.Td>
                 {user.accountStatus === "blocked" ? (
                   <Badge color="red" variant="light">Blocked</Badge>
+                ) : user.accountStatus === "invited" ? (
+                  <Badge color="blue" variant="light">Invited</Badge>
                 ) : (
                   <Badge color="gray" variant="light">Active</Badge>
                 )}

@@ -14,6 +14,7 @@ import {
   Loader,
   Alert,
   Badge,
+  SegmentedControl,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { modals } from "@mantine/modals";
@@ -23,10 +24,12 @@ import useAuthGuard from "../hooks/use-auth-guard";
 import { useAuthStore } from "../stores/auth-store";
 import { confirmDelete } from "../utils/confirm-delete";
 import { ChangePasswordModal } from "../components/change-password-modal";
+import { InviteLinkModal } from "../components/invite-link-modal";
 import { ROUTES } from "../constants/routes";
 import {
   defaultUserFormData,
   type AccountStatus,
+  type IssuedInvite,
 } from "../types/user-type";
 import { grants } from "../constants/grants";
 import { PasswordGenerator } from "../components/password-generator";
@@ -43,6 +46,9 @@ function UserEditPage() {
     changeOtherUserPassword,
     resetUserMFA,
     setUserBlocked,
+    inviteUser,
+    reissueInvite,
+    revokeInvite,
   } = useAppUserStore();
   const {
     readList: readAppUserGroupList,
@@ -79,6 +85,15 @@ function UserEditPage() {
   const [accountStatus, setAccountStatus] =
     useState<AccountStatus>("active");
   const [blockLoading, setBlockLoading] = useState(false);
+  // A new user is onboarded by an invite link (they choose their own
+  // password) or with a password the admin sets (B035).
+  const [onboarding, setOnboarding] = useState<"invite" | "password">(
+    "invite",
+  );
+  const [issuedInvite, setIssuedInvite] = useState<IssuedInvite | null>(
+    null,
+  );
+  const [inviteActionLoading, setInviteActionLoading] = useState(false);
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
@@ -139,6 +154,21 @@ function UserEditPage() {
     };
 
     try {
+      if (isNew && onboarding === "invite") {
+        // The link is shown once, in the modal; closing it goes back to
+        // the list.
+        setIssuedInvite(
+          await inviteUser({
+            userName: data.userName,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            email: data.email,
+            appUserGroupMembershipList: data.appUserGroupMembershipList,
+            mfaExempt: data.mfaExempt,
+          }),
+        );
+        return;
+      }
       if (isNew) {
         await createUser(data);
         notifications.show({
@@ -284,7 +314,53 @@ function UserEditPage() {
     }
   };
 
+  const handleReissueInvite = async () => {
+    if (!numericId) return;
+    setInviteActionLoading(true);
+    try {
+      setIssuedInvite(await reissueInvite(numericId, form.values.userName));
+    } catch (err) {
+      notifications.show({
+        title: "Error",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Failed to issue a new invite link",
+        color: "red",
+      });
+    } finally {
+      setInviteActionLoading(false);
+    }
+  };
+
+  const handleRevokeInvite = async () => {
+    if (!numericId) return;
+    setInviteActionLoading(true);
+    try {
+      await revokeInvite(numericId);
+      notifications.show({
+        title: "Invite link revoked",
+        message:
+          "The link no longer works. Issue a new one to invite this user " +
+          "again.",
+        color: "green",
+      });
+    } catch (err) {
+      notifications.show({
+        title: "Error",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Failed to revoke the invite link",
+        color: "red",
+      });
+    } finally {
+      setInviteActionLoading(false);
+    }
+  };
+
   const isBlocked = accountStatus === "blocked";
+  const isInvited = !isNew && accountStatus === "invited";
 
   const groupOptions = appUserGroupList.map((g) => ({
     value: g.appUserGroupId.toString(),
@@ -298,6 +374,11 @@ function UserEditPage() {
         {isBlocked && (
           <Badge color="red" variant="light" ml="md">
             Blocked
+          </Badge>
+        )}
+        {isInvited && (
+          <Badge color="blue" variant="light" ml="md">
+            Invited
           </Badge>
         )}
       </Title>
@@ -323,6 +404,25 @@ function UserEditPage() {
           mb="md"
         />
         {isNew && (
+          <SegmentedControl
+            value={onboarding}
+            onChange={(value) =>
+              setOnboarding(value as "invite" | "password")
+            }
+            data={[
+              { value: "invite", label: "Send an invite link" },
+              { value: "password", label: "Set a password" },
+            ]}
+            mb="xs"
+          />
+        )}
+        {isNew && onboarding === "invite" && (
+          <Text size="sm" c="dimmed" mb="md">
+            You get a one-time link to send them. They choose their own
+            password when they open it.
+          </Text>
+        )}
+        {isNew && onboarding === "password" && (
           <>
             <PasswordInput
               label="Password"
@@ -350,8 +450,31 @@ function UserEditPage() {
           mb="md"
         />
         <Group>
-          <Button type="submit">Save</Button>
-           {!isNew && (
+          <Button type="submit">
+            {isNew && onboarding === "invite"
+              ? "Create and get invite link"
+              : "Save"}
+          </Button>
+           {isInvited && grantList.includes(grants.UPDATE_USER) && (
+             <>
+               <Button
+                 variant="outline"
+                 loading={inviteActionLoading}
+                 onClick={() => void handleReissueInvite()}
+               >
+                 New invite link
+               </Button>
+               <Button
+                 variant="outline"
+                 color="orange"
+                 loading={inviteActionLoading}
+                 onClick={() => void handleRevokeInvite()}
+               >
+                 Revoke link
+               </Button>
+             </>
+           )}
+           {!isNew && !isInvited && (
              <Button
                variant="outline"
                onClick={() => setPasswordModalOpen(true)}
@@ -359,7 +482,8 @@ function UserEditPage() {
                Change Password
              </Button>
            )}
-           {!isNew && grantList.includes(grants.RESET_MFA_TOKEN) && (
+           {!isNew && !isInvited &&
+             grantList.includes(grants.RESET_MFA_TOKEN) && (
              <Button
                color="orange"
                loading={resetMFALoading}
@@ -380,7 +504,7 @@ function UserEditPage() {
                Reset MFA
              </Button>
            )}
-           {!isNew && grantList.includes(grants.BLOCK_USER) &&
+           {!isNew && !isInvited && grantList.includes(grants.BLOCK_USER) &&
              form.values.userName !== ownUserName && (
              <Button
                color={isBlocked ? "green" : "orange"}
@@ -433,6 +557,13 @@ function UserEditPage() {
         mode="other"
         loading={passwordChangeLoading}
         error={passwordChangeError}
+      />
+      <InviteLinkModal
+        invite={issuedInvite}
+        onClose={() => {
+          setIssuedInvite(null);
+          if (isNew) void navigate(ROUTES.APP_USER_LIST);
+        }}
       />
     </Container>
   );

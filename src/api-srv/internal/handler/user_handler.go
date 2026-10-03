@@ -142,11 +142,25 @@ func (h *UserHandler) validateGroupsSecurityContext(
 	expectedSecurityContext int,
 	ctx context.Context,
 ) (bool, error) {
+	return groupListInSecurityContext(
+		ctx, h.appUserGroupRepo, groupIDs, expectedSecurityContext,
+	)
+}
+
+// groupListInSecurityContext reports whether every group in groupIDs is a
+// live group of expectedSecurityContext. POST /user and POST /userInvite
+// share it.
+func groupListInSecurityContext(
+	ctx context.Context,
+	appUserGroupRepo AppUserGroupRepositoryInterface,
+	groupIDs []int,
+	expectedSecurityContext int,
+) (bool, error) {
 	if len(groupIDs) == 0 {
 		return true, nil
 	}
 
-	groups, err := h.appUserGroupRepo.RetrieveAppUserGroupListByIDList(
+	groups, err := appUserGroupRepo.RetrieveAppUserGroupListByIDList(
 		ctx,
 		groupIDs,
 		expectedSecurityContext,
@@ -938,6 +952,15 @@ func (h *UserHandler) ChangeOtherUserPassword(
 		return
 	}
 	user := users[0]
+	// An invited login gets its password from its invite link (B035); an
+	// admin-set one would leave it invited and unusable.
+	if user.AccountStatus == model.AccountStatusInvited {
+		app.WriteError(w, http.StatusConflict,
+			"This user has not accepted their invite yet; issue a new "+
+				"invite link instead",
+			"PW_INVITED", nil)
+		return
+	}
 
 	// Hash new password
 	hashedPassword, err := auth.HashPassword(req.NewPassword)

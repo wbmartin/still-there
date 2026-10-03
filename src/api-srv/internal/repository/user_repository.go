@@ -113,9 +113,31 @@ func (r *UserRepository) GetGrantsForGroups(
 	return grants, nil
 }
 
-// CreateUser creates a new user within a security context
+// CreateUser creates a new, active user within a security context.
 func (r *UserRepository) CreateUser(
 	ctx context.Context, user *model.AppUserModel, securityContext int,
+) (*model.AppUserModel, error) {
+	// Every login made with a password is active; account_status has no
+	// DEFAULT. An invited one is UserInviteRepository.CreateInvitedUser.
+	user.AccountStatus = model.AccountStatusActive
+	return insertAppUser(ctx, r.db, user, securityContext)
+}
+
+// rowQuerier is what insertAppUser needs: a pool, or a transaction.
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// userNamePattern is the one character set a user_name may use.
+var userNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+// insertAppUser inserts user, whose AccountStatus the caller has set, and
+// fills its AppUserID.
+func insertAppUser(
+	ctx context.Context,
+	db rowQuerier,
+	user *model.AppUserModel,
+	securityContext int,
 ) (*model.AppUserModel, error) {
 	// Validate that the user can only be created in the user's security context
 	if user.SecurityContext != securityContext {
@@ -124,7 +146,7 @@ func (r *UserRepository) CreateUser(
 		)
 	}
 
-	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(user.UserName) {
+	if !userNamePattern.MatchString(user.UserName) {
 		return nil, clientMessage(ErrValidation,
 			"username must contain only alphanumeric characters, "+
 				"hyphens, and underscores")
@@ -139,10 +161,7 @@ func (r *UserRepository) CreateUser(
 		        $15)
 		RETURNING app_user_id`
 
-	// Every login is created active; account_status has no DEFAULT.
-	user.AccountStatus = model.AccountStatusActive
-
-	err := r.db.QueryRow(
+	err := db.QueryRow(
 		ctx,
 		query,
 		user.UserName,

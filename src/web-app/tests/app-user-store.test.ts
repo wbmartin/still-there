@@ -56,4 +56,59 @@ describe("app user store request bodies", () => {
     expect(init?.method).toBe("POST");
     expect(JSON.parse(init?.body as string)).toEqual({ userName: "bob" });
   });
+
+  it("inviteUser posts the user fields, no password, and returns the token",
+    async () => {
+      const fetchMock = vi.fn<
+        (input: string, init?: RequestInit) => Promise<Response>
+      >(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: { inviteToken: "ab".repeat(32), expiresTs: 1800000000 },
+            }),
+            { status: 201, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const data = {
+        userName: "ivy",
+        firstName: "Ivy",
+        lastName: "Vine",
+        email: "ivy@example.com",
+        appUserGroupMembershipList: [1],
+        mfaExempt: false,
+      };
+
+      const issued = await useAppUserStore.getState().inviteUser(data);
+
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe("/api/userInvite");
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(init?.body as string)).toEqual(data);
+      expect(issued).toEqual({
+        userName: "ivy",
+        inviteToken: "ab".repeat(32),
+        expiresTs: 1800000000,
+      });
+    });
+
+  it.each([
+    ["reissueInvite", "/api/userInviteReissue"],
+    ["revokeInvite", "/api/userInviteRevoke"],
+  ] as const)("%s posts appUserId to %s", async (action, path) => {
+    const fetchMock = recordFetch();
+
+    if (action === "reissueInvite") {
+      await useAppUserStore.getState().reissueInvite(51, "ivy");
+    } else {
+      await useAppUserStore.getState().revokeInvite(51);
+    }
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(path);
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual({ appUserId: 51 });
+  });
 });

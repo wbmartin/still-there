@@ -106,6 +106,11 @@ initial/examples in src/api-srv/sql/migrations/0001_initial_schema.sql (DDL) and
 | POST | /admin/resetUserMFA | Yes | Yes | RESET_MFA_TOKEN | Clear a user's TOTP seed (9020: its own grant, not CHG_USER) |
 | POST | /admin/blockUser | Yes | Yes | BLOCK_USER | Block a login of the caller's tenant (see User Blocking) |
 | POST | /admin/unblockUser | Yes | Yes | BLOCK_USER | Unblock it |
+| POST | /userInvite | Yes | Yes | ADD_USER | Create an invited login (no password) and its one-time link (see Invite Links) |
+| POST | /userInviteReissue | Yes | Yes | CHG_USER | New link for an invited login; revokes the old one |
+| POST | /userInviteRevoke | Yes | Yes | CHG_USER | Stop an invited login's live links |
+| POST | /inviteCheck | No | No | N/A | Who a live invite link is for (public; the token is the credential) |
+| POST | /inviteRedeem | No | No | N/A | Set the password from a live link; the login becomes active (public) |
 | POST | /addUserListToGroup | Yes | Yes | CHG_USER_GROUP | Add users to group |
 | POST | /removeUserListFromGroup | Yes | Yes | CHG_USER_GROUP | Remove users from group |
 | GET | /grantList | Yes | No | GET_USER | Retrieve available grants |
@@ -237,6 +242,38 @@ another tenant's or unknown login 404, wrong starting state 409, stale row
 409. The `admin` subject is exempt from the flag check (as from the rate
 limit); its row still stops it signing in.
 
+### Invite Links
+An admin onboards a person without handling their password (B035,
+`internal/handler/user_invite_handler.go`). It is a second admin path
+beside `POST /user` (admin sets a password), and both sit beside public
+self-registration (`POST /userSelfCreate`); a derived app keeps the paths
+it wants.
+
+- `POST /userInvite` (ADD_USER, body as `POST /user` without a password)
+  creates the login with `account_status = invited` and an empty
+  `pw_hash`, and one `user_invite` row (migration `0005`), in one
+  transaction. The answer carries `inviteToken` (32 random bytes, hex)
+  once; only its SHA-256 is stored. The link is `<origin>/invite#<token>`:
+  the fragment never reaches a server log or `Referer`.
+- `POST /userInviteReissue` / `/userInviteRevoke` (CHG_USER, body
+  `{appUserId}`): reissue revokes every live link and issues a new one;
+  revoke with no live link is 409. A login that is not invited, deleted or
+  of another tenant is 404.
+- `POST /inviteCheck` / `/inviteRedeem` (public, body `{token}` /
+  `{token, password}`, 4 KiB cap): `SkipJWT`, `CheckRateLimit` (per
+  address), `SkipUserBlock`, `SkipCSRF`, `SkipAuthorization`, each stated
+  in the handler. Then the `/auth` lockout: the per-address key /auth
+  counts plus a per-token key (`invite:<16 hex of the hash>`); 429 when
+  locked. Every unusable link (malformed, unknown, expired, redeemed,
+  revoked, login deleted or not invited) is one counted 404 with one
+  message. Redeem checks the password floor (8), then the token, then
+  runs Argon2id, then locks invite and user `FOR UPDATE` and sets the
+  password, `active`, `redeemed_ts` and `redeemed_source_ip`.
+- An invited login cannot sign in (`/auth` refuses anything not
+  `active`), and `/changeOtherUserPassword` answers it 409. Links expire
+  after `INVITE_TTL_HOURS` (required). No e-mail is sent: the admin copies
+  the link from the web app, which shows it once.
+
 **Limit: a restart forgets revocations.** The KV is process memory and
 revocations have no durable row, so after an API restart a token revoked
 before it is good again until it expires. Accepted for one app server; a
@@ -268,10 +305,10 @@ own text goes to the log only.
 
 | Cap | Routes |
 |---|---|
-| 4 KiB (`maxAuthBodyBytes`) | `/auth`, `/mfaSetup`, `/mfaVerify`, `/changeSecurityContext`, `/userSelfCreate` (read before or without a session) |
+| 4 KiB (`maxAuthBodyBytes`) | `/auth`, `/mfaSetup`, `/mfaVerify`, `/changeSecurityContext`, `/userSelfCreate`, `/inviteCheck`, `/inviteRedeem` (read before or without a session) |
 | 8 KiB (`maxErrorReportBodyBytes`) | `/error-report` (signed-in; logs the first 2000 characters) |
 | 12 KiB (4 KiB + `maxPreferenceBytes`) | `PUT /me` |
-| 64 KiB (`maxLoginLayerBodyBytes`) | `POST`/`PUT /user`, `POST`/`PUT /appUserGroup`, `/addUserListToGroup`, `/removeUserListFromGroup`, `/changeOwnPassword`, `/changeOtherUserPassword`, `/admin/resetUserMFA`, `/admin/blockUser`, `/admin/unblockUser` |
+| 64 KiB (`maxLoginLayerBodyBytes`) | `POST`/`PUT /user`, `POST`/`PUT /appUserGroup`, `/addUserListToGroup`, `/removeUserListFromGroup`, `/changeOwnPassword`, `/changeOtherUserPassword`, `/admin/resetUserMFA`, `/admin/blockUser`, `/admin/unblockUser`, `/userInvite`, `/userInviteReissue`, `/userInviteRevoke` |
 | 1 MiB (`maxEntityBodyBytes`) | `example_handler.go` writes, bulk lists included |
 
 Deletes take their ids in the query string and read no body. The entity cap

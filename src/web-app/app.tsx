@@ -41,6 +41,7 @@ import AppUserGroupListPage from './pages/app-user-group-list-page'
 import AppUserGroupEditPage from './pages/app-user-group-edit-page'
 import UserPreferencesPage from './pages/user-preferences-page'
 import MFAOnboardingPage from './pages/mfa-onboarding-page'
+import InvitePage from './pages/invite-page'
 
 import { useAuthStore, setRouteNavigator } from './stores/auth-store'
 import { ROUTES } from './constants/routes'
@@ -114,6 +115,11 @@ const router = createBrowserRouter([
         {
           path: ROUTES.MFA_VERIFY,
           element: <MFAOnboardingPage />,
+          errorElement: <ErrorPage />,
+        },
+        {
+          path: ROUTES.INVITE,
+          element: <InvitePage />,
           errorElement: <ErrorPage />,
         },
         {

@@ -34,8 +34,8 @@ Required:
   required
 - `TOTP_ENCRYPTION_KEY` — 32 bytes as hex (AES-256)
 - `JWT_SESSION_EXPIRE_HOURS`, `MAX_USER_REQ_PER_MIN`,
-  `MAX_UNAUTH_REQ_PER_MIN`, `FAILED_LOGIN_ATTEMPT_THRESHOLD` — positive
-  integers
+  `MAX_UNAUTH_REQ_PER_MIN`, `FAILED_LOGIN_ATTEMPT_THRESHOLD`,
+  `INVITE_TTL_HOURS` (how long an invite link works) — positive integers
 - `FAILED_LOGIN_ATTEMPT_WINDOW_DURATION`, `FAILED_LOGIN_LOCKOUT_DURATION` —
   KV durations above 0: `30s`, `5min`, `1h`
 - `LOG_LEVEL` — one of `debug`, `info`, `warn`, `error`; lines below it are
@@ -75,6 +75,12 @@ All JSON is camelCase. List endpoints take `?<entity>IdList=1,2,3`
 - `POST /admin/blockUser`, `POST /admin/unblockUser` — body `{userName}`;
   block sets `account_status = blocked` (`/auth` refuses it), ends the
   login's sessions and sets the `BLOCKED*` KV flag, reloaded at start
+- `POST /userInvite`, `POST /userInviteReissue`, `POST /userInviteRevoke`
+  — an invited login (no password, cannot sign in) and its one-time link;
+  the token is answered once, only its SHA-256 stored
+- `POST /inviteCheck`, `POST /inviteRedeem` — public: who a link is for;
+  set the password from it (login becomes active). Rate limit plus the
+  `/auth` lockout per address and per token; one 404 for any dead link
 
 ### Example (CRUD)
 - `GET /example?exampleId={id}`

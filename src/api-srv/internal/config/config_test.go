@@ -65,6 +65,7 @@ FAILED_LOGIN_ATTEMPT_THRESHOLD=7
 FAILED_LOGIN_ATTEMPT_WINDOW_DURATION=5min
 FAILED_LOGIN_LOCKOUT_DURATION=5min
 LOG_LEVEL=info
+INVITE_TTL_HOURS=72
 `
 
 // withoutKey returns validBase minus the line that sets key.
@@ -173,7 +174,7 @@ func TestLoadConfig_PositiveIntKeys(t *testing.T) {
 	keyList := []string{
 		"JWT_SESSION_EXPIRE_HOURS", "MAX_USER_REQ_PER_MIN",
 		"MAX_UNAUTH_REQ_PER_MIN", "SERVER_PORT",
-		"FAILED_LOGIN_ATTEMPT_THRESHOLD",
+		"FAILED_LOGIN_ATTEMPT_THRESHOLD", "INVITE_TTL_HOURS",
 	}
 	testCaseList := []struct {
 		name    string
@@ -296,5 +297,6 @@ func intField(config *Config, key string) int {
 		"MAX_UNAUTH_REQ_PER_MIN":         config.MaxUnauthReqPerMin,
 		"SERVER_PORT":                    config.ServerPort,
 		"FAILED_LOGIN_ATTEMPT_THRESHOLD": config.FailedLoginAttemptThreshold,
+		"INVITE_TTL_HOURS":               config.InviteTTLHours,
 	}[key]
 }

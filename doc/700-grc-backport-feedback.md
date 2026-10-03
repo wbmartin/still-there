@@ -242,132 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B035 — Invite-link onboarding (replaces self-registration)
-
-- **Priority:** P2  **Area:** go-api, web-app, tests, etc
-- **GRC:** `src/internal/handler/user_invite_handler.go:1-538`; `repository/user_invite_repository.go:1-388`; `model/user_invite_model.go`; `auth/token.go:24-44`; `config/config.go:58-71,168-174`; `src/api-srv/cmd/server/main.go:46-51,180-187,208-210`; `user_handler.go:1088-1099`; `src/migrate-srv/sql/00024_user_invite.sql:8-10,16-32,35-38,40-42`; `pages/invite-page.tsx:1-191`; `components/invite-link-modal.tsx:1-53`; `utils/invite-link.ts:1-33`; `stores/app-user-store.ts:208-275`; `pages/app-user-edit-page.tsx:142-145,284-315,366-420`; `pages/app-user-list-page.tsx:158,173-180`; `constants/routes.ts:23-25`; `tests/test_user_invite.py:1-179`; `etc/loc-api-srv.env:7-8`; `user_repository.go:143-210`   **PROTO:** new files; new `src/api-srv/sql/migrations/0004_user_lifecycle.sql`; `src/api-srv/cmd/server/main.go` routes
-- **Ticket:** RG0035 / `7001cbd`; RG0036
-- **What:** Admin creates an `invited` login and a one-time link (256-bit
-fragment token, SHA-256 stored, `INVITE_TTL_HOURS`); reissue revokes; redeem
-activates in one transaction.
-- **Port notes:** Strip `audit_log` calls (:351-388) or B067. `account_status`
-NOT NULL, no DEFAULT. Rewrite pytest off `grc` fixture. No email (RG0040).
-Enables B071.
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-PROTO has two ways to make a login, and neither lets an admin onboard a
-person without handling their password.
-
-1. **Admin sets a password.** `POST /user`
-   (`src/api-srv/internal/handler/user_handler.go:341`) requires a raw
-   password and hashes it (`:436`, `auth.HashPassword(req.PwRaw)`). The
-   admin chooses it, sends it to the person outside the app, and nothing
-   makes the person change it. The admin's "Change Password" for another
-   user is itself broken (B013).
-2. **Self-registration.** `POST /userSelfCreate`
-   (`src/api-srv/cmd/server/main.go:154`) is public. It puts the new login
-   in tenant 1, group 3 (`src/api-srv/internal/handler/user_mfa_handler.go:127-128`).
-   The login page links to it (`src/web-app/pages/login.tsx:88-97`,
-   "Don't have an account? Create one here").
-
-B002 (retire `/userSelfCreate`) is marked **SKIP**, so path 2 stays.
-What this item fixes is path 1: the admin knows every new user's first
-password. That is a security weakness (shared secret in email or chat,
-no forced change) and a UX gap. It is not an open hole.
-
-**Correction to the doc entry's title.** "Replaces self-registration"
-was GRC's framing. With B002 skipped, B035 for PROTO means **invite links
-are an additional admin path, beside self-registration**, and the
-recommended default for admin-created users. "Set a password" stays as
-the second admin option, as it did in GRC.
-
-#### What GRC changed
-
-GRC RG0035 (`7001cbd`, merged `92423c9`) added invite links and, in the
-same ticket, removed self-registration. The parts:
-
-- **Schema** (`src/migrate-srv/sql/00024_user_invite.sql`):
-  `app_user.account_status` (`invited`/`active`), backfilled `active`,
-  `NOT NULL`, no DEFAULT (`:8-10`); table `user_invite` with
-  `token_hash`, `expires_ts`, `redeemed_ts`, `redeemed_source_ip`,
-  `revoked_ts` (`:16-32`); unique index on `token_hash` (`:35`).
-- **Token** (`src/internal/auth/token.go:32-42`): 32 random bytes, hex;
-  only the SHA-256 is stored ("a fast hash is enough ... the token is 256
-  random bits").
-- **Routes**: admin `POST /userInvite`, `/userInviteReissue`,
-  `/userInviteRevoke` with full checks (`src/api-srv/cmd/server/main.go:208-210`);
-  public `POST /inviteCheck`, `/inviteRedeem` (`:186-187`) with
-  per-IP rate limit, the `/auth` per-address lockout plus a per-token
-  lockout, and one generic 404 for any dead link. Redeem checks the
-  password rule, then the token, then runs argon2, and locks the invite
-  and user rows `FOR UPDATE` in one transaction.
-- Reissue revokes the older link; `/changeOtherUserPassword` 409s on an
-  invited login (`src/internal/handler/user_handler.go:1088-1099`);
-  `/auth` refuses non-`active` logins as a bad password.
-- **Config**: `INVITE_TTL_HOURS` (72), required at api-srv start
-  (`src/internal/config/config.go:58-71,168-174`).
-- **Web**: `pages/invite-page.tsx` takes the token from the URL fragment
-  (never sent to a server), checks, redeems, strips it from history and
-  signs in; `invite-link-modal.tsx` shows the link once; new users
-  default to "Send an invite link".
-- **Audit**: each step appends to GRC's hash-chained audit log
-  (`src/internal/repository/user_invite_repository.go:351-388`).
-- **Removed self-registration**: route, handler, login link, modal.
-
-Tests: Go `user_invite_handler_test.go`, `user_invite_repository_test.go`;
-pytest `tests/test_user_invite.py` (9 cases: issue, invited cannot sign
-in, check+redeem+sign in, reissue/revoke, same answer for dead links,
-audit, 409 on admin password, needs `CREATE_USER`, self-registration 404).
-
-#### Proposed fix for PROTO
-
-1. **Migration** `src/api-srv/sql/migrations/0004_user_lifecycle.sql`
-   (latest is `0003`): `account_status` as in GRC (shared with B034,
-   whichever lands first) plus `user_invite`. Plain SQL: drop goose
-   markers, the Down section and the per-migration GRANT lines (PROTO's
-   `0001` grants once; confirm new tables are covered).
-2. **Every insert names `account_status`**: `CreateUser`
-   (`internal/repository/user_repository.go:143`) writes `active`; this
-   covers `/userSelfCreate` too. `sql/fixtures/local-seed.sql:92` likewise.
-3. Port `token.go` functions, `user_invite_repository.go`,
-   `user_invite_model.go`, `user_invite_handler.go`. Traps: module path
-   `github.com/wbmartin/starter-api`; **strip every
-   `appendUserInviteAudit` call** (no audit table until B067);
-   `ErrNotFound`/`mapRepoError` need B028 (or B007's minimal wrap);
-   `limitBody` needs B011; GRC's `grc` group names and `/grc` landing
-   become PROTO's groups and `/dashboard`.
-4. `/auth`: refuse non-`active` in B007's failure branch.
-   `ChangeOtherUserPassword` (`user_handler.go:965`): 409 for `invited`.
-5. **Keep** `/userSelfCreate`, its login link and
-   `user-registration-modal.tsx`. Do **not** port GRC's
-   `test_self_registration_is_gone`, the login text "Ask your
-   administrator for an invite link", or the `main.go` comment that says
-   there is no self-registration route.
-6. `INVITE_TTL_HOURS` required in `LoadConfig` (PROTO has one server
-   binary; no `ValidateInvite` split), added to every API env file.
-7. **Web**: invite page, modal, `utils/invite-link.ts`, edit-page invite
-   mode, list Status column, route `/invite`, two public endpoints.
-   GRC's `anonymous: true` (no CSRF on anonymous calls) needs B037.
-8. No email (GRC RG0040 is still open). Enables B071.
-
-Dependencies: B007, B028, B037; B034 shares the column. Tests: Go handler and repo
-tests in tenant 2; pytest `test_user_invite.py` rewritten off GRC's
-`grc` fixture, minus the self-registration case and the audit case;
-vitest for `invite-link.ts`.
-
-#### Open question for Brandon
-
-With self-registration kept, should a self-registered login stay
-`active` at once, or land `invited`/pending until an admin approves it?
-Recommendation: keep it `active` (today's behaviour) and leave approval
-to a later ticket; B035 is about admin onboarding only.
-
-Brandon: Let's adapt so we have both invite links and self create, the generated app will have to decid what it wants.
-
 ### B036 — Web: API unreachable seam for 5xx/429; `/refresh` retried
 
 - **Priority:** P2  **Area:** web-app, docs
@@ -8893,3 +8767,131 @@ Recommendation: port it; disabling a login without deleting it is a
 baseline admin need, and half the plumbing is already shipped.
 
 Brandon: Port Blocked
+### B035 — COMPLETED — Invite-link onboarding (beside self-registration)
+- **Completed:** 2026-10-03. Adapted per Brandon: invite links added beside self-registration (`/userSelfCreate`, its login link and modal untouched; the derived app picks its paths), so the title drops GRC's "replaces self-registration". Migration `0005_user_invite.sql` adds `user_invite` (token_hash unique, expires/redeemed/revoked ts, redeemed_source_ip; no `kind` column, no FKs/DEFAULTs) with its own GRANTs; `invited` is the third `account_status` value (TEXT, no DDL). `auth/token.go` (`NewInviteToken` 32 random bytes hex, `HashInviteToken` SHA-256). `CreateUser` now calls a shared `insertAppUser` (pool or tx). New `user_invite_repository.go` (create invited login + invite in one tx, reissue revokes live links, revoke 409 when none, live read unscoped by token, redeem locks invite+user `FOR UPDATE`) and `user_invite_handler.go`: admin `POST /userInvite` (9001), `/userInviteReissue`, `/userInviteRevoke` (9003) with explicit JWT/rate+block/CSRF/authz checks; public `POST /inviteCheck`, `/inviteRedeem` with each Skip stated, `CheckRateLimit`, the `/auth` per-address lockout plus a per-token key, one counted 404 for every dead link, password floor before lookup before Argon2id. `/changeOtherUserPassword` 409s an invited login; `/auth` already refused non-active (B034). `groupListInSecurityContext` extracted so POST /user and /userInvite share it. `INVITE_TTL_HOURS` required positive int, added (72) to all six API env files. Web: 5 endpoints, `/invite` route and `invite-page.tsx` (token from the fragment, check, redeem, strip history, sign in, MFA path), `invite-link-modal.tsx` (shown once), `utils/invite-link.ts`, store `inviteUser`/`reissueInvite`/`revokeInvite`, edit page "Send an invite link" (default) / "Set a password", New link / Revoke for invited logins (Change Password, Reset MFA, Block hidden for them), Invited badge on edit and list pages. Deviations: GRC's audit calls stripped (no audit log until B067); password rule is PROTO's 8-char floor (no GRC MFA-exempt rule); email must be non-empty like POST /user (not GRC's plain-address parse); B037 not landed, so the invite page uses today's `apiJson(..., {anonymous: true})` (a leftover CSRF header is harmless, the server skips CSRF there); pytest has no DB handle, so stored-hash/source-IP checks live in the Go repo test; GRC's self-registration-gone and audit cases not ported. Docs: doc/105 route table, body caps, new Invite Links section; api-srv and tests READMEs. Tests: Go handler (11: check sequence, issue/hash/TTL, required fields, dead-link 404 alike, lockout shared with /auth, rate limit, no-session check, short password first, Argon hash + client IP, 409 on admin password, /auth refuses invited), repo suite (5, tenant 2), config keys; vitest `invite-link.test.ts` (8) and store bodies (3); pytest `test_user_invite.py` (8). All green, govulncheck clean: go=429 unit=55 e2e=12 py=96. Env: any existing API env file needs `INVITE_TTL_HOURS` (the UAT host's `api-srv.env` was written once by bin/610 and is not regenerated) and the DB needs migration 0005 before the API starts.
+
+
+
+- **Priority:** P2  **Area:** go-api, web-app, tests, etc
+- **GRC:** `src/internal/handler/user_invite_handler.go:1-538`; `repository/user_invite_repository.go:1-388`; `model/user_invite_model.go`; `auth/token.go:24-44`; `config/config.go:58-71,168-174`; `src/api-srv/cmd/server/main.go:46-51,180-187,208-210`; `user_handler.go:1088-1099`; `src/migrate-srv/sql/00024_user_invite.sql:8-10,16-32,35-38,40-42`; `pages/invite-page.tsx:1-191`; `components/invite-link-modal.tsx:1-53`; `utils/invite-link.ts:1-33`; `stores/app-user-store.ts:208-275`; `pages/app-user-edit-page.tsx:142-145,284-315,366-420`; `pages/app-user-list-page.tsx:158,173-180`; `constants/routes.ts:23-25`; `tests/test_user_invite.py:1-179`; `etc/loc-api-srv.env:7-8`; `user_repository.go:143-210`   **PROTO:** new files; new `src/api-srv/sql/migrations/0004_user_lifecycle.sql`; `src/api-srv/cmd/server/main.go` routes
+- **Ticket:** RG0035 / `7001cbd`; RG0036
+- **What:** Admin creates an `invited` login and a one-time link (256-bit
+fragment token, SHA-256 stored, `INVITE_TTL_HOURS`); reissue revokes; redeem
+activates in one transaction.
+- **Port notes:** Strip `audit_log` calls (:351-388) or B067. `account_status`
+NOT NULL, no DEFAULT. Rewrite pytest off `grc` fixture. No email (RG0040).
+Enables B071.
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+PROTO has two ways to make a login, and neither lets an admin onboard a
+person without handling their password.
+
+1. **Admin sets a password.** `POST /user`
+   (`src/api-srv/internal/handler/user_handler.go:341`) requires a raw
+   password and hashes it (`:436`, `auth.HashPassword(req.PwRaw)`). The
+   admin chooses it, sends it to the person outside the app, and nothing
+   makes the person change it. The admin's "Change Password" for another
+   user is itself broken (B013).
+2. **Self-registration.** `POST /userSelfCreate`
+   (`src/api-srv/cmd/server/main.go:154`) is public. It puts the new login
+   in tenant 1, group 3 (`src/api-srv/internal/handler/user_mfa_handler.go:127-128`).
+   The login page links to it (`src/web-app/pages/login.tsx:88-97`,
+   "Don't have an account? Create one here").
+
+B002 (retire `/userSelfCreate`) is marked **SKIP**, so path 2 stays.
+What this item fixes is path 1: the admin knows every new user's first
+password. That is a security weakness (shared secret in email or chat,
+no forced change) and a UX gap. It is not an open hole.
+
+**Correction to the doc entry's title.** "Replaces self-registration"
+was GRC's framing. With B002 skipped, B035 for PROTO means **invite links
+are an additional admin path, beside self-registration**, and the
+recommended default for admin-created users. "Set a password" stays as
+the second admin option, as it did in GRC.
+
+#### What GRC changed
+
+GRC RG0035 (`7001cbd`, merged `92423c9`) added invite links and, in the
+same ticket, removed self-registration. The parts:
+
+- **Schema** (`src/migrate-srv/sql/00024_user_invite.sql`):
+  `app_user.account_status` (`invited`/`active`), backfilled `active`,
+  `NOT NULL`, no DEFAULT (`:8-10`); table `user_invite` with
+  `token_hash`, `expires_ts`, `redeemed_ts`, `redeemed_source_ip`,
+  `revoked_ts` (`:16-32`); unique index on `token_hash` (`:35`).
+- **Token** (`src/internal/auth/token.go:32-42`): 32 random bytes, hex;
+  only the SHA-256 is stored ("a fast hash is enough ... the token is 256
+  random bits").
+- **Routes**: admin `POST /userInvite`, `/userInviteReissue`,
+  `/userInviteRevoke` with full checks (`src/api-srv/cmd/server/main.go:208-210`);
+  public `POST /inviteCheck`, `/inviteRedeem` (`:186-187`) with
+  per-IP rate limit, the `/auth` per-address lockout plus a per-token
+  lockout, and one generic 404 for any dead link. Redeem checks the
+  password rule, then the token, then runs argon2, and locks the invite
+  and user rows `FOR UPDATE` in one transaction.
+- Reissue revokes the older link; `/changeOtherUserPassword` 409s on an
+  invited login (`src/internal/handler/user_handler.go:1088-1099`);
+  `/auth` refuses non-`active` logins as a bad password.
+- **Config**: `INVITE_TTL_HOURS` (72), required at api-srv start
+  (`src/internal/config/config.go:58-71,168-174`).
+- **Web**: `pages/invite-page.tsx` takes the token from the URL fragment
+  (never sent to a server), checks, redeems, strips it from history and
+  signs in; `invite-link-modal.tsx` shows the link once; new users
+  default to "Send an invite link".
+- **Audit**: each step appends to GRC's hash-chained audit log
+  (`src/internal/repository/user_invite_repository.go:351-388`).
+- **Removed self-registration**: route, handler, login link, modal.
+
+Tests: Go `user_invite_handler_test.go`, `user_invite_repository_test.go`;
+pytest `tests/test_user_invite.py` (9 cases: issue, invited cannot sign
+in, check+redeem+sign in, reissue/revoke, same answer for dead links,
+audit, 409 on admin password, needs `CREATE_USER`, self-registration 404).
+
+#### Proposed fix for PROTO
+
+1. **Migration** `src/api-srv/sql/migrations/0004_user_lifecycle.sql`
+   (latest is `0003`): `account_status` as in GRC (shared with B034,
+   whichever lands first) plus `user_invite`. Plain SQL: drop goose
+   markers, the Down section and the per-migration GRANT lines (PROTO's
+   `0001` grants once; confirm new tables are covered).
+2. **Every insert names `account_status`**: `CreateUser`
+   (`internal/repository/user_repository.go:143`) writes `active`; this
+   covers `/userSelfCreate` too. `sql/fixtures/local-seed.sql:92` likewise.
+3. Port `token.go` functions, `user_invite_repository.go`,
+   `user_invite_model.go`, `user_invite_handler.go`. Traps: module path
+   `github.com/wbmartin/starter-api`; **strip every
+   `appendUserInviteAudit` call** (no audit table until B067);
+   `ErrNotFound`/`mapRepoError` need B028 (or B007's minimal wrap);
+   `limitBody` needs B011; GRC's `grc` group names and `/grc` landing
+   become PROTO's groups and `/dashboard`.
+4. `/auth`: refuse non-`active` in B007's failure branch.
+   `ChangeOtherUserPassword` (`user_handler.go:965`): 409 for `invited`.
+5. **Keep** `/userSelfCreate`, its login link and
+   `user-registration-modal.tsx`. Do **not** port GRC's
+   `test_self_registration_is_gone`, the login text "Ask your
+   administrator for an invite link", or the `main.go` comment that says
+   there is no self-registration route.
+6. `INVITE_TTL_HOURS` required in `LoadConfig` (PROTO has one server
+   binary; no `ValidateInvite` split), added to every API env file.
+7. **Web**: invite page, modal, `utils/invite-link.ts`, edit-page invite
+   mode, list Status column, route `/invite`, two public endpoints.
+   GRC's `anonymous: true` (no CSRF on anonymous calls) needs B037.
+8. No email (GRC RG0040 is still open). Enables B071.
+
+Dependencies: B007, B028, B037; B034 shares the column. Tests: Go handler and repo
+tests in tenant 2; pytest `test_user_invite.py` rewritten off GRC's
+`grc` fixture, minus the self-registration case and the audit case;
+vitest for `invite-link.ts`.
+
+#### Open question for Brandon
+
+With self-registration kept, should a self-registered login stay
+`active` at once, or land `invited`/pending until an admin approves it?
+Recommendation: keep it `active` (today's behaviour) and leave approval
+to a later ticket; B035 is about admin onboarding only.
+
+Brandon: Let's adapt so we have both invite links and self create, the generated app will have to decid what it wants.

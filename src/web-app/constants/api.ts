@@ -28,6 +28,14 @@ export const API_ENDPOINTS = {
   ADD_USER_LIST_TO_GROUP: "/addUserListToGroup",
   REMOVE_USER_LIST_FROM_GROUP: "/removeUserListFromGroup",
 
+  // Invite links (handler/user_invite_handler.go): admin half, then the
+  // public half the invited person's browser calls with no session
+  USER_INVITE: "/userInvite",
+  USER_INVITE_REISSUE: "/userInviteReissue",
+  USER_INVITE_REVOKE: "/userInviteRevoke",
+  INVITE_CHECK: "/inviteCheck",
+  INVITE_REDEEM: "/inviteRedeem",
+
   // User groups
   APP_USER_GROUP_LIST: "/appUserGroupList",
   APP_USER_GROUP: "/appUserGroup",

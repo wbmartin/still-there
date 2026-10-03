@@ -33,6 +33,7 @@ type Config struct {
 	CorsAllowedOrigins               []string   `json:"cors_allowed_origins"`
 	TrustedProxyCount                int        `json:"trusted_proxy_count"`
 	LogLevel                         slog.Level `json:"log_level"`
+	InviteTTLHours                   int        `json:"invite_ttl_hours"`
 }
 
 // ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,
@@ -102,6 +103,13 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	}
 	if config.MaxUnauthReqPerMin, err = requirePositiveInt(
 		env, "MAX_UNAUTH_REQ_PER_MIN",
+	); err != nil {
+		return nil, err
+	}
+
+	// How long an invite link works (B035); 0 would issue dead links.
+	if config.InviteTTLHours, err = requirePositiveInt(
+		env, "INVITE_TTL_HOURS",
 	); err != nil {
 		return nil, err
 	}

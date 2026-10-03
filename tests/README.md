@@ -96,6 +96,9 @@ authenticates in one step. Fixtures:
   group grant edit end live sessions (old cookie gets 401)
 - `test_user_block.py` — block ends a login's sessions and refuses its
   sign-in; unblock restores sign-in, not the old session; 409/400/404/403
+- `test_user_invite.py` — invite links: an invited login cannot sign in;
+  check, redeem (once) and sign in; reissue/revoke; one 404 for any dead
+  link; 409 on an admin-set password; 403 without CREATE_USER or CSRF
 - `test_user_management.py` — user management operations (admin only)
 - `test_z_error_scenarios.py` — error conditions and status codes
 - `test_zz_mfa_totp.py` — TOTP enrolment, sign-in, code and temp-token

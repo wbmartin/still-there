@@ -1,4 +1,8 @@
-import type { User } from "../types/user-type";
+import type {
+  ApiInviteIssued,
+  IssuedInvite,
+  User,
+} from "../types/user-type";
 import type { ApiResponse } from "../types/api";
 import { apiJson, apiRequest, jsonBody, throwForFailedResponse } from "../utils/api";
 import { API_ENDPOINTS, type ApiEndpoint } from "../constants/api";
@@ -28,6 +32,25 @@ interface AppUserExtras {
   // Block (true) or unblock (false) a login by name; the key is the
   // handler's json tag (model.BlockUserRequest).
   setUserBlocked: (userName: string, blocked: boolean) => Promise<void>;
+  // Invite links (B035): create an invited login with no password and get
+  // its one-time link; replace a lost link; stop a link working. The token
+  // comes back once, from the issuing call, and is never stored here.
+  inviteUser: (data: InviteUserData) => Promise<IssuedInvite>;
+  reissueInvite: (
+    appUserId: number,
+    userName: string,
+  ) => Promise<IssuedInvite>;
+  revokeInvite: (appUserId: number) => Promise<void>;
+}
+
+/** POST /userInvite: the POST /user fields without a password. */
+export interface InviteUserData {
+  userName: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  appUserGroupMembershipList: number[];
+  mfaExempt: boolean;
 }
 
 export const useAppUserStore = createEntityStore<User, AppUserExtras>(
@@ -129,6 +152,40 @@ export const useAppUserStore = createEntityStore<User, AppUserExtras>(
             : API_ENDPOINTS.ADMIN_UNBLOCK_USER,
           { userName },
         ),
+
+      inviteUser: async (data) => {
+        set({ error: null });
+        try {
+          const result = await apiJson<ApiResponse<ApiInviteIssued>>(
+            API_ENDPOINTS.USER_INVITE,
+            { method: "POST", ...jsonBody(data) },
+          );
+          if (result.data.user) mergeUserList([result.data.user]);
+          return {
+            userName: data.userName,
+            inviteToken: result.data.inviteToken,
+            expiresTs: result.data.expiresTs,
+          };
+        } catch (err) {
+          set({ error: err instanceof Error ? err.message : "Request failed" });
+          throw err;
+        }
+      },
+
+      reissueInvite: async (appUserId, userName) => {
+        const result = await apiJson<ApiResponse<ApiInviteIssued>>(
+          API_ENDPOINTS.USER_INVITE_REISSUE,
+          { method: "POST", ...jsonBody({ appUserId }) },
+        );
+        return {
+          userName,
+          inviteToken: result.data.inviteToken,
+          expiresTs: result.data.expiresTs,
+        };
+      },
+
+      revokeInvite: (appUserId) =>
+        postOrThrow(API_ENDPOINTS.USER_INVITE_REVOKE, { appUserId }),
     };
   },
 );
