@@ -710,76 +710,6 @@ given it moves authorization differences into a matrix? Recommend an ADR
 that permits it only for derived apps past ~10 entities, never the
 template.
 
-### B069 — Web dependency hygiene: depcheck config, zod pin
-
-- **Priority:** P3  **Area:** web-app
-- **GRC:** `.depcheckrc.yml`; `package.json` (`"zod": "^4.6.5"`)   **PROTO:** `package.json` (`"zod": "4.1.13"`)
-- **Ticket:** RG0007 / `d7750dc`
-- **What:** depcheck carries a recorded exception list. PROTO's other deps are
-newer.
-- **Port notes:** Brandon's call: caret or exact zod? `coverage` ignore is B041.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Two small things, one real and one already solved.
-
-1. zod is the only exact pin. `src/web-app/package.json:31`:
-
-       "zod": "4.1.13",
-
-   Every other dependency is a range (`:21-51`; caret, typescript tilde), and
-   `src/web-app/README.md:114-118` says "Caret ranges. Any ticket that
-   touches the web app runs `npm update --legacy-peer-deps`". PS0013
-   (`tickets/04-archive/PS0013-web-hygiene-deps-schemas-constants.md:30-31`)
-   "declared `zod` at its already-resolved version", which wrote the bare
-   version, not `^4.1.13`.
-   Consequence: the README's in-range update never moves zod. The lock
-   holds 4.1.13 while GRC's holds 4.6.5. A future zod advisory in 4.x is
-   not picked up by the documented cadence. Quality gap, not a bug today.
-2. depcheck config. PROTO has no `.depcheckrc.yml`, and needs none now:
-   `npx --no-install depcheck` in `src/web-app` prints "No depcheck issue"
-   (run 2026-10-02). The feedback line "PROTO's other deps are newer" is
-   true of the lock (vite 7.3.6 vs 7.2.7, vitest 4.1.11 vs 4.0.15,
-   @mantine/core 8.3.18 vs 8.3.10), not of `package.json`, whose shared
-   ranges are identical.
-
-#### What GRC changed
-
-RG0007 (`d7750dc`) found zod imported by `schemas/form-schemas.ts` but
-undeclared, and declared it as `"zod": "^4.6.5"` (GRC
-`src/web-app/package.json:33`). PROTO already declares zod (PS0013), so
-only the caret matters here. A follow-up, `606a9d5`, added
-`src/web-app/.depcheckrc.yml:13-14` with one ignore:
-
-    ignores:
-      - "@vitest/coverage-v8"
-
-Reason (`:5-12`): `test:coverage` loads the provider through a CLI flag,
-which depcheck cannot see; "Nothing else belongs in this list." The commit
-itself records the file was unnecessary while the lock was fully updated,
-because newer vitest makes the provider reachable through its own metadata;
-it became necessary only after GRC pinned the lock back. No tests.
-
-#### Proposed fix for PROTO
-
-1. `src/web-app/package.json:31`: `"zod": "^4.1.13"`, then
-   `npm update --legacy-peer-deps zod` per the README cadence. The only
-   consumer constraint is `mantine-form-zod-resolver` peer `zod >=3.25.0`.
-2. Do not add `.depcheckrc.yml`. PROTO's lock is newer and depcheck is
-   clean. If a later lock trips the `@vitest/coverage-v8` false positive,
-   copy GRC's file verbatim, comment included.
-3. The `coverage/` gitignore belongs to B041, not here.
-4. Tests: none new; `npm run build`, `npm run test:run`, and
-   `npx depcheck` must stay clean after the bump.
-
-#### Open question for Brandon
-
-Caret or exact for zod? Recommendation: caret, because the README already
-says caret ranges and the exact pin is an accident of PS0013.
-
 ### B070 — bin dev conveniences: targeted restart, test API, dirty flag, coverage
 
 - **Priority:** P3  **Area:** bin
@@ -8992,3 +8922,74 @@ GRC wrote a route-by-role sweep as plain node scripts, not Playwright tests
 None.
 
 - **Completed:** 2026-10-03. No Brandon line; took the recommendation. New `src/web-app/tests/e2e/route-sweep.spec.ts`: a `SWEEP_ROW_LIST` over every `ROUTES` entry (edit pages as `?…Id=new` and a fixture id: `Sample example 1` and `basic` looked up through the admin API session, group 2 fixed), each row naming where `admin`, `basic` and a signed-out visitor land (path and heading; the allow-list of fix step 4: basic on the user pages and group edit lands on the dashboard, signed out on `/login`). One `test()` per row x visitor (45) checks the landing path and heading, then after `networkidle`: no "Something went wrong" / "This page ran into a problem" heading, body text over 40 characters, no `console` error, no `pageerror`, and no 4xx/5xx response but the signed-out `401 GET /api/refresh`. The browser's URL-less "Failed to load resource" console lines are judged by the response instead. A first test fails when a `ROUTES` path has no row; a last one proves the detector sees the router's error page on `/no-such-page`. `basic` signs in with `signIn` in `beforeAll` and its cookie is added per test (empty `storageState`). Found and fixed: basic on `/appUserList`, `/appUserEdit?appUserId=N` and `/appUserGroupEdit?appUserGroupId=2` called `GET /api/userList` (403, plus a `reportError` console line) while being redirected, because `useAuthGuard` returned `"YES"` without the grants. `src/web-app/hooks/use-auth-guard.ts` now returns `"DENIED"` for a signed-in user lacking the page's grants (the redirect is unchanged), so the `"YES"`-gated load effects never run; `user-preferences-page.tsx` treats `"DENIED"` as not signed in. Old guard: 3 basic rows fail with `403 GET /api/userList`; new: all pass. Deviations: fix step 3 already done (B018 seeded tenant 2; `global-setup.ts` refuses a non-2 session); the `mfa` routes are swept with no temp token (all visitors see the set-up heading), the `mfa` user is not. `src/web-app/README.md` (new-entity checklist, house-pattern bullet) and `doc/902-project-commands.md` mention the spec. All green, infra=15 docs=507 go=700 unit=101 e2e=68 py=103 (docs +2 from new paths, e2e +47: 45 sweep rows, the coverage test, the detector test), govulncheck clean, gofmt clean.
+
+### B069 — COMPLETED — Web dependency hygiene: depcheck config, zod pin
+
+- **Priority:** P3  **Area:** web-app
+- **GRC:** `.depcheckrc.yml`; `package.json` (`"zod": "^4.6.5"`)   **PROTO:** `package.json` (`"zod": "4.1.13"`)
+- **Ticket:** RG0007 / `d7750dc`
+- **What:** depcheck carries a recorded exception list. PROTO's other deps are
+newer.
+- **Port notes:** Brandon's call: caret or exact zod? `coverage` ignore is B041.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Two small things, one real and one already solved.
+
+1. zod is the only exact pin. `src/web-app/package.json:31`:
+
+       "zod": "4.1.13",
+
+   Every other dependency is a range (`:21-51`; caret, typescript tilde), and
+   `src/web-app/README.md:114-118` says "Caret ranges. Any ticket that
+   touches the web app runs `npm update --legacy-peer-deps`". PS0013
+   (`tickets/04-archive/PS0013-web-hygiene-deps-schemas-constants.md:30-31`)
+   "declared `zod` at its already-resolved version", which wrote the bare
+   version, not `^4.1.13`.
+   Consequence: the README's in-range update never moves zod. The lock
+   holds 4.1.13 while GRC's holds 4.6.5. A future zod advisory in 4.x is
+   not picked up by the documented cadence. Quality gap, not a bug today.
+2. depcheck config. PROTO has no `.depcheckrc.yml`, and needs none now:
+   `npx --no-install depcheck` in `src/web-app` prints "No depcheck issue"
+   (run 2026-10-02). The feedback line "PROTO's other deps are newer" is
+   true of the lock (vite 7.3.6 vs 7.2.7, vitest 4.1.11 vs 4.0.15,
+   @mantine/core 8.3.18 vs 8.3.10), not of `package.json`, whose shared
+   ranges are identical.
+
+#### What GRC changed
+
+RG0007 (`d7750dc`) found zod imported by `schemas/form-schemas.ts` but
+undeclared, and declared it as `"zod": "^4.6.5"` (GRC
+`src/web-app/package.json:33`). PROTO already declares zod (PS0013), so
+only the caret matters here. A follow-up, `606a9d5`, added
+`src/web-app/.depcheckrc.yml:13-14` with one ignore:
+
+    ignores:
+      - "@vitest/coverage-v8"
+
+Reason (`:5-12`): `test:coverage` loads the provider through a CLI flag,
+which depcheck cannot see; "Nothing else belongs in this list." The commit
+itself records the file was unnecessary while the lock was fully updated,
+because newer vitest makes the provider reachable through its own metadata;
+it became necessary only after GRC pinned the lock back. No tests.
+
+#### Proposed fix for PROTO
+
+1. `src/web-app/package.json:31`: `"zod": "^4.1.13"`, then
+   `npm update --legacy-peer-deps zod` per the README cadence. The only
+   consumer constraint is `mantine-form-zod-resolver` peer `zod >=3.25.0`.
+2. Do not add `.depcheckrc.yml`. PROTO's lock is newer and depcheck is
+   clean. If a later lock trips the `@vitest/coverage-v8` false positive,
+   copy GRC's file verbatim, comment included.
+3. The `coverage/` gitignore belongs to B041, not here.
+4. Tests: none new; `npm run build`, `npm run test:run`, and
+   `npx depcheck` must stay clean after the bump.
+
+#### Open question for Brandon
+
+Caret or exact for zod? Recommendation: caret, because the README already
+says caret ranges and the exact pin is an accident of PS0013.
+- **Completed:** 2026-10-03. Caret per the decision (no Brandon line; took the recommendation). `src/web-app/package.json` `"zod": "4.1.13"` -> `"^4.1.13"`; `package-lock.json` changes only the root `packages[""]` spec line (via `npm install --package-lock-only --legacy-peer-deps`), the resolved zod stays 4.1.13. Deviation: step 1's `npm update --legacy-peer-deps zod` is not run. It was written against the old "every ticket runs npm update" cadence; B055's cadence allows only audit-advised bumps, and `npm audit --omit=dev` reports 0 (latest zod is 4.6.5). The caret makes a future advised `npm update --legacy-peer-deps zod` effective. No `.depcheckrc.yml` (step 2): `npx depcheck` reports no issue. No README change: "Caret ranges" is now true of every dependency (typescript stays tilde). No new tests per step 4; `tsc -b`, `vite build --mode development` and `npx depcheck` clean (`npm run build` in production mode fails at `vite.config.ts` without `VITE_API_PROXY_URL`, pre-existing, open as B093). Tests: all green, infra=15 docs=507 go=700 unit=101 e2e=68 py=103 (unchanged), govulncheck clean, gofmt clean.
