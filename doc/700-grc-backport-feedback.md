@@ -866,20 +866,6 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
   returns the new status and the session cookie still works.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ X\] skip  (new, not yet decided)
 
-### B093 — `bin/600-bundle-uat` fails at the Vite build without `VITE_API_PROXY_URL`
-- **Priority:** P2  **Area:** bin, web-app
-- **GRC:** not checked   **PROTO:** `src/web-app/vite.config.ts` (throws in production mode when the proxy URL is unset); `bin/600-bundle-uat` (Vite build step)
-- **Ticket:** found while implementing B027 (2026-10-03)
-- **What:** The presales bundle step builds the web app in production
-  mode, and `vite.config.ts` throws when `VITE_API_PROXY_URL` is unset,
-  so `bin/600` stops at the Vite step unless the operator exports a value.
-  The proxy only matters for the dev server; a production build serves
-  `/api/` through nginx and never uses it.
-- **Port notes:** Make the config require the proxy URL only for `vite`
-  serve (dev), not `vite build`, or have `bin/600` set a documented dummy.
-  Prefer the former. Check `bin/110-build-web-app` and the UAT build too.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
-
 ### B094 — `/mfaSetup` and `/mfaVerify` never check the block flag on the session path
 - **Priority:** P2  **Area:** go-api
 - **GRC:** not checked   **PROTO:** `src/api-srv/internal/handler/user_mfa_handler.go:167` (`CheckRateLimitAndUserBlock` before the body is read), `:212` (`CheckJWT`, session path); same at `:362` and `:402`; `src/api-srv/internal/security/app_helper.go:472-481` (no claims: per-address bucket), `:502-518` (block flag read only when claims are set); `src/api-srv/internal/handler/user_block_handler.go:14-27`; `src/api-srv/internal/security/session_revocation.go:56-64`; `src/api-srv/internal/handler/route_check_contract_test.go:171-178`
@@ -9060,3 +9046,18 @@ is an idempotent, superuser-run host setup creating ddl/app/ci roles
 
 None.
 - **Completed:** 2026-10-03. Mostly done earlier; one real fix here. doc/330 (the `sql/ddl-role-host-setup.sql` pointers; B026 `e063d88`), doc/810:20 (`app-user-group-edit-page.tsx`; B053 `f017833`) and doc/340 were fixed by earlier items; B053's `docs` gate now fails on any backticked path that does not resolve (705 tokens, all resolve), which is the item's test. Added because the item names doc/810: its grant-numbering text said READ is xx0/CREATE xx1; `grants.go` has Example READ 1001/CREATE 1002/UPDATE 1003/DELETE 1004 and user groups 9010-9013 (User is the older 9001 CREATE, 9002 READ order). `doc/810` now says: next free block, Read, Create, Update, Delete in order from the first number N, and the step 4 line reads `N`, `N+1`, `N+2`, `N+3`. No code, no test. Tests: all green, infra=15 docs=705 go=708 unit=105 e2e=70 py=103
+
+### B093 — COMPLETED — `bin/600-bundle-uat` fails at the Vite build without `VITE_API_PROXY_URL`
+- **Priority:** P2  **Area:** bin, web-app
+- **GRC:** not checked   **PROTO:** `src/web-app/vite.config.ts` (throws in production mode when the proxy URL is unset); `bin/600-bundle-uat` (Vite build step)
+- **Ticket:** found while implementing B027 (2026-10-03)
+- **What:** The presales bundle step builds the web app in production
+  mode, and `vite.config.ts` throws when `VITE_API_PROXY_URL` is unset,
+  so `bin/600` stops at the Vite step unless the operator exports a value.
+  The proxy only matters for the dev server; a production build serves
+  `/api/` through nginx and never uses it.
+- **Port notes:** Make the config require the proxy URL only for `vite`
+  serve (dev), not `vite build`, or have `bin/600` set a documented dummy.
+  Prefer the former. Check `bin/110-build-web-app` and the UAT build too.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip  (Brandon: as recommended, 2026-10-03)
+- **Completed:** 2026-10-03. `src/web-app/vite.config.ts` takes `command` and throws for a missing `VITE_API_PROXY_URL` only when `command === "serve"`; `vite build` no longer needs it. No change to `bin/600` or `bin/110` (both just run `npm run build`). Proof: `npm run build` with the variable unset now succeeds (failed before); `npx vite` dev server without it still fails naming `VITE_API_PROXY_URL`; `bin/110-build-web-app` works. No new tests (config only). Tests: all green, infra=15 docs=705 go=708 unit=105 e2e=70 py=103 (unchanged)

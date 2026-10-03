@@ -8,11 +8,8 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 
 ## 0. Waiting on Brandon
 
-- **Decide B093-B098** (pull/adapt/skip in doc/700, under "Bugs found in
-  PROTO along the way"). B093: `bin/600-bundle-uat` stops at the Vite
-  build unless `VITE_API_PROXY_URL` is set (`src/web-app/vite.config.ts`
-  throws in production mode); it also blocks `bin/110` and `bin/600`
-  production web builds. B094:
+- **Decide B094-B098** (pull/adapt/skip in doc/700, under "Bugs found in
+  PROTO along the way"). B094:
   `/mfaSetup` and `/mfaVerify` never read the `BLOCKED*` flag on their
   session path (rate check runs before `CheckJWT`); matters after an API
   restart. B095: six bash scripts lack `set -o pipefail`. B096: grant id
@@ -73,9 +70,9 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 
 ## 1. Queue (doc/700 items not done, not skipped), in order
 
-The decided queue is empty: B062-B066, B069-B078, B080-B083, B085-B088 and
-B090 are done (B089 folded into B038, B091 removed the ticket system).
-Remaining work is only items awaiting Brandon's decision: B093, B094,
+The decided queue is empty: B062-B066, B069-B078, B080-B083, B085-B088, B090
+and B093 are done (B089 folded into B038, B091 removed the ticket system).
+Remaining work is only items awaiting Brandon's decision: B094,
 B095, B096, B097, B098. Once one is decided pull or adapt, work it with
 the §2 procedure.
 Skipped, do not do: B002, B005, B015, B049, B050, B057, B067, B068, B079,
