@@ -866,33 +866,6 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
   returns the new status and the session cookie still works.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ X\] skip  (new, not yet decided)
 
-### B094 — `/mfaSetup` and `/mfaVerify` never check the block flag on the session path
-- **Priority:** P2  **Area:** go-api
-- **GRC:** not checked   **PROTO:** `src/api-srv/internal/handler/user_mfa_handler.go:167` (`CheckRateLimitAndUserBlock` before the body is read), `:212` (`CheckJWT`, session path); same at `:362` and `:402`; `src/api-srv/internal/security/app_helper.go:472-481` (no claims: per-address bucket), `:502-518` (block flag read only when claims are set); `src/api-srv/internal/handler/user_block_handler.go:14-27`; `src/api-srv/internal/security/session_revocation.go:56-64`; `src/api-srv/internal/handler/route_check_contract_test.go:171-178`
-- **Ticket:** found while implementing B039 (2026-10-03)
-- **What:** Both handlers call `CheckRateLimitAndUserBlock` first, then read
-  the body to pick the temp-token or session path, and only call `CheckJWT`
-  on the session path. At the rate check the claims are nil, so the
-  `BLOCKED*` flag is skipped (`app_helper.go:502`) and the caller is counted
-  in the anonymous per-address bucket, not the per-user one (`:476-480`).
-  Today this matters only after an API restart: a block also revokes every
-  session (`user_block_handler.go:18-20`), so a pre-block token gets 401
-  from `CheckJWT`, but revocations live in the in-process KV and are lost
-  on restart, while the flag is reloaded. After a restart a pre-block token
-  can still run the session path of both routes (start or finish MFA
-  enrolment on the blocked login) until it expires; every other route
-  answers 403. `/auth` refuses the blocked row, so no new session results.
-  B039's route contract table records the current behaviour
-  (`session: true, rate: true`, no `block`).
-- **Port notes:** Move the rate/block call into each branch after the
-  bounded body read: temp-token path `SkipJWT`, `CheckRateLimit`,
-  `SkipUserBlock` (the temp token comes from `/auth`, which already refuses
-  a blocked row); session path `CheckJWT`, then `CheckRateLimitAndUserBlock`.
-  Flip both contract rows to `block: true` and add a Go test: valid JWT
-  plus the `BLOCKED*` flag answers 403 on both routes. The body read stays
-  ahead of every check (it chooses the path) and stays bounded.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
-
 ### B095 — Six bash scripts run without `set -o pipefail`
 - **Priority:** P3  **Area:** bin
 - **GRC:** not checked   **PROTO:** `bin/100-build-api-server:6` (`set -e`), `bin/215-run-api-srv:3` (`set -e`), `bin/216-stop-local-stack:3` (`set -e`), `bin/220-run-web-app` (no `set` line at all), `bin/510-reset-test-db:39` (`set -e`), `bin/515-reseed-db:27` (`set -e`)
@@ -9061,3 +9034,31 @@ None.
   Prefer the former. Check `bin/110-build-web-app` and the UAT build too.
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip  (Brandon: as recommended, 2026-10-03)
 - **Completed:** 2026-10-03. `src/web-app/vite.config.ts` takes `command` and throws for a missing `VITE_API_PROXY_URL` only when `command === "serve"`; `vite build` no longer needs it. No change to `bin/600` or `bin/110` (both just run `npm run build`). Proof: `npm run build` with the variable unset now succeeds (failed before); `npx vite` dev server without it still fails naming `VITE_API_PROXY_URL`; `bin/110-build-web-app` works. No new tests (config only). Tests: all green, infra=15 docs=705 go=708 unit=105 e2e=70 py=103 (unchanged)
+
+### B094 — COMPLETED — `/mfaSetup` and `/mfaVerify` never check the block flag on the session path
+- **Priority:** P2  **Area:** go-api
+- **GRC:** not checked   **PROTO:** `src/api-srv/internal/handler/user_mfa_handler.go:167` (`CheckRateLimitAndUserBlock` before the body is read), `:212` (`CheckJWT`, session path); same at `:362` and `:402`; `src/api-srv/internal/security/app_helper.go:472-481` (no claims: per-address bucket), `:502-518` (block flag read only when claims are set); `src/api-srv/internal/handler/user_block_handler.go:14-27`; `src/api-srv/internal/security/session_revocation.go:56-64`; `src/api-srv/internal/handler/route_check_contract_test.go:171-178`
+- **Ticket:** found while implementing B039 (2026-10-03)
+- **What:** Both handlers call `CheckRateLimitAndUserBlock` first, then read
+  the body to pick the temp-token or session path, and only call `CheckJWT`
+  on the session path. At the rate check the claims are nil, so the
+  `BLOCKED*` flag is skipped (`app_helper.go:502`) and the caller is counted
+  in the anonymous per-address bucket, not the per-user one (`:476-480`).
+  Today this matters only after an API restart: a block also revokes every
+  session (`user_block_handler.go:18-20`), so a pre-block token gets 401
+  from `CheckJWT`, but revocations live in the in-process KV and are lost
+  on restart, while the flag is reloaded. After a restart a pre-block token
+  can still run the session path of both routes (start or finish MFA
+  enrolment on the blocked login) until it expires; every other route
+  answers 403. `/auth` refuses the blocked row, so no new session results.
+  B039's route contract table records the current behaviour
+  (`session: true, rate: true`, no `block`).
+- **Port notes:** Move the rate/block call into each branch after the
+  bounded body read: temp-token path `SkipJWT`, `CheckRateLimit`,
+  `SkipUserBlock` (the temp token comes from `/auth`, which already refuses
+  a blocked row); session path `CheckJWT`, then `CheckRateLimitAndUserBlock`.
+  Flip both contract rows to `block: true` and add a Go test: valid JWT
+  plus the `BLOCKED*` flag answers 403 on both routes. The body read stays
+  ahead of every check (it chooses the path) and stays bounded.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip  (Brandon: as recommended, 2026-10-03)
+- **Completed:** 2026-10-03. `src/api-srv/internal/handler/user_mfa_handler.go`: both handlers drop the up-front `CheckRateLimitAndUserBlock`; after the bounded body read the temp-token path runs `SkipJWT`, `CheckRateLimit` (per address), `SkipUserBlock`, and the session path runs `CheckJWT` then `CheckRateLimitAndUserBlock` (per user, `BLOCKED*` read). `route_check_contract_test.go`: both rows now `block: true`, skip reasons rewritten. New `TestMFAHandlers_SessionPathReadsTheBlockFlag` (both routes): a valid pre-block token with the flag set and no revocation (the post-restart state) answers 403 before the repository; the session path counts in the per-user bucket (passes with `MaxUnauthReqPerMin=0`); the temp-token path stays per address (second request from one address 429, another address still served). On the old handler the two contract rows and four of the six new subtests fail (the two temp-token subtests pass on both, as intended). doc/105 route table and exception row updated; doc/110 row 1.9 drops the B094 open note (stays partial: the `admin` subject skips the flag, row 1.10). Note: `CheckRateLimit` adopts a validly signed auth cookie if one is sent, as on the other public routes, so a temp-token request carrying one counts per user. Tests: all green, infra=15 docs=705 go=715 unit=105 e2e=70 py=103 (go +7: the new test and its six subtests), govulncheck clean, gofmt clean.

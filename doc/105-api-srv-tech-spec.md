@@ -114,8 +114,8 @@ is the login lockout instead. **CSRF** `CheckCSRF` (never on GET).
 | POST | /userSelfCreate | - | address | - | - | Public self-registration (see Exceptions) |
 | POST | /inviteCheck | - | address, then lockout | - | - | Who a live invite link is for (public) |
 | POST | /inviteRedeem | - | address, then lockout | - | - | Set the password from a live link (public) |
-| POST | /mfaSetup | temp token or Yes | address | - | - | Enrol: TOTP secret and QR code |
-| POST | /mfaVerify | temp token or Yes | address; lockout | - | - | Check a TOTP code; completes an MFA login |
+| POST | /mfaSetup | temp token or Yes | temp token: address; session: user+block | - | - | Enrol: TOTP secret and QR code |
+| POST | /mfaVerify | temp token or Yes | temp token: address; session: user+block; lockout | - | - | Check a TOTP code; completes an MFA login |
 | GET | /userList | Yes | user+block | (GET) | READ_USER (9002) | Logins of the caller's tenant |
 | POST | /user | Yes | user+block | Yes | CREATE_USER (9001) | Create a login with a password |
 | PUT | /user | Yes | user+block | Yes | UPDATE_USER (9003) | Update a login |
@@ -480,7 +480,7 @@ anything not here runs all five.
 | `LogoffHandler` (`/logoff`) | CSRF, grant | Ending one's own session needs neither |
 | `ChangeSecurityContextHandler` (`/changeSecurityContext`) | CSRF, grant | Kept by decision (doc/700 B005, skipped): the switch writes no table row; it ends the old session and mints a new one. The grant is replaced by a check after the gate that the login holds a group in the target tenant (403 "Security context not available"). The 4 KiB body is decoded before `CheckJWT` |
 | `UserSelfCreateHandler` (`/userSelfCreate`) | JWT, block, CSRF, grant | Public self-registration, per-address rate limit only. It creates a tenant-1 login in group 3 and answers 409 "Username already taken" for a name in use (a name probe). Kept beside invite links (doc/700 B002 skipped, B035); a derived app keeps or removes it |
-| `MFASetupHandler`, `MFAVerifyHandler` (`/mfaSetup`, `/mfaVerify`) | CSRF, grant; JWT on the temp-token path | Temp token from the password step, or a session. The rate check runs before the JWT is read, so it is per address and the `BLOCKED*` flag is not consulted on either path (only matters after a restart, when revocations are lost). The 4 KiB body is read before the gate because it picks the path |
+| `MFASetupHandler`, `MFAVerifyHandler` (`/mfaSetup`, `/mfaVerify`) | CSRF, grant; on the temp-token path also JWT and block | Temp token from the password step, or a session. The 4 KiB body is read before every check because it picks the path. Temp token: `SkipJWT`, `CheckRateLimit` (per address), `SkipUserBlock` (the token comes from `/auth`, which refuses a blocked login). Session: `CheckJWT`, then `CheckRateLimitAndUserBlock` (per user, `BLOCKED*` read, so a pre-block token is refused after a restart that lost its revocation; doc/700 B094) |
 | `UserInviteHandler.CheckInvite`, `.RedeemInvite` (`/inviteCheck`, `/inviteRedeem`) | JWT, block, CSRF, grant | Public; the token is the credential. Per-address rate limit, then the `/auth` lockout per address plus per token (see Invite Links) |
 
 #### What proves it

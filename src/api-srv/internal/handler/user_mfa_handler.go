@@ -166,7 +166,6 @@ func MFASetupHandler(
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
 		appHelper := security.NewAppHelper(w, r, appServices, "MFASetupHandler")
-		appHelper.CheckRateLimitAndUserBlock()
 		appHelper.SkipCSRF()
 		appHelper.SkipAuthorization() // MFA setup is user-specific
 
@@ -176,20 +175,21 @@ func MFASetupHandler(
 			TempToken string `json:"tempToken"`
 		}
 		// The body has to be read here because it decides which auth path runs
-		// below -- temp token or JWT -- so the read necessarily precedes
-		// CheckAllChecksComplete(). That makes bounding it the only protection
-		// available: an unauthenticated caller reaches this line, and a
-		// rate-limited one does too, because nothing checks blocked first.
+		// below -- temp token or JWT -- so the read precedes every check.
+		// That makes bounding it the only protection available: any caller
+		// reaches this line, rate-limited or not.
 		bodyBytes, ok := readBody(appHelper, w, r, maxAuthBodyBytes)
 		if !ok {
 			return
 		}
 		if err := json.Unmarshal(bodyBytes, &tempReq); err == nil &&
 			tempReq.TempToken != "" {
-			// Temp token path - skip JWT for temp token authentication.
-			// The other checks (rate limit, user block) have already run;
-			// this is where a failed one stops the request.
+			// Temp token path: no session yet, so the rate limit is per
+			// address. The temp token comes from /auth, which refuses a
+			// blocked login, so there is no block flag to read here.
 			appHelper.SkipJWT()
+			appHelper.CheckRateLimit()
+			appHelper.SkipUserBlock()
 			if !appHelper.CheckAllChecksComplete() {
 				return
 			}
@@ -210,8 +210,10 @@ func MFASetupHandler(
 			}
 			userName = userNameBytes
 		} else {
-			// JWT path, there is no standard authorization/csrf for the temp token path
+			// Session path: the JWT first, so the rate limit is per user
+			// and the block flag is read (B094).
 			appHelper.CheckJWT()
+			appHelper.CheckRateLimitAndUserBlock()
 			if !appHelper.CheckAllChecksComplete() {
 				return
 			}
@@ -374,7 +376,6 @@ func MFAVerifyHandler(
 		appHelper := security.NewAppHelper(
 			w, r, appServices, "MFAVerifyHandler",
 		)
-		appHelper.CheckRateLimitAndUserBlock()
 		appHelper.SkipCSRF()
 		appHelper.SkipAuthorization()
 
@@ -383,7 +384,7 @@ func MFAVerifyHandler(
 			TempToken string `json:"tempToken"`
 			TOTPCode  string `json:"totpCode"`
 		}
-		// Same reasoning as MFASetupHandler: read before the auth gate, so
+		// Same reasoning as MFASetupHandler: read before every check, so
 		// bound it.
 		if !decodeJSONBody(appHelper, w, r, maxAuthBodyBytes, &req) {
 			return
@@ -391,10 +392,11 @@ func MFAVerifyHandler(
 
 		var userName string
 		if req.TempToken != "" {
-			// Temp token path - skip JWT for temp token authentication.
-			// The other checks (rate limit, user block) have already run;
-			// this is where a failed one stops the request.
+			// Temp token path: as in MFASetupHandler, per-address rate
+			// limit and no block flag (/auth refused a blocked login).
 			appHelper.SkipJWT()
+			appHelper.CheckRateLimit()
+			appHelper.SkipUserBlock()
 			if !appHelper.CheckAllChecksComplete() {
 				return
 			}
@@ -413,8 +415,9 @@ func MFAVerifyHandler(
 			}
 			userName = userNameBytes
 		} else {
-			// JWT path
+			// Session path: JWT, then per-user rate limit and block flag.
 			appHelper.CheckJWT()
+			appHelper.CheckRateLimitAndUserBlock()
 			if !appHelper.CheckAllChecksComplete() {
 				return
 			}
