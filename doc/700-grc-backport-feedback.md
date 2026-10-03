@@ -852,69 +852,6 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
 
 # Bugs found in PROTO along the way
 
-### B087 — doc/902 health URL names another project's real host
-
-- **Priority:** P2  **Area:** docs
-- **GRC:** `doc/902-project-commands.md:40-42`   **PROTO:** `doc/902-project-commands.md:17`
-- **Ticket:** none
-- **What:** The `curl -k https://...:8443/health` line names a personal dev
-host from another project (the same host as GRC's `TLS_NAME`).
-- **Port notes:** Use `http://localhost:8080/health`.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Docs bug with a small disclosure side. `doc/902-project-commands.md:15-18`
-says to check the local API with `curl -k https://<host>:8443/health`,
-where `<host>` is a real personal dev hostname under another project's
-domain (not repeated here). Three problems:
-
-1. It is not this machine. Local dev is plain HTTP on 8080
-   (`etc/loc-api-srv.env:26` `SERVER_PORT=8080`, `:30` `ENABLE_TLS=false`).
-   The command fails DNS or, if the name resolves, asks a different real
-   server whether it is up.
-2. `-k` disables certificate checks, a habit the template should not teach.
-3. The host is the same string as GRC's `TLS_NAME` in
-   `etc/loc-api-srv.env:24` (checked by comparison). Every derived app
-   inherits it.
-
-The item misses a second place: `doc/310-api-srv-cert-renewal.md:2-12`
-names the same host five times, plus an ssh alias for a VM of that other
-project and an absolute `~/Code/ProtoStack-ReactGo/etc/crt/` path.
-`tickets/04-archive/PS0001-backport-derivatives.md:19` and
-`PS0005-agent-guidance-consolidation.md:31` also mention it, as history.
-
-#### What GRC changed
-
-GRC rewrote the line under RG0011 (`06a1396`).
-`doc/902-project-commands.md:40-42`:
-
-```
-Is the API up? `curl -s http://localhost:8080/health` (the port is
-`SERVER_PORT` in `etc/loc-api-srv.env`). Logs of a backgrounded server:
-```
-
-GRC did not clean its `doc/310`; it still names the host. No tests.
-
-#### Proposed fix for PROTO
-
-1. `doc/902:15-18`: GRC's sentence, `curl -s http://localhost:8080/health`,
-   naming `SERVER_PORT` in `etc/loc-api-srv.env` as the source. Keep
-   PROTO's `bin/216-stop-local-stack`, not GRC's `bin/211-stop-app`.
-2. `doc/310`: replace host, ssh alias and absolute path with
-   `<api-host>`, `<uat-vm>` and repo-relative `etc/crt/`. B021 (cert
-   renewal) does not touch this page, so fix it here.
-3. Grep the tree for the domain, excluding `tickets/04-archive/`; expect
-   no hits.
-4. Tests: none; optionally deny-list the domain in B053's checker.
-
-#### Open question for Brandon
-
-Scrub the two archived tickets too, or leave archive history as written?
-Recommend leaving the archive and fixing only live docs.
-
 ### B088 — Broken comments: UAT env example and `.gitignore`
 
 - **Priority:** P3  **Area:** etc
@@ -9008,3 +8945,67 @@ infrahub repo, now via an absolute personal path. No tests.
 Infrahub or a plain `docker run` for derived apps? Recommend `docker
 run`; a derived app's developers will not have infrahub.
 - **Completed:** 2026-10-03. Pulled per the recommendation (plain `docker run`, not infrahub, as recommended). Docs only. B075 had already added the title, the doc/050 pointer and the repo-relative `./bin/220-run-web-app`; what remained was the infrahub block. `doc/060` Shell 1 now starts with `docker start loc-postgres` (no `cd` into the external loc-postgres repo, no personal env file, no `515-run-postgres.sh`). `doc/050` "Create the database" carried the circular claim that the container comes from doc/060, so it now holds the one-time `docker run -d --name loc-postgres -e POSTGRES_PASSWORD=... -p 127.0.0.1:5432:5432 postgres:17` (password from `etc/loc-test.env`). Not run: the command was not executed here (a `loc-postgres` container already exists). No code, no test. Tests: all green, infra=15 docs=705 go=708 unit=105 e2e=70 py=103
+
+### B087 — COMPLETED — doc/902 health URL names another project's real host
+
+- **Priority:** P2  **Area:** docs
+- **GRC:** `doc/902-project-commands.md:40-42`   **PROTO:** `doc/902-project-commands.md:17`
+- **Ticket:** none
+- **What:** The `curl -k https://...:8443/health` line names a personal dev
+host from another project (the same host as GRC's `TLS_NAME`).
+- **Port notes:** Use `http://localhost:8080/health`.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Docs bug with a small disclosure side. `doc/902-project-commands.md:15-18`
+says to check the local API with `curl -k https://<host>:8443/health`,
+where `<host>` is a real personal dev hostname under another project's
+domain (not repeated here). Three problems:
+
+1. It is not this machine. Local dev is plain HTTP on 8080
+   (`etc/loc-api-srv.env:26` `SERVER_PORT=8080`, `:30` `ENABLE_TLS=false`).
+   The command fails DNS or, if the name resolves, asks a different real
+   server whether it is up.
+2. `-k` disables certificate checks, a habit the template should not teach.
+3. The host is the same string as GRC's `TLS_NAME` in
+   `etc/loc-api-srv.env:24` (checked by comparison). Every derived app
+   inherits it.
+
+The item misses a second place: `doc/310-api-srv-cert-renewal.md:2-12`
+names the same host five times, plus an ssh alias for a VM of that other
+project and an absolute `~/Code/ProtoStack-ReactGo/etc/crt/` path.
+`tickets/04-archive/PS0001-backport-derivatives.md:19` and
+`PS0005-agent-guidance-consolidation.md:31` also mention it, as history.
+
+#### What GRC changed
+
+GRC rewrote the line under RG0011 (`06a1396`).
+`doc/902-project-commands.md:40-42`:
+
+```
+Is the API up? `curl -s http://localhost:8080/health` (the port is
+`SERVER_PORT` in `etc/loc-api-srv.env`). Logs of a backgrounded server:
+```
+
+GRC did not clean its `doc/310`; it still names the host. No tests.
+
+#### Proposed fix for PROTO
+
+1. `doc/902:15-18`: GRC's sentence, `curl -s http://localhost:8080/health`,
+   naming `SERVER_PORT` in `etc/loc-api-srv.env` as the source. Keep
+   PROTO's `bin/216-stop-local-stack`, not GRC's `bin/211-stop-app`.
+2. `doc/310`: replace host, ssh alias and absolute path with
+   `<api-host>`, `<uat-vm>` and repo-relative `etc/crt/`. B021 (cert
+   renewal) does not touch this page, so fix it here.
+3. Grep the tree for the domain, excluding `tickets/04-archive/`; expect
+   no hits.
+4. Tests: none; optionally deny-list the domain in B053's checker.
+
+#### Open question for Brandon
+
+Scrub the two archived tickets too, or leave archive history as written?
+Recommend leaving the archive and fixing only live docs.
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). Docs only. `doc/902` was already fixed by B075 (`curl -s http://localhost:8080/health`, no `-k`, no other project's host). Remaining: `doc/310-api-srv-cert-renewal.md` named the other project's host five times, its ssh alias and an absolute `~/Code/ProtoStack-ReactGo/etc/crt/` path; rewritten with `<api-host>`, `<uat-vm>`, repo-relative `etc/crt/` and a title. Tree grep for the domain, the host label and the ssh alias (excluding doc/700) now finds nothing; the archived tickets were deleted by B091. No code, no test. Tests: all green, infra=15 docs=705 go=708 unit=105 e2e=70 py=103

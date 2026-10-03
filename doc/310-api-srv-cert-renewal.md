@@ -1,13 +1,20 @@
+# API server certificate renewal (local TLS testing)
+
+`<api-host>` is the name the certificate was issued for; `<uat-vm>` is the
+ssh alias of the machine that holds the Let's Encrypt files.
+
+```
 # On remote
-ssh pathway-atticus-uat-vm
+ssh <uat-vm>
 ```
-cp /etc/letsencrypt/live/local-atticus-snipper.teamtaggle.com/fullchain.pem ~brandon/local-atticus-snipper.teamtaggle.com-fullchain.pem
+```
+cp /etc/letsencrypt/live/<api-host>/fullchain.pem ~/<api-host>-fullchain.pem
 
-cp /etc/letsencrypt/live/local-atticus-snipper.teamtaggle.com/privkey.pem ~brandon/local-atticus-snipper.teamtaggle.com-privkey.pem
+cp /etc/letsencrypt/live/<api-host>/privkey.pem ~/<api-host>-privkey.pem
 ```
 
-# on Local
 ```
-scp pathway-atticus-uat-vm:~/local-atticus-snipper.teamtaggle.com-fullchain.pem ~/Code/ProtoStack-ReactGo/etc/crt/api-srv-fullchain.pem
-scp pathway-atticus-uat-vm:~/local-atticus-snipper.teamtaggle.com-privkey.pem ~/Code/ProtoStack-ReactGo/etc/crt/api-srv-privkey.pem
+# On local, from the repo root
+scp <uat-vm>:~/<api-host>-fullchain.pem etc/crt/api-srv-fullchain.pem
+scp <uat-vm>:~/<api-host>-privkey.pem etc/crt/api-srv-privkey.pem
 ```
