@@ -186,11 +186,12 @@ cd "$APP_ROOT/etc"
 sudo mv api-srv.env "${ENV}-proto-api.env"
 ```
 
-Then diff the keys against the repo's redacted copy. As of 2026-09-21 the only
-differences are that the post-sales file **adds `SERVER_BIND_ADDRESS`**
-(`127.0.0.1` — without it the API binds every interface) and comments out
-`LOG_RECEIVER_HOST_PORT`; the rest is the same key set in a different
-order. Check anyway — the two files are maintained separately:
+Then diff the keys against the repo's redacted copy. As of 2026-10-02 the
+presales example and the post-sales file carry the same key set in a
+different order. A host set up from an older example may lack
+**`SERVER_BIND_ADDRESS=127.0.0.1`** (without it the API binds every
+interface) and still have `JWT_SESSION_EXPIRE_HOURS=72` (now 12). Check
+anyway — the two files are maintained separately:
 
 ```bash
 diff <(grep -oE '^[A-Z_]+=' "${ENV}-proto-api.env" | sort) \

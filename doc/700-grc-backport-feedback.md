@@ -240,123 +240,6 @@ published password off UAT hosts that already have it but makes the host
 env file the only source of truth? Recommendation: yes, and check the
 existing UAT host once by hand in the same ticket.
 
-### B016 — UAT env example: API not bound to loopback
-
-- **Priority:** P1  **Area:** etc
-- **GRC:** `etc/uat-api-srv.env.template:6,23-26`   **PROTO:** `etc/uat-api-srv.env.example:17-23,26`; `infra/uat/etc/uat-proto-api.env:29`
-- **Ticket:** RG0012 / `2890e8a`
-- **What:** The presales API listens on all interfaces (8088 exposed unless
-firewalled); infra env already binds 127.0.0.1. GRC binds loopback, 12 h
-sessions.
-- **Port notes:** Add the key with GRC's comment. Brandon's call: deployed
-session 12 h or 72 h? File defects B088.
-- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-The API's listen address is `SERVER_BIND_ADDRESS:SERVER_PORT`:
-
-```go
-// src/api-srv/cmd/server/main.go:202
-Addr:    fmt.Sprintf("%s:%d", config.ServerBindAddress, config.ServerPort),
-```
-
-The key is optional and empty means every interface, by design
-(`src/api-srv/internal/config/config.go:106-109`: "Empty listens on every
-interface ... 127.0.0.1 is right behind nginx"). Local dev leaves it unset
-on purpose so the Vite proxy and a phone on the LAN can reach it
-(`etc/loc-api-srv.env:27-28`).
-
-The presales UAT example, the file the operator copies to the host
-(`doc/320-presales-uat-deploy.md:76`), never sets it:
-
-```
-# etc/uat-api-srv.env.example:20-21
-SERVER_PORT=8088
-ENABLE_TLS=false
-```
-
-So a presales UAT API listens on `0.0.0.0:8088` in plain HTTP. Every other
-deployed env file already binds loopback:
-`infra/uat/etc/uat-proto-api.env:29`, `infra/prd/etc/prd-proto-api.env:29`,
-`infra/uat/etc/uat-proto-e2e-api.env:27`. `doc/330-presales-to-postsales-
-migration.md:189-191` even records the gap ("without it the API binds every
-interface") but only as a post-sales diff to apply later.
-
-Consequence, unless a host firewall happens to drop 8088 (nothing in the
-presales path sets one up):
-
-1. Anyone on the network can talk to the API directly on
-   `http://<host>:8088`, bypassing nginx. Passwords and the session cookie
-   cross the wire unencrypted (`ENABLE_TLS=false`).
-2. nginx's protections do not apply: TLS, its access logs, and the
-   fail2ban jails that read those logs
-   (`infra/uat/fail2ban/etc/jail.local`).
-3. The caller controls `X-Forwarded-For` end to end. Today `ClientIP`
-   trusts the first entry anyway (B007). After B007's fix with
-   `TRUSTED_PROXY_COUNT=1`, a direct caller's own header is the "one hop"
-   the API trusts, so the IP lockout and per-minute limits are spoofable
-   again. B007's fix is only sound when nginx is the only way in.
-
-Kind: security hole (exposed plaintext service, control bypass). The
-example also has two broken comments, tracked as B088: `:7` stops at "It
-intentionally omits" and `:38` is a `# --- logging / KV ---` header with
-no keys under it.
-
-#### What GRC changed
-
-GRC's presales template binds loopback with a reason (RG0012, `2890e8a`,
-"pre-sales UAT bundle and deploy"), at
-`etc/uat-api-srv.env.template:23-26`:
-
-```
-# TLS terminates at nginx; the API listens on loopback only
-ENABLE_TLS=false
-SERVER_BIND_ADDRESS=127.0.0.1
-SERVER_PORT=__PORT__
-```
-
-It also sets `JWT_SESSION_EXPIRE_HOURS=12` (`:6`), as do GRC's infra
-`uat-grc-api.env:16` and `prd-grc-api.env:16`. Neither the RG0012 ticket
-nor the commit gives a reason for 12. GRC's template is filled on the host
-by its 610 (B027); PROTO's is a hand-copied example. GRC added no test.
-
-#### Proposed fix for PROTO
-
-1. `etc/uat-api-srv.env.example:17-23`: add `SERVER_BIND_ADDRESS=127.0.0.1`
-   after `ENABLE_TLS=false`, with GRC's one-line comment ("TLS terminates
-   at nginx; the API listens on loopback only"). Drop the commented
-   `TLS_CERT_PATH`/`TLS_KEY_PATH` lines if Brandon agrees they never apply
-   behind nginx (optional).
-2. Same edit fixes B088's two comment defects in this file: finish or cut
-   `:6-7`, and either fill or delete the empty `:38` section.
-3. `doc/330-presales-to-postsales-migration.md:189-191`: the presales file
-   no longer lacks the key; reword the "adds `SERVER_BIND_ADDRESS`" diff.
-4. `bin/610-deploy-uat`: optional guard. After reading `SERVER_PORT` at
-   `:56`, warn (or refuse) when the host env has no
-   `SERVER_BIND_ADDRESS=127.0.0.1`. Existing presales hosts keep their old
-   env file (610 never overwrites it, `doc/320:78`), so the example edit
-   alone does not fix a host already deployed. Check those by hand.
-5. Order: land before or with B007's `TRUSTED_PROXY_COUNT`, since that
-   fix assumes only nginx reaches the API.
-6. Blind-copy traps: GRC's `__PORT__`/`__UAT_DOMAIN__` placeholders belong
-   to B027's host-side fill; PROTO keeps `SERVERONLY` and port 8088 until
-   B027. Leave out `INVITE_TTL_HOURS`, `BLOB_ROOT`, `WORKER_*`.
-7. Tests: none automated. Manual: after a deploy, `ss -ltn` on the host
-   shows `127.0.0.1:8088`, and `curl http://<host>:8088/health` from
-   outside fails.
-
-#### Open question for Brandon
-
-Should deployed sessions last 12 h (GRC) or stay at 72 h (every PROTO env
-file: `etc/uat-api-srv.env.example:26`, `infra/uat/etc/uat-proto-api.env:12`,
-`infra/prd/etc/prd-proto-api.env:12`)? The value is how long an issued
-token lives; `GET /refresh` (`auth_handler.go:383`) issues a new one, so
-it bounds a stolen cookie and an idle tab, not an active user.
-Recommendation: 12 h for UAT and prd templates, keep 72 h for local dev.
-
 ### B017 — pytest/requests pins carry advisories
 
 - **Priority:** P1  **Area:** tests
@@ -8857,3 +8740,122 @@ mismatch by step (`:85-90`; host Debian go is 1.24.4).
 Should `govulncheck` fail the `bin/300` gate (blocking a push on a new
 upstream advisory), or only warn? Recommendation: fail, since a template
 that ships known-vulnerable pins propagates them to every derived app.
+
+### B016 — COMPLETED — UAT env example: API not bound to loopback
+
+- **Completed:** 2026-10-02. `etc/uat-api-srv.env.example` now sets `SERVER_BIND_ADDRESS=127.0.0.1` with a comment that nginx is the only way in and `TRUSTED_PROXY_COUNT=1` depends on it; the same comment sits over the existing bind in `infra/uat/etc/uat-proto-api.env` and `infra/prd/etc/prd-proto-api.env`, and `infra/uat/etc/uat-proto-e2e-api.env` (already loopback) says why its pytest copy can trust XFF. Open question took the recommendation: `JWT_SESSION_EXPIRE_HOURS=12` in the UAT example and the UAT/prd infra API env files; local dev (`etc/loc-api-srv.env`, `etc/e2e-api-srv.env`) and the build-host e2e harness file stay 72. B088's two example-file defects fixed in the same edit (cut-off "It intentionally omits" sentence ended, empty `# --- logging / KV ---` header removed; B088's `.gitignore` part not done); `doc/330-presales-to-postsales-migration.md` env-diff paragraph reworded. Not done: the optional `bin/610-deploy-uat` guard. Already-deployed presales hosts keep their env file (bin/610 never overwrites it) and need a hand edit: add `SERVER_BIND_ADDRESS=127.0.0.1`, set `JWT_SESSION_EXPIRE_HOURS=12`, restart the API. Verified: the built API run with a test env bound to 127.0.0.1 shows `TCP 127.0.0.1:18088 (LISTEN)` in lsof; /health on loopback 200, on the LAN address no connection. Tests: all green, go=278 unit=42 e2e=10 py=79
+
+- **Priority:** P1  **Area:** etc
+- **GRC:** `etc/uat-api-srv.env.template:6,23-26`   **PROTO:** `etc/uat-api-srv.env.example:17-23,26`; `infra/uat/etc/uat-proto-api.env:29`
+- **Ticket:** RG0012 / `2890e8a`
+- **What:** The presales API listens on all interfaces (8088 exposed unless
+firewalled); infra env already binds 127.0.0.1. GRC binds loopback, 12 h
+sessions.
+- **Port notes:** Add the key with GRC's comment. Brandon's call: deployed
+session 12 h or 72 h? File defects B088.
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+The API's listen address is `SERVER_BIND_ADDRESS:SERVER_PORT`:
+
+```go
+// src/api-srv/cmd/server/main.go:202
+Addr:    fmt.Sprintf("%s:%d", config.ServerBindAddress, config.ServerPort),
+```
+
+The key is optional and empty means every interface, by design
+(`src/api-srv/internal/config/config.go:106-109`: "Empty listens on every
+interface ... 127.0.0.1 is right behind nginx"). Local dev leaves it unset
+on purpose so the Vite proxy and a phone on the LAN can reach it
+(`etc/loc-api-srv.env:27-28`).
+
+The presales UAT example, the file the operator copies to the host
+(`doc/320-presales-uat-deploy.md:76`), never sets it:
+
+```
+# etc/uat-api-srv.env.example:20-21
+SERVER_PORT=8088
+ENABLE_TLS=false
+```
+
+So a presales UAT API listens on `0.0.0.0:8088` in plain HTTP. Every other
+deployed env file already binds loopback:
+`infra/uat/etc/uat-proto-api.env:29`, `infra/prd/etc/prd-proto-api.env:29`,
+`infra/uat/etc/uat-proto-e2e-api.env:27`. `doc/330-presales-to-postsales-
+migration.md:189-191` even records the gap ("without it the API binds every
+interface") but only as a post-sales diff to apply later.
+
+Consequence, unless a host firewall happens to drop 8088 (nothing in the
+presales path sets one up):
+
+1. Anyone on the network can talk to the API directly on
+   `http://<host>:8088`, bypassing nginx. Passwords and the session cookie
+   cross the wire unencrypted (`ENABLE_TLS=false`).
+2. nginx's protections do not apply: TLS, its access logs, and the
+   fail2ban jails that read those logs
+   (`infra/uat/fail2ban/etc/jail.local`).
+3. The caller controls `X-Forwarded-For` end to end. Today `ClientIP`
+   trusts the first entry anyway (B007). After B007's fix with
+   `TRUSTED_PROXY_COUNT=1`, a direct caller's own header is the "one hop"
+   the API trusts, so the IP lockout and per-minute limits are spoofable
+   again. B007's fix is only sound when nginx is the only way in.
+
+Kind: security hole (exposed plaintext service, control bypass). The
+example also has two broken comments, tracked as B088: `:7` stops at "It
+intentionally omits" and `:38` is a `# --- logging / KV ---` header with
+no keys under it.
+
+#### What GRC changed
+
+GRC's presales template binds loopback with a reason (RG0012, `2890e8a`,
+"pre-sales UAT bundle and deploy"), at
+`etc/uat-api-srv.env.template:23-26`:
+
+```
+# TLS terminates at nginx; the API listens on loopback only
+ENABLE_TLS=false
+SERVER_BIND_ADDRESS=127.0.0.1
+SERVER_PORT=__PORT__
+```
+
+It also sets `JWT_SESSION_EXPIRE_HOURS=12` (`:6`), as do GRC's infra
+`uat-grc-api.env:16` and `prd-grc-api.env:16`. Neither the RG0012 ticket
+nor the commit gives a reason for 12. GRC's template is filled on the host
+by its 610 (B027); PROTO's is a hand-copied example. GRC added no test.
+
+#### Proposed fix for PROTO
+
+1. `etc/uat-api-srv.env.example:17-23`: add `SERVER_BIND_ADDRESS=127.0.0.1`
+   after `ENABLE_TLS=false`, with GRC's one-line comment ("TLS terminates
+   at nginx; the API listens on loopback only"). Drop the commented
+   `TLS_CERT_PATH`/`TLS_KEY_PATH` lines if Brandon agrees they never apply
+   behind nginx (optional).
+2. Same edit fixes B088's two comment defects in this file: finish or cut
+   `:6-7`, and either fill or delete the empty `:38` section.
+3. `doc/330-presales-to-postsales-migration.md:189-191`: the presales file
+   no longer lacks the key; reword the "adds `SERVER_BIND_ADDRESS`" diff.
+4. `bin/610-deploy-uat`: optional guard. After reading `SERVER_PORT` at
+   `:56`, warn (or refuse) when the host env has no
+   `SERVER_BIND_ADDRESS=127.0.0.1`. Existing presales hosts keep their old
+   env file (610 never overwrites it, `doc/320:78`), so the example edit
+   alone does not fix a host already deployed. Check those by hand.
+5. Order: land before or with B007's `TRUSTED_PROXY_COUNT`, since that
+   fix assumes only nginx reaches the API.
+6. Blind-copy traps: GRC's `__PORT__`/`__UAT_DOMAIN__` placeholders belong
+   to B027's host-side fill; PROTO keeps `SERVERONLY` and port 8088 until
+   B027. Leave out `INVITE_TTL_HOURS`, `BLOB_ROOT`, `WORKER_*`.
+7. Tests: none automated. Manual: after a deploy, `ss -ltn` on the host
+   shows `127.0.0.1:8088`, and `curl http://<host>:8088/health` from
+   outside fails.
+
+#### Open question for Brandon
+
+Should deployed sessions last 12 h (GRC) or stay at 72 h (every PROTO env
+file: `etc/uat-api-srv.env.example:26`, `infra/uat/etc/uat-proto-api.env:12`,
+`infra/prd/etc/prd-proto-api.env:12`)? The value is how long an issued
+token lives; `GET /refresh` (`auth_handler.go:383`) issues a new one, so
+it bounds a stolen cookie and an idle tab, not an active user.
+Recommendation: 12 h for UAT and prd templates, keep 72 h for local dev.
