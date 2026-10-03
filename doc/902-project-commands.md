@@ -19,13 +19,14 @@ curl -k https://local-atticus-snipper.teamtaggle.com:8443/health
 
 To view server logs (when running in background):
 ```
-tail -f tmp/server.log
+tail -f tmp/api-srv/server.log
 ```
 
-To stop the api server:
-```
-pkill -f "dist/proto-api" || kill $(cat tmp/server.pid 2>/dev/null) 2>/dev/null || true
-```
+To stop the api server, `./bin/216-stop-local-stack` (below), or
+`kill $(cat tmp/api-srv/server.pid)` for a background run. `bin/215` (on
+restart) and `bin/216` match this checkout's binary plus config path, so
+another checkout's API and `bin/300`'s private instance on 8082 keep
+running; `bin/216` stops only this checkout's vite.
 
 ## Local Stack
 
@@ -85,7 +86,9 @@ The one command, on a laptop or a build host:
   with Go 1.26, which `go install` fetches unless `GOTOOLCHAIN=local`).
   Then rebuilds `loc_proto_test_db` via `bin/510` and runs
   `go test -v ./...` in each module with `TEST_DATABASE_URL` exported
-  (one `go-test.log`; the `go=` count covers both).
+  (one `go-test.log`; the `go=` count covers both), with
+  `-coverprofile`: per module `tmp/test-reports/go-coverage-<module>.out`
+  and an HTML page, total printed; a report, no threshold.
   A repository suite that cannot reach the database SKIPS (see
   `internal/repository/testdb_test.go`); the runner greps for that skip and
   fails the run, so a green run always includes the integration suites.

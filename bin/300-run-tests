@@ -13,6 +13,7 @@ set -euo pipefail
 #   bin/300-run-tests docs     # scripts/check-doc-paths.sh: every
 #                              #   backticked repo path in the docs exists
 #   bin/300-run-tests go       # gofmt, go vet, staticcheck, go test
+#                              #   + coverage report, no threshold
 #                              #   (seconds; run before every commit)
 #   bin/300-run-tests unit     # eslint, vitest (src/web-app), no database
 #   bin/300-run-tests e2e      # Playwright only (bin/230-run-web-app-e2e)
@@ -22,8 +23,9 @@ set -euo pipefail
 #                              #   the e2e database, a minute (not in all)
 #
 # Output: tmp/test-logs/ (logs, the private API's env and binary) and
-# tmp/test-reports/ (pytest HTML). Both gitignored. tmp/test-logs/
-# run-tests.result is the run's one-line outcome, for a caller to post.
+# tmp/test-reports/ (pytest HTML, Go coverage). Both gitignored.
+# tmp/test-logs/run-tests.result is the run's one-line outcome, for a
+# caller to post.
 #
 # Everything environment-specific comes from ONE sourced file, so "it passed
 # for me" and "it passed on the host" mean the same thing:
@@ -249,10 +251,14 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
     GO_LOG="$LOG_DIR/go-test.log"
     STEP_LOG="$GO_LOG"
     : > "$GO_LOG"
+    # Coverage rides the same run: a report per module in REPORT_DIR, no
+    # threshold.
     for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
         echo "[INFO] go test $module_dir"
         (cd "$PROJECT_ROOT/$module_dir" \
-            && TEST_DATABASE_URL="$TEST_DATABASE_URL" go test -v ./...) \
+            && TEST_DATABASE_URL="$TEST_DATABASE_URL" go test -v \
+                -coverprofile="$REPORT_DIR/go-coverage-${module_dir##*/}.out" \
+                ./...) \
             >> "$GO_LOG" 2>&1 || true
     done
     grep -E '^(ok|FAIL|--- FAIL)' "$GO_LOG" || true
@@ -266,6 +272,18 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
         grep -B2 -A12 -- '--- FAIL' "$GO_LOG" | head -60
         exit 1
     fi
+    for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
+        COVER_PROFILE="$REPORT_DIR/go-coverage-${module_dir##*/}.out"
+        COVER_HTML="${COVER_PROFILE%.out}.html"
+        (cd "$PROJECT_ROOT/$module_dir" \
+            && go tool cover -html="$COVER_PROFILE" -o "$COVER_HTML") \
+            || { echo "[ERROR] go tool cover: $module_dir"; exit 1; }
+        COVER_TOTAL="$(cd "$PROJECT_ROOT/$module_dir" \
+            && go tool cover -func="$COVER_PROFILE" \
+            | awk '/^total:/ {print $NF}')"
+        echo "[INFO] go coverage $module_dir: $COVER_TOTAL of statements" \
+            "(${COVER_HTML#"$PROJECT_ROOT"/})"
+    done
     GO_COUNT=$(grep -c -E '^\s*--- PASS' "$GO_LOG" || true)
     echo "[INFO] go: $GO_COUNT passed"
     SUMMARY+=("go=$GO_COUNT")

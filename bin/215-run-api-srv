@@ -31,9 +31,12 @@ if [ ! -f "$CONFIG_PATH" ]; then
     exit 1
 fi
 
-# Kill any existing instances of the server
+# Kill any existing instance of THIS dev server: this checkout's binary on
+# this checkout's config. A second checkout's API, and bin/300's private
+# instance on 8082 (its own binary under tmp/test-logs/), keep running.
+INSTANCE_PATTERN="$BINARY_PATH $CONFIG_PATH"
 echo "Checking for existing server instances..."
-EXISTING_PIDS=$(pgrep -f "dist/$APP_SLUG-api" || true)
+EXISTING_PIDS=$(pgrep -f "$INSTANCE_PATTERN" || true)
 
 if [ -n "$EXISTING_PIDS" ]; then
     echo "Found existing server instances (PIDs: $EXISTING_PIDS), terminating..."
@@ -41,7 +44,7 @@ if [ -n "$EXISTING_PIDS" ]; then
 
     # Wait up to 10 seconds for graceful shutdown
     for i in {1..10}; do
-        if ! pgrep -f "dist/$APP_SLUG-api" > /dev/null 2>&1; then
+        if ! pgrep -f "$INSTANCE_PATTERN" > /dev/null 2>&1; then
             echo "All existing instances terminated gracefully."
             break
         fi
@@ -50,7 +53,7 @@ if [ -n "$EXISTING_PIDS" ]; then
     done
 
     # Force kill any remaining instances
-    REMAINING_PIDS=$(pgrep -f "dist/$APP_SLUG-api" || true)
+    REMAINING_PIDS=$(pgrep -f "$INSTANCE_PATTERN" || true)
     if [ -n "$REMAINING_PIDS" ]; then
         echo "Force killing remaining instances (PIDs: $REMAINING_PIDS)..."
         echo "$REMAINING_PIDS" | xargs kill -KILL 2>/dev/null || true

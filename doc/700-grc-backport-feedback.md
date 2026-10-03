@@ -710,77 +710,6 @@ given it moves authorization differences into a matrix? Recommend an ADR
 that permits it only for derived apps past ~10 entities, never the
 template.
 
-### B070 — bin dev conveniences: targeted restart, test API, dirty flag, coverage
-
-- **Priority:** P3  **Area:** bin
-- **GRC:** `bin/215-run-api-srv:33-36,44,53`; `bin/216-run-test-api-srv:1-38`; `bin/600-bundle-uat:52-53,98`; `bin/620-export-tenant-data:71`; `bin/310-test-repo-model:121-147`   **PROTO:** `bin/215-run-api-srv:36,44,53`; `bin/300-run-tests:58-89,140-182`; `bin/600-bundle-uat:58,113`
-- **Ticket:** RG0041 / `31970ae`; RG0012 / `2890e8a`; RG0006 / `0cf57f7`
-- **What:** Restart kills only the dev instance (binary + env path); a
-long-lived test API on 8082; staged changes mark a bundle dirty;
-repository/model coverage HTML.
-- **Port notes:** PROTO's per-run instance is the better gate. Keep
-`tmp/api-srv/`. 221 is SKIP.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-1. Restart matches too wide. `bin/215-run-api-srv:36` (also `:44,53`):
-
-       EXISTING_PIDS=$(pgrep -f "dist/$APP_SLUG-api" || true)
-
-   Any process whose argv contains `dist/proto-api` dies, including the
-   dev API of a second checkout or agent worktree of the same app.
-   `bin/216-stop-local-stack:11` is wider: `pkill -f "vite"` kills every
-   Vite server on the machine, any project. DX gap.
-2. Dirty flag misses staged work. `bin/600-bundle-uat:58,113` use
-   `git diff --quiet`, which compares work tree to index only. Changes
-   `git add`ed but not committed ship stamped clean in `MANIFEST`, so UAT
-   claims a commit it is not running. Small provenance bug.
-3. No standing test API. Deliberate: `bin/300-run-tests` `py` builds a
-   private binary (`:165-167`), stops it on exit (`:171-175`), and refuses
-   to start if 8082 already answers (`:158-160`). Not a gap.
-4. No Go coverage report: nothing under `bin/` passes `-cover`; only
-   vitest has a floor (`src/web-app/vitest.config.ts:12-17`). DX gap.
-
-#### What GRC changed
-
-- RG0041 (`31970ae`): `bin/215-run-api-srv:33-36,44,53` match binary plus
-  env file, `pgrep -f "proto-go-app $CONFIG_PATH"`, so a dev restart
-  spares the test instance. New `bin/216-run-test-api-srv:1-38` keeps a
-  long-lived API on 8082 (e2e DB, tenant 2) for pytest, smoke and load.
-- RG0012 (`2890e8a`): `bin/600-bundle-uat:52` sets `DIRTY` from
-  `git diff --quiet && git diff --cached --quiet`, used at `:53,98`;
-  `bin/620-export-tenant-data:71` repeats it.
-- RG0006 (`0cf57f7`): `bin/310-test-repo-model:121-147` writes a
-  coverprofile, `-func` summary and HTML to `tmp/test-reports/`.
-- No tests pin any of these.
-
-#### Proposed fix for PROTO
-
-1. `bin/215-run-api-srv:36,44,53`: match `"$BINARY_PATH $CONFIG_PATH"`.
-   Keep `tmp/api-srv/` for log and pid (`:87-91`); GRC writes loose `tmp/`
-   and hardcodes `proto-go-app` where PROTO derives `$APP_SLUG`.
-2. `bin/216-stop-local-stack:10-11`: same binary+env match for the API;
-   scope the Vite kill to this checkout's path (check real argv first).
-   Not in GRC; same class of bug.
-3. `bin/600-bundle-uat:58,113`: compute `DIRTY` once with GRC's two-part
-   test (or `git status --porcelain` to count untracked files too).
-4. Optional: add `-coverprofile` to the existing `go test` in
-   `bin/300-run-tests:72` and write HTML to `tmp/test-reports/`; report,
-   no floor.
-5. Do not port GRC `bin/216-run-test-api-srv`. PROTO's 216 is taken, a
-   standing 8082 instance makes bin/300 `py` refuse, and Playwright reuses
-   it (`playwright.config.ts:84`), risking a stale binary. 221 is SKIP.
-6. Tests: none; check by hand that restarting one checkout's API leaves
-   another checkout's running.
-
-#### Open question for Brandon
-
-Add Go coverage to `bin/300 go`? Recommendation: yes, as a report with no
-threshold, since it rides the existing `go test` run.
-
 ### B071 — Host survey and scrubbed tenant export
 
 - **Priority:** P3  **Area:** bin, docs
@@ -8993,3 +8922,75 @@ it became necessary only after GRC pinned the lock back. No tests.
 Caret or exact for zod? Recommendation: caret, because the README already
 says caret ranges and the exact pin is an accident of PS0013.
 - **Completed:** 2026-10-03. Caret per the decision (no Brandon line; took the recommendation). `src/web-app/package.json` `"zod": "4.1.13"` -> `"^4.1.13"`; `package-lock.json` changes only the root `packages[""]` spec line (via `npm install --package-lock-only --legacy-peer-deps`), the resolved zod stays 4.1.13. Deviation: step 1's `npm update --legacy-peer-deps zod` is not run. It was written against the old "every ticket runs npm update" cadence; B055's cadence allows only audit-advised bumps, and `npm audit --omit=dev` reports 0 (latest zod is 4.6.5). The caret makes a future advised `npm update --legacy-peer-deps zod` effective. No `.depcheckrc.yml` (step 2): `npx depcheck` reports no issue. No README change: "Caret ranges" is now true of every dependency (typescript stays tilde). No new tests per step 4; `tsc -b`, `vite build --mode development` and `npx depcheck` clean (`npm run build` in production mode fails at `vite.config.ts` without `VITE_API_PROXY_URL`, pre-existing, open as B093). Tests: all green, infra=15 docs=507 go=700 unit=101 e2e=68 py=103 (unchanged), govulncheck clean, gofmt clean.
+
+### B070 — COMPLETED — bin dev conveniences: targeted restart, test API, dirty flag, coverage
+
+- **Priority:** P3  **Area:** bin
+- **GRC:** `bin/215-run-api-srv:33-36,44,53`; `bin/216-run-test-api-srv:1-38`; `bin/600-bundle-uat:52-53,98`; `bin/620-export-tenant-data:71`; `bin/310-test-repo-model:121-147`   **PROTO:** `bin/215-run-api-srv:36,44,53`; `bin/300-run-tests:58-89,140-182`; `bin/600-bundle-uat:58,113`
+- **Ticket:** RG0041 / `31970ae`; RG0012 / `2890e8a`; RG0006 / `0cf57f7`
+- **What:** Restart kills only the dev instance (binary + env path); a
+long-lived test API on 8082; staged changes mark a bundle dirty;
+repository/model coverage HTML.
+- **Port notes:** PROTO's per-run instance is the better gate. Keep
+`tmp/api-srv/`. 221 is SKIP.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+1. Restart matches too wide. `bin/215-run-api-srv:36` (also `:44,53`):
+
+       EXISTING_PIDS=$(pgrep -f "dist/$APP_SLUG-api" || true)
+
+   Any process whose argv contains `dist/proto-api` dies, including the
+   dev API of a second checkout or agent worktree of the same app.
+   `bin/216-stop-local-stack:11` is wider: `pkill -f "vite"` kills every
+   Vite server on the machine, any project. DX gap.
+2. Dirty flag misses staged work. `bin/600-bundle-uat:58,113` use
+   `git diff --quiet`, which compares work tree to index only. Changes
+   `git add`ed but not committed ship stamped clean in `MANIFEST`, so UAT
+   claims a commit it is not running. Small provenance bug.
+3. No standing test API. Deliberate: `bin/300-run-tests` `py` builds a
+   private binary (`:165-167`), stops it on exit (`:171-175`), and refuses
+   to start if 8082 already answers (`:158-160`). Not a gap.
+4. No Go coverage report: nothing under `bin/` passes `-cover`; only
+   vitest has a floor (`src/web-app/vitest.config.ts:12-17`). DX gap.
+
+#### What GRC changed
+
+- RG0041 (`31970ae`): `bin/215-run-api-srv:33-36,44,53` match binary plus
+  env file, `pgrep -f "proto-go-app $CONFIG_PATH"`, so a dev restart
+  spares the test instance. New `bin/216-run-test-api-srv:1-38` keeps a
+  long-lived API on 8082 (e2e DB, tenant 2) for pytest, smoke and load.
+- RG0012 (`2890e8a`): `bin/600-bundle-uat:52` sets `DIRTY` from
+  `git diff --quiet && git diff --cached --quiet`, used at `:53,98`;
+  `bin/620-export-tenant-data:71` repeats it.
+- RG0006 (`0cf57f7`): `bin/310-test-repo-model:121-147` writes a
+  coverprofile, `-func` summary and HTML to `tmp/test-reports/`.
+- No tests pin any of these.
+
+#### Proposed fix for PROTO
+
+1. `bin/215-run-api-srv:36,44,53`: match `"$BINARY_PATH $CONFIG_PATH"`.
+   Keep `tmp/api-srv/` for log and pid (`:87-91`); GRC writes loose `tmp/`
+   and hardcodes `proto-go-app` where PROTO derives `$APP_SLUG`.
+2. `bin/216-stop-local-stack:10-11`: same binary+env match for the API;
+   scope the Vite kill to this checkout's path (check real argv first).
+   Not in GRC; same class of bug.
+3. `bin/600-bundle-uat:58,113`: compute `DIRTY` once with GRC's two-part
+   test (or `git status --porcelain` to count untracked files too).
+4. Optional: add `-coverprofile` to the existing `go test` in
+   `bin/300-run-tests:72` and write HTML to `tmp/test-reports/`; report,
+   no floor.
+5. Do not port GRC `bin/216-run-test-api-srv`. PROTO's 216 is taken, a
+   standing 8082 instance makes bin/300 `py` refuse, and Playwright reuses
+   it (`playwright.config.ts:84`), risking a stale binary. 221 is SKIP.
+6. Tests: none; check by hand that restarting one checkout's API leaves
+   another checkout's running.
+
+#### Open question for Brandon
+
+Add Go coverage to `bin/300 go`? Recommendation: yes, as a report with no
+threshold, since it rides the existing `go test` run.
+- **Completed:** 2026-10-03. Fix steps 1-5; step 4 taken per the recommendation (no Brandon line). `bin/215-run-api-srv` matches `"$BINARY_PATH $CONFIG_PATH"` for the existence check, wait loop and force kill; `tmp/api-srv/` log and pid kept. `bin/216-stop-local-stack` kills the API by the same binary+config pattern and vite by `<checkout>/src/web-app/node_modules/\.bin/vite( |$)` (real argv of `npm run dev` and `npx vite` is `node <abs>/node_modules/.bin/vite ...`, checked by hand; `( |$)` spares vitest; Playwright's 5182 vite from the same checkout still matches). `bin/600-bundle-uat` computes `COMMIT` and `DIRTY` once from `git status --porcelain` (unstaged, staged and untracked), used by the console line and `MANIFEST`. `bin/300-run-tests` `go` adds `-coverprofile` to the existing `go test` and writes `tmp/test-reports/go-coverage-<module>.out` + `.html` per module, prints the total (api-srv 67.5%, load-test 7.0%), no threshold. GRC `bin/216-run-test-api-srv` not ported (step 5). doc/902: stale `tmp/server.log` / `tmp/server.pid` / `pkill -f "dist/proto-api"` lines now name `tmp/api-srv/` and bin/216; `go` mode notes coverage. Hand checks (scratch checkouts A and B with fake API, vite, vitest and an 8082 test-API process; macOS and `ubuntu:24.04`): old 215 restart in A killed B's API, new kills only A's dev API; old 216 killed every API, vite and vitest in A and B, new kills only A's API and vite. Dirty flag in a scratch repo: staged-only and untracked were clean before, dirty now. shellcheck 0.9.0 clean on 215, 216, 300, 600. B095 (pipefail in 215/216) left alone. Tests: all green, infra=15 docs=511 (+4 path tokens in doc/902) go=700 unit=101 e2e=68 py=103, govulncheck clean, gofmt clean.

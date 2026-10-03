@@ -1,14 +1,32 @@
 #!/bin/bash
 # Stop the local stack: the API server (bin/215) and the vite dev server (bin/220).
+# Only this checkout's: another checkout's (or another project's) API and
+# vite keep running. pgrep -f patterns are extended regexes over the argv.
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # shellcheck disable=SC1091
 source "$PROJECT_ROOT/etc/app.env"
 
+# bin/215 runs exactly "<binary> <config>".
+API_PATTERN="$PROJECT_ROOT/dist/$APP_SLUG-api"
+API_PATTERN+=" $PROJECT_ROOT/etc/loc-api-srv.env"
+# npm run dev / npx vite run "node <web-app>/node_modules/.bin/vite [args]";
+# ( |$) so vitest (.bin/vitest) is spared. Playwright's vite on 5182 from
+# this checkout matches too.
+VITE_PATTERN="$PROJECT_ROOT/src/web-app/node_modules/\.bin/vite( |$)"
+
 KILLED=false
-if pkill -f "dist/$APP_SLUG-api" 2>/dev/null; then echo "Killed $APP_SLUG-api"; KILLED=true; else echo "No $APP_SLUG-api running"; fi
-if pkill -f "vite" 2>/dev/null;         then echo "Killed vite";         KILLED=true; else echo "No vite running"; fi
+if pkill -f "$API_PATTERN" 2>/dev/null; then
+    echo "Killed $APP_SLUG-api"; KILLED=true
+else
+    echo "No $APP_SLUG-api running"
+fi
+if pkill -f "$VITE_PATTERN" 2>/dev/null; then
+    echo "Killed vite"; KILLED=true
+else
+    echo "No vite running"
+fi
 
 if [ "$KILLED" = true ]; then sleep 2; fi
 echo "Local stack stopped."

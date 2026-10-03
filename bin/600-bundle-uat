@@ -60,7 +60,12 @@ if [ "$DO_DB" = 1 ]; then
 fi
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo n/a)"
-echo "app=$APP_NAME branch=$BRANCH  commit=$(git rev-parse --short HEAD 2>/dev/null)$(git diff --quiet 2>/dev/null || echo ' (dirty)')"
+COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo n/a)"
+# Dirty = anything the build can see that HEAD does not hold: unstaged,
+# staged (git diff alone misses `git add`ed work) and untracked files.
+DIRTY=""
+[ -z "$(git status --porcelain 2>/dev/null)" ] || DIRTY="(dirty)"
+echo "app=$APP_NAME branch=$BRANCH  commit=$COMMIT${DIRTY:+ $DIRTY}"
 STAMP="$(date +%Y%m%d_%H%M)"
 NAME="${APP_NAME}_bundle_${STAMP}"
 STAGE="$PROJECT_ROOT/dist/$NAME"
@@ -126,7 +131,7 @@ APP_DISPLAY_NAME="$APP_DISPLAY_NAME" awk '
   echo "app=$APP_NAME"
   echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "branch=$BRANCH"
-  echo "git=$(git rev-parse --short HEAD 2>/dev/null || echo n/a) $(git diff --quiet 2>/dev/null || echo '(dirty)')"
+  echo "git=$COMMIT $DIRTY"
   echo "go=$(go version | awk '{print $3}')  node=$(node --version)"
   echo "db=${LOCAL_DB:-skipped}"
   [ -f "$STAGE/$APP_SLUG-migrate" ] && echo "migrate=included" || echo "migrate=not-built"
