@@ -144,7 +144,7 @@ func (h *AppUserGroupHandler) CreateAppUserGroup(w http.ResponseWriter,
 
 	app.Debug("UGRP_CREATED", "User group created")
 	wrapper := model.DataWrapper{Data: createdGroup}
-	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusCreated, wrapper)
 	app.Info(
 		"CR_UGRP_DONE",
 		fmt.Sprintf(

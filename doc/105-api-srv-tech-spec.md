@@ -219,6 +219,21 @@ before it is good again until it expires. Accepted for one app server; a
 second server or a need to survive restarts means a shared store (see
 `internal/cache/kv.go`).
 
+### Session cookie
+One helper writes it, `setAuthCookie` in `internal/handler/common.go`, so
+login (`/auth`, MFA-exempt), `/mfaVerify`, `/refresh` and
+`/changeSecurityContext` cannot drift apart: `auth`, `Path=/`, `HttpOnly`,
+`Secure`, `SameSite=Strict`.
+
+**The JWT's exp (`JWT_SESSION_EXPIRE_HOURS`) is the only session
+lifetime.** Every issuing path writes a browser-session cookie with no
+`Max-Age` (`authCookieSessionMaxAge`); it lasts until the browser closes or
+the server refuses the token. Only `/logoff` sets one
+(`authCookieExpireNow`, sent as `Max-Age=0`) to expire it. A cookie
+`Max-Age` shorter than the token would drop a session the server still
+accepts: the web app calls `/refresh` on every page load, so one reload
+would cut the session to that `Max-Age`.
+
 ### Request Body Limits
 Go puts no bound on `r.Body`, so every handler that reads one caps it
 first, through `decodeJSONBody` (or `readBody` for raw bytes) in

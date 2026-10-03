@@ -295,6 +295,54 @@ class TestBodyLimits:
         assert response.json()["error"] == "Invalid request body"
 
 
+def _auth_set_cookie(response) -> str:
+    cookie_header = response.headers.get("Set-Cookie", "")
+    assert cookie_header.startswith("auth="), cookie_header
+    return cookie_header
+
+
+class TestSessionCookie:
+    """The JWT's exp is the session's only lifetime (B029)."""
+
+    def test_issued_cookie_is_a_browser_session_cookie(self):
+        """/auth and /refresh set no Max-Age; /logoff expires the cookie.
+
+        /refresh once wrote Max-Age=3600 against a longer-lived JWT, so one
+        page reload cut the session to an hour.
+        """
+        base_url = os.environ["TEST_BASE_URL"]
+        login = _login(base_url, new_forwarded_ip(), "admin", "admin123!")
+        assert login.status_code == 200, login.text
+        login_cookie = _auth_set_cookie(login)
+        token = login_cookie.split("auth=")[1].split(";")[0]
+        csrf_token = login.json()["csrfToken"]
+
+        refresh = requests.get(
+            f"{base_url}/refresh", cookies={"auth": token}, verify=False,
+        )
+        assert refresh.status_code == 200, refresh.text
+        refresh_cookie = _auth_set_cookie(refresh)
+
+        for route, cookie_header in (
+            ("/auth", login_cookie),
+            ("/refresh", refresh_cookie),
+        ):
+            lowered = cookie_header.lower()
+            assert "max-age" not in lowered, f"{route}: {cookie_header}"
+            assert "expires" not in lowered, f"{route}: {cookie_header}"
+            for flag in ("HttpOnly", "Secure", "SameSite=Strict", "Path=/"):
+                assert flag in cookie_header, f"{route}: {cookie_header}"
+
+        logoff = requests.post(
+            f"{base_url}/logoff",
+            cookies={"auth": token},
+            headers={"X-CSRF-Token": csrf_token},
+            verify=False,
+        )
+        assert logoff.status_code == 200, logoff.text
+        assert "Max-Age=0" in _auth_set_cookie(logoff)
+
+
 # Import TestClient for use in this module
 from conftest import (
     TEST_TENANT,

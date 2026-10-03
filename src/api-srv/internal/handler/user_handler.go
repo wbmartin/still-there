@@ -458,7 +458,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	app.Debug("UCD0", "User created")
 	wrapper := model.DataWrapper{Data: createdUser}
-	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusCreated, wrapper)
 	app.Info(
 		"USR_CREATE_DONE",
 		fmt.Sprintf(

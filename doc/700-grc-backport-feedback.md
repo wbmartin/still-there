@@ -242,111 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B029 — RG0004: one JSON writer; session cookie without `Max-Age`
-
-- **Priority:** P2  **Area:** go-api, tests, docs
-- **GRC:** `src/internal/handler/auth_handler.go:415,466,493,600,619,785,806,849,1033`; `user_handler.go:520`; `app_user_group_handler.go:166`; `common.go:58-92`; `user_mfa_handler.go:533`; `tests/test_auth_flow.py:255-303`; `doc/105-api-srv-tech-spec.md:363-377`   **PROTO:** `src/api-srv/internal/handler/common.go:14-25`; `auth_handler.go:28-41,300,371,474,493,643,664,698,867`; `user_handler.go:493`; `app_user_group_handler.go:164`; doc/105 after `:209`
-- **Ticket:** RG0004 / `d761d42`, `9fe4a78`; RG0043 item 34 / `720f5e1`
-- **What:** (a) `handler.writeJSON` skips the gate on 2xx; GRC has one writer.
-(b) `Max-Age=3600` on refresh/switch against a 72 h JWT kills refreshed
-sessions after an hour; GRC: JWT expiry is the only lifetime.
-- **Port notes:** `setAuthCookie` + named constants into `common.go`. Pytest: no
-Max-Age, logoff 0. Tests rated the cookie P1.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-All PROTO paths are under `src/api-srv/internal/`. Two separate problems.
-
-**(a) A second JSON writer skips the check gate.** `AppHelper.WriteJSON`
-refuses a 2xx when the security checks did not all run:
-
-```go
-// security/app_helper.go:214, 219
-if status < 400 && !ah.CheckAllChecksComplete() {
-    http.Error(w, "Security check failed", http.StatusInternalServerError)
-```
-
-`handler/common.go:15-24` defines a package-level `writeJSON` that writes
-headers and body with no check. Nine success paths use it:
-`auth_handler.go:300,372,493,664,867`, `user_handler.go:492`,
-`app_user_group_handler.go:163`, `example_handler.go:222,685`. Each runs
-after its handler's own `CheckAllChecksComplete` with `app` in scope, so
-nothing leaks today. The example handler is the copy-me template, so a
-new handler copied from it that drops the gate still answers 200.
-Defense-in-depth gap, not a live hole.
-
-**(b) Refresh and switch cut the session to one hour.** One helper writes
-the cookie (`auth_handler.go:28-41`); callers disagree on lifetime:
-
-```go
-// auth_handler.go:351 (login), :474 (refresh), :643 (switch), :698 (logoff)
-setAuthCookie(w, jwt, 0)
-setAuthCookie(w, jwt, 3600) // 1 hour
-setAuthCookie(w, "", -1) // expire immediately
-```
-
-`user_mfa_handler.go:619` (MFA verify) also passes 0. The JWT inside lives
-`JWT_SESSION_EXPIRE_HOURS=72` (`etc/loc-api-srv.env:13`, same in
-`etc/uat-api-srv.env.example:26`). The web calls `/refresh` on every page
-load (`src/web-app/stores/auth-store.ts:105`, from
-`hooks/use-auth-guard.ts:15-20`). Log in, reload once, work an hour
-without reloading: the browser drops the cookie, the next call 401s, and
-the user lands on login holding a valid 72-hour token. UX and correctness
-bug, not a security hole: the server enforces the JWT's `exp` anyway.
-
-#### What GRC changed
-
-RG0043 item 34 (`720f5e1`) deleted `handler.writeJSON`; its seven callers
-call `appHelper.WriteJSON` (`src/internal/handler/auth_handler.go:415,496,
-619,806,1033`, `user_handler.go:519`, `app_user_group_handler.go:165`).
-
-RG0004 (`d761d42`) moved `setAuthCookie` to
-`src/internal/handler/common.go:79-89` with named values (`:93-96`):
-
-```go
-authCookieSessionMaxAge = 0
-authCookieExpireNow     = -1
-```
-
-Every issuing path passes the session value (`auth_handler.go:466,600,785`,
-`user_mfa_handler.go:533`); only logoff expires (`auth_handler.go:848`).
-The comment at `common.go:70-78` and `doc/105-api-srv-tech-spec.md:363-376`
-state the rule: the JWT's expiry is the only session lifetime. `9fe4a78`
-added `test_session_cookie_lifetime_is_the_jwt_expiry`
-(`tests/test_auth_flow.py:255-303`): `/auth` and `/refresh` carry no
-`Max-Age` and keep `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`;
-`/logoff` carries `Max-Age=0`. No Go test covers either change.
-
-#### Proposed fix for PROTO
-
-1. **`handler/common.go`**: delete `writeJSON` (`:14-24`) and unused
-   imports; the nine sites call `app.WriteJSON(w, status, wrapper)`.
-2. **Move `setAuthCookie`** from `auth_handler.go:28-41` to `common.go`.
-   Add `authCookieName = "auth"`, `authCookieSessionMaxAge = 0`,
-   `authCookieExpireNow = -1` (`security/app_helper.go:280` keeps its own
-   `"auth"` literal; it is another package).
-3. **`auth_handler.go:474,643`**: pass `authCookieSessionMaxAge`; drop the
-   `// 1 hour` comments. Swap the literals at `:351,698` and
-   `user_mfa_handler.go:619` for the constants.
-4. **B004 edits the same `/refresh` code** (`:454-474`); land B029 first
-   or in the same branch.
-5. **doc/105**: add a "Session cookie" section after `:209` stating the
-   rule, adapted from GRC `doc/105:363-376` without the RG ticket refs.
-6. Keep PROTO's module path and `app` helper name, not GRC's `appHelper`.
-7. Tests. pytest in `tests/test_auth_flow.py`: port GRC's cookie test and
-   add `/changeSecurityContext` (GRC skipped it; needs a two-tenant user,
-   see B030). Go: none for (a); the compiler rejects any leftover caller.
-
-#### Open question for Brandon
-
-Browser-session cookie (gone when the browser closes, as login is today)
-or persistent with `Max-Age = JWT_SESSION_EXPIRE_HOURS * 3600`?
-Recommendation: browser-session, as GRC chose; it matches login today and
-needs no new config.
-
 ### B030 — `/me` 404s after a context switch
 
 - **Priority:** P2  **Area:** go-api, tests
@@ -8873,3 +8768,109 @@ Soft-deleted row: 410 Gone (PROTO example and doc/105 today) or 404 like
 a missing row (GRC)? Recommendation: 404; 410 tells a caller the id once
 existed, and no web code acts on 410.
 Brandon: 404
+
+### B029 — COMPLETED — RG0004: one JSON writer; session cookie without `Max-Age`
+- **Completed:** 2026-10-02. Deleted `handler.writeJSON` (common.go); its nine success paths (auth_handler, user_handler, app_user_group_handler, example_handler) call the gated `app.WriteJSON`, same statuses and bodies. `setAuthCookie` moved to common.go with `authCookieName`, `authCookieSessionMaxAge` (0) and `authCookieExpireNow` (-1); login, `/mfaVerify`, `/refresh` and `/changeSecurityContext` now all issue a browser-session cookie (no Max-Age; open question unanswered, so the recommendation), logoff expires it. New Go `auth_cookie_test.go` checks the raw Set-Cookie on all five paths (fails on the old 3600); pytest `TestSessionCookie` covers /auth, /refresh, /logoff, without the /changeSecurityContext case (no two-tenant fixture user yet, B030). doc/105 gains a "Session cookie" section. Tests: all green, go=303 unit=42 e2e=12 py=80
+
+- **Priority:** P2  **Area:** go-api, tests, docs
+- **GRC:** `src/internal/handler/auth_handler.go:415,466,493,600,619,785,806,849,1033`; `user_handler.go:520`; `app_user_group_handler.go:166`; `common.go:58-92`; `user_mfa_handler.go:533`; `tests/test_auth_flow.py:255-303`; `doc/105-api-srv-tech-spec.md:363-377`   **PROTO:** `src/api-srv/internal/handler/common.go:14-25`; `auth_handler.go:28-41,300,371,474,493,643,664,698,867`; `user_handler.go:493`; `app_user_group_handler.go:164`; doc/105 after `:209`
+- **Ticket:** RG0004 / `d761d42`, `9fe4a78`; RG0043 item 34 / `720f5e1`
+- **What:** (a) `handler.writeJSON` skips the gate on 2xx; GRC has one writer.
+(b) `Max-Age=3600` on refresh/switch against a 72 h JWT kills refreshed
+sessions after an hour; GRC: JWT expiry is the only lifetime.
+- **Port notes:** `setAuthCookie` + named constants into `common.go`. Pytest: no
+Max-Age, logoff 0. Tests rated the cookie P1.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+All PROTO paths are under `src/api-srv/internal/`. Two separate problems.
+
+**(a) A second JSON writer skips the check gate.** `AppHelper.WriteJSON`
+refuses a 2xx when the security checks did not all run:
+
+```go
+// security/app_helper.go:214, 219
+if status < 400 && !ah.CheckAllChecksComplete() {
+    http.Error(w, "Security check failed", http.StatusInternalServerError)
+```
+
+`handler/common.go:15-24` defines a package-level `writeJSON` that writes
+headers and body with no check. Nine success paths use it:
+`auth_handler.go:300,372,493,664,867`, `user_handler.go:492`,
+`app_user_group_handler.go:163`, `example_handler.go:222,685`. Each runs
+after its handler's own `CheckAllChecksComplete` with `app` in scope, so
+nothing leaks today. The example handler is the copy-me template, so a
+new handler copied from it that drops the gate still answers 200.
+Defense-in-depth gap, not a live hole.
+
+**(b) Refresh and switch cut the session to one hour.** One helper writes
+the cookie (`auth_handler.go:28-41`); callers disagree on lifetime:
+
+```go
+// auth_handler.go:351 (login), :474 (refresh), :643 (switch), :698 (logoff)
+setAuthCookie(w, jwt, 0)
+setAuthCookie(w, jwt, 3600) // 1 hour
+setAuthCookie(w, "", -1) // expire immediately
+```
+
+`user_mfa_handler.go:619` (MFA verify) also passes 0. The JWT inside lives
+`JWT_SESSION_EXPIRE_HOURS=72` (`etc/loc-api-srv.env:13`, same in
+`etc/uat-api-srv.env.example:26`). The web calls `/refresh` on every page
+load (`src/web-app/stores/auth-store.ts:105`, from
+`hooks/use-auth-guard.ts:15-20`). Log in, reload once, work an hour
+without reloading: the browser drops the cookie, the next call 401s, and
+the user lands on login holding a valid 72-hour token. UX and correctness
+bug, not a security hole: the server enforces the JWT's `exp` anyway.
+
+#### What GRC changed
+
+RG0043 item 34 (`720f5e1`) deleted `handler.writeJSON`; its seven callers
+call `appHelper.WriteJSON` (`src/internal/handler/auth_handler.go:415,496,
+619,806,1033`, `user_handler.go:519`, `app_user_group_handler.go:165`).
+
+RG0004 (`d761d42`) moved `setAuthCookie` to
+`src/internal/handler/common.go:79-89` with named values (`:93-96`):
+
+```go
+authCookieSessionMaxAge = 0
+authCookieExpireNow     = -1
+```
+
+Every issuing path passes the session value (`auth_handler.go:466,600,785`,
+`user_mfa_handler.go:533`); only logoff expires (`auth_handler.go:848`).
+The comment at `common.go:70-78` and `doc/105-api-srv-tech-spec.md:363-376`
+state the rule: the JWT's expiry is the only session lifetime. `9fe4a78`
+added `test_session_cookie_lifetime_is_the_jwt_expiry`
+(`tests/test_auth_flow.py:255-303`): `/auth` and `/refresh` carry no
+`Max-Age` and keep `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`;
+`/logoff` carries `Max-Age=0`. No Go test covers either change.
+
+#### Proposed fix for PROTO
+
+1. **`handler/common.go`**: delete `writeJSON` (`:14-24`) and unused
+   imports; the nine sites call `app.WriteJSON(w, status, wrapper)`.
+2. **Move `setAuthCookie`** from `auth_handler.go:28-41` to `common.go`.
+   Add `authCookieName = "auth"`, `authCookieSessionMaxAge = 0`,
+   `authCookieExpireNow = -1` (`security/app_helper.go:280` keeps its own
+   `"auth"` literal; it is another package).
+3. **`auth_handler.go:474,643`**: pass `authCookieSessionMaxAge`; drop the
+   `// 1 hour` comments. Swap the literals at `:351,698` and
+   `user_mfa_handler.go:619` for the constants.
+4. **B004 edits the same `/refresh` code** (`:454-474`); land B029 first
+   or in the same branch.
+5. **doc/105**: add a "Session cookie" section after `:209` stating the
+   rule, adapted from GRC `doc/105:363-376` without the RG ticket refs.
+6. Keep PROTO's module path and `app` helper name, not GRC's `appHelper`.
+7. Tests. pytest in `tests/test_auth_flow.py`: port GRC's cookie test and
+   add `/changeSecurityContext` (GRC skipped it; needs a two-tenant user,
+   see B030). Go: none for (a); the compiler rejects any leftover caller.
+
+#### Open question for Brandon
+
+Browser-session cookie (gone when the browser closes, as login is today)
+or persistent with `Max-Age = JWT_SESSION_EXPIRE_HOURS * 3600`?
+Recommendation: browser-session, as GRC chose; it matches login today and
+needs no new config.

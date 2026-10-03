@@ -594,7 +594,7 @@ func MFAVerifyHandler(
 			}
 
 			// Set JWT cookie
-			setAuthCookie(w, jwt, 0)
+			setAuthCookie(w, jwt, authCookieSessionMaxAge)
 			// The login completes here (password step, then this code)
 			resetFailedAttemptsOrLog(appServices, userName)
 

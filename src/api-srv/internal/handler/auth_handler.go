@@ -20,21 +20,6 @@ import (
 // maxUserNameLen matches app_user.user_name VARCHAR(50).
 const maxUserNameLen = 50
 
-// setAuthCookie writes the JWT as the HttpOnly, Secure, SameSite=Strict
-// "auth" cookie every authenticated request carries. maxAge 0 leaves the
-// cookie a session cookie, -1 expires it (logoff).
-func setAuthCookie(w http.ResponseWriter, jwt string, maxAge int) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     "auth",
-		Value:    jwt,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
-		MaxAge:   maxAge,
-	})
-}
-
 // isAccountLocked checks if the IP or username is currently locked out
 func isAccountLocked(
 	kv *cache.KV,
@@ -298,7 +283,7 @@ func AuthHandler(
 			}
 
 			wrapper := model.AuthResponseWrapper{User: response}
-			writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+			app.WriteJSON(w, http.StatusOK, wrapper)
 			appServices.Logger.Info("TMP_TKN_ISSUED",
 				"Auth temp token issued for user: "+req.UserName)
 			return
@@ -349,7 +334,7 @@ func AuthHandler(
 			return
 		}
 		// Set JWT cookie
-		setAuthCookie(w, jwt, 0)
+		setAuthCookie(w, jwt, authCookieSessionMaxAge)
 		// Login completes here for an MFA-exempt user only; an MFA login
 		// completes in MFAVerifyHandler.
 		resetFailedAttemptsOrLog(appServices, user.UserName)
@@ -373,7 +358,7 @@ func AuthHandler(
 			User:      response,
 			CsrfToken: csrfToken,
 		}
-		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+		app.WriteJSON(w, http.StatusOK, wrapper)
 		appServices.Logger.Info(
 			"AUTH_SUCCESS",
 			"Authentication successful for user: "+user.UserName,
@@ -477,7 +462,7 @@ func RefreshHandler(
 		}
 
 		// Set updated JWT cookie
-		setAuthCookie(w, jwt, 3600) // 1 hour
+		setAuthCookie(w, jwt, authCookieSessionMaxAge)
 
 		response := model.Auth2ResponseModel{
 			AppUserID:                    user.AppUserID,
@@ -496,7 +481,7 @@ func RefreshHandler(
 			User:      response,
 			CsrfToken: csrfToken,
 		}
-		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+		app.WriteJSON(w, http.StatusOK, wrapper)
 		appServices.Logger.Info(
 			"REFRESH_SUCCESS",
 			"Refresh successful for user: "+user.UserName,
@@ -652,7 +637,7 @@ func ChangeSecurityContextHandler(
 		}
 
 		// Set new JWT cookie
-		setAuthCookie(w, jwt, 3600) // 1 hour
+		setAuthCookie(w, jwt, authCookieSessionMaxAge)
 
 		// CSRF token is last 3 characters of session ID
 		csrfToken := sessionID[len(sessionID)-3:]
@@ -673,7 +658,7 @@ func ChangeSecurityContextHandler(
 			User:      response,
 			CsrfToken: csrfToken,
 		}
-		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+		app.WriteJSON(w, http.StatusOK, wrapper)
 		appServices.Logger.Info(
 			"CHANGE_CTX_SUCCESS",
 			"Security context changed for user: "+userName+" to context: "+strconv.Itoa(
@@ -721,7 +706,7 @@ func LogoffHandler(appServices *app.Services) http.HandlerFunc {
 		}
 
 		// Clear the auth cookie
-		setAuthCookie(w, "", -1) // expire immediately
+		setAuthCookie(w, "", authCookieExpireNow)
 
 		w.WriteHeader(http.StatusOK)
 		app.Logger().Info(
@@ -897,7 +882,7 @@ func ChangeOwnPasswordHandler(
 		wrapper := model.DataWrapper{
 			Data: map[string]string{"message": "Password changed successfully"},
 		}
-		writeJSON(w, http.StatusOK, wrapper, appServices.Logger)
+		app.WriteJSON(w, http.StatusOK, wrapper)
 	}
 }
 

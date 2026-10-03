@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/logging"
 	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
@@ -75,16 +74,32 @@ func writeBodyError(
 		"INV_REQ_BODY", err)
 }
 
-// writeJSON writes a JSON response
-func writeJSON(w http.ResponseWriter, status int, data interface{},
-	logger *logging.Logger) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
+// authCookieName is the cookie that carries the JWT on every authenticated
+// request.
+const authCookieName = "auth"
 
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		logger.Error("JEN0", "Failed to encode JSON response: "+err.Error())
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+// The auth cookie's Max-Age values. The JWT's exp is the only session
+// lifetime: every path that issues a token (login, MFA verify, refresh,
+// context switch) sets a browser-session cookie with no Max-Age, so the
+// browser never drops a token the server would still accept. Logoff
+// expires the cookie.
+const (
+	authCookieSessionMaxAge = 0
+	authCookieExpireNow     = -1
+)
+
+// setAuthCookie writes jwt as the HttpOnly, Secure, SameSite=Strict auth
+// cookie. maxAge is authCookieSessionMaxAge or authCookieExpireNow.
+func setAuthCookie(w http.ResponseWriter, jwt string, maxAge int) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     authCookieName,
+		Value:    jwt,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   maxAge,
+	})
 }
 
 // mapRepoError answers a failed repository call. A sentinel decides the

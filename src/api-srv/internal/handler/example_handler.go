@@ -188,7 +188,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 
 	app.Debug("EX_CREATED", fmt.Sprintf("Example created: %+v", createdExample))
 	wrapper := model.DataWrapper{Data: createdExample}
-	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusCreated, wrapper)
 	app.Info(
 		"EX_CR_DONE",
 		fmt.Sprintf(
@@ -553,7 +553,7 @@ func (h *ExampleHandler) CreateExampleList(
 
 	// Return the created examples with IDs
 	wrapper := model.DataWrapper{Data: createdExamples}
-	writeJSON(w, http.StatusCreated, wrapper, h.appsrv.Logger)
+	app.WriteJSON(w, http.StatusCreated, wrapper)
 
 	createdIds := make([]int, len(createdExamples))
 	for i, ex := range createdExamples {
