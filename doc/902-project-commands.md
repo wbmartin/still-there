@@ -210,3 +210,27 @@ sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside
   swaps the file. No inline defaults -- a missing key stops the run.
 - See doc/320-presales-uat-deploy.md. Run `./bin/300-run-tests` first.
 - Post-sales pipeline placeholders: `infra/{uat,prd}/` (see `infra/README.md`).
+
+## Post-sales Host Survey and Data Export
+
+```
+./bin/605-survey-host <ssh-host>                    # read-only host record -> tmp/survey/
+./bin/620-export-tenant-data <out-dir> [api-env]    # scrubbed local db dump, outside the repo
+```
+- `605` runs one probe on the host under sudo (the password once):
+  users, tools, `/srv/{uat,prd}-proto`, units, Postgres roles, databases
+  and owners, nginx, fail2ban, cron, ports. Env files as key names only;
+  units, nginx sites and crontab pass a best-effort secret mask. Changes
+  nothing. Names from `etc/app.env` and `etc/uat-deploy.env`. Run before
+  the first post-sales step on a host and keep the file (doc/330 0.1,
+  doc/331 0.1).
+- `620` reads the database `LOCAL_ENV_FILE` (`etc/uat-deploy.env`) names,
+  or the one in `[api-env]`; refuses it unless its `schema_migration`
+  matches the checkout's migrations exactly; copies it to a throwaway
+  `<db>_export`; runs `src/api-srv/sql/export-scrub.sql` there (refuses
+  tenant-2 rows and the fixture logins; every password, TOTP seed and MFA
+  exemption cleared, live logins `invited`, open invite links revoked);
+  writes `<slug>-data-<stamp>.dump` with `.sha256` and `.manifest` to
+  `<out-dir>`, which must be outside the checkout. The export is customer
+  data. The first sign-in on the host is an invite link issued there
+  (doc/330 A9).

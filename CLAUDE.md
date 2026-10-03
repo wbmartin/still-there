@@ -23,7 +23,8 @@ here.
   Placeholder until post-sales; presales uses `bin/600`/`610`.
 - `src/api-srv/sql/` — `migrations/NNNN_name.sql`, embedded in
   `cmd/migrate`. This is the **only** way a schema change reaches a
-  database; never hand-run DDL. Also `roles.sql` and `fixtures/`.
+  database; never hand-run DDL. Also `roles.sql`, `fixtures/` and
+  `export-scrub.sql` (`bin/620`).
 - `doc/` — reference docs.
 - `scripts/` — repo checks the gate calls: `check-doc-paths.sh` (every
   backticked repo path in a doc exists; `bin/300-run-tests docs`).

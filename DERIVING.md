@@ -38,7 +38,7 @@ Postgres cluster is the safe default for every derived app.
 | Where | What | Note |
 |---|---|---|
 | `src/api-srv/sql/roles.sql` | `reallygoodPSQLpassword` for `acme_app` | also in `etc/e2e-api-srv.env`, `etc/loc-api-srv.env`, `etc/loc-test.env` (×3), `infra/uat/etc/uat-acme-test.env` (×3) — keep them equal |
-| `src/api-srv/sql/fixtures/test-seed.sql`, `local-seed.sql` | `admin` / `admin123!`, `basic` / `basic123!` | the pytest, Playwright and load suites log in with these (test seed, tenant 2; the load test reads `TEST_PERSONA_USER`/`TEST_PERSONA_PASSWORD` from `etc/e2e-api-srv.env`); the dev seed has the same logins in tenant 1; change the suites' fixtures with them |
+| `src/api-srv/sql/fixtures/test-seed.sql`, `local-seed.sql` | `admin` / `admin123!`, `basic` / `basic123!` | the pytest, Playwright and load suites log in with these (test seed, tenant 2; the load test reads `TEST_PERSONA_USER`/`TEST_PERSONA_PASSWORD` from `etc/e2e-api-srv.env`); the dev seed has the same logins in tenant 1; change the suites' fixtures with them, and the fixture-login list `src/api-srv/sql/export-scrub.sql` refuses |
 | `etc/loc-test.env` | docker `postgres` superuser password | must match the container |
 | `etc/loc-api-srv.env`, `etc/e2e-api-srv.env` | `JWT_SECRET`, `TOTP_ENCRYPTION_KEY` (32 bytes hex) | local-only, but make them yours |
 | `etc/uat-api-srv.env.template`, `infra/*/etc/*-api.env` | `__SECRET__` / `SERVERONLY` placeholders | stay placeholders in git; real values are generated on the host (presales by `610`, post-sales by doc/330 / doc/331) |

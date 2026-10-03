@@ -710,82 +710,6 @@ given it moves authorization differences into a matrix? Recommend an ADR
 that permits it only for derived apps past ~10 entities, never the
 template.
 
-### B071 — Host survey and scrubbed tenant export
-
-- **Priority:** P3  **Area:** bin, docs
-- **GRC:** `bin/605-survey-host:1-97` (:27, :31,42,52,59); `bin/620-export-tenant-data:1-97` (:77); `bin/lib/export-scrub.sql:1-35` (:22-24); `doc/902-project-commands.md:96-97`   **PROTO:** new `bin/605-survey-host`, `bin/620-export-tenant-data`; `doc/330-presales-to-postsales-migration.md`; `doc/902-project-commands.md`
-- **Ticket:** RG0013 / `3a3fc94`, `a57d6ad`, `cc30f35`
-- **What:** 605 records a host read-only (key names only, masked) into
-`tmp/survey/`. 620 copies the DB, sets every login `invited`, dumps
-`--no-owner`, MANIFEST + sha256.
-- **Port notes:** Names from `APP_SLUG`; mask is best-effort. 620 needs B035.
-- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (Brandon: post-sales only, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Two operator gaps around moving an app onto a server.
-
-1. No host survey. `doc/330-presales-to-postsales-migration.md:58-84`
-   lists what must be true of the host; nothing records what is there
-   (users, units, env keys, roles, owners, nginx, ports) before step 1
-   changes it, so the "before" state is lost.
-2. The data that reaches a server carries laptop credentials.
-   `bin/600-bundle-uat:92-93` dumps the whole local database:
-
-       docker exec "$PG_CONTAINER" pg_dump -U postgres -d "$LOCAL_DB" \
-           --no-owner --no-privileges --format=plain --encoding=UTF8
-
-   `bin/610-deploy-uat:117` restores it verbatim. Every `app_user` row
-   arrives with its `pw_hash`, `totp_seed` and `mfa_setup`
-   (`0001_initial_schema.sql:47,53-55`), including the fixture logins
-   `doc/050-dev-env-init.md:30` seeds into the dev DB (`admin /
-   admin123!`, per `bin/510-reset-test-db:29`). doc/330 then keeps that
-   database for good. No tenant check either. Security gap at the
-   presales-to-post-sales boundary.
-
-#### What GRC changed
-
-RG0013 (`3a3fc94`, `a57d6ad`, `cc30f35`):
-
-- `bin/605-survey-host:1-97`: one sudo probe over `ssh -t`, teed to
-  `tmp/survey/<host>-<stamp>.txt` (`:17-18,95`). Env files as key names
-  only (`keys()`, `:26`). `mask()` (`:27`) is used only on crontab
-  (`:88`); nginx sites (`:73`) and units (`:53`) print unmasked. GRC
-  names are hardcoded (`:31,42,52,59`).
-- `bin/620-export-tenant-data:1-97`: verify schema and audit chain, copy
-  to a throwaway `_export` DB (`:48-55`), scrub, dump `-Fc --no-owner
-  --no-privileges` (`:64`), MANIFEST with counts, logins, sha256
-  (`:67-83`). `bin/lib/export-scrub.sql` refuses rows outside tenant 1
-  (`:13-20`) and named test logins (`:22-25`), revokes open invites, and
-  sets every login `invited` with empty `pw_hash`/`totp_seed` (`:33-35`).
-  First access on the host is an invite link. No tests.
-
-#### Proposed fix for PROTO
-
-1. `bin/605-survey-host`: port the probe; derive users, `/srv/<env>-<slug>`,
-   unit and database names from `etc/app.env` and `etc/uat-deploy.env`;
-   swap `goose_db_version` (`:63`) for `schema_migration`; drop GRC's
-   `pwsh`, `oras`, worker units. Apply `mask` to unit and nginx output
-   too, and say in the header it is best-effort.
-2. `bin/620-export-tenant-data` + `bin/lib/export-scrub.sql`: needs B035
-   (`account_status`, invite redeem) or nobody can sign in after the
-   scrub. Drop the audit-chain steps (B067), the blob tarball, GRC's
-   table list (`:77`) and fixture names (`:22-27`); refuse tenant 2 and
-   the PROTO fixture logins instead.
-3. `doc/330` "Before you start": run 605 and keep its file; load from a
-   620 export, not the last presales `db.sql`. One row each in `doc/902`.
-4. Tests: a pytest or Go integration test that runs the scrub on the
-   test DB and asserts no `pw_hash`/`totp_seed` survives and tenant 2
-   rows make it fail.
-
-#### Open question for Brandon
-
-Should presales UAT itself stop shipping laptop credentials (scrub in
-bin/600), or only the post-sales load? Recommendation: post-sales only
-for now, since presales UAT is demo data and the scrub needs B035.
-
 ### B072 — Presales: install the nginx site from a template
 
 - **Priority:** P3  **Area:** bin, etc
@@ -8994,3 +8918,80 @@ repository/model coverage HTML.
 Add Go coverage to `bin/300 go`? Recommendation: yes, as a report with no
 threshold, since it rides the existing `go test` run.
 - **Completed:** 2026-10-03. Fix steps 1-5; step 4 taken per the recommendation (no Brandon line). `bin/215-run-api-srv` matches `"$BINARY_PATH $CONFIG_PATH"` for the existence check, wait loop and force kill; `tmp/api-srv/` log and pid kept. `bin/216-stop-local-stack` kills the API by the same binary+config pattern and vite by `<checkout>/src/web-app/node_modules/\.bin/vite( |$)` (real argv of `npm run dev` and `npx vite` is `node <abs>/node_modules/.bin/vite ...`, checked by hand; `( |$)` spares vitest; Playwright's 5182 vite from the same checkout still matches). `bin/600-bundle-uat` computes `COMMIT` and `DIRTY` once from `git status --porcelain` (unstaged, staged and untracked), used by the console line and `MANIFEST`. `bin/300-run-tests` `go` adds `-coverprofile` to the existing `go test` and writes `tmp/test-reports/go-coverage-<module>.out` + `.html` per module, prints the total (api-srv 67.5%, load-test 7.0%), no threshold. GRC `bin/216-run-test-api-srv` not ported (step 5). doc/902: stale `tmp/server.log` / `tmp/server.pid` / `pkill -f "dist/proto-api"` lines now name `tmp/api-srv/` and bin/216; `go` mode notes coverage. Hand checks (scratch checkouts A and B with fake API, vite, vitest and an 8082 test-API process; macOS and `ubuntu:24.04`): old 215 restart in A killed B's API, new kills only A's dev API; old 216 killed every API, vite and vitest in A and B, new kills only A's API and vite. Dirty flag in a scratch repo: staged-only and untracked were clean before, dirty now. shellcheck 0.9.0 clean on 215, 216, 300, 600. B095 (pipefail in 215/216) left alone. Tests: all green, infra=15 docs=511 (+4 path tokens in doc/902) go=700 unit=101 e2e=68 py=103, govulncheck clean, gofmt clean.
+
+### B071 — COMPLETED — Host survey and scrubbed tenant export
+
+- **Priority:** P3  **Area:** bin, docs
+- **GRC:** `bin/605-survey-host:1-97` (:27, :31,42,52,59); `bin/620-export-tenant-data:1-97` (:77); `bin/lib/export-scrub.sql:1-35` (:22-24); `doc/902-project-commands.md:96-97`   **PROTO:** new `bin/605-survey-host`, `bin/620-export-tenant-data`; `doc/330-presales-to-postsales-migration.md`; `doc/902-project-commands.md`
+- **Ticket:** RG0013 / `3a3fc94`, `a57d6ad`, `cc30f35`
+- **What:** 605 records a host read-only (key names only, masked) into
+`tmp/survey/`. 620 copies the DB, sets every login `invited`, dumps
+`--no-owner`, MANIFEST + sha256.
+- **Port notes:** Names from `APP_SLUG`; mask is best-effort. 620 needs B035.
+- **Decision:** \[ \] pull / \[X\] adapt / \[ \] skip  (Brandon: post-sales only, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Two operator gaps around moving an app onto a server.
+
+1. No host survey. `doc/330-presales-to-postsales-migration.md:58-84`
+   lists what must be true of the host; nothing records what is there
+   (users, units, env keys, roles, owners, nginx, ports) before step 1
+   changes it, so the "before" state is lost.
+2. The data that reaches a server carries laptop credentials.
+   `bin/600-bundle-uat:92-93` dumps the whole local database:
+
+       docker exec "$PG_CONTAINER" pg_dump -U postgres -d "$LOCAL_DB" \
+           --no-owner --no-privileges --format=plain --encoding=UTF8
+
+   `bin/610-deploy-uat:117` restores it verbatim. Every `app_user` row
+   arrives with its `pw_hash`, `totp_seed` and `mfa_setup`
+   (`0001_initial_schema.sql:47,53-55`), including the fixture logins
+   `doc/050-dev-env-init.md:30` seeds into the dev DB (`admin /
+   admin123!`, per `bin/510-reset-test-db:29`). doc/330 then keeps that
+   database for good. No tenant check either. Security gap at the
+   presales-to-post-sales boundary.
+
+#### What GRC changed
+
+RG0013 (`3a3fc94`, `a57d6ad`, `cc30f35`):
+
+- `bin/605-survey-host:1-97`: one sudo probe over `ssh -t`, teed to
+  `tmp/survey/<host>-<stamp>.txt` (`:17-18,95`). Env files as key names
+  only (`keys()`, `:26`). `mask()` (`:27`) is used only on crontab
+  (`:88`); nginx sites (`:73`) and units (`:53`) print unmasked. GRC
+  names are hardcoded (`:31,42,52,59`).
+- `bin/620-export-tenant-data:1-97`: verify schema and audit chain, copy
+  to a throwaway `_export` DB (`:48-55`), scrub, dump `-Fc --no-owner
+  --no-privileges` (`:64`), MANIFEST with counts, logins, sha256
+  (`:67-83`). `bin/lib/export-scrub.sql` refuses rows outside tenant 1
+  (`:13-20`) and named test logins (`:22-25`), revokes open invites, and
+  sets every login `invited` with empty `pw_hash`/`totp_seed` (`:33-35`).
+  First access on the host is an invite link. No tests.
+
+#### Proposed fix for PROTO
+
+1. `bin/605-survey-host`: port the probe; derive users, `/srv/<env>-<slug>`,
+   unit and database names from `etc/app.env` and `etc/uat-deploy.env`;
+   swap `goose_db_version` (`:63`) for `schema_migration`; drop GRC's
+   `pwsh`, `oras`, worker units. Apply `mask` to unit and nginx output
+   too, and say in the header it is best-effort.
+2. `bin/620-export-tenant-data` + `bin/lib/export-scrub.sql`: needs B035
+   (`account_status`, invite redeem) or nobody can sign in after the
+   scrub. Drop the audit-chain steps (B067), the blob tarball, GRC's
+   table list (`:77`) and fixture names (`:22-27`); refuse tenant 2 and
+   the PROTO fixture logins instead.
+3. `doc/330` "Before you start": run 605 and keep its file; load from a
+   620 export, not the last presales `db.sql`. One row each in `doc/902`.
+4. Tests: a pytest or Go integration test that runs the scrub on the
+   test DB and asserts no `pw_hash`/`totp_seed` survives and tenant 2
+   rows make it fail.
+
+#### Open question for Brandon
+
+Should presales UAT itself stop shipping laptop credentials (scrub in
+bin/600), or only the post-sales load? Recommendation: post-sales only
+for now, since presales UAT is demo data and the scrub needs B035.
+- **Completed:** 2026-10-03. Adapted per Brandon (post-sales only: presales `bin/600` still ships the laptop dump unscrubbed, as the open question recommended). New `bin/605-survey-host <ssh-host>`: GRC's one-sudo read-only probe over `ssh -t`, teed to `tmp/survey/<host>-<stamp>.txt`; names from `etc/app.env` (`APP_SLUG`) and `etc/uat-deploy.env` (`SVC_USER`, `DB_NAME`) passed in as quoted assignments; looks for both `/srv/{uat,prd}-<slug>`, units `<env>-<slug>-api` / `-restart(.path)`, databases `uat_`/`prd_<slug>_db` and the `_presales` copy, users `www-data`, `<slug>`, `svc-<slug>`, `shrmpl-hook`; `schema_migration` replaces `goose_db_version`; per-tenant login counts and statuses; GRC's `pwsh`, worker units, blob counts dropped. Env files as key names only; `mask` now covers units, nginx sites, hba and crontab (password/passwd/secret/token/api key/credential keys, `Authorization` values, URL credentials; `proxy_pass` not masked), header says best-effort. New `bin/620-export-tenant-data <out-dir> [api-env]`: source DB from `LOCAL_ENV_FILE` (`etc/uat-deploy.env`) or the given env file; preflight compares `schema_migration` (version, checksum) to the checkout's migration files exactly, no migrator build or DB password needed; copies to a throwaway `<db>_export` (dropped on exit, `WITH (FORCE)`), runs the scrub with `psql --single-transaction`, `pg_dump -Fc --no-owner --no-privileges`; writes `<slug>-data-<stamp>.dump` + `.dump.sha256` + `.manifest` (commit with dirty flag, `pg_dump` version, schema version, live rows per tenant table per tenant, logins with status per tenant, sha256). `<out-dir>` must resolve outside the checkout (B052); no tarball (the host steps keep `sha256sum -c`). Scrub at `src/api-srv/sql/export-scrub.sql` (deviation: not `bin/lib/`, so SQL stays under `sql/` and the Go test reads it in place; not embedded): refuses any tenant-2 row (catalog loop over every tenant table) and live fixture logins `admin`, `basic`, `mfa`, `switcher`; revokes open invites; empties every `pw_hash`/`totp_seed`, clears `mfa_setup`/`mfa_exempt` on all rows; live non-blocked logins become `invited`, blocked stay blocked (deviation from GRC, which invited everyone), deleted keep their status. Audit-chain steps (B067), blob tarball, GRC table list dropped. First sign-in: PROTO has no migrator `invite` command, so doc/330 A9 issues the first link on the host with `openssl rand -hex 32`, its `sha256sum` and one `INSERT INTO user_invite` via psql variables, TTL from `INVITE_TTL_HOURS`, link `https://<SITE_NAME>/invite#<token>`; doc/331 A9 reuses it. Docs: doc/330 0 (`EXPORT_DIR` alongside `UAT_SSH`), 0.1 survey bullet, 0.4 rewritten around 620, A5 MFA reset replaced by a no-credential check, A9, C cleanup; doc/331 intro, 0.1, 0.3, A6, A9, C cleanup; doc/902 new section; CLAUDE.md layout, DERIVING.md fixture row, `sql/embed.go` comment. Tests: new `src/api-srv/sql/export_scrub_test.go` (own migrated `<test db>_scrub_test_db`, no tenant lock so tenant 1 holds rows; credentials gone and statuses/invites/data rows as above; tenant-2 refusal names `example(1)`; fixture refusal names live `admin, switcher`, not a deleted `basic`); mutation check (scrub without the `totp_seed` clear and with the tenant check aimed at 99) fails both cases. Hand checks: 620 against a scratch `loc_proto_b071src_test_db` (bin/510): refused tenant 2 as seeded; after deleting tenant-2 rows and adding synthetic tenant-3 logins, exported; dump restored into a second scratch DB: no credential, statuses as expected, invite revoked, source untouched; edited and missing `schema_migration` rows refused; out-dir inside the repo refused before any mkdir; the A9 SQL then issued a link that `/inviteCheck`, `/inviteRedeem` and `/auth` accepted on a private API (MFA enrolment next). 605 in `ubuntu:24.04` with postgres, nginx, a unit, crontab and env files seeded with a secret value, ssh shimmed: value appears 0 times, key names and DB facts present. shellcheck 0.9.0 clean on 605 and 620. Scratch DBs dropped. Tests: all green, infra=15 docs=524 (+13 path tokens) go=704 (+4: TestExportScrub and 3 subtests) unit=101 e2e=68 py=103, govulncheck clean, gofmt clean.

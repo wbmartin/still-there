@@ -3,8 +3,9 @@
 The runbook that installs the app on its prod host and loads it from your
 local database: a fresh install, with no `/srv/prd-proto`, no database and
 no roles yet. It follows `doc/330-uat-postsales-cutover.md`, which
-rehearsed every step on UAT, and it loads **the same dump** UAT loaded,
-normally the same day: one dump, one freeze, from local. Nothing is taken
+rehearsed every step on UAT, and it loads **the same export** UAT loaded
+(`bin/620-export-tenant-data`, credentials scrubbed), normally the same
+day: one export, one freeze, from local. Nothing is taken
 from UAT but the registry build A7 promotes.
 
 **Prod has no checkout and never builds.** The binaries and the web bundle
@@ -46,10 +47,13 @@ blocks** run in bash as root.
 
 **0.1 Have to hand**
 
-- `doc/330` run, and its dump still here: `ls dist/*-data-*.dump`.
-- The freeze has held since that dump: nobody has edited the local data.
-  If someone has, make a new dump (`doc/330` 0.4, `scp` to prod instead)
-  and load that.
+- `doc/330` run, and its export still in `EXPORT_DIR` (set it in this
+  terminal too): `ls "$EXPORT_DIR"/*-data-*.dump`.
+- The freeze has held since that export: nobody has edited the local
+  data. If someone has, export again (`doc/330` 0.4, `scp` to prod
+  instead) and load that.
+- A record of prod as it is now: `bin/605-survey-host "$PRD_SSH"`, kept
+  as in `doc/330` 0.1.
 - DNS: the prod site name resolves to the host. Certbot's HTTP challenge
   in A8 needs it.
 - The registry login (UAT's), the Slack webhook URL, the certbot e-mail,
@@ -79,14 +83,14 @@ git commit -m "prd-proto: nackmon check-in ids and the promote hook id"
 git push
 ```
 
-**0.3 Local: package the host files, ship them with the dump.** The
+**0.3 Local: package the host files, ship them with the export.** The
 archive is cut from the pushed commit (`origin/main` in the template),
 never the working tree; the `git log` line shows 0.2's commit:
 
 ```bash
-: "${PRD_SSH:?}"
+: "${PRD_SSH:?}" "${EXPORT_DIR:?}"
 source etc/app.env
-DUMP=$(ls -t dist/$APP_SLUG-data-*.dump | head -1)
+DUMP=$(ls -t "$EXPORT_DIR"/$APP_SLUG-data-*.dump | head -1)
 echo "$DUMP"
 git fetch origin
 git log --oneline -1 origin/main
@@ -248,19 +252,19 @@ DUMP=$(ls -t /tmp/proto-data-*.dump | head -1); echo "DUMP=$DUMP"
 (cd /tmp && sha256sum -c "${DUMP##*/}.sha256")
 ```
 
-Expect `OK`. Restore it as `proto_ddl`, reset MFA, check the owner, and
-the negative check:
+Expect `OK`. Restore it as `proto_ddl`, check that no credential came
+with it, check the owner, and the negative check:
 
 ```bash
 : "${APP_ROOT:?}" "${DUMP:?}"
 DB=$(urldb "$APP_ROOT/etc/prd-proto-migrate.env")
 sudo -u postgres pg_restore --no-owner --no-privileges --role=proto_ddl --exit-on-error -d "$DB" < "$DUMP"
-sudo -u postgres psql -X -d "$DB" -c "UPDATE app_user SET totp_seed = '', mfa_setup = FALSE WHERE mfa_setup"
+sudo -u postgres psql -X -d "$DB" -Atc "SELECT count(*) FROM app_user WHERE pw_hash <> '' OR totp_seed <> '' OR (account_status = 'active' AND delete_ts IS NULL)"
 sudo -u postgres psql -X -d "$DB" -c "SELECT tableowner, count(*) FROM pg_tables WHERE schemaname = 'public' GROUP BY 1"
 PGPASSWORD=$(urlpw "$APP_ROOT/etc/prd-proto-api.env") psql -X -h 127.0.0.1 -U proto_app -d "$DB" -c 'SELECT count(*) FROM app_user' -c 'CREATE TABLE nope (i int)'
 ```
 
-Expect one owner row `proto_ddl | <n>` (as on UAT), the user count, and
+Expect `0`, one owner row `proto_ddl | <n>` (as on UAT), the user count, and
 `ERROR:  permission denied for schema public`.
 
 ### A7. Units, then the first deploy
@@ -335,8 +339,10 @@ Expect `reloaded`, the health JSON, and `200`.
 
 ### A9. First login
 
-Open the site and sign in with a login from the local data; a user who had
-MFA enrols again.
+Every login arrived `invited`, with no password. Issue the first invite
+link with `doc/330` A9's block, here (`ENV` and `APP_ROOT` are prod's in
+this shell), and send it privately; its holder sets a password, enrols
+in MFA and invites the rest.
 
 **Prod is live and is now the system of record.** The freeze ends; work
 happens on prod.
@@ -485,7 +491,8 @@ rm -f /tmp/proto-data-*.dump /tmp/proto-data-*.dump.sha256 /tmp/proto-infra-prd.
 ```
 
 Keep `/root/proto-infra` until the next infra change replaces it. Locally,
-delete `dist/*-data-*.dump*` and `dist/*-infra-prd.tgz`.
+delete the export in `EXPORT_DIR` (`*-data-*.dump`, `.sha256`,
+`.manifest`) and `dist/*-infra-prd.tgz`.
 
 ## Every later release
 

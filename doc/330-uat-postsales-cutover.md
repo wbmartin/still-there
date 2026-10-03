@@ -4,10 +4,11 @@ The runbook that moves the UAT host from the presales bundle
 (`bin/600-bundle-uat` / `bin/610-deploy-uat`,
 `doc/320-presales-uat-deploy.md`) onto the webhook → tests → registry →
 migrator pipeline in `infra/uat/` (`infra/README.md`). The host is
-reloaded from your **local** database, and
-`doc/331-prd-postsales-install.md` loads prod from the same dump the same
-day, so prod runs nothing UAT has not (Brandon, 2026-10-02: "we setup UAT
-and Prod with whatever we've been working on our locals").
+reloaded from your **local** database, as a credential-scrubbed export
+(0.4), and `doc/331-prd-postsales-install.md` loads prod from the same
+export the same day, so prod runs nothing UAT has not (Brandon,
+2026-10-02: "we setup UAT and Prod with whatever we've been working on
+our locals").
 
 It is a migration, not a switch: the role model, env files, units and
 the restart mechanism all differ, and the database changes owner. UAT
@@ -72,8 +73,9 @@ comments, because zsh without `setopt interactivecomments` (the macOS
 default) runs `#` as a command and an apostrophe in a "comment" opens a
 quote that swallows the lines after it. They read the hosts' ssh aliases
 from `UAT_SSH` and `MON_SSH` (the host that runs nackmon and pulsecheck;
-it may be UAT itself): set both once in that terminal. **Host blocks** run
-in bash as root (`sudo -i`).
+it may be UAT itself), and `EXPORT_DIR`, a directory outside the repo and
+off shared drives where 0.4 writes the data: set all three once in that
+terminal. **Host blocks** run in bash as root (`sudo -i`).
 
 **0.1 Have to hand**
 
@@ -87,6 +89,19 @@ in bash as root (`sudo -i`).
 ```bash
 for t in git go npm oras jq psql pg_dump pg_restore certbot nginx fail2ban-client openssl; do command -v "$t" >/dev/null || echo "missing: $t"; done
 id shrmpl-hook >/dev/null || echo "missing: the shrmpl-hook user"
+```
+
+- A record of the host as it is now, before anything below changes it:
+  users, tools, `/srv`, units, Postgres roles, databases and owners,
+  nginx, fail2ban, cron, ports. `bin/605-survey-host` is read-only; it
+  asks for your sudo password once and saves `tmp/survey/<host>-<stamp>.txt`.
+  Env files appear as key names only and the rest passes a best-effort
+  secret mask: read the file before you share it. Keep it until C; it is
+  what a rollback or a later question is checked against. Locally:
+
+```bash
+: "${UAT_SSH:?}"
+bin/605-survey-host "$UAT_SSH"
 ```
 
 **0.2 Local: the ids.** The nackmon check-in code and the webhook id are
@@ -138,33 +153,41 @@ systemctl restart shrmpl-nackmon && systemctl is-active shrmpl-nackmon
 Expect `0`, then `active`.
 
 **0.4 Local: the data.** The local database is what UAT, and later prod,
-start from. Before the dump, make it what you want there:
+start from. `bin/620-export-tenant-data` copies it into a throwaway
+database, scrubs every credential there
+(`src/api-srv/sql/export-scrub.sql`) and dumps that copy into
+`EXPORT_DIR`; the local database is only read. Before you run it:
 
-- Its logins keep their passwords. Change or remove every login whose
-  password is in the repo (the seed's `admin`, `basic`, `mfa`).
-- MFA enrolments do not survive: the host has its own
-  `TOTP_ENCRYPTION_KEY`, so A5 resets them and those users enrol again.
-- From the dump on, **nobody edits the local data** until prod has loaded
-  the same file (`doc/331`). Anything entered locally later is on neither
-  host; if that happens, dump again and load that.
+- Remove what must not ship. The scrub refuses, naming what it found, any
+  row in tenant 2 (the test tenant) and the seeded fixture logins
+  (`admin`, `basic`, `mfa`, `switcher`: their passwords are in the repo).
+  Rename or delete those in the app first.
+- No login keeps a credential: every password, MFA enrolment and MFA
+  exemption is cleared, every live login becomes `invited` (a blocked one
+  stays blocked) and open invite links are revoked. Nobody signs in on a
+  host with anything that lived on this laptop; the first person in
+  comes through a link A9 issues there, and invites the rest.
+- From the export on, **nobody edits the local data** until prod has
+  loaded the same file (`doc/331`). Anything entered locally later is on
+  neither host; if that happens, export again and load that.
+- The export is the customer's data: it never goes in the repo (the
+  script refuses an `EXPORT_DIR` inside the checkout) or on a shared
+  drive. Delete it once prod has loaded it.
 
-`git status --short` empty and the branch pushed first. The two last lines
-print the newest migration the dump carries and the newest in the repo:
-they must agree. The host's Postgres must be the same major version as the
-local container's (`pg_dump` here) or newer.
+`git status --short` empty and the branch pushed first. The script stops
+unless the database's `schema_migration` matches this checkout's
+migrations exactly (none pending, none edited), and the manifest records
+the commit, the schema version, rows per table per tenant and every
+login with its status. The host's Postgres must be the same major version
+as the manifest's `pg_dump=` line or newer.
 
 ```bash
-: "${UAT_SSH:?}"
+: "${UAT_SSH:?}" "${EXPORT_DIR:?}"
+bin/620-export-tenant-data "$EXPORT_DIR"
 source etc/app.env
-LOCAL_DB=$(sed -nE 's|^DATABASE_URL=postgres://[^/]+/([^?]+).*|\1|p' etc/loc-api-srv.env)
-PG_CONTAINER=$(sed -n 's/^PG_CONTAINER=//p' etc/uat-deploy.env)
-DUMP=$APP_SLUG-data-$(date -u +%Y%m%dT%H%M%SZ).dump
-mkdir -p dist
-docker exec "$PG_CONTAINER" pg_dump -U postgres -d "$LOCAL_DB" -Fc --no-owner --no-privileges > "dist/$DUMP"
-(cd dist && shasum -a 256 "$DUMP" > "$DUMP.sha256")
-scp "dist/$DUMP" "dist/$DUMP.sha256" "$UAT_SSH:/tmp/"
-docker exec "$PG_CONTAINER" psql -U postgres -d "$LOCAL_DB" -Atc 'SELECT max(version) FROM schema_migration'
-ls src/api-srv/sql/migrations | tail -1
+DUMP=$(ls -t "$EXPORT_DIR"/$APP_SLUG-data-*.dump | head -1)
+echo "$DUMP"
+scp "$DUMP" "$DUMP.sha256" "$UAT_SSH:/tmp/"
 ```
 
 ## A. Cutover — UAT is down from A1 to A8
@@ -312,7 +335,7 @@ grep -n '^[^#].*SERVERONLY' "$APP_ROOT"/etc/uat-proto-*.env || echo "all filled"
 ```
 
 `all filled` is the only acceptable answer. The JWT and TOTP keys are new
-on purpose: every local session dies, and A5 resets MFA.
+on purpose: every local session dies (MFA enrolments did not ship: 0.4).
 
 ### A5. Roles, the database, the data
 
@@ -341,17 +364,18 @@ DUMP=$(ls -t /tmp/proto-data-*.dump | head -1); echo "DUMP=$DUMP"
 (cd /tmp && sha256sum -c "${DUMP##*/}.sha256")
 ```
 
-Expect `OK`. Restore it as `proto_ddl`, reset MFA, and check the owner:
+Expect `OK`. Restore it as `proto_ddl`, check that no credential came
+with it, and check the owner:
 
 ```bash
 : "${APP_ROOT:?}" "${DUMP:?}"
 DB=$(urldb "$APP_ROOT/etc/uat-proto-migrate.env")
 sudo -u postgres pg_restore --no-owner --no-privileges --role=proto_ddl --exit-on-error -d "$DB" < "$DUMP"
-sudo -u postgres psql -X -d "$DB" -c "UPDATE app_user SET totp_seed = '', mfa_setup = FALSE WHERE mfa_setup"
+sudo -u postgres psql -X -d "$DB" -Atc "SELECT count(*) FROM app_user WHERE pw_hash <> '' OR totp_seed <> '' OR (account_status = 'active' AND delete_ts IS NULL)"
 sudo -u postgres psql -X -d "$DB" -c "SELECT tableowner, count(*) FROM pg_tables WHERE schemaname = 'public' GROUP BY 1"
 ```
 
-Expect one row, `proto_ddl | <n>`. Then the negative checks: the API's
+Expect `0` (0.4's scrub), then one row, `proto_ddl | <n>`. Then the negative checks: the API's
 role reads but cannot create, the CI role cannot connect:
 
 ```bash
@@ -428,8 +452,38 @@ the two pem files, `reloaded`, and the health JSON.
 
 ### A9. First login
 
-Open the site and sign in with a login from the local data. A user who had
-MFA enrols again (A5 reset it).
+Every login arrived `invited`, with no password (0.4), so the first one in
+comes through an invite link issued here. Pick a login that administers
+its tenant (the manifest's `logins.tenant_<n>` line lists them); a second
+tenant needs its own. The token is printed once and never stored: only its
+SHA-256 goes into `user_invite`, exactly as the API stores the links it
+issues, and the link lives `INVITE_TTL_HOURS`:
+
+```bash
+: "${ENV:?}" "${APP_ROOT:?}"
+LOGIN=the-admin-login-to-invite
+DB=$(urldb "$APP_ROOT/etc/$ENV-proto-migrate.env")
+TTL=$(getv "$APP_ROOT/etc/$ENV-proto-api.env" INVITE_TTL_HOURS)
+SITE=$(getv "$APP_ROOT/etc/$ENV-proto-deploy.env" SITE_NAME)
+TOKEN=$(openssl rand -hex 32)
+HASH=$(printf %s "$TOKEN" | sha256sum | cut -d' ' -f1)
+sudo -u postgres psql -X -v ON_ERROR_STOP=1 -d "$DB" -v login="$LOGIN" -v hash="$HASH" -v ttl="$TTL" <<'SQL'
+INSERT INTO user_invite (security_context_id, app_user_id, token_hash,
+       expires_ts, create_ts, create_user_id, update_ts, update_user_id)
+SELECT security_context_id, app_user_id, :'hash',
+       extract(epoch FROM now()) + :ttl * 3600,
+       extract(epoch FROM now()), 0, extract(epoch FROM now()), 0
+FROM app_user
+WHERE user_name = :'login' AND account_status = 'invited'
+  AND delete_ts IS NULL;
+SQL
+echo "https://$SITE/invite#$TOKEN"
+```
+
+Expect `INSERT 0 1` and the link (`INSERT 0 0`: no live invited login by
+that name). Send the link privately. Its holder sets a password, enrols
+in MFA, and invites everyone else from the user list ("New link" on an
+invited login).
 
 UAT is back.
 
@@ -575,8 +629,9 @@ sudo -u postgres psql -X -v ON_ERROR_STOP=1 -c "DROP DATABASE \"${OLD_DB}_presal
 rm -f /tmp/proto-data-*.dump /tmp/proto-data-*.dump.sha256
 ```
 
-Locally, keep `dist/*-data-*.dump` until `doc/331` has loaded it on prod:
-it is the same file. Then delete it — it is the customer's data.
+Locally, keep the export in `EXPORT_DIR` (`.dump`, `.sha256`,
+`.manifest`) until `doc/331` has loaded it on prod: it is the same file.
+Then delete it — it is the customer's data.
 
 ## Rollback (any time before C)
 
