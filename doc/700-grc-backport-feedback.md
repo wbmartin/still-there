@@ -866,23 +866,6 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
   returns the new status and the session cookie still works.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ X\] skip  (new, not yet decided)
 
-### B097 — `mfa_exempt` is policy-only: the API accepts it from any user admin
-- **Priority:** P2  **Area:** go-api, docs
-- **GRC:** not checked   **PROTO:** `src/api-srv/internal/handler/user_handler.go:434` (create copies `req.MFAExempt`, grant check `:361`), `:493` (update, grant check), `src/api-srv/internal/handler/user_invite_handler.go:170`, `src/api-srv/internal/handler/auth_handler.go:248` (login skips TOTP when exempt), `doc/110-threat-model.md` rows 1.6 and 3.5 (policy, status open)
-- **Ticket:** found while writing doc/110 for B077 (2026-10-03)
-- **What:** doc/110 sets the policy "never on a human account in
-  production", but anyone holding `CREATE_USER` or `UPDATE_USER` can set
-  the flag through `POST`/`PUT /user` and switch a login to password-only.
-  Only B071's export scrub (`src/api-srv/sql/export-scrub.sql`) clears it,
-  and only for a post-sales export, not for a live host.
-- **Port notes:** Option A: refuse `mfaExempt: true` in the API unless the
-  caller's tenant is the test tenant (2) or a config key allows it; test
-  logins in pytest would sign in as a tenant-2 user, which already holds.
-  Option B: keep the API open and add a check that reports exempt logins on
-  a host (a `bin/` query or a startup log line). A is stronger; B costs no
-  behaviour change. Either way, update doc/110 rows 1.6 and 3.5.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
-
 ### B098 — `example` has no cross-tenant repository test
 - **Priority:** P3  **Area:** go-api, tests
 - **GRC:** not checked   **PROTO:** `src/api-srv/internal/repository/example_repository_test.go` (every call uses `testTenant`, lines 46-79), `doc/110-threat-model.md` (tenant table row `example`: "none", status partial; row 2.1)
@@ -9064,3 +9047,21 @@ None.
   (`-update-grants` in `grants_fixture_test.go:20`); not recommended.
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip  (Brandon: as recommended, 2026-10-03)
 - **Completed:** 2026-10-03. Convention for new ids only: one block of ten per entity from a multiple of ten, N+0 Read, N+1 Create, N+2 Update, N+3 Delete, N+4..N+9 extras. Written as a section in doc/810 (replacing the inline note) and as a header comment in `grants.go`; `grants.ts` header points to both. No grant id changed; shipped ids never renumbered (stored in groups, pinned by `testdata/grants.json`). Tests: all green, infra=15 docs=707 (was 705; new doc/810 section) go=715 unit=105 e2e=70 py=103.
+
+### B097 — COMPLETED — `mfa_exempt` is policy-only: the API accepts it from any user admin
+- **Priority:** P2  **Area:** go-api, docs
+- **GRC:** not checked   **PROTO:** `src/api-srv/internal/handler/user_handler.go:434` (create copies `req.MFAExempt`, grant check `:361`), `:493` (update, grant check), `src/api-srv/internal/handler/user_invite_handler.go:170`, `src/api-srv/internal/handler/auth_handler.go:248` (login skips TOTP when exempt), `doc/110-threat-model.md` rows 1.6 and 3.5 (policy, status open)
+- **Ticket:** found while writing doc/110 for B077 (2026-10-03)
+- **What:** doc/110 sets the policy "never on a human account in
+  production", but anyone holding `CREATE_USER` or `UPDATE_USER` can set
+  the flag through `POST`/`PUT /user` and switch a login to password-only.
+  Only B071's export scrub (`src/api-srv/sql/export-scrub.sql`) clears it,
+  and only for a post-sales export, not for a live host.
+- **Port notes:** Option A: refuse `mfaExempt: true` in the API unless the
+  caller's tenant is the test tenant (2) or a config key allows it; test
+  logins in pytest would sign in as a tenant-2 user, which already holds.
+  Option B: keep the API open and add a check that reports exempt logins on
+  a host (a `bin/` query or a startup log line). A is stronger; B costs no
+  behaviour change. Either way, update doc/110 rows 1.6 and 3.5.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip  (option A; Brandon: as recommended, 2026-10-03)
+- **Completed:** 2026-10-03. Option A, config key only (no tenant-2 rule). New required key `ALLOW_MFA_EXEMPT_VIA_API`, exactly `true` or `false` (`config.go`; `TestLoadConfig_AllowMFAExemptViaAPI`). `true` only in `etc/e2e-api-srv.env` and `infra/uat/etc/uat-proto-e2e-api.env` (pytest `create_throwaway_login` and other tests, and Playwright `change-other-password.spec.ts`, create exempt logins through `POST /user` and `/userInvite`); `false` in `etc/loc-api-srv.env` (dev seeds its exempt logins in SQL, never through the API), `etc/uat-api-srv.env.template`, `infra/uat/etc/uat-proto-api.env`, `infra/prd/etc/prd-proto-api.env`. `TestLoadConfig_RepoEnvFiles` now also pins true-only-in-e2e-files. `POST /user` and `/userInvite` refuse `mfaExempt: true` with 403 `MFA_EXEMPT_REFUSED` (well-formed body, caller holds the grant; server policy refuses: 403 per doc/105, not 400) before any write; `PUT /user` refuses only turning it on (stored false, body true), so clearing it and saving a login already exempt (the seeded dev `admin`/`basic`) still work. Each handler checks explicitly; `writeMFAExemptRefused` in `common.go` is only the answer. `UpdateUser` now reads the stored row via new `storedUserOf` (`userNameOf` wraps it). `bin/610-deploy-uat` refuses a host env without the key, like `SERVER_BIND_ADDRESS`. Docs: doc/105 (Request bodies, Configuration), doc/110 row 1.6 met, row 3.5 note, Controls item 4 met, doc/905 required list (also added the missing `INVITE_TTL_HOURS`), `src/api-srv/README.md`, doc/320 hand-edit list (also `INVITE_TTL_HOURS=72`). No pytest added: the harness API runs with the key `true`, so a refusal is not reachable there; the Go handler tests cover both settings (`TestUserHandler_MFAExemptNeedsTheConfigKey`, `TestCreateInvitedUser_MFAExemptNeedsTheConfigKey`). The web user-edit page still shows the checkbox; on a `false` server ticking it shows the 403 message. Tests: all green, infra=15 docs=709 (was 707; new backticked paths) go=734 (was 715; +19: `TestLoadConfig_AllowMFAExemptViaAPI` and 7 subtests, `TestUserHandler_MFAExemptNeedsTheConfigKey` and 7, `TestCreateInvitedUser_MFAExemptNeedsTheConfigKey` and 2) unit=105 e2e=70 py=103, govulncheck clean, gofmt clean; `bin/610-deploy-uat` shellcheck clean in `ubuntu:24.04`.

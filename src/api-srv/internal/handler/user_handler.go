@@ -408,6 +408,12 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// An exempt login skips TOTP; only the test harness allows it (B097).
+	if req.MFAExempt && !h.appsrv.Config.AllowMFAExemptViaAPI {
+		writeMFAExemptRefused(appHelper, w)
+		return
+	}
+
 	// Validate password length
 	if len(req.Password) < 8 {
 		appHelper.WriteError(
@@ -553,8 +559,9 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	user.UpdateTS = now
 	user.UpdateUserID = jwtClaims.UserID
 
-	// The name the login's tokens carry, before an update that may rename it.
-	priorUserName, err := userNameOf(
+	// The login as stored: the name its tokens carry, before an update
+	// that may rename it, and whether it is already MFA exempt.
+	storedUser, err := storedUserOf(
 		r, h.userRepo, jwtClaims.SecurityContext, user.AppUserID,
 	)
 	if err != nil {
@@ -565,6 +572,19 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 			"USR_UPD_FAIL",
 			err,
 		)
+		return
+	}
+	priorUserName, priorMFAExempt := "", false
+	if storedUser != nil {
+		priorUserName = storedUser.UserName
+		priorMFAExempt = storedUser.MFAExempt
+	}
+
+	// Turning mfa_exempt on is refused unless this server allows it (B097).
+	// Keeping a stored true (the seeded dev logins) or clearing it is not.
+	if user.MFAExempt && !priorMFAExempt &&
+		!h.appsrv.Config.AllowMFAExemptViaAPI {
+		writeMFAExemptRefused(appHelper, w)
 		return
 	}
 

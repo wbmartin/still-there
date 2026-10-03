@@ -351,11 +351,36 @@ func userNameOf(
 	securityContext int,
 	userID int,
 ) (string, error) {
+	storedUser, err := storedUserOf(r, userRepo, securityContext, userID)
+	if err != nil || storedUser == nil {
+		return "", err
+	}
+	return storedUser.UserName, nil
+}
+
+// storedUserOf returns one login of securityContext as stored, nil when
+// there is none.
+func storedUserOf(
+	r *http.Request,
+	userRepo UserRepositoryInterface,
+	securityContext int,
+	userID int,
+) (*model.AppUserModel, error) {
 	userList, err := userRepo.RetrieveUserList(
 		r.Context(), securityContext, []int{userID}, 0,
 	)
 	if err != nil || len(userList) == 0 {
-		return "", err
+		return nil, err
 	}
-	return userList[0].UserName, nil
+	return userList[0], nil
+}
+
+// writeMFAExemptRefused answers a request that would turn mfa_exempt on
+// while ALLOW_MFA_EXEMPT_VIA_API=false (B097). 403, not 400: the body is
+// well formed and the caller holds the grant; this server's policy refuses
+// the action. Each handler makes the check itself; this is only the answer.
+func writeMFAExemptRefused(app *security.AppHelper, w http.ResponseWriter) {
+	app.WriteError(w, http.StatusForbidden,
+		"MFA exemption cannot be turned on through the API on this server",
+		"MFA_EXEMPT_REFUSED", nil)
 }

@@ -67,6 +67,7 @@ FAILED_LOGIN_ATTEMPT_WINDOW_DURATION=5min
 FAILED_LOGIN_LOCKOUT_DURATION=5min
 LOG_LEVEL=info
 INVITE_TTL_HOURS=72
+ALLOW_MFA_EXEMPT_VIA_API=false
 `
 
 // withoutKey returns validBase minus the line that sets key.
@@ -125,6 +126,50 @@ func TestLoadConfig_LogLevel(t *testing.T) {
 			if config.LogLevel != testCase.want {
 				t.Errorf("LogLevel = %v, want %v",
 					config.LogLevel, testCase.want)
+			}
+		})
+	}
+}
+
+// ALLOW_MFA_EXEMPT_VIA_API is required and exactly true or false (B097):
+// a missing key must not leave the API open, and a near-miss spelling must
+// not read as either value.
+func TestLoadConfig_AllowMFAExemptViaAPI(t *testing.T) {
+	testCaseList := []struct {
+		name    string
+		line    string
+		want    bool
+		wantErr string
+	}{
+		{"absent", "", false, "ALLOW_MFA_EXEMPT_VIA_API is required"},
+		{"empty", "ALLOW_MFA_EXEMPT_VIA_API=\n", false,
+			"ALLOW_MFA_EXEMPT_VIA_API is required"},
+		{"true", "ALLOW_MFA_EXEMPT_VIA_API=true\n", true, ""},
+		{"false", "ALLOW_MFA_EXEMPT_VIA_API=false\n", false, ""},
+		{"upper case", "ALLOW_MFA_EXEMPT_VIA_API=TRUE\n", false,
+			"ALLOW_MFA_EXEMPT_VIA_API must be true or false"},
+		{"digit", "ALLOW_MFA_EXEMPT_VIA_API=1\n", false,
+			"ALLOW_MFA_EXEMPT_VIA_API must be true or false"},
+		{"word", "ALLOW_MFA_EXEMPT_VIA_API=yes\n", false,
+			"ALLOW_MFA_EXEMPT_VIA_API must be true or false"},
+	}
+	for _, testCase := range testCaseList {
+		t.Run(testCase.name, func(t *testing.T) {
+			config, err := LoadConfig(writeEnv(t,
+				withoutKey("ALLOW_MFA_EXEMPT_VIA_API")+testCase.line))
+			if testCase.wantErr != "" {
+				if err == nil ||
+					!strings.Contains(err.Error(), testCase.wantErr) {
+					t.Fatalf("err = %v, want %q", err, testCase.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.AllowMFAExemptViaAPI != testCase.want {
+				t.Errorf("AllowMFAExemptViaAPI = %v, want %v",
+					config.AllowMFAExemptViaAPI, testCase.want)
 			}
 		})
 	}
@@ -321,8 +366,17 @@ func TestLoadConfig_RepoEnvFiles(t *testing.T) {
 			len(pathList), pathList)
 	}
 	for _, path := range pathList {
-		if _, err := LoadConfig(path); err != nil {
+		config, err := LoadConfig(path)
+		if err != nil {
 			t.Errorf("%s: %v", path, err)
+			continue
+		}
+		// Only the test harness (an e2e file) may turn mfa_exempt on
+		// through the API; dev, the UAT template and every server refuse.
+		isHarness := strings.Contains(filepath.Base(path), "e2e")
+		if config.AllowMFAExemptViaAPI != isHarness {
+			t.Errorf("%s: ALLOW_MFA_EXEMPT_VIA_API=%v, want %v",
+				path, config.AllowMFAExemptViaAPI, isHarness)
 		}
 	}
 }

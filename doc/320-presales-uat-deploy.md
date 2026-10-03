@@ -150,9 +150,12 @@ authenticator) unless they are weak.
 Deploys never rewrite `api-srv.env`, so a key the API started requiring after
 the host's first deploy is missing there and the new binary exits with
 "`KEY` is required". Add it by hand, as root, before deploying:
-`LOG_LEVEL=info` (debug, info, warn or error) and
-`SERVER_BIND_ADDRESS=127.0.0.1` (nginx is the only way in).
-`610-deploy-uat` refuses a file without `SERVER_BIND_ADDRESS` before it
+`LOG_LEVEL=info` (debug, info, warn or error),
+`SERVER_BIND_ADDRESS=127.0.0.1` (nginx is the only way in),
+`INVITE_TTL_HOURS=72` (hours an invite link works) and
+`ALLOW_MFA_EXEMPT_VIA_API=false` (the API refuses to turn `mfaExempt` on;
+`true` is for the test harness only). `610-deploy-uat` refuses a file
+without `SERVER_BIND_ADDRESS` or `ALLOW_MFA_EXEMPT_VIA_API` before it
 stops the service.
 
 ## The two commands

@@ -188,6 +188,17 @@ refused 400 by the field's own validation, not by the decoder:
 The password key is `password` everywhere a password is set
 (`pwHash` is gone, B038); list keys are `fooList`, never plural.
 
+`mfaExempt: true` lets a login sign in with a password alone, so it is
+accepted only where `ALLOW_MFA_EXEMPT_VIA_API=true` (the test harness
+files; B097). Elsewhere `POST /user`, `/userInvite`, and a `PUT /user`
+that turns the flag on answer **403** "MFA exemption cannot be turned on
+through the API on this server" (code `MFA_EXEMPT_REFUSED`) before any
+write. 403, not 400: the body is well formed and the caller holds the
+grant; the server's policy refuses the action. `false` is always
+accepted, and a `PUT` that keeps a stored `true` (the seeded dev logins)
+is not refused, so clearing or editing an exempt login still works. Each
+handler makes the check itself, after the body is decoded.
+
 ### Authentication Flow
 
 1. **Initial Auth** (`/auth`):
@@ -601,8 +612,9 @@ which tables have a cross-tenant test are in doc/110, Tenant isolation.
 Environment files follow the naming convention `loc-{service}.env` for
 local development configurations. The API's keys, required and optional,
 are listed in `src/api-srv/README.md` (Configuration); among them
-`INVITE_TTL_HOURS` (invite link lifetime), `TRUSTED_PROXY_COUNT`
-(`ClientIP`), the rate limits and the lockout thresholds above.
+`INVITE_TTL_HOURS` (invite link lifetime), `ALLOW_MFA_EXEMPT_VIA_API`
+(Request bodies, above), `TRUSTED_PROXY_COUNT` (`ClientIP`), the rate
+limits and the lockout thresholds above.
 
 ### Loading
 - Command-line argument specifies config file path

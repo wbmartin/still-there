@@ -228,6 +228,31 @@ func TestCreateInvitedUser_IssuesATokenAndStoresOnlyItsHash(t *testing.T) {
 		answer.Data.User.AccountStatus)
 }
 
+// An invite carries mfa_exempt into the login it creates, so it is held to
+// POST /user's rule: true only where ALLOW_MFA_EXEMPT_VIA_API=true (B097).
+func TestCreateInvitedUser_MFAExemptNeedsTheConfigKey(t *testing.T) {
+	exemptBody := strings.Replace(inviteBody, `"mfaExempt":false`,
+		`"mfaExempt":true`, 1)
+
+	t.Run("not allowed → 403 before the repository", func(t *testing.T) {
+		w := inviteAdminRequest(t, inviteServices(t),
+			panicInviteRepository{}, "/userInvite", exemptBody,
+			[]int{model.GrantUserCreate}, true, true)
+		assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), "MFA exemption cannot")
+	})
+	t.Run("allowed → 201, stored exempt", func(t *testing.T) {
+		appServices := inviteServices(t)
+		appServices.Config.AllowMFAExemptViaAPI = true
+		userInviteRepository := &recordingInviteRepository{}
+		w := inviteAdminRequest(t, appServices, userInviteRepository,
+			"/userInvite", exemptBody, []int{model.GrantUserCreate},
+			true, true)
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		assert.True(t, userInviteRepository.createdUser.MFAExempt)
+	})
+}
+
 // The same required fields as POST /user, refused before the repository.
 func TestCreateInvitedUser_RequiresEveryField(t *testing.T) {
 	body := strings.Replace(inviteBody, `"ivy@example.com"`, `""`, 1)

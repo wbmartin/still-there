@@ -8,10 +8,9 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 
 ## 0. Waiting on Brandon
 
-- **Decide B097-B098** (pull/adapt/skip in doc/700, under "Bugs found in
-  PROTO along the way"). B097: `mfa_exempt` accepted by the API from any
-  user admin (refuse it, or report exempt logins on a host). B098: `example`
-  has no cross-tenant repository test (tenant 2 vs 3).
+- **Decide B098** (pull/adapt/skip in doc/700, under "Bugs found in
+  PROTO along the way"): `example` has no cross-tenant repository test
+  (tenant 2 vs 3).
 - **Dev DB:** run `bin/205-migrate-db` to apply 0004/0005 (B034, B035)
   before the next `bin/215-run-api-srv` or `bin/600-bundle-uat`; the API
   exits at start otherwise.
@@ -35,7 +34,9 @@ recommendation. Done items sit under `# Completed` at the end of that file.
   (B031: required, the API will not start without it); add
   `SERVER_BIND_ADDRESS=127.0.0.1` (B016; required since B061, the API and
   `bin/610-deploy-uat` refuse a file without it); add
-  `INVITE_TTL_HOURS=72` (B035, required key); set
+  `INVITE_TTL_HOURS=72` (B035, required key); add
+  `ALLOW_MFA_EXEMPT_VIA_API=false` (B097: required, the API and
+  `bin/610-deploy-uat` refuse a file without it); set
   `JWT_SESSION_EXPIRE_HOURS=12` (B016); rotate the DB password off the repo
   literal (B027, step in `doc/320-presales-uat-deploy.md`).
 - **Grant 9020 (reset another user's MFA) by hand** on every real tenant's
@@ -66,8 +67,8 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 ## 1. Queue (doc/700 items not done, not skipped), in order
 
 The decided queue is empty: B062-B066, B069-B078, B080-B083, B085-B088, B090,
-B093, B094, B095 and B096 are done (B089 folded into B038, B091 removed the ticket
-system). Remaining work is only items awaiting Brandon's decision: B097, B098. Once one is decided pull or adapt, work it with
+B093, B094, B095, B096 and B097 are done (B089 folded into B038, B091 removed the ticket
+system). Remaining work is only items awaiting Brandon's decision: B098. Once one is decided pull or adapt, work it with
 the §2 procedure.
 Skipped, do not do: B002, B005, B015, B049, B050, B057, B067, B068, B079,
 B084, B092. B067 (audit log) is skipped, so B035 stripped GRC's audit

@@ -562,6 +562,108 @@ func TestUpdateUser(t *testing.T) {
 	}
 }
 
+// mfa_exempt switches a login to password-only, so POST and PUT /user
+// turn it on only where ALLOW_MFA_EXEMPT_VIA_API=true (B097). Clearing it
+// and keeping a stored true are always allowed. An unexpected repository
+// call panics, so a refusal proves nothing was written.
+func TestUserHandler_MFAExemptNeedsTheConfigKey(t *testing.T) {
+	const createBody = `{"userName":"bob","password":"long-enough-1",` +
+		`"firstName":"Bob","lastName":"B","email":"b@example.com",` +
+		`"mfaExempt":%t}`
+	const updateBody = `{"appUserId":9,"userName":"bob",` +
+		`"updateTs":12.5,"mfaExempt":%t}`
+
+	run := func(
+		t *testing.T, allow bool, repo *MockUserRepository,
+		method, body string,
+	) *httptest.ResponseRecorder {
+		t.Helper()
+		s := testServices(t)
+		s.Config.AllowMFAExemptViaAPI = allow
+		handler := NewUserHandler(s, repo, new(MockAppUserGroupRepository))
+		w := httptest.NewRecorder()
+		if method == http.MethodPost {
+			handler.CreateUser(w, userAdminRequest(t, s, method, "/user",
+				body, model.GrantUserCreate))
+		} else {
+			handler.UpdateUser(w, userAdminRequest(t, s, method, "/user",
+				body, model.GrantUserUpdate))
+		}
+		repo.AssertExpectations(t)
+		return w
+	}
+	createRepo := func(wantExempt bool) *MockUserRepository {
+		repo := new(MockUserRepository)
+		repo.On("CreateUser", mock.Anything,
+			mock.MatchedBy(func(user *model.AppUserModel) bool {
+				return user.MFAExempt == wantExempt
+			}), userAdminTenant).
+			Return(&model.AppUserModel{AppUserID: 51, UserName: "bob",
+				SecurityContext: userAdminTenant}, nil)
+		return repo
+	}
+	// storedRepo holds bob with the given stored flag; write adds the
+	// UpdateUser the handler should reach, carrying wantExempt.
+	storedRepo := func(
+		storedExempt, write, wantExempt bool,
+	) *MockUserRepository {
+		repo := new(MockUserRepository)
+		row := bobRow()
+		row[0].MFAExempt = storedExempt
+		repo.On("RetrieveUserList", mock.Anything, userAdminTenant,
+			[]int{9}, float64(0)).Return(row, nil)
+		if write {
+			repo.On("UpdateUser", mock.Anything,
+				mock.MatchedBy(func(user *model.AppUserModel) bool {
+					return user.MFAExempt == wantExempt
+				}), 12.5, userAdminTenant).Return(nil)
+		}
+		return repo
+	}
+
+	t.Run("POST true, not allowed → 403, nothing created",
+		func(t *testing.T) {
+			w := run(t, false, new(MockUserRepository), http.MethodPost,
+				fmt.Sprintf(createBody, true))
+			assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), "MFA exemption cannot")
+		})
+	t.Run("POST true, allowed → 201 exempt", func(t *testing.T) {
+		w := run(t, true, createRepo(true), http.MethodPost,
+			fmt.Sprintf(createBody, true))
+		assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	})
+	t.Run("POST false, not allowed → 201", func(t *testing.T) {
+		w := run(t, false, createRepo(false), http.MethodPost,
+			fmt.Sprintf(createBody, false))
+		assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	})
+
+	t.Run("PUT turning it on, not allowed → 403, nothing written",
+		func(t *testing.T) {
+			w := run(t, false, storedRepo(false, false, false),
+				http.MethodPut, fmt.Sprintf(updateBody, true))
+			assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), "MFA exemption cannot")
+		})
+	t.Run("PUT turning it on, allowed → 200", func(t *testing.T) {
+		w := run(t, true, storedRepo(false, true, true),
+			http.MethodPut, fmt.Sprintf(updateBody, true))
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	})
+	t.Run("PUT keeping a stored true, not allowed → 200",
+		func(t *testing.T) {
+			w := run(t, false, storedRepo(true, true, true),
+				http.MethodPut, fmt.Sprintf(updateBody, true))
+			assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		})
+	t.Run("PUT clearing it, not allowed → 200", func(t *testing.T) {
+		w := run(t, false, storedRepo(true, true, false),
+			http.MethodPut, fmt.Sprintf(updateBody, false))
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	})
+}
+
 func TestDeleteUser(t *testing.T) {
 	deleteUser := func(
 		t *testing.T, repo *MockUserRepository, target string,

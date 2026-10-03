@@ -155,6 +155,12 @@ func (h *UserInviteHandler) CreateInvitedUser(
 		return
 	}
 
+	// An exempt login skips TOTP; only the test harness allows it (B097).
+	if req.MFAExempt && !h.appsrv.Config.AllowMFAExemptViaAPI {
+		writeMFAExemptRefused(appHelper, w)
+		return
+	}
+
 	token, tokenHash, expiresTS, ok := h.newInvite(appHelper, w)
 	if !ok {
 		return

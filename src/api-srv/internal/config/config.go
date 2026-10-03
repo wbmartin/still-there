@@ -34,6 +34,7 @@ type Config struct {
 	TrustedProxyCount                int        `json:"trusted_proxy_count"`
 	LogLevel                         slog.Level `json:"log_level"`
 	InviteTTLHours                   int        `json:"invite_ttl_hours"`
+	AllowMFAExemptViaAPI             bool       `json:"allow_mfa_exempt_via_api"`
 }
 
 // ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,
@@ -112,6 +113,24 @@ func LoadConfig(configFilePath string) (*Config, error) {
 		env, "INVITE_TTL_HOURS",
 	); err != nil {
 		return nil, err
+	}
+
+	// Whether POST/PUT /user and /userInvite may turn mfa_exempt on (B097).
+	// Required and spelled out, so no host allows it by omission: true
+	// only for the test harness, false on every server.
+	switch env["ALLOW_MFA_EXEMPT_VIA_API"] {
+	case "true":
+		config.AllowMFAExemptViaAPI = true
+	case "false":
+		config.AllowMFAExemptViaAPI = false
+	case "":
+		return nil, fmt.Errorf("ALLOW_MFA_EXEMPT_VIA_API is required " +
+			"(true or false; false on every server)")
+	default:
+		return nil, fmt.Errorf(
+			"ALLOW_MFA_EXEMPT_VIA_API must be true or false, got %q",
+			env["ALLOW_MFA_EXEMPT_VIA_API"],
+		)
 	}
 
 	logLevelStr := env["LOG_LEVEL"]

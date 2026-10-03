@@ -103,6 +103,8 @@ PORT="$(sed -nE 's/^SERVER_PORT=([0-9]+).*/\1/p' "$ENV_FILE" | head -1)"
 # Required since B061; a file written before then lacks it (doc/320). Checked
 # here so the deploy stops before the service does, not after.
 grep -qE '^SERVER_BIND_ADDRESS=.' "$ENV_FILE" || { echo "[ERROR] SERVER_BIND_ADDRESS not set in $ENV_FILE; add SERVER_BIND_ADDRESS=127.0.0.1"; exit 1; }
+# Required since B097, same reason.
+grep -qE '^ALLOW_MFA_EXEMPT_VIA_API=.' "$ENV_FILE" || { echo "[ERROR] ALLOW_MFA_EXEMPT_VIA_API not set in $ENV_FILE; add ALLOW_MFA_EXEMPT_VIA_API=false"; exit 1; }
 HEALTH="http://127.0.0.1:$PORT/health"
 DB_LOGIN="$(sed -nE 's#^DATABASE_URL=postgres://([^:@/]+):.*#\1#p' "$ENV_FILE" | head -1)"
 [ "$DB_LOGIN" = "$DB_APP_ROLE" ] || { echo "[ERROR] DATABASE_URL in $ENV_FILE logs in as '$DB_LOGIN', not DB_APP_ROLE=$DB_APP_ROLE"; exit 1; }

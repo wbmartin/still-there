@@ -44,6 +44,12 @@ Required:
 - `LOG_LEVEL` — one of `debug`, `info`, `warn`, `error`; lines below it are
   dropped. Per-request lines (`APP_HELPER_INIT`, `RLP0`) and health polls
   are debug; deployed files set `info`, local dev `debug`
+- `ALLOW_MFA_EXEMPT_VIA_API` — exactly `true` or `false`. `false` makes
+  `POST /user`, `/userInvite` and a `PUT /user` that turns the flag on
+  answer 403 to `mfaExempt: true`; clearing it, or saving a login already
+  exempt, still works. `true` only in the test harness
+  (`etc/e2e-api-srv.env`, `infra/uat/etc/uat-proto-e2e-api.env`), whose
+  suites create password-only logins; dev and every server say `false`
 
 Optional:
 
@@ -164,7 +170,9 @@ invite link count toward the same lockout.
 **MFA.** A login that is not `mfaExempt` gets a temp token from `/auth`,
 not a session. `/mfaSetup` enrols (TOTP secret stored AES-GCM encrypted
 under `TOTP_ENCRYPTION_KEY`; refused 409 once enrolled), `/mfaVerify`
-checks the code (each code good once) and issues the session. No
+checks the code (each code good once) and issues the session. The API
+turns `mfaExempt` on only where `ALLOW_MFA_EXEMPT_VIA_API=true` (the test
+harness); elsewhere it answers 403 (Configuration). No
 response carries `pw_hash` or `totp_seed`: both are `json:"-"` in
 `internal/model/app_user_model.go`.
 
