@@ -564,81 +564,6 @@ moves on a deliberate release; GRC left this open too.
 
 # P3: nice to have
 
-### B065 — Web: small UI helpers
-
-- **Priority:** P3  **Area:** web-app
-- **GRC:** `components/grc/help-tip.tsx:1-34`; `components/grc/sort-th.tsx:1-18`; `hooks/use-sort.ts:1-25`; `components/grc/save-bar.tsx:1-13`; `utils/safe-href.ts:1-26`; `hooks/use-draft.ts:17-24`   **PROTO:** new under `components/`, `hooks/`, `utils/`; `pages/app-user-list-page.tsx:135-148`
-- **Ticket:** `e2a110f`; RG0043 1.6
-- **What:** Info-icon labels, sortable `<Th>`, save bar, link allow-list for
-untrusted content.
-- **Port notes:** `use-sort` to `useSearchParams`; `safe-href` once untrusted
-HTML renders; `use-draft` lacks try/finally.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Nothing is broken. This is a DX gap: six small helpers GRC grew that PROTO
-lacks. PROTO's sortable header is hand-written per column, four times on
-the user list alone:
-
-```tsx
-// src/web-app/pages/app-user-list-page.tsx:150-155
-<Table.Th
-  className="sortable-column"
-  onClick={() => handleSort("name")}
->
-  Name{" "}
-  {sortColumn === "name" && (sortDirection === "asc" ? "↑" : "↓")}
-```
-
-The header is a clickable `<th>`, not a button, so a keyboard user cannot
-sort. Field help, where it exists, goes in Mantine's `description` prop as
-grey text under the label (three uses in `pages/` and `components/`).
-PROTO renders no untrusted HTML (no `dangerouslySetInnerHTML` in the web
-app), so it has no use for a link sanitiser yet. `components/`, `hooks/`
-and `utils/` hold no shared leaf UI.
-
-#### What GRC changed
-
-Paths are under GRC `src/web-app/`.
-
-1. `components/grc/help-tip.tsx:13-34`: `HelpTip` (info icon, tooltip,
-   `aria-label`) and `LabelWithHelp` for an input's `label`. From `e2a110f`
-   (Brandon 2026-09-29: help "in information icons / popup help").
-2. `components/grc/sort-th.tsx:5-18`: `SortTh`, a `<Th>` holding an
-   `UnstyledButton` and a chevron icon, so it is keyboard-reachable.
-3. `hooks/use-sort.ts:6-25`: client-side sort in `useState`, nulls last,
-   numeric-aware `localeCompare`.
-4. `components/grc/save-bar.tsx:4-13`: Cancel/Save, shown only when dirty.
-5. `utils/safe-href.ts:5-26`: `isSafeHref` keeps `http:`, `https:`,
-   `mailto:`; `neutraliseLinks` strips the rest and adds `rel=noopener`.
-   RG0043 1.6, for links inside tenant-uploaded `.docx` previews.
-6. `hooks/use-draft.ts:10-26`: an edit buffer. `save` (`:17-24`) has no
-   `try/finally`: if `update` throws, `saving` stays `true` and the error
-   escapes uncaught. `blankAudited` (`:7`) hard-codes `securityContext: 1`.
-No tests for any of the six.
-
-#### Proposed fix for PROTO
-
-1. Add `components/help-tip.tsx` and `components/sort-th.tsx` (no `grc/`
-   folder). `@tabler/icons-react` is already a dependency.
-2. Trap: `use-sort` keeps state in `useState`; PROTO's lists keep `sort`
-   and `dir` in the URL. Write `SortTh` against PROTO's `handleSort`, or a
-   URL-backed hook (same fix as B064's merge-style `setListParams`).
-3. Swap the hand-written headers page by page. Each page keeps its own
-   sort code (scaffolding); only the leaf `<Th>` is shared.
-4. `save-bar`: add only with the first in-place edit page.
-5. `safe-href`: defer until a page renders untrusted HTML.
-6. Do not port `use-draft` as is: wrap `save` in `try/finally` and drop
-   `blankAudited`'s tenant 1 (the tenant comes from the JWT).
-7. vitest: `SortTh` toggles on Enter; `isSafeHref` refuses `javascript:`.
-
-#### Open question for Brandon
-
-None.
-
 ### B066 — Route-sweep Playwright spec (not GRC's `smoke/*.mjs`)
 
 - **Priority:** P3  **Area:** tests, web-app
@@ -8989,3 +8914,79 @@ None.
 
 - **Completed:** 2026-10-03. No Brandon line; took the recommendation. `AppLayout` (`src/web-app/app.tsx`) applies the colour-scheme preference only once the profile is loaded (`profile !== null`), so a reload keeps Mantine's stored scheme until `/me` answers (fix step 1's trap: gating on `YES` alone still flashes), and calls `clearColorScheme()` on the signed-in to `NO` edge only (a `wasSignedIn` ref; `UNREACHABLE` and a cold signed-out load leave the stored scheme). Each list page separately (`app-user-list-page.tsx`, `app-user-group-list-page.tsx`, `example-list-page.tsx`; no shared hook): merge-style `setListParams` (empty value deletes the key; `setPage` and the sort use it, a sort drops `page`), `dir` is `desc` or else `asc`, and `page = Math.min(requestedPage, Math.max(1, totalPageCount))`. Group list gains `sort`/`dir` and sortable ID and Group Name headers (default `appUserGroupId` asc). Deviations: `?page=` is also floored (`?page=1.5` sliced mid-row); the sort drops `page` rather than GRC's `page: "1"` (same as `setPage(1)`); `example-list-page.tsx` got the same fixes (the Expanded block names its bugs). `src/web-app/README.md` page-conventions bullet extended. Tests: e2e `profile-page.spec.ts` "colour scheme" (own session; set Dark, hold GET `/api/me` with `page.route`, reload, `<html data-mantine-color-scheme="dark">` while held and after; sign-out and a reload at `/login` are not dark; `finally` restores the fixture user through the API), failing on the old `app.tsx` (`light` while `/me` held); `entity-pages.spec.ts` per list page `?page=99&keep=1` shows rows and a header sort keeps `keep=1`, drops `page`; unknown `dir` shows ascending; group list sorts by name (asc, then reversed) and id desc. All green, infra=15 docs=503 go=700 unit=97 e2e=20 py=103 (e2e +6), govulncheck clean, gofmt clean.
 
+### B065 — COMPLETED — Web: small UI helpers
+
+- **Priority:** P3  **Area:** web-app
+- **GRC:** `components/grc/help-tip.tsx:1-34`; `components/grc/sort-th.tsx:1-18`; `hooks/use-sort.ts:1-25`; `components/grc/save-bar.tsx:1-13`; `utils/safe-href.ts:1-26`; `hooks/use-draft.ts:17-24`   **PROTO:** new under `components/`, `hooks/`, `utils/`; `pages/app-user-list-page.tsx:135-148`
+- **Ticket:** `e2a110f`; RG0043 1.6
+- **What:** Info-icon labels, sortable `<Th>`, save bar, link allow-list for
+untrusted content.
+- **Port notes:** `use-sort` to `useSearchParams`; `safe-href` once untrusted
+HTML renders; `use-draft` lacks try/finally.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Nothing is broken. This is a DX gap: six small helpers GRC grew that PROTO
+lacks. PROTO's sortable header is hand-written per column, four times on
+the user list alone:
+
+```tsx
+// src/web-app/pages/app-user-list-page.tsx:150-155
+<Table.Th
+  className="sortable-column"
+  onClick={() => handleSort("name")}
+>
+  Name{" "}
+  {sortColumn === "name" && (sortDirection === "asc" ? "↑" : "↓")}
+```
+
+The header is a clickable `<th>`, not a button, so a keyboard user cannot
+sort. Field help, where it exists, goes in Mantine's `description` prop as
+grey text under the label (three uses in `pages/` and `components/`).
+PROTO renders no untrusted HTML (no `dangerouslySetInnerHTML` in the web
+app), so it has no use for a link sanitiser yet. `components/`, `hooks/`
+and `utils/` hold no shared leaf UI.
+
+#### What GRC changed
+
+Paths are under GRC `src/web-app/`.
+
+1. `components/grc/help-tip.tsx:13-34`: `HelpTip` (info icon, tooltip,
+   `aria-label`) and `LabelWithHelp` for an input's `label`. From `e2a110f`
+   (Brandon 2026-09-29: help "in information icons / popup help").
+2. `components/grc/sort-th.tsx:5-18`: `SortTh`, a `<Th>` holding an
+   `UnstyledButton` and a chevron icon, so it is keyboard-reachable.
+3. `hooks/use-sort.ts:6-25`: client-side sort in `useState`, nulls last,
+   numeric-aware `localeCompare`.
+4. `components/grc/save-bar.tsx:4-13`: Cancel/Save, shown only when dirty.
+5. `utils/safe-href.ts:5-26`: `isSafeHref` keeps `http:`, `https:`,
+   `mailto:`; `neutraliseLinks` strips the rest and adds `rel=noopener`.
+   RG0043 1.6, for links inside tenant-uploaded `.docx` previews.
+6. `hooks/use-draft.ts:10-26`: an edit buffer. `save` (`:17-24`) has no
+   `try/finally`: if `update` throws, `saving` stays `true` and the error
+   escapes uncaught. `blankAudited` (`:7`) hard-codes `securityContext: 1`.
+No tests for any of the six.
+
+#### Proposed fix for PROTO
+
+1. Add `components/help-tip.tsx` and `components/sort-th.tsx` (no `grc/`
+   folder). `@tabler/icons-react` is already a dependency.
+2. Trap: `use-sort` keeps state in `useState`; PROTO's lists keep `sort`
+   and `dir` in the URL. Write `SortTh` against PROTO's `handleSort`, or a
+   URL-backed hook (same fix as B064's merge-style `setListParams`).
+3. Swap the hand-written headers page by page. Each page keeps its own
+   sort code (scaffolding); only the leaf `<Th>` is shared.
+4. `save-bar`: add only with the first in-place edit page.
+5. `safe-href`: defer until a page renders untrusted HTML.
+6. Do not port `use-draft` as is: wrap `save` in `try/finally` and drop
+   `blankAudited`'s tenant 1 (the tenant comes from the JWT).
+7. vitest: `SortTh` toggles on Enter; `isSafeHref` refuses `javascript:`.
+
+#### Open question for Brandon
+
+None.
+
+- **Completed:** 2026-10-03. No Brandon line; took the recommendation. New `src/web-app/components/sort-th.tsx` (`SortTh`: a `<Table.Th>` holding an `UnstyledButton` and a Tabler chevron/selector icon, `aria-sort` on the sorted column only; props `label`, `column`, `sortColumn`, `sortDirection`, `onSort`, so it plugs into each page's existing `handleSort`, fix step 2) and `src/web-app/components/help-tip.tsx` (`HelpTip`, `LabelWithHelp`). The hand-written sortable headers on `app-user-list-page.tsx`, `app-user-group-list-page.tsx` and `example-list-page.tsx` are now `SortTh`; each page keeps its own sort code (fix step 3); the unused `.sortable-column` rule leaves `src/web-app/index.css`. The three `description` props (`example-edit-page.tsx` JSON and UUID, `user-preferences-page.tsx` Rows per page, now worded "How many rows each list page shows") become `LabelWithHelp` labels, so `HelpTip` has users. Deviations: `HelpTip`'s icon wrapper is `role="img"`, `aria-label="About <field>"`, `tabIndex=0` and the Tooltip opens on focus too, so a keyboard user can read the help (GRC's was hover-only); `use-sort` not ported (PROTO's sort lives in the URL); `save-bar` (step 4), `safe-href` and its `isSafeHref` test (step 5, no untrusted HTML yet) and `use-draft` (step 6, no edit page uses an edit buffer; when ported, wrap `save` in `try/finally` and drop the hard-coded tenant) deferred. `src/web-app/README.md` Project Structure and page-conventions bullets updated. Tests: vitest `tests/ui-helpers.test.tsx` (SortTh label is a `<button>` that calls `onSort`; `aria-sort` only on the sorted column, asc/desc; help icon named and focusable; bare label without help); Enter is proved in a real browser rather than jsdom (which does not synthesise a click from Enter): e2e `entity-pages.spec.ts` "a column sorts from the keyboard" (focus the Username header button, Enter sorts asc, Enter again desc, `aria-sort` follows); "an unknown dir sorts ascending" now checks `aria-sort` instead of the removed arrow glyph; `example-pages.spec.ts` focuses "About JSON" and sees the tooltip, and finds JSON/UUID by `getByRole("textbox")` because `getByLabel` would also match the icon's label. All green, infra=15 docs=505 go=700 unit=101 e2e=21 py=103 (docs +2 from new paths, unit +4, e2e +1), govulncheck clean, gofmt clean.

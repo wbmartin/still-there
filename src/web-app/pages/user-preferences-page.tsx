@@ -20,6 +20,7 @@ import { ROUTES } from "../constants/routes";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { grants } from "../constants/grants";
 import { ChangePasswordModal } from "../components/change-password-modal";
+import { LabelWithHelp } from "../components/help-tip";
 import { useProfileStore } from "../stores/profile-store";
 import {
   defaultPreference,
@@ -235,8 +236,12 @@ function UserPreferencesPage() {
             {...profileForm.getInputProps("colorScheme")}
           />
           <Select
-            label="Rows per page"
-            description="List pages"
+            label={
+              <LabelWithHelp
+                label="Rows per page"
+                help="How many rows each list page shows"
+              />
+            }
             data={rowsPerPageOptions}
             allowDeselect={false}
             {...profileForm.getInputProps("rowsPerPage")}

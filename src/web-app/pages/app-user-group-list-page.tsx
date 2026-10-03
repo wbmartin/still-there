@@ -21,6 +21,7 @@ import { confirmDelete } from "../utils/confirm-delete";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { AppUserGroup } from "../types/app-user-group-type";
+import { SortTh } from "../components/sort-th";
 import { reportError } from "../utils/report-error";
 
 function AppUserGroupListPage() {
@@ -165,22 +166,20 @@ function AppUserGroupListPage() {
       <Table>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("appUserGroupId")}
-            >
-              ID{" "}
-              {sortColumn === "appUserGroupId" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("groupName")}
-            >
-              Group Name{" "}
-              {sortColumn === "groupName" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
+            <SortTh
+              label="ID"
+              column="appUserGroupId"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Group Name"
+              column="groupName"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
             <Table.Th>Roles</Table.Th>
             <Table.Th>Actions</Table.Th>
           </Table.Tr>

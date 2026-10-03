@@ -57,7 +57,23 @@ test.describe("entity pages", () => {
     await page.goto("/appUserList?sort=userName&dir=sideways");
     await expect(
       page.getByRole("columnheader", { name: /Username/ }),
-    ).toHaveText(/↑/);
+    ).toHaveAttribute("aria-sort", "ascending");
+  });
+
+  test("a column sorts from the keyboard", async ({ page }) => {
+    // The header label is a button (components/sort-th.tsx): Tab reaches
+    // it and Enter sorts, then sorts the other way.
+    await page.goto("/appUserList");
+    const usernameHeader = page.getByRole("columnheader", {
+      name: /Username/,
+    });
+    await usernameHeader.getByRole("button").focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/sort=userName/);
+    await expect(usernameHeader).toHaveAttribute("aria-sort", "ascending");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/dir=desc/);
+    await expect(usernameHeader).toHaveAttribute("aria-sort", "descending");
   });
 
   test("the user group list sorts by name and id", async ({ page }) => {

@@ -19,6 +19,7 @@ import useAuthGuard from "../hooks/use-auth-guard";
 import { confirmDelete } from "../utils/confirm-delete";
 import { grants } from "../constants/grants";
 import { defaultExampleFormData } from "../types/example-type";
+import { LabelWithHelp } from "../components/help-tip";
 import { reportError } from "../utils/report-error";
 
 const isJsonOrEmpty = (text: string) => {
@@ -216,8 +217,12 @@ function ExampleEditPage() {
           mb="md"
         />
         <Textarea
-          label="JSON"
-          description="Any JSON value; leave empty for none"
+          label={
+            <LabelWithHelp
+              label="JSON"
+              help="Any JSON value; leave empty for none"
+            />
+          }
           autosize
           minRows={3}
           ff="monospace"
@@ -226,8 +231,12 @@ function ExampleEditPage() {
         />
         {!isNew && (
           <TextInput
-            label="UUID"
-            description="Assigned by the server on create; read-only"
+            label={
+              <LabelWithHelp
+                label="UUID"
+                help="Assigned by the server on create; read-only"
+              />
+            }
             value={exampleUuid}
             readOnly
             ff="monospace"

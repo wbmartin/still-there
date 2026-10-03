@@ -54,12 +54,6 @@ h1 {
     }
 }
 
-/* Sortable list-page column headers */
-.sortable-column {
-    cursor: pointer;
-    user-select: none;
-}
-
 /* Stop the notifications stack from stretching children */
 .mantine-Notifications-root {
     align-items: flex-end;

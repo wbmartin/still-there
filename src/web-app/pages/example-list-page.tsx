@@ -16,6 +16,7 @@ import { useRowsPerPage } from "../hooks/use-preference";
 import { confirmDelete } from "../utils/confirm-delete";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
+import { SortTh } from "../components/sort-th";
 import { reportError } from "../utils/report-error";
 
 function ExampleListPage() {
@@ -160,38 +161,34 @@ function ExampleListPage() {
       <Table>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("exampleId")}
-            >
-              ID{" "}
-              {sortColumn === "exampleId" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("exampleText")}
-            >
-              Text{" "}
-              {sortColumn === "exampleText" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("exampleInt")}
-            >
-              Int{" "}
-              {sortColumn === "exampleInt" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("exampleFloat")}
-            >
-              Float{" "}
-              {sortColumn === "exampleFloat" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
+            <SortTh
+              label="ID"
+              column="exampleId"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Text"
+              column="exampleText"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Int"
+              column="exampleInt"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Float"
+              column="exampleFloat"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
             <Table.Th>UUID</Table.Th>
             <Table.Th>Actions</Table.Th>
           </Table.Tr>

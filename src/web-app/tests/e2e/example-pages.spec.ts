@@ -9,7 +9,15 @@ test.describe("example pages", () => {
   }) => {
     await page.goto("/example?exampleId=new");
     await page.getByLabel("Text", { exact: true }).fill("e2e jsonb example");
-    await page.getByLabel("JSON").fill('{"colour": "teal", "count": 3}');
+    // Field help is behind an info icon (components/help-tip.tsx); its
+    // label also names the icon, so fields are found by role.
+    await page.getByRole("img", { name: "About JSON" }).focus();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "Any JSON value; leave empty for none",
+    );
+    await page
+      .getByRole("textbox", { name: "JSON" })
+      .fill('{"colour": "teal", "count": 3}');
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page).toHaveURL(/\/exampleList/);
 
@@ -23,8 +31,10 @@ test.describe("example pages", () => {
 
     // The edit page round-trips the JSON and shows the uuid read-only.
     await row.getByRole("button", { name: "Edit" }).click();
-    await expect(page.getByLabel("UUID")).toHaveValue(uuid);
-    const jsonField = page.getByLabel("JSON");
+    await expect(page.getByRole("textbox", { name: "UUID" })).toHaveValue(
+      uuid,
+    );
+    const jsonField = page.getByRole("textbox", { name: "JSON" });
     expect(JSON.parse(await jsonField.inputValue())).toEqual({
       colour: "teal",
       count: 3,
@@ -42,8 +52,13 @@ test.describe("example pages", () => {
       .getByRole("row", { name: /e2e jsonb example/ })
       .getByRole("button", { name: "Edit" })
       .click();
-    await expect(page.getByLabel("UUID")).toHaveValue(uuid);
-    expect(JSON.parse(await page.getByLabel("JSON").inputValue())).toEqual([
+    await expect(page.getByRole("textbox", { name: "UUID" })).toHaveValue(
+      uuid,
+    );
+    const editedJson = await page
+      .getByRole("textbox", { name: "JSON" })
+      .inputValue();
+    expect(JSON.parse(editedJson)).toEqual([
       1, 2, 3,
     ]);
 

@@ -19,6 +19,7 @@ import { confirmDelete } from "../utils/confirm-delete";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { User } from "../types/user-type";
+import { SortTh } from "../components/sort-th";
 import { reportError } from "../utils/report-error";
 
 function UserAdminPage() {
@@ -155,36 +156,34 @@ function UserAdminPage() {
       <Table>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("appUserId")}
-            >
-              ID{" "}
-              {sortColumn === "appUserId" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("userName")}
-            >
-              Username{" "}
-              {sortColumn === "userName" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("name")}
-            >
-              Name{" "}
-              {sortColumn === "name" && (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("email")}
-            >
-              Email{" "}
-              {sortColumn === "email" && (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
+            <SortTh
+              label="ID"
+              column="appUserId"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Username"
+              column="userName"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Name"
+              column="name"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Email"
+              column="email"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
             <Table.Th>Groups</Table.Th>
             <Table.Th>Status</Table.Th>
             <Table.Th>Actions</Table.Th>

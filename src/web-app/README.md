@@ -36,7 +36,11 @@ browser.
 
 - `pages/` — route components; entity pages are named
   `<entity>-list-page.tsx` / `<entity>-edit-page.tsx`
-- `components/` — shared UI components (modals, error boundary)
+- `components/` — shared UI components (modals, error boundary) and
+  shared leaves: `sort-th.tsx` (a sortable list-page `<th>` whose label is a
+  button, with `aria-sort`) and `help-tip.tsx` (`LabelWithHelp` puts field
+  help behind an info icon; use it as an input's `label` instead of
+  `description`)
 - `stores/` — Zustand state: one store per entity plus
   `create-entity-store.ts` (see below) and `auth-store.ts`
 - `schemas/` — zod form schemas (today only `loginSchema`; edit pages validate inline)
@@ -162,6 +166,8 @@ House pattern inside a page, in this order:
   page writes it through its own merge-style `setListParams` (a sort or a
   page change keeps every other parameter), reads `dir` strictly
   (anything but `desc` is `asc`), and clamps `?page=` to the last page.
+  Sortable headers are `SortTh`, handed the page's own `sortColumn`,
+  `sortDirection` and `handleSort`; the sort itself stays in the page.
 - `ROUTES` values are absolute; `navigate(ROUTES.X)`, never
   `` `/${ROUTES.X}` ``.
 
