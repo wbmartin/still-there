@@ -242,106 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B048 — nginx: keepalive actually used; plain redirect; IPv6
-
-- **Priority:** P2  **Area:** infra
-- **GRC:** `infra/uat-unified001/etc/nginx_uat-grc.atticustechnology.com:13-25,43-55`   **PROTO:** `infra/uat/etc/nginx_uat-proto.example.com:9-27,40-51` (+ prd); `src/api-srv/internal/security/app_helper.go:308-311`
-- **Ticket:** RG0013 / `3a3fc94`
-- **What:** `keepalive 64` is unused without `Connection ""`. GRC adds it,
-`X-Real-IP`, drops `Origin`, plain 301, `[::]:443`.
-- **Port notes:** Keep PROTO's 8088 and 20M body.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-PROTO ships `infra/uat/etc/nginx_uat-proto.example.com` and
-`infra/prd/etc/nginx_proto.example.com`; they differ only in hostname and
-app root, so each point applies to both. nginx terminates TLS, serves the
-bundle and proxies `/api/` to the Go API on loopback port 8088.
-
-**(1) The upstream keepalive pool is never used.** `upstream
-proto_api_server` asks for `keepalive 64;` (`:5-8`). `location /api/`
-(`:40-51`) sets `proxy_http_version 1.1` but never clears the `Connection`
-header. nginx's default for proxied requests is `Connection: close`, so Go
-closes every connection after one response and the pool stays empty. Each
-API call opens a new TCP connection to 8088 and leaves a socket in
-TIME_WAIT. On loopback the handshake is cheap. Under a burst (a load test,
-a list page firing many calls) TIME_WAIT sockets pile up and can exhaust
-ephemeral ports. This is a quality gap: the config claims a behaviour it
-does not have. It is not a security hole.
-
-**(2) The port-80 block is Certbot's generated form.** `:12-14` wraps the
-`return 301` in `if ($host = uat-proto.example.com)`, and `:19` falls
-through to `return 404; # managed by Certbot`. A request whose `Host`
-matches `server_name` always takes the `if`. The 404 is reached only when
-this block is the port-80 default server and the request names some other
-host. The behaviour is acceptable; the text is noise a reader must decode.
-The renew script uses `certbot certonly`
-(`infra/uat/bin/uat-proto-renew-web-certs:16`), which never edits this
-file, so the "managed by Certbot" comments only record its origin.
-
-**(3) No IPv6 on 443.** Port 80 listens on both stacks (`:16-17`), port 443
-only on IPv4 (`:24`, `listen 443 ssl;`). On a host whose name has an AAAA
-record, an IPv6 client gets the 301 over IPv6, then a refused connection on
-`[::]:443`. Browsers usually fall back to IPv4 after a delay; `curl`,
-monitors and some mobile networks do not. With no AAAA record nothing
-happens. This is a latent correctness bug.
-
-**(4) A redundant `Origin` line.** `:46` sets `Origin $http_origin`; nginx
-forwards `Origin` unchanged anyway, so CORS at
-`src/api-srv/internal/security/security_headers.go:76` is unaffected.
-
-#### What GRC changed
-
-GRC commit `3a3fc94` (RG0013, the post-sales infra mirrors) rewrote the site.
-In GRC's UAT conf (`infra/<uat-host>/etc/nginx_<site>`; prd is the same):
-
-1. Port 80 is a plain redirect (`:13-18`): `listen 80; listen [::]:80;`
-   then `return 301 https://<site>$request_uri;`. No `if`, no 404.
-2. Port 443 listens on both stacks (`:21-22`): `listen 443 ssl;` and
-   `listen [::]:443 ssl;`.
-3. `location /api/` (`:43-55`) adds `proxy_set_header Connection "";`
-   (`:46`), so nginx reuses the pooled connections, and
-   `proxy_set_header X-Real-IP $remote_addr;` (`:48`). It drops the
-   `Origin` line. `X-Forwarded-For $proxy_add_x_forwarded_for` stays.
-
-The ticket gives no separate reason; the lines arrived with the rewrite.
-No test pins them. Nothing in GRC's Go code reads
-`X-Real-IP` (grep finds only `X-Forwarded-For`, in
-`src/internal/security/client_ip.go:26`), so that header is set and unused.
-GRC also differs in port (8089) and body cap (`50m`, for PDF uploads); those
-are GRC-specific and do not port.
-
-#### Proposed fix for PROTO
-
-1. In both `infra/uat/etc/nginx_uat-proto.example.com` and
-   `infra/prd/etc/nginx_proto.example.com`, replace the port-80 block
-   (`:11-20`) with `listen 80; listen [::]:80; server_name <site>;
-   return 301 https://<site>$request_uri;`.
-2. Add `listen [::]:443 ssl;` under `:24`.
-3. In `location /api/`, add `proxy_set_header Connection "";` after
-   `proxy_http_version 1.1` and delete the `Origin` line (`:46`).
-4. Keep `X-Forwarded-For $proxy_add_x_forwarded_for` exactly as it is.
-   B007's agreed fix makes `ClientIP` take the entry `TRUSTED_PROXY_COUNT`
-   hops from the right; that relies on nginx appending `$remote_addr`.
-   Do not switch to overwriting the header.
-5. Leave out `X-Real-IP`: no PROTO code reads it, and a second client-IP
-   header invites trusting the wrong one. Keep 8088 and `20M`.
-6. Security headers are B022's change to the same file (move them off the
-   server level into each web location). Land B022 and B048 in one edit to
-   avoid two passes over the same lines.
-7. B072 (presales nginx template) should start from the result.
-
-Tests: none automated. On UAT: `nginx -t`; `curl -sI http://<site>/x`
-gives a 301; `curl -6 -sI https://<site>/` connects when AAAA exists;
-`ss -tn '( dport = :8088 )'` shows pooled connections after page loads.
-
-#### Open question for Brandon
-
-None.
-
 ### B049 — infra/README: runs-as table; layout with owners and modes
 
 - **Priority:** P2  **Area:** infra, docs
@@ -8915,3 +8815,105 @@ build to log "waiting" and then build the second commit.
 None.
 
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). `infra/uat/bin/uat-proto-build`: the lock tries `flock -n`, logs "waiting", then `flock -w 1800`; `build-proto_HOOKID.env` `HOOK_TIMEOUT=3600`. A `slack()` helper and `STEP` (`build lock`, `preflight`, `checkout`, `go toolchain`, `tests`, `go build`, `web build`, `registry push`, `install (migrate, swap, restart, health)`, `web publish`); the EXIT trap is armed before the lock, so a lock give-up or a preflight failure also Slacks (no separate give-up message). Failure text: `:x: $APP_ENV build FAILED at *<step>* (exit N) -- commit <full sha|?> on <host>. <service> is <state>`, plus "still on the previous build" only before install, "it may already run this commit, see the hook log" for install/web publish. Slack *started* after checkout with the full sha and `git log -1 --format=%s | cut -c1-90`; the deployed message gains `$APP_ENV` and the subject ("proto UAT" literal gone). Preflight adds `git psql pg_dump`, `backup/` to the writable dirs, and a `BUILD_STG` writable check with the chown hint (GRC :59-61; B049's note). `export GOTOOLCHAIN=auto` before the gate (also lets bin/300 `go install` staticcheck v0.8.1's Go 1.26, B040), then a `go toolchain` step compares `go env GOVERSION` in `src/api-srv` with `go.mod`'s `go` line by `sort -V` and fails by name. Docs: `infra/README.md` promotion flow, `doc/330` A7. Not done: prd promote has no lock and already Slacks the full sha; no prd build exists. Order unchanged (B058). Verified in ubuntu:24.04, fake `/srv/uat-proto`, local bare origin, stubbed go/npm/oras/systemctl/psql/pg_dump and a payload-capturing curl, old vs new: push landing mid-build, old B exits 1 at once with no Slack and the third commit is never built; new B logs waiting and builds and Slacks the third commit. Lock held past the wait (shortened to 3 s in a copy): old drops silently, new Slacks FAILED at *build lock*. Tests fail: old generic "FAILED (exit 1)", new FAILED at *tests* with full sha. Install fails: new FAILED at *install ...*, "may already run this commit". Host go1.22.0: old builds on, new fails at *go toolchain* by name. Missing pg_dump: old deploys, new fails at *preflight*. Happy path: started + deployed both carry the 40-char sha; `go env` sees `GOTOOLCHAIN=auto`. shellcheck 0.9.0: no warnings; only the same SC2317 (trap function) / pre-existing SC2015 notes. Host action (when post-sales UAT exists): recopy `bin/uat-proto-build`; set `HOOK_TIMEOUT=3600` in the server's `/srv/shrmpl/etc/build-proto_<hookid>.env`; install `postgresql-client` if `psql`/`pg_dump` are missing. Tests: all green, `gofmt -l` empty (no Go change): infra=15 go=687 unit=82 e2e=13 py=102.
+
+### B048 — COMPLETED — nginx: keepalive actually used; plain redirect; IPv6
+
+- **Priority:** P2  **Area:** infra
+- **GRC:** `infra/uat-unified001/etc/nginx_uat-grc.atticustechnology.com:13-25,43-55`   **PROTO:** `infra/uat/etc/nginx_uat-proto.example.com:9-27,40-51` (+ prd); `src/api-srv/internal/security/app_helper.go:308-311`
+- **Ticket:** RG0013 / `3a3fc94`
+- **What:** `keepalive 64` is unused without `Connection ""`. GRC adds it,
+`X-Real-IP`, drops `Origin`, plain 301, `[::]:443`.
+- **Port notes:** Keep PROTO's 8088 and 20M body.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+PROTO ships `infra/uat/etc/nginx_uat-proto.example.com` and
+`infra/prd/etc/nginx_proto.example.com`; they differ only in hostname and
+app root, so each point applies to both. nginx terminates TLS, serves the
+bundle and proxies `/api/` to the Go API on loopback port 8088.
+
+**(1) The upstream keepalive pool is never used.** `upstream
+proto_api_server` asks for `keepalive 64;` (`:5-8`). `location /api/`
+(`:40-51`) sets `proxy_http_version 1.1` but never clears the `Connection`
+header. nginx's default for proxied requests is `Connection: close`, so Go
+closes every connection after one response and the pool stays empty. Each
+API call opens a new TCP connection to 8088 and leaves a socket in
+TIME_WAIT. On loopback the handshake is cheap. Under a burst (a load test,
+a list page firing many calls) TIME_WAIT sockets pile up and can exhaust
+ephemeral ports. This is a quality gap: the config claims a behaviour it
+does not have. It is not a security hole.
+
+**(2) The port-80 block is Certbot's generated form.** `:12-14` wraps the
+`return 301` in `if ($host = uat-proto.example.com)`, and `:19` falls
+through to `return 404; # managed by Certbot`. A request whose `Host`
+matches `server_name` always takes the `if`. The 404 is reached only when
+this block is the port-80 default server and the request names some other
+host. The behaviour is acceptable; the text is noise a reader must decode.
+The renew script uses `certbot certonly`
+(`infra/uat/bin/uat-proto-renew-web-certs:16`), which never edits this
+file, so the "managed by Certbot" comments only record its origin.
+
+**(3) No IPv6 on 443.** Port 80 listens on both stacks (`:16-17`), port 443
+only on IPv4 (`:24`, `listen 443 ssl;`). On a host whose name has an AAAA
+record, an IPv6 client gets the 301 over IPv6, then a refused connection on
+`[::]:443`. Browsers usually fall back to IPv4 after a delay; `curl`,
+monitors and some mobile networks do not. With no AAAA record nothing
+happens. This is a latent correctness bug.
+
+**(4) A redundant `Origin` line.** `:46` sets `Origin $http_origin`; nginx
+forwards `Origin` unchanged anyway, so CORS at
+`src/api-srv/internal/security/security_headers.go:76` is unaffected.
+
+#### What GRC changed
+
+GRC commit `3a3fc94` (RG0013, the post-sales infra mirrors) rewrote the site.
+In GRC's UAT conf (`infra/<uat-host>/etc/nginx_<site>`; prd is the same):
+
+1. Port 80 is a plain redirect (`:13-18`): `listen 80; listen [::]:80;`
+   then `return 301 https://<site>$request_uri;`. No `if`, no 404.
+2. Port 443 listens on both stacks (`:21-22`): `listen 443 ssl;` and
+   `listen [::]:443 ssl;`.
+3. `location /api/` (`:43-55`) adds `proxy_set_header Connection "";`
+   (`:46`), so nginx reuses the pooled connections, and
+   `proxy_set_header X-Real-IP $remote_addr;` (`:48`). It drops the
+   `Origin` line. `X-Forwarded-For $proxy_add_x_forwarded_for` stays.
+
+The ticket gives no separate reason; the lines arrived with the rewrite.
+No test pins them. Nothing in GRC's Go code reads
+`X-Real-IP` (grep finds only `X-Forwarded-For`, in
+`src/internal/security/client_ip.go:26`), so that header is set and unused.
+GRC also differs in port (8089) and body cap (`50m`, for PDF uploads); those
+are GRC-specific and do not port.
+
+#### Proposed fix for PROTO
+
+1. In both `infra/uat/etc/nginx_uat-proto.example.com` and
+   `infra/prd/etc/nginx_proto.example.com`, replace the port-80 block
+   (`:11-20`) with `listen 80; listen [::]:80; server_name <site>;
+   return 301 https://<site>$request_uri;`.
+2. Add `listen [::]:443 ssl;` under `:24`.
+3. In `location /api/`, add `proxy_set_header Connection "";` after
+   `proxy_http_version 1.1` and delete the `Origin` line (`:46`).
+4. Keep `X-Forwarded-For $proxy_add_x_forwarded_for` exactly as it is.
+   B007's agreed fix makes `ClientIP` take the entry `TRUSTED_PROXY_COUNT`
+   hops from the right; that relies on nginx appending `$remote_addr`.
+   Do not switch to overwriting the header.
+5. Leave out `X-Real-IP`: no PROTO code reads it, and a second client-IP
+   header invites trusting the wrong one. Keep 8088 and `20M`.
+6. Security headers are B022's change to the same file (move them off the
+   server level into each web location). Land B022 and B048 in one edit to
+   avoid two passes over the same lines.
+7. B072 (presales nginx template) should start from the result.
+
+Tests: none automated. On UAT: `nginx -t`; `curl -sI http://<site>/x`
+gives a 301; `curl -6 -sI https://<site>/` connects when AAAA exists;
+`ss -tn '( dport = :8088 )'` shows pooled connections after page loads.
+
+#### Open question for Brandon
+
+None.
+
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). In `infra/uat/etc/nginx_uat-proto.example.com` and `infra/prd/etc/nginx_proto.example.com` (still differing only in hostname and app root): the port-80 block is a plain `listen 80; listen [::]:80; server_name <site>; return 301 https://<site>$request_uri;` (Certbot's `if`/`return 404` gone, so a port-80 request naming another host is now redirected to the site instead of 404 when this is the default server); 443 adds `listen [::]:443 ssl;`; `location /api/` adds `proxy_set_header Connection "";` after `proxy_http_version 1.1` and drops the `Origin` line. `X-Forwarded-For $proxy_add_x_forwarded_for` kept, with a comment that ClientIP counts hops from the right; `X-Real-IP` left out; 8088 and `20M` kept. B022's header move had already landed, so step 6 was moot; no presales nginx exists in `bin/6xx`/`etc/` (B072 starts from this). Verified in ubuntu:24.04 (nginx 1.24.0, self-signed certs, a Python HTTP/1.1 stub on 8088 logging each request's client port and headers): `nginx -t` passes for both sites, old and new. 100 `/api/health` calls: old used 100 upstream connections, each sent `Connection: close`, 100 TIME_WAIT; new used 10 (one per worker, held ESTABLISHED), no `Connection` header, no new TIME_WAIT; `Origin` still reaches the API. Listeners: old `0.0.0.0:443 0.0.0.0:80 [::]:80`, new adds `[::]:443`; `curl -6` to `[::1]:443` fails rc=7 old, 200 new. Port 80 with the site host: 301 to `https://<site>/x?y=1` both. certbot's nginx plugin (python3-certbot-nginx in the container) inserts `rewrite ^(/.well-known/acme-challenge/.*) $1 break;` at the top of the matching server block; with that and its challenge location added to the new port-80 block, the challenge path answers 200 and other paths 301, so `uat-proto-renew-web-certs` keeps working. No automated test (none named). Tests: all green, infra=15 go=687 unit=82 e2e=13 py=102, govulncheck clean, gofmt clean.

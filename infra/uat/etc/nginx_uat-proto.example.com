@@ -10,20 +10,19 @@ upstream proto_api_server {
 }
 
 
+# Plain redirect. certbot --nginx certonly answers its HTTP-01 challenge here
+# by inserting a server-level rewrite ... break ahead of this return.
 server {
-    if ($host = uat-proto.example.com) {
-        return 301 https://uat-proto.example.com$request_uri;
-    } # managed by Certbot
-
     listen 80;
     listen [::]:80;
     server_name uat-proto.example.com;
-    return 404; # managed by Certbot
+    return 301 https://uat-proto.example.com$request_uri;
 }
 
 
 server { # simple reverse-proxy
     listen       443 ssl;
+    listen       [::]:443 ssl;
     ssl_certificate /srv/uat-proto/crt/uat-proto.example.com/fullchain.pem;
     ssl_certificate_key /srv/uat-proto/crt/uat-proto.example.com/privkey.pem;
     server_name  uat-proto.example.com;
@@ -42,11 +41,15 @@ server { # simple reverse-proxy
     # headers (security.HeadersMiddleware) stand alone.
     location /api/ {
         proxy_pass http://proto_api_server/;
+        # HTTP/1.1 with Connection cleared, or nginx sends Connection: close
+        # and the upstream keepalive pool is never used.
         proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Host $http_host;
+        # Appends $remote_addr; ClientIP counts TRUSTED_PROXY_COUNT hops from
+        # the right, so never overwrite it.
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Origin $http_origin;
         proxy_redirect off;
         proxy_connect_timeout 30s;
         proxy_send_timeout    300s;
