@@ -240,129 +240,6 @@ published password off UAT hosts that already have it but makes the host
 env file the only source of truth? Recommendation: yes, and check the
 existing UAT host once by hand in the same ticket.
 
-### B022 — nginx: security headers per web location, none at server level
-
-- **Priority:** P1  **Area:** infra
-- **GRC:** `infra/uat-unified001/etc/nginx_uat-grc.atticustechnology.com:36-42,69-76`   **PROTO:** `infra/uat/etc/nginx_uat-proto.example.com:33-36,69-71` (+ prd); `src/api-srv/internal/security/security_headers.go:32-34`
-- **Ticket:** RG0043 1.5 / `535e7cb`
-- **What:** Server-level headers inherit into `/api/`: duplicates, and a relaxed
-header gets overridden by `DENY`. GRC moves them into `location /`.
-- **Port notes:** Add to `location /` when removing :33-36.
-- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Two layers set browser security headers, and on `/api/` both do.
-
-1. nginx, server level. `infra/uat/etc/nginx_uat-proto.example.com:33-36`
-   (the prd site is identical apart from names):
-
-       add_header X-Content-Type-Options "nosniff" always;
-       add_header X-Frame-Options "DENY" always;
-       add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-       add_header Strict-Transport-Security "max-age=31536000; ..." always;
-
-2. The Go API, on every response. `src/api-srv/cmd/server/main.go:118`
-   wraps the whole mux in `security.HeadersMiddleware`, which sets CSP,
-   HSTS (`...; includeSubDomains; preload`, `security_headers.go:27-30`),
-   `X-Frame-Options: DENY` (`:32-35`), `nosniff`, Referrer-Policy,
-   Permissions-Policy and cache headers.
-
-nginx's rule: a location inherits the server-level `add_header` lines only
-if it sets none of its own. `location /api/` (`:40-51`) sets none, so it
-inherits all four, and nginx adds them on top of the headers the API
-already sent through `proxy_pass`. Every API response therefore carries
-two `X-Frame-Options`, two `X-Content-Type-Options`, two `Referrer-Policy`
-and two `Strict-Transport-Security` headers, the last pair with different
-values (the API's has `preload`, nginx's does not). `curl -sI
-https://<site>/api/health | grep -ic '^x-frame-options'` should print 2
-(read from the config, not run on a host).
-
-What that does in a browser today: nothing visible, because the values
-agree. The real cost is latent. The moment any API route relaxes a header
-(the usual case is `X-Frame-Options: SAMEORIGIN` so the SPA can show a
-PDF from `/api/...` in an iframe; B083 describes that pattern), nginx
-still appends `DENY`, the browser sees two conflicting values and refuses
-to frame the page. The developer sees a correct Go handler and a broken
-page, and the cause is in a file on the host. A feature
-breaks; no protection is lost. So in PROTO this is a correctness trap and
-a quality gap, not a security hole; the item's P1 is high for PROTO,
-where no route relaxes a header yet.
-
-The file already knows about the inheritance rule: the comment at
-`:56-58` explains why `/assets/` (`:59-67`) and `= /index.html`
-(`:75-82`) repeat all four headers. It just did not apply the same logic
-to `/api/`. `location /` (`:69-71`) sets no header and so relies on the
-server-level block; it serves real files that sit at the web root
-(anything Vite copies from `public/`, such as a favicon). `/` itself and
-every SPA route fall through `try_files` to `/index.html`, an internal
-redirect into `location = /index.html`, which has its own headers.
-
-#### What GRC changed
-
-GRC hit the latent bug. Its file routes send `X-Frame-Options: SAMEORIGIN`
-so the SPA can embed uploaded PDFs (RG0026), and the server-level `DENY`
-broke the inline viewer. RG0043 item 1.5 (headline 5 in
-`RG0043 md:876-896`) records it and a first wrong fix: `proxy_hide_header
-X-Frame-Options` under `/api/` would have stripped Go's `SAMEORIGIN` and
-kept nginx's `DENY`.
-
-The fix, commit `535e7cb`, in both GRC site files
-(`infra/uat-unified001/etc/nginx_uat-grc.*`, prd in lockstep):
-
-- `:36-39`: comment: headers are set per web location, never at server
-  level, because a server-level `add_header` is inherited by `/api/`.
-- `:42`: in `location /api/`: "No add_header here: the API's own
-  security headers (security.HeadersMiddleware) stand alone."
-- `:70-76`: `location /` gains the four `add_header` lines.
-- `/assets/` (`:59-67`) and `= /index.html` (`:79-86`) keep theirs.
-
-No automated test. The ticket's host check is `curl -sI .../api/health |
-grep -ic '^x-frame-options'` returning 1, not 2, then opening a PDF in the
-browser (`RG0043 md:642-653`). The ticket notes the file was not run
-through `nginx -t` locally.
-
-#### Proposed fix for PROTO
-
-1. `infra/uat/etc/nginx_uat-proto.example.com:33-36`: delete the four
-   server-level `add_header` lines.
-2. Same file, `location / {` (`:69-71`): add the same four lines, with
-   `always`, above `try_files`.
-3. Replace the comment at `:56-58` with one placed before `location /api/`
-   that states the rule: headers are per web location, none at server
-   level, and `/api/` sets none because `HeadersMiddleware`
-   (`src/api-srv/internal/security/security_headers.go`) already does.
-4. Apply 1-3 identically to `infra/prd/etc/nginx_proto.example.com`; keep
-   the two files equal except for names.
-5. `doc/105-api-srv-tech-spec.md:212-219` lists the API's headers; add
-   one line that nginx adds none on `/api/`.
-
-Blind-copy traps: GRC's site has a different upstream port, a 50m body
-cap, `X-Real-IP` and `Connection ""`; keep PROTO's 8088 and 20M and leave
-the proxy lines to B048, which edits the same two files (land them
-together or rebase one on the other). Drop the RG0026/RG0043 references
-and the document-route wording from the comment. Hostnames stay
-`example.com`.
-
-Trade-off: nginx-generated errors under `/api/` (502 when the API is down,
-413 over the body cap) lose the four headers, since the API never sees
-those requests. HSTS still arrives on every page load from the web
-locations, so nothing material is lost.
-
-Depends on nothing. Related: B048 (same files), B083 (the first PROTO
-route that would relax a header), B059 (the API's own header set).
-
-Tests: none automated for `infra/`. On each host after `nginx -t &&
-systemctl reload nginx`: `curl -sI https://<site>/api/health` shows one
-`X-Frame-Options` and one HSTS; `curl -sI https://<site>/` and
-`https://<site>/assets/<file>` still show all four.
-
-#### Open question for Brandon
-
-None.
-
 ### B023 — fail2ban app jail bans real users on `/api/` 4xx
 
 - **Priority:** P1  **Area:** infra, docs
@@ -8861,6 +8738,130 @@ Tests: none automated. `shellcheck` both scripts; `diff` the uat and prd
 copies (only `:6` may differ without B045); on a host, run once and check
 `stat -c '%U:%G %a' crt/<site> crt/<site>/*.pem` shows `root:www-data 750`
 and `640`.
+
+#### Open question for Brandon
+
+None.
+
+### B022 — COMPLETED — nginx: security headers per web location, none at server level
+- **Completed:** 2026-10-02. The four browser security headers moved out of the server block into `location /` in `infra/uat/etc/nginx_uat-proto.example.com` and `infra/prd/etc/nginx_proto.example.com` (`/assets/` and `= /index.html` keep theirs); `/api/` sets none, and one comment before it states the rule, replacing the old repeat-in-every-location comment. `doc/105-api-srv-tech-spec.md` notes that nginx adds none of the API headers on `/api/`. No deviation; B048 proxy lines left alone. Verified in ubuntu:24.04 with dummy certs and a stub API on 8088 sending SAMEORIGIN and HSTS with preload: old conf gave `/api/x` two X-Frame-Options (DENY and SAMEORIGIN), two HSTS and two nosniff; new conf gives one of each (the API's), while `/`, an SPA route, `/favicon.ico` and `/assets/` still carry all four; `nginx -t` passes for both sites. Tests: all green, go=279 unit=42 e2e=10 py=79
+
+- **Priority:** P1  **Area:** infra
+- **GRC:** `infra/uat-unified001/etc/nginx_uat-grc.atticustechnology.com:36-42,69-76`   **PROTO:** `infra/uat/etc/nginx_uat-proto.example.com:33-36,69-71` (+ prd); `src/api-srv/internal/security/security_headers.go:32-34`
+- **Ticket:** RG0043 1.5 / `535e7cb`
+- **What:** Server-level headers inherit into `/api/`: duplicates, and a relaxed
+header gets overridden by `DENY`. GRC moves them into `location /`.
+- **Port notes:** Add to `location /` when removing :33-36.
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Two layers set browser security headers, and on `/api/` both do.
+
+1. nginx, server level. `infra/uat/etc/nginx_uat-proto.example.com:33-36`
+   (the prd site is identical apart from names):
+
+       add_header X-Content-Type-Options "nosniff" always;
+       add_header X-Frame-Options "DENY" always;
+       add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+       add_header Strict-Transport-Security "max-age=31536000; ..." always;
+
+2. The Go API, on every response. `src/api-srv/cmd/server/main.go:118`
+   wraps the whole mux in `security.HeadersMiddleware`, which sets CSP,
+   HSTS (`...; includeSubDomains; preload`, `security_headers.go:27-30`),
+   `X-Frame-Options: DENY` (`:32-35`), `nosniff`, Referrer-Policy,
+   Permissions-Policy and cache headers.
+
+nginx's rule: a location inherits the server-level `add_header` lines only
+if it sets none of its own. `location /api/` (`:40-51`) sets none, so it
+inherits all four, and nginx adds them on top of the headers the API
+already sent through `proxy_pass`. Every API response therefore carries
+two `X-Frame-Options`, two `X-Content-Type-Options`, two `Referrer-Policy`
+and two `Strict-Transport-Security` headers, the last pair with different
+values (the API's has `preload`, nginx's does not). `curl -sI
+https://<site>/api/health | grep -ic '^x-frame-options'` should print 2
+(read from the config, not run on a host).
+
+What that does in a browser today: nothing visible, because the values
+agree. The real cost is latent. The moment any API route relaxes a header
+(the usual case is `X-Frame-Options: SAMEORIGIN` so the SPA can show a
+PDF from `/api/...` in an iframe; B083 describes that pattern), nginx
+still appends `DENY`, the browser sees two conflicting values and refuses
+to frame the page. The developer sees a correct Go handler and a broken
+page, and the cause is in a file on the host. A feature
+breaks; no protection is lost. So in PROTO this is a correctness trap and
+a quality gap, not a security hole; the item's P1 is high for PROTO,
+where no route relaxes a header yet.
+
+The file already knows about the inheritance rule: the comment at
+`:56-58` explains why `/assets/` (`:59-67`) and `= /index.html`
+(`:75-82`) repeat all four headers. It just did not apply the same logic
+to `/api/`. `location /` (`:69-71`) sets no header and so relies on the
+server-level block; it serves real files that sit at the web root
+(anything Vite copies from `public/`, such as a favicon). `/` itself and
+every SPA route fall through `try_files` to `/index.html`, an internal
+redirect into `location = /index.html`, which has its own headers.
+
+#### What GRC changed
+
+GRC hit the latent bug. Its file routes send `X-Frame-Options: SAMEORIGIN`
+so the SPA can embed uploaded PDFs (RG0026), and the server-level `DENY`
+broke the inline viewer. RG0043 item 1.5 (headline 5 in
+`RG0043 md:876-896`) records it and a first wrong fix: `proxy_hide_header
+X-Frame-Options` under `/api/` would have stripped Go's `SAMEORIGIN` and
+kept nginx's `DENY`.
+
+The fix, commit `535e7cb`, in both GRC site files
+(`infra/uat-unified001/etc/nginx_uat-grc.*`, prd in lockstep):
+
+- `:36-39`: comment: headers are set per web location, never at server
+  level, because a server-level `add_header` is inherited by `/api/`.
+- `:42`: in `location /api/`: "No add_header here: the API's own
+  security headers (security.HeadersMiddleware) stand alone."
+- `:70-76`: `location /` gains the four `add_header` lines.
+- `/assets/` (`:59-67`) and `= /index.html` (`:79-86`) keep theirs.
+
+No automated test. The ticket's host check is `curl -sI .../api/health |
+grep -ic '^x-frame-options'` returning 1, not 2, then opening a PDF in the
+browser (`RG0043 md:642-653`). The ticket notes the file was not run
+through `nginx -t` locally.
+
+#### Proposed fix for PROTO
+
+1. `infra/uat/etc/nginx_uat-proto.example.com:33-36`: delete the four
+   server-level `add_header` lines.
+2. Same file, `location / {` (`:69-71`): add the same four lines, with
+   `always`, above `try_files`.
+3. Replace the comment at `:56-58` with one placed before `location /api/`
+   that states the rule: headers are per web location, none at server
+   level, and `/api/` sets none because `HeadersMiddleware`
+   (`src/api-srv/internal/security/security_headers.go`) already does.
+4. Apply 1-3 identically to `infra/prd/etc/nginx_proto.example.com`; keep
+   the two files equal except for names.
+5. `doc/105-api-srv-tech-spec.md:212-219` lists the API's headers; add
+   one line that nginx adds none on `/api/`.
+
+Blind-copy traps: GRC's site has a different upstream port, a 50m body
+cap, `X-Real-IP` and `Connection ""`; keep PROTO's 8088 and 20M and leave
+the proxy lines to B048, which edits the same two files (land them
+together or rebase one on the other). Drop the RG0026/RG0043 references
+and the document-route wording from the comment. Hostnames stay
+`example.com`.
+
+Trade-off: nginx-generated errors under `/api/` (502 when the API is down,
+413 over the body cap) lose the four headers, since the API never sees
+those requests. HSTS still arrives on every page load from the web
+locations, so nothing material is lost.
+
+Depends on nothing. Related: B048 (same files), B083 (the first PROTO
+route that would relax a header), B059 (the API's own header set).
+
+Tests: none automated for `infra/`. On each host after `nginx -t &&
+systemctl reload nginx`: `curl -sI https://<site>/api/health` shows one
+`X-Frame-Options` and one HSTS; `curl -sI https://<site>/` and
+`https://<site>/assets/<file>` still show all four.
 
 #### Open question for Brandon
 

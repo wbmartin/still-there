@@ -321,6 +321,10 @@ every check has passed.
 - **X-Permitted-Cross-Domain-Policies**: Restricts Flash cross-domain requests
 - **Cache-Control**: Prevents caching of sensitive API responses
 
+nginx adds none of these on `/api/`; it sets its own four (nosniff,
+frame, referrer, HSTS) on the web locations only, so each API header
+arrives once.
+
 ### Multi-tenancy
 - **Security Context**: Integer identifier for tenant isolation
 - **Data Segregation**: All queries filter by `security_context`

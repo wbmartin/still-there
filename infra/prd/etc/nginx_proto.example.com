@@ -32,13 +32,14 @@ server { # simple reverse-proxy
     root    /srv/prd-proto/web-pub ;
     index index.html;
     client_max_body_size 20M;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "DENY" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
+    # Security headers are set per web location, never at server level: a
+    # location that sets any add_header drops every server-level one, and one
+    # that sets none (like /api/) inherits them all on top of its own.
+    #
     # The API. The trailing slash strips the /api prefix, because the Go server
-    # registers /health, not /api/health.
+    # registers /health, not /api/health. No add_header here: the API's own
+    # headers (security.HeadersMiddleware) stand alone.
     location /api/ {
         proxy_pass http://proto_api_server/;
         proxy_http_version 1.1;
@@ -54,10 +55,6 @@ server { # simple reverse-proxy
 
     # Hashed filenames, so the content at a given URL never changes. immutable
     # stops the browser revalidating on every navigation.
-    #
-    # The four security headers are repeated in every location block on purpose:
-    # a single add_header anywhere in a location silently discards ALL
-    # server-level add_headers for that location.
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable" always;
@@ -69,6 +66,10 @@ server { # simple reverse-proxy
     }
 
     location / {
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         try_files $uri $uri/ /index.html;
     }
 
