@@ -1,0 +1,39 @@
+# scripts/check-doc-paths.sh allowlist: <document>:<token>, one per line.
+# Only for a name that is real but never in this tree. Each group says why.
+# A stale path is fixed in the document, never listed here.
+
+# Inside the presales bundle bin/600 builds (dist/<name>/) or under the
+# presales app root on the host bin/610 installs into.
+doc/320-presales-uat-deploy.md:deploy.sh
+doc/320-presales-uat-deploy.md:deploy.env
+doc/320-presales-uat-deploy.md:db.sql
+doc/320-presales-uat-deploy.md:000-roles.sql
+doc/320-presales-uat-deploy.md:api-srv.env
+doc/320-presales-uat-deploy.md:etc/api-srv.env
+doc/320-presales-uat-deploy.md:etc/deploy.env
+doc/330-uat-postsales-cutover.md:deploy.sh
+doc/330-uat-postsales-cutover.md:deploy.env
+doc/330-uat-postsales-cutover.md:etc/api-srv.env
+doc/330-uat-postsales-cutover.md:etc/deploy.env
+doc/340-db-host-setup.md:000-roles.sql
+infra/README.md:deploy.sh
+infra/README.md:deploy.env
+infra/README.md:etc/api-srv.env
+
+# Certbot's certificate files on a host (crt/<site>/).
+doc/330-uat-postsales-cutover.md:fullchain.pem
+doc/330-uat-postsales-cutover.md:privkey.pem
+doc/331-prd-postsales-install.md:fullchain.pem
+doc/331-prd-postsales-install.md:privkey.pem
+infra/README.md:fullchain.pem
+infra/README.md:privkey.pem
+
+# Named as it is after the example `bin/000-rebrand acme` the document
+# walks through (uat-proto-test.env here).
+DERIVING.md:infra/uat/etc/uat-acme-test.env
+
+# Copy targets of the "add an entity widget" example.
+src/web-app/README.md:types/widget-type.ts
+src/web-app/README.md:stores/widget-store.ts
+src/web-app/README.md:pages/widget-list-page.tsx
+src/web-app/README.md:pages/widget-edit-page.tsx

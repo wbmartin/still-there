@@ -37,8 +37,9 @@ go run ./cmd/migrate -url "postgres://postgres:<pw>@127.0.0.1:5432/loc_proto_db"
 #   expect: 0001  initial_schema   applied <now> by postgres
 ```
 
-An existing database built by hand from the old `sql/010-initialcreate.sql`
-already has the 0001 schema: bring it under the migrator with
+An existing database built by hand from the old (since deleted)
+sql/010-initialcreate.sql already has the 0001 schema: bring it under the
+migrator with
 `go run ./cmd/migrate -url ... stamp 1` instead of `up`.
 
 For a deployed environment, the DDL owner role and default privileges are a

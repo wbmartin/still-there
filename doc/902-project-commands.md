@@ -52,8 +52,9 @@ To build and package the web app for deployment:
 
 The one command, on a laptop or a build host:
 ```
-./bin/300-run-tests            # all: infra + go + govulncheck + unit + e2e + py (load is not part of all)
+./bin/300-run-tests            # all: infra + docs + go + govulncheck + unit + e2e + py (load is not part of all)
 ./bin/300-run-tests infra      # infra/<host>/bin: bash -n, shared copies identical across hosts
+./bin/300-run-tests docs       # scripts/check-doc-paths.sh: backticked repo paths in docs exist
 ./bin/300-run-tests go         # gofmt, go vet, staticcheck, go test (run before every commit)
 ./bin/300-run-tests unit       # eslint, vitest (src/web-app)
 ./bin/300-run-tests e2e        # Playwright only
@@ -64,6 +65,15 @@ The one command, on a laptop or a build host:
   scratch database names, `TEST_PG_URL_BASE` for the migrator,
   `TEST_DATABASE_URL` for the Go repository suite, `E2E_API_ENV`
   for the API instance the e2e/py suites start, `TEST_LOG_DIR`.
+- `docs`: `scripts/check-doc-paths.sh` reads every backticked token in
+  `CLAUDE.md`, `DERIVING.md`, the READMEs and `doc/*.md` (not doc/700,
+  which quotes GRC paths), keeps the ones that look like repo paths, and
+  resolves each by prefix (`bin/215`), against a package root
+  (`internal/...`, `bin/uat-proto-build` under `infra/uat/`) or by
+  basename. A miss prints `MISS <doc>:<line> <token>` and fails the run;
+  so does an entry in `scripts/doc-paths-allow.txt` its document no longer
+  names. Skips URLs, absolute paths, `<placeholder>`s and gitignored
+  runtime dirs. The `docs=` count is path tokens checked.
 - `go`: first, in each Go module (`src/api-srv`, `src/load-test`):
   `gofmt -l .` (any file listed fails; fix with `gofmt -w`), `go vet ./...`
   and `staticcheck ./...`. Checks only, nothing is rewritten; zero

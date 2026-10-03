@@ -454,103 +454,6 @@ repository and a prod repository that promote copies into, or accept that
 UAT's credential can move `:prd`? Recommendation: split; it is the only
 way a UAT compromise cannot ship to prod.
 
-### B053 — `scripts/check-doc-paths.sh`: backticked paths must exist
-
-- **Priority:** P2  **Area:** docs, bin
-- **GRC:** `tickets/03-done/RG0011-doc-history-to-engineering-log/check-doc-paths.sh:1-4` (whole file); RG0010 md `:155-163`   **PROTO:** new `scripts/check-doc-paths.sh`; `CLAUDE.md:70-74`; `doc/902-project-commands.md`
-- **Ticket:** RG0011
-- **What:** Resolves every backticked path in docs and READMEs; exits 1 on a
-miss. On PROTO: 35 of 207 missing in 16 docs (B090).
-- **Port notes:** `cd` to repo root; allowlist placeholders
-(`src/web-app/README.md:77-80`). Wire into bin/300 or the skill.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-A docs/DX gap. Nothing checks that a path a document names still exists.
-PROTO's only doc-side check is `scripts/lint-tickets.py` (`CLAUDE.md:70-74`),
-which reads ticket frontmatter, not paths. `bin/300-run-tests` runs Go,
-vitest, Playwright and pytest; no doc step.
-
-GRC's script, run read-only against PROTO on 2026-10-02 (copied to the
-scratchpad, `cd` pointed at PROTO, `doc/700` excluded because it names GRC
-paths on purpose): "checked 207 path tokens in 16 documents, 34 missing".
-The doc/700 entry says 35; the run gives 34. "16 docs" is the number
-scanned; the misses sit in 6 of them. Sorted by cause:
-
-1. **Stale, real (4).** `doc/330-presales-to-postsales-migration.md:37` and
-   `:131` name `sql/ddl-role-host-setup.sql`, deleted by PS0015 (`0981ddb`,
-   replaced by `doc/340`). `doc/810-create-new-entity-type-notes.md:20`
-   names `user-group-edit-page.tsx`; the file is
-   `app-user-group-edit-page.tsx`. `doc/050-dev-env-init.md:35` backticks
-   the deleted `sql/010-initialcreate.sql` in prose about history.
-2. **Placeholders (7).** `src/web-app/README.md:77-80` (`widget-*` copy
-   targets) and `doc/810:51,55,61` (`entity_model.go`,
-   `entity_repository.go`, `entity_handler.go` meaning "your entity").
-3. **Host or bundle paths (23).** `doc/320` (8), `doc/330` (13), `doc/340`
-   (2): `deploy.sh`, `db.sql`, `000-roles.sql`, `etc/api-srv.env` inside
-   the presales bundle, and `bin/uat-proto-build`, `etc/uat-proto-*.env`,
-   which exist under `infra/uat/` but GRC's resolver does not look there.
-
-So the real rot is small today (4), but a reader cannot tell a stale path
-from a host path, and nothing stops the next rename from adding more.
-
-#### What GRC changed
-
-RG0011 wrote
-`tickets/03-done/RG0011-doc-history-to-engineering-log/check-doc-paths.sh`.
-The doc/700 ref ":1-4 (whole file)" is wrong: the file is 82 lines. It
-greps backticked tokens from `doc/*.md` and the READMEs (`:33`), keeps
-tokens that end in a repo extension or start at a top-level dir (`:67-71`),
-skips URLs, absolute paths, `<`/`*`/`{`/`NNN` placeholders and gitignored
-runtime dirs (`:63-66,72`), and resolves by prefix, against package roots,
-or by basename anywhere (`:44-58`). A miss prints file:line; exit 1
-(`:75,82`). Its rule (`:25-26`): "A document that names a file which was
-deleted says so in prose, without backticks."
-
-RG0010 (`:155-163`) used a one-line version of the same check for
-`CLAUDE.md` and `doc/902`. RG0011 closed at "228 path tokens in 13
-documents, 0 missing".
-
-GRC never wired it into a gate: it lives in a done ticket folder, and no
-`bin/`, `CLAUDE.md` or `doc/` file calls it. Run read-only on GRC today:
-"checked 345 path tokens in 17 documents, 16 missing". It rotted from 0 to
-16 in ten days. That is the strongest argument for wiring it in.
-
-#### Proposed fix for PROTO
-
-1. Add `scripts/check-doc-paths.sh` next to `lint-tickets.py`. `cd` with
-   `"$(dirname "$0")/.."`, not GRC's `../../..` (`:31`).
-2. `BASES` (`:34-35`): drop GRC's `src/migrate-srv`, `src/worker-srv`,
-   `src/internal`, `doc/evidence-for-import`. Use `. src src/api-srv
-   src/api-srv/internal src/web-app tests doc bin infra/uat infra/prd`.
-   Adding `infra/*` resolves 5 of the host-path misses.
-3. `DOCS` (`:33`): `doc/*.md` minus `doc/700` (it cites GRC), the four
-   READMEs, `DERIVING.md`, `infra/README.md`. Leave `.claude/skills` out
-   for now: a trial run gave 42 misses there, nearly all placeholders and
-   bundle names.
-4. Add an allowlist file (for example `scripts/doc-paths-allow.txt`,
-   `file:token` per line) for the placeholders and bundle names, rather
-   than widening the skip regex. Better still, rewrite placeholders as
-   `<entity>_model.go`, which the existing `<` skip already handles.
-5. Fix the 4 real misses in the same change so the script lands green.
-6. Wire it in: a `docs` mode in `bin/300-run-tests` and in `all`, plus a
-   line in `CLAUDE.md` next to the `lint-tickets.py` block and in
-   `doc/902-project-commands.md`.
-7. Run under `/bin/bash` 3.2 on macOS: the copy failed to parse once
-   without an explicit UTF-8 locale (likely the `'…'` at `:64`). Replace
-   the ellipsis with ASCII or set `LC_ALL` in the script.
-8. Dependency: B051 rewrites `doc/105`; run the script after it.
-   Tests: the script is the test; no unit test for it.
-
-#### Open question for Brandon
-
-Should a doc-path miss fail the `all` gate (blocking a merge) or only
-print a warning? Recommendation: fail it, since GRC's unwired copy went
-from 0 to 16 misses in ten days.
-
 ### B054 — Mirror drift tests: hand-coded contract, tested both sides
 
 - **Priority:** P2  **Area:** docs, web-app, tests
@@ -8921,3 +8824,102 @@ one line in `CLAUDE.md` pointing at the `DERIVING.md` paragraph, because
 the leak happens during later import work, long after derivation.
 
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: both). `DERIVING.md` section 2: a paragraph under the secrets table — customer source data and anything derived from it (including mock data built from real records) lives outside the repo in a directory named by a key in the app's env file; the key is the derived app's to add (no `IMPORT_DATA_DIR` copied, ProtoStack has no import path); fixtures, seeds and mock data are synthetic; the cost of a leak (new repository, webhooks, deploy key, re-clone; GRC RG0044, described without the ticket id since ProtoStack carries no ticket system after B091). `CLAUDE.md` Conventions: two bullets after the config rule — customer data never in git (pointing at `DERIVING.md` section 2), and show only what the code verified (a count counts confirmed results, a metric is measured or absent, a missing value stays missing; nothing fabricated reaches a screen, report or log). Step 3 checked: `local-seed.sql`/`test-seed.sql` are synthetic; no `.gitignore` entry (the data directory sits outside the repo). Step 4: B042 had already removed the load test's fixed CPU/memory numbers (no `CPUUsage`/`--monitor-server` left in `src/load-test`). No tests (rules, per step 5). Tests: all green, infra=15 go=687 unit=82 e2e=13 py=102, govulncheck clean, gofmt clean.
+
+### B053 — COMPLETED — `scripts/check-doc-paths.sh`: backticked paths must exist
+
+- **Priority:** P2  **Area:** docs, bin
+- **GRC:** `tickets/03-done/RG0011-doc-history-to-engineering-log/check-doc-paths.sh:1-4` (whole file); RG0010 md `:155-163`   **PROTO:** new `scripts/check-doc-paths.sh`; `CLAUDE.md:70-74`; `doc/902-project-commands.md`
+- **Ticket:** RG0011
+- **What:** Resolves every backticked path in docs and READMEs; exits 1 on a
+miss. On PROTO: 35 of 207 missing in 16 docs (B090).
+- **Port notes:** `cd` to repo root; allowlist placeholders
+(`src/web-app/README.md:77-80`). Wire into bin/300 or the skill.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+A docs/DX gap. Nothing checks that a path a document names still exists.
+PROTO's only doc-side check is `scripts/lint-tickets.py` (`CLAUDE.md:70-74`),
+which reads ticket frontmatter, not paths. `bin/300-run-tests` runs Go,
+vitest, Playwright and pytest; no doc step.
+
+GRC's script, run read-only against PROTO on 2026-10-02 (copied to the
+scratchpad, `cd` pointed at PROTO, `doc/700` excluded because it names GRC
+paths on purpose): "checked 207 path tokens in 16 documents, 34 missing".
+The doc/700 entry says 35; the run gives 34. "16 docs" is the number
+scanned; the misses sit in 6 of them. Sorted by cause:
+
+1. **Stale, real (4).** `doc/330-presales-to-postsales-migration.md:37` and
+   `:131` name `sql/ddl-role-host-setup.sql`, deleted by PS0015 (`0981ddb`,
+   replaced by `doc/340`). `doc/810-create-new-entity-type-notes.md:20`
+   names `user-group-edit-page.tsx`; the file is
+   `app-user-group-edit-page.tsx`. `doc/050-dev-env-init.md:35` backticks
+   the deleted `sql/010-initialcreate.sql` in prose about history.
+2. **Placeholders (7).** `src/web-app/README.md:77-80` (`widget-*` copy
+   targets) and `doc/810:51,55,61` (`entity_model.go`,
+   `entity_repository.go`, `entity_handler.go` meaning "your entity").
+3. **Host or bundle paths (23).** `doc/320` (8), `doc/330` (13), `doc/340`
+   (2): `deploy.sh`, `db.sql`, `000-roles.sql`, `etc/api-srv.env` inside
+   the presales bundle, and `bin/uat-proto-build`, `etc/uat-proto-*.env`,
+   which exist under `infra/uat/` but GRC's resolver does not look there.
+
+So the real rot is small today (4), but a reader cannot tell a stale path
+from a host path, and nothing stops the next rename from adding more.
+
+#### What GRC changed
+
+RG0011 wrote
+`tickets/03-done/RG0011-doc-history-to-engineering-log/check-doc-paths.sh`.
+The doc/700 ref ":1-4 (whole file)" is wrong: the file is 82 lines. It
+greps backticked tokens from `doc/*.md` and the READMEs (`:33`), keeps
+tokens that end in a repo extension or start at a top-level dir (`:67-71`),
+skips URLs, absolute paths, `<`/`*`/`{`/`NNN` placeholders and gitignored
+runtime dirs (`:63-66,72`), and resolves by prefix, against package roots,
+or by basename anywhere (`:44-58`). A miss prints file:line; exit 1
+(`:75,82`). Its rule (`:25-26`): "A document that names a file which was
+deleted says so in prose, without backticks."
+
+RG0010 (`:155-163`) used a one-line version of the same check for
+`CLAUDE.md` and `doc/902`. RG0011 closed at "228 path tokens in 13
+documents, 0 missing".
+
+GRC never wired it into a gate: it lives in a done ticket folder, and no
+`bin/`, `CLAUDE.md` or `doc/` file calls it. Run read-only on GRC today:
+"checked 345 path tokens in 17 documents, 16 missing". It rotted from 0 to
+16 in ten days. That is the strongest argument for wiring it in.
+
+#### Proposed fix for PROTO
+
+1. Add `scripts/check-doc-paths.sh` next to `lint-tickets.py`. `cd` with
+   `"$(dirname "$0")/.."`, not GRC's `../../..` (`:31`).
+2. `BASES` (`:34-35`): drop GRC's `src/migrate-srv`, `src/worker-srv`,
+   `src/internal`, `doc/evidence-for-import`. Use `. src src/api-srv
+   src/api-srv/internal src/web-app tests doc bin infra/uat infra/prd`.
+   Adding `infra/*` resolves 5 of the host-path misses.
+3. `DOCS` (`:33`): `doc/*.md` minus `doc/700` (it cites GRC), the four
+   READMEs, `DERIVING.md`, `infra/README.md`. Leave `.claude/skills` out
+   for now: a trial run gave 42 misses there, nearly all placeholders and
+   bundle names.
+4. Add an allowlist file (for example `scripts/doc-paths-allow.txt`,
+   `file:token` per line) for the placeholders and bundle names, rather
+   than widening the skip regex. Better still, rewrite placeholders as
+   `<entity>_model.go`, which the existing `<` skip already handles.
+5. Fix the 4 real misses in the same change so the script lands green.
+6. Wire it in: a `docs` mode in `bin/300-run-tests` and in `all`, plus a
+   line in `CLAUDE.md` next to the `lint-tickets.py` block and in
+   `doc/902-project-commands.md`.
+7. Run under `/bin/bash` 3.2 on macOS: the copy failed to parse once
+   without an explicit UTF-8 locale (likely the `'…'` at `:64`). Replace
+   the ellipsis with ASCII or set `LC_ALL` in the script.
+8. Dependency: B051 rewrites `doc/105`; run the script after it.
+   Tests: the script is the test; no unit test for it.
+
+#### Open question for Brandon
+
+Should a doc-path miss fail the `all` gate (blocking a merge) or only
+print a warning? Recommendation: fail it, since GRC's unwired copy went
+from 0 to 16 misses in ten days.
+
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: a miss fails the gate). New `scripts/` dir: `scripts/check-doc-paths.sh` ported from GRC RG0011 (`cd` via `dirname`, `set -euo pipefail`, `LC_ALL=C`, the ellipsis as `$'\xe2\x80\xa6'` so the file is ASCII; bash 3.2 clean). Docs checked: `CLAUDE.md`, `DERIVING.md`, `README.md`, `doc/*.md` minus doc/700, `infra/README.md`, `src/*/README.md`, `src/web-app/schemas/README.md`, `tests/README.md` (21); `.claude/skills` left out per step 3. Bases per step 2 plus `src/api-srv/sql` (doc/810 names `migrations/0002_...`) and `infra/{uat,prd}/fail2ban` (infra/README names `etc/jail.local`, `bin/migrate-to-srv-config`); runtime skips add `src/web-app/coverage` and `tests/e2e/.auth` (a fresh copy without them otherwise missed). Two fixes over GRC: `find -print -quit` inside `[ -n ]` and a direct `grep -qxF` for the allowlist, since under pipefail `| grep -q` can fail on SIGPIPE. Allowlist `scripts/doc-paths-allow.txt` (`doc:token`, grouped with reasons): presales bundle/host names (`deploy.sh`, `deploy.env`, `db.sql`, `000-roles.sql`, `api-srv.env`, `etc/api-srv.env`, `etc/deploy.env`), certbot `fullchain.pem`/`privkey.pem`, DERIVING's post-rebrand `uat-acme-test.env`, the web-app README `widget-*` copy targets; an entry its doc no longer names fails as STALE. Real misses fixed: doc/050 names the deleted sql/010-initialcreate.sql in prose; doc/810 `app-user-group-edit-page.tsx`; doc/810 placeholders now `<entity>_model.go` etc. (doc/330's `sql/ddl-role-host-setup.sql` was already gone after the doc/330 rewrite). Wired as `bin/300-run-tests docs`, also in `all` (`docs=` = path tokens checked); `CLAUDE.md` layout + conventions bullet, `doc/902` mode list and a `docs` paragraph. Verified: `shellcheck` 0.9.0 clean in `ubuntu:24.04` (script and bin/300; one `SC2016` disable for the literal backticks in the grep pattern); the script run from a fresh copy there passes; a planted `bin/999-no-such-script` and a stale allow entry each exit 1. Tests: all green, infra=15 docs=478 go=687 unit=82 e2e=13 py=102, govulncheck clean, gofmt clean.

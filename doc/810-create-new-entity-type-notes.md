@@ -17,7 +17,7 @@ This document outlines the steps and key points for creating a new entity type i
 ## Naming Conventions
 - **Methods**: Use "Retrieve" for list retrieval (e.g., `RetrieveUserList`) and single-entity retrieval (e.g., `RetrieveUser`). Use Create/Update/Delete for mutations.
 - **Stores**: Singular naming (e.g., `useUserStore`, not `useUsersStore`).
-- **Pages**: Descriptive names (e.g., `app-user-list-page.tsx`, `user-group-edit-page.tsx`).
+- **Pages**: Descriptive names (e.g., `app-user-list-page.tsx`, `app-user-group-edit-page.tsx`).
 - **Routes**: `/entityList` for lists, `/entityEdit` for single operations.
 - **Grants**: Short codes with CRUD verbs (e.g., "READ_USER_GROUP", "CREATE_USER_GROUP").
 
@@ -48,11 +48,11 @@ This document outlines the steps and key points for creating a new entity type i
 3. **Data**: Insert initial data if needed (`src/api-srv/sql/fixtures/local-seed.sql` for a dev database in tenant 1; `test-seed.sql` for the test databases, tenant 2, never 1). The tenant lock covers a new table on its own. Updates to existing data (e.g., adding new grants to user groups) are migrations too: `src/api-srv/sql/migrations/NNNN_<name>.sql`.
 
 ## API-SRV
-1. **Model** (`src/api-srv/internal/model/entity_model.go`):
+1. **Model** (`src/api-srv/internal/model/<entity>_model.go`):
    - Struct with JSON and DB tags (camelCase JSON, snake_case DB).
    - Example: `ExampleModel` in `example_model.go`.
 
-2. **Repository** (`internal/repository/entity_repository.go`):
+2. **Repository** (`internal/repository/<entity>_repository.go`):
    - Methods: `RetrieveEntityList`, `CreateEntity`, `UpdateEntity`, `DeleteEntity`.
    - Call pgx directly (`r.db.QueryRow`, `Exec`, `Query`); there is no
      retry wrapper.
@@ -67,7 +67,7 @@ This document outlines the steps and key points for creating a new entity type i
      `ErrDeleted` or `ErrConflict`.
    - Example: `ExampleRepository` in `example_repository.go`.
 
-3. **Handler** (`internal/handler/entity_handler.go`):
+3. **Handler** (`internal/handler/<entity>_handler.go`):
    - Struct with `appsrv`, `entityRepo`.
    - Methods: `RetrieveEntityList`, `CreateEntity`, `UpdateEntity`, `DeleteEntity`.
    - Security: JWT, rate limit, CSRF, grants.
