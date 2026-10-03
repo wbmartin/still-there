@@ -150,7 +150,7 @@ internal/logging/  # slog wrapper with the code= attribute
 internal/security/ # AppHelper (explicit per-handler checks), client IP, headers/CORS
 internal/handler/  # HTTP handlers, one file per entity/concern
 internal/model/    # models, grants, DTOs
-internal/repository/  # data access
+internal/repository/  # data access; every write and its zero-row check carry the tenant
 sql/migrations/    # schema, applied by cmd/migrate
 sql/roles.sql       # database roles
 sql/fixtures/       # seed data

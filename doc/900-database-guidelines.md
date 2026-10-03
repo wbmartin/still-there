@@ -14,6 +14,12 @@ This section describes how I'd like an AI to think and respond for database desi
   field; handlers overwrite `security_context_id` on the way in. Tests
   therefore select their tenant by the seeded user they authenticate as, and a
   test that must prove isolation uses 1 and 2 as the two sides.
+- Every UPDATE/DELETE matches on the caller's tenant as well as the id, and
+  the follow-up check that explains a zero-row write ("absent" 404 vs
+  "stale `update_ts`" 409) uses the same tenant predicate. A row in another
+  tenant reads as absent, so an id is never confirmed across tenants. Two
+  named lookups are exempt: `RetrieveUserByUserName` and
+  `GetGrantsForGroups` (see doc/105, Optimistic Locking).
 - Don't create foreign keys / Postgres references within the database - managed in the application layer similar to how nosql is managed.
 - Don't create triggers for updating dates within the database - managed by the application layer.
 - Schema changes are versioned SQL files applied by the project's own migrator (`src/api-srv/cmd/migrate`); see "Schema changes" below. No third-party migration framework.

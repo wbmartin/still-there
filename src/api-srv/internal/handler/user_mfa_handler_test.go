@@ -122,7 +122,8 @@ func TestMFAVerifyHandler_TempTokenPath(t *testing.T) {
 		require.NoError(t, err)
 		repo := new(MockUserRepository)
 		repo.On("RetrieveUserByUserName", mock.Anything, "mfa").Return(user, nil)
-		repo.On("UpdateUserMFASetup", mock.Anything, 7, true, 1.5, 7).Return(2.5, nil)
+		repo.On("UpdateUserMFASetup", mock.Anything, 7, true, 1.5, 7, 1).
+			Return(2.5, nil)
 		repo.On("GetGrantsForGroups", mock.Anything, []int{1}).
 			Return(map[int][]int{1: {model.GrantLogon}}, nil)
 		w := httptest.NewRecorder()
@@ -218,7 +219,7 @@ func TestMFASetupHandler_TempTokenPath(t *testing.T) {
 		assert.NotContains(t, w.Body.String(), "qrCodeImage")
 		repo.AssertNotCalled(t, "UpdateUserTOTPSeed",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-			mock.Anything)
+			mock.Anything, mock.Anything)
 	})
 
 	t.Run("seed stored, never verified → 200 with the same secret", func(t *testing.T) {
@@ -233,7 +234,7 @@ func TestMFASetupHandler_TempTokenPath(t *testing.T) {
 		assert.Contains(t, w.Body.String(), "qrCodeImage")
 		repo.AssertNotCalled(t, "UpdateUserTOTPSeed",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-			mock.Anything)
+			mock.Anything, mock.Anything)
 	})
 
 	t.Run("no seed → 200, a new seed is stored", func(t *testing.T) {
@@ -244,7 +245,8 @@ func TestMFASetupHandler_TempTokenPath(t *testing.T) {
 		}
 		repo := new(MockUserRepository)
 		repo.On("RetrieveUserByUserName", mock.Anything, "mfa").Return(user, nil)
-		repo.On("UpdateUserTOTPSeed", mock.Anything, 7, mock.Anything, 1.5, 7).
+		repo.On("UpdateUserTOTPSeed",
+			mock.Anything, 7, mock.Anything, 1.5, 7, 1).
 			Return(2.5, nil)
 		w := httptest.NewRecorder()
 		MFASetupHandler(s, repo)(w, setupRequest())
@@ -379,9 +381,10 @@ func TestAdminResetUserMFA_ClearsTheLastTOTPStep(t *testing.T) {
 	repo := new(MockUserRepository)
 	repo.On("RetrieveUserList", mock.Anything, 1, []int{7}, float64(0)).
 		Return([]*model.AppUserModel{
-			{AppUserID: 7, UserName: "mfa", UpdateTS: 1.5},
+			{AppUserID: 7, UserName: "mfa", UpdateTS: 1.5,
+				SecurityContext: 1},
 		}, nil)
-	repo.On("UpdateUserTOTPSeed", mock.Anything, 7, "", 1.5, 1).
+	repo.On("UpdateUserTOTPSeed", mock.Anything, 7, "", 1.5, 1, 1).
 		Return(2.5, nil)
 	admin := sessionToken(t, s, "alice", 1, "session-admin",
 		[]int{model.GrantResetUserMFA})
@@ -413,9 +416,10 @@ func TestAdminResetUserMFARequiresGrant9020(t *testing.T) {
 			repo := new(MockUserRepository)
 			repo.On("RetrieveUserList", mock.Anything, 1, []int{7}, float64(0)).
 				Return([]*model.AppUserModel{
-					{AppUserID: 7, UserName: "mfa", UpdateTS: 1.5},
+					{AppUserID: 7, UserName: "mfa", UpdateTS: 1.5,
+						SecurityContext: 1},
 				}, nil)
-			repo.On("UpdateUserTOTPSeed", mock.Anything, 7, "", 1.5, 1).
+			repo.On("UpdateUserTOTPSeed", mock.Anything, 7, "", 1.5, 1, 1).
 				Return(2.5, nil)
 			admin := sessionToken(t, s, "alice", 1, "session-admin",
 				testCase.grantList)
@@ -428,7 +432,7 @@ func TestAdminResetUserMFARequiresGrant9020(t *testing.T) {
 				assert.Contains(t, w.Body.String(), "RESET_MFA_TOKEN")
 				repo.AssertNotCalled(t, "UpdateUserTOTPSeed",
 					mock.Anything, mock.Anything, mock.Anything,
-					mock.Anything, mock.Anything)
+					mock.Anything, mock.Anything, mock.Anything)
 			}
 		})
 	}

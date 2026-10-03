@@ -71,8 +71,10 @@ func (m *MockUserRepository) UpdateUserPassword(
 	hashedPassword string,
 	now float64,
 	updateUserID int,
+	securityContext int,
 ) error {
-	args := m.Called(ctx, userID, hashedPassword, now, updateUserID)
+	args := m.Called(
+		ctx, userID, hashedPassword, now, updateUserID, securityContext)
 	return args.Error(0)
 }
 
@@ -82,8 +84,10 @@ func (m *MockUserRepository) UpdateUserMFASetup(
 	mfaSetup bool,
 	expectedUpdateTS float64,
 	updateUserID int,
+	securityContext int,
 ) (float64, error) {
-	args := m.Called(ctx, userID, mfaSetup, expectedUpdateTS, updateUserID)
+	args := m.Called(ctx, userID, mfaSetup, expectedUpdateTS, updateUserID,
+		securityContext)
 	return args.Get(0).(float64), args.Error(1)
 }
 
@@ -93,8 +97,10 @@ func (m *MockUserRepository) UpdateUserTOTPSeed(
 	totpSeed string,
 	updateTS float64,
 	updateUserID int,
+	securityContext int,
 ) (float64, error) {
-	args := m.Called(ctx, userID, totpSeed, updateTS, updateUserID)
+	args := m.Called(ctx, userID, totpSeed, updateTS, updateUserID,
+		securityContext)
 	return args.Get(0).(float64), args.Error(1)
 }
 
@@ -104,8 +110,10 @@ func (m *MockUserRepository) UpdateUserMFAExempt(
 	mfaExempt bool,
 	updateTS float64,
 	updateUserID int,
+	securityContext int,
 ) (float64, error) {
-	args := m.Called(ctx, userID, mfaExempt, updateTS, updateUserID)
+	args := m.Called(ctx, userID, mfaExempt, updateTS, updateUserID,
+		securityContext)
 	return args.Get(0).(float64), args.Error(1)
 }
 

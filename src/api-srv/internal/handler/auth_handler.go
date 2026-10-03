@@ -854,6 +854,7 @@ func ChangeOwnPasswordHandler(
 			hashedPassword,
 			now,
 			jwtClaims.UserID,
+			user.SecurityContext,
 		)
 		if err != nil {
 			app.WriteError(

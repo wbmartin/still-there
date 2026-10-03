@@ -107,6 +107,9 @@ func (r *UserRepository) GetGrantsForGroups(
 				grants[securityContext] = grantList
 			}
 		}
+		if err := rowList.Err(); err != nil {
+			return fmt.Errorf("failed to read grant list: %w", err)
+		}
 
 		// Remove duplicates from grant lists
 		for context, grantList := range grants {
@@ -183,21 +186,24 @@ func (r *UserRepository) CreateUser(
 	return user, nil
 }
 
-// UpdateUserPassword updates a user's password
+// UpdateUserPassword updates a user's password. securityContext is the
+// row's own (home) tenant, not the JWT's active one.
 func (r *UserRepository) UpdateUserPassword(
 	ctx context.Context, userID int, newPasswordHash string,
-	updateTS float64, updateUserID int,
+	updateTS float64, updateUserID int, securityContext int,
 ) error {
 	query := `
 		UPDATE app_user
 		SET pw_hash = $1, update_ts = $2, update_user_id = $3
-		WHERE app_user_id = $4 AND delete_user_id IS NULL`
+		WHERE app_user_id = $4 AND security_context_id = $5
+		  AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		var err error
 		result, err = r.db.Exec(ctx, query,
-			newPasswordHash, updateTS, updateUserID, userID)
+			newPasswordHash, updateTS, updateUserID, userID,
+			securityContext)
 		return err
 	})
 	if err != nil {
@@ -205,7 +211,7 @@ func (r *UserRepository) UpdateUserPassword(
 	}
 
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("user not found")
+		return fmt.Errorf("user not found: %w", ErrNotFound)
 	}
 
 	return nil
@@ -214,19 +220,21 @@ func (r *UserRepository) UpdateUserPassword(
 // UpdateUserTOTPSeed updates a user's TOTP seed with optimistic locking
 func (r *UserRepository) UpdateUserTOTPSeed(
 	ctx context.Context, userID int, totpSeed string,
-	expectedUpdateTS float64, updateUserID int,
+	expectedUpdateTS float64, updateUserID int, securityContext int,
 ) (newUpdateTS float64, err error) {
 	newUpdateTS = CurrentTimestamp()
 	query := `
 		UPDATE app_user
 		SET totp_seed = $1, mfa_setup = false, update_ts = $2, update_user_id = $3
-		WHERE app_user_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+		WHERE app_user_id = $4 AND update_ts = $5
+		  AND security_context_id = $6 AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		var execErr error
 		result, execErr = r.db.Exec(ctx, query,
-			totpSeed, newUpdateTS, updateUserID, userID, expectedUpdateTS)
+			totpSeed, newUpdateTS, updateUserID, userID, expectedUpdateTS,
+			securityContext)
 		return execErr
 	})
 	if err != nil {
@@ -234,7 +242,8 @@ func (r *UserRepository) UpdateUserTOTPSeed(
 	}
 
 	if result.RowsAffected() == 0 {
-		return 0, fmt.Errorf("user not found or concurrent modification")
+		return 0, zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			userID, securityContext)
 	}
 
 	return newUpdateTS, nil
@@ -243,19 +252,21 @@ func (r *UserRepository) UpdateUserTOTPSeed(
 // UpdateUserMFASetup updates a user's MFA setup status with optimistic locking
 func (r *UserRepository) UpdateUserMFASetup(
 	ctx context.Context, userID int, mfaSetup bool,
-	expectedUpdateTS float64, updateUserID int,
+	expectedUpdateTS float64, updateUserID int, securityContext int,
 ) (newUpdateTS float64, err error) {
 	newUpdateTS = CurrentTimestamp()
 	query := `
 		UPDATE app_user
 		SET mfa_setup = $1, update_ts = $2, update_user_id = $3
-		WHERE app_user_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+		WHERE app_user_id = $4 AND update_ts = $5
+		  AND security_context_id = $6 AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		var execErr error
 		result, execErr = r.db.Exec(ctx, query,
-			mfaSetup, newUpdateTS, updateUserID, userID, expectedUpdateTS)
+			mfaSetup, newUpdateTS, updateUserID, userID, expectedUpdateTS,
+			securityContext)
 		return execErr
 	})
 	if err != nil {
@@ -263,7 +274,8 @@ func (r *UserRepository) UpdateUserMFASetup(
 	}
 
 	if result.RowsAffected() == 0 {
-		return 0, fmt.Errorf("user not found or concurrent modification")
+		return 0, zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			userID, securityContext)
 	}
 
 	return newUpdateTS, nil
@@ -272,19 +284,21 @@ func (r *UserRepository) UpdateUserMFASetup(
 // UpdateUserMFAExempt updates a user's MFA exempt status with optimistic locking
 func (r *UserRepository) UpdateUserMFAExempt(
 	ctx context.Context, userID int, mfaExempt bool,
-	expectedUpdateTS float64, updateUserID int,
+	expectedUpdateTS float64, updateUserID int, securityContext int,
 ) (newUpdateTS float64, err error) {
 	newUpdateTS = CurrentTimestamp()
 	query := `
 		UPDATE app_user
 		SET mfa_exempt = $1, update_ts = $2, update_user_id = $3
-		WHERE app_user_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+		WHERE app_user_id = $4 AND update_ts = $5
+		  AND security_context_id = $6 AND delete_user_id IS NULL`
 
 	var result pgconn.CommandTag
 	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
 		var execErr error
 		result, execErr = r.db.Exec(ctx, query,
-			mfaExempt, newUpdateTS, updateUserID, userID, expectedUpdateTS)
+			mfaExempt, newUpdateTS, updateUserID, userID, expectedUpdateTS,
+			securityContext)
 		return execErr
 	})
 	if err != nil {
@@ -292,7 +306,8 @@ func (r *UserRepository) UpdateUserMFAExempt(
 	}
 
 	if result.RowsAffected() == 0 {
-		return 0, fmt.Errorf("user not found or concurrent modification")
+		return 0, zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			userID, securityContext)
 	}
 
 	return newUpdateTS, nil
@@ -362,7 +377,7 @@ func (r *UserRepository) RetrieveUserList(
 			}
 			users = append(users, &user)
 		}
-		return nil
+		return rows.Err()
 	})
 
 	if err != nil {
@@ -405,20 +420,8 @@ func (r *UserRepository) UpdateUser(
 	}
 
 	if result.RowsAffected() == 0 {
-		// Check if user exists
-		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user
-			WHERE app_user_id = $1 AND delete_user_id IS NULL)`
-		err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx, checkQuery, user.AppUserID).Scan(&exists)
-		})
-		if err != nil {
-			return fmt.Errorf("failed to check user existence: %w", err)
-		}
-		if !exists {
-			return ErrNotFound
-		}
-		return ErrConflict
+		return zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			user.AppUserID, securityContext)
 	}
 
 	return nil
@@ -457,19 +460,8 @@ func (r *UserRepository) DeleteUser(
 	}
 
 	if result.RowsAffected() == 0 {
-		// Check if user exists
-		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user WHERE app_user_id = $1 AND delete_user_id IS NULL)`
-		err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx, checkQuery, userID).Scan(&exists)
-		})
-		if err != nil {
-			return 0, fmt.Errorf("failed to check user existence: %w", err)
-		}
-		if !exists {
-			return 0, ErrNotFound
-		}
-		return 0, ErrConflict
+		return 0, zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			userID, securityContext)
 	}
 
 	return userID, nil
@@ -506,21 +498,26 @@ func (r *UserRepository) AddUserListToGroup(
 			SET app_user_group_membership_list = array_append(app_user_group_membership_list, $2),
 				update_ts = $3,
 				update_user_id = $4
-			WHERE app_user_id = $1 AND update_ts = $5 AND delete_user_id IS NULL AND $2 != ALL(app_user_group_membership_list)`,
+			WHERE app_user_id = $1 AND update_ts = $5
+			  AND security_context_id = $6 AND delete_user_id IS NULL
+			  AND $2 != ALL(app_user_group_membership_list)`,
 			userId,
 			groupId,
 			float64(time.Now().UnixNano())/1e9,
 			updateUserId,
 			updateTsList[i],
+			securityContext,
 		)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to update user %d: %w", userId, err)
 		}
 		if result.RowsAffected() == 0 {
+			// Ambiguous on purpose: absent, already a member, or stale.
 			return nil, fmt.Errorf(
-				"user %d not found, already has group, or concurrent update",
-				userId,
+				"user %d not found, already has group, "+
+					"or concurrent update: %w",
+				userId, ErrConflict,
 			)
 		}
 	}
@@ -565,12 +562,14 @@ func (r *UserRepository) RemoveUserListFromGroup(
 			SET app_user_group_membership_list = array_remove(app_user_group_membership_list, $2),
 				update_ts = $3,
 				update_user_id = $4
-			WHERE app_user_id = $1 AND update_ts = $5 AND delete_user_id IS NULL`,
+			WHERE app_user_id = $1 AND update_ts = $5
+			  AND security_context_id = $6 AND delete_user_id IS NULL`,
 			userId,
 			groupId,
 			float64(time.Now().UnixNano())/1e9,
 			updateUserId,
 			updateTsList[i],
+			securityContext,
 		)
 
 		if err != nil {
@@ -578,8 +577,8 @@ func (r *UserRepository) RemoveUserListFromGroup(
 		}
 		if result.RowsAffected() == 0 {
 			return nil, fmt.Errorf(
-				"user %d not found or concurrent update",
-				userId,
+				"user %d not found or concurrent update: %w",
+				userId, ErrConflict,
 			)
 		}
 	}

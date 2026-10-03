@@ -295,3 +295,73 @@ class TestSecurityContextIsolation:
             "POST", "/addUserListToGroup", json=add_data
         )
         assert response.status_code == 200
+
+    def test_cross_security_context_group_is_404_not_409(self, test_client):
+        """Another tenant's group id reads as absent (404), never as a
+        stale write (409): the answer must not reveal that the id exists.
+        Seed groups 4 and 5 live in tenant 2; the admin is in tenant 1."""
+        for group_id in (4, 5):
+            response = test_client.make_request(
+                "PUT",
+                "/appUserGroup",
+                json={
+                    "appUserGroupId": group_id,
+                    "groupName": "Probe",
+                    "userGrantList": [],
+                    "updateTs": 0,
+                },
+            )
+            assert response.status_code == 404, response.text
+
+            response = test_client.make_request(
+                "DELETE",
+                "/appUserGroup",
+                params={"appUserGroupId": group_id, "updateTs": 0},
+            )
+            assert response.status_code == 404, response.text
+
+        # A stale updateTs on a group of the caller's own tenant is still 409.
+        response = test_client.make_request(
+            "PUT",
+            "/appUserGroup",
+            json={
+                "appUserGroupId": 3,
+                "groupName": "New User",
+                "userGrantList": [1, 1001],
+                "updateTs": 0,
+            },
+        )
+        assert response.status_code == 409, response.text
+
+    def test_add_user_list_to_group_stale_update_ts_is_409(self, test_client):
+        """A stale updateTs on a membership write is a conflict, not a 500."""
+        import uuid
+
+        suffix = uuid.uuid4().hex
+        response = test_client.make_request(
+            "POST",
+            "/user",
+            json={
+                "userName": f"staleuser{suffix}",
+                "firstName": "Stale",
+                "lastName": "Member",
+                "email": f"stale{suffix}@example.com",
+                "pwHash": "testpass123!",
+                "mfaExempt": False,
+                "appUserGroupMembershipList": [],
+            },
+        )
+        assert response.status_code == 201
+        created_user = response.json()["data"]
+        test_client.track_user(created_user["appUserId"], created_user["updateTs"])
+
+        response = test_client.make_request(
+            "POST",
+            "/addUserListToGroup",
+            json={
+                "userIds": [created_user["appUserId"]],
+                "groupId": 3,
+                "updateTsList": [created_user["updateTs"] - 1],
+            },
+        )
+        assert response.status_code == 409, response.text

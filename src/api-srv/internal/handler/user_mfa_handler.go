@@ -310,7 +310,10 @@ func MFASetupHandler(
 				app.WriteError(w, http.StatusInternalServerError, "Failed to encrypt TOTP secret", "TSE0", err)
 				return
 			}
-			_, err = userRepo.UpdateUserTOTPSeed(r.Context(), user.AppUserID, encrypted, user.UpdateTS, user.AppUserID)
+			_, err = userRepo.UpdateUserTOTPSeed(
+				r.Context(), user.AppUserID, encrypted, user.UpdateTS,
+				user.AppUserID, user.SecurityContext,
+			)
 			if err != nil {
 				app.WriteError(w, http.StatusInternalServerError, "Failed to save TOTP secret", "TSS0", err)
 				return
@@ -560,6 +563,7 @@ func MFAVerifyHandler(
 				true,
 				user.UpdateTS,
 				user.AppUserID,
+				user.SecurityContext,
 			)
 			if err != nil {
 				app.Logger().Error(
@@ -744,6 +748,7 @@ func AdminResetUserMFAHandler(
 			"",
 			targetUser.UpdateTS,
 			app.GetClaims().UserID,
+			targetUser.SecurityContext,
 		)
 		if err != nil {
 			app.WriteError(

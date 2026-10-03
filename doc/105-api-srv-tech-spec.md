@@ -377,6 +377,14 @@ Environment files follow the naming convention `loc-{service}.env` for local dev
 - Client sends `updateTs` in requests
 - Server compares with database value in WHERE clause
 - On conflict: Query to distinguish between modified (409) and deleted (410)
+- Every write carries the tenant (`security_context_id`) in its WHERE
+  clause, and so does the check that explains a zero-row write. An id that
+  lives in another tenant therefore answers 404, never 409: a 409 would
+  tell the caller the row exists. For the login-layer tables this is
+  `zeroRowOutcome` (`internal/repository/scope.go`). Two lookups are
+  unscoped by design: `RetrieveUserByUserName` (login has no tenant yet)
+  and `GetGrantsForGroups` (a login may hold another tenant's group; that
+  is how it gets a second security context).
 
 ### Database Resilience
 - **Retry Logic**: Exponential backoff for transient connection errors

@@ -57,7 +57,7 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupListByIDList(
 			}
 			groupList = append(groupList, &group)
 		}
-		return nil
+		return rowList.Err()
 	})
 
 	if err != nil {
@@ -114,7 +114,7 @@ func (r *AppUserGroupRepository) RetrieveAppUserGroupList(
 			}
 			groups = append(groups, &group)
 		}
-		return nil
+		return rows.Err()
 	})
 
 	if err != nil {
@@ -191,21 +191,8 @@ func (r *AppUserGroupRepository) UpdateAppUserGroup(
 	}
 
 	if result.RowsAffected() == 0 {
-		// Check if group exists
-		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user_group
-			WHERE app_user_group_id = $1 AND delete_user_id IS NULL)`
-		err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx, checkQuery, group.AppUserGroupID).
-				Scan(&exists)
-		})
-		if err != nil {
-			return fmt.Errorf("failed to check user group existence: %w", err)
-		}
-		if !exists {
-			return ErrNotFound
-		}
-		return ErrConflict
+		return zeroRowOutcome(ctx, r.db, appUserGroupTable, appUserGroupPK,
+			group.AppUserGroupID, securityContext)
 	}
 
 	return nil
@@ -261,14 +248,18 @@ func (r *AppUserGroupRepository) DeleteAppUserGroup(
 	deleteTS float64,
 	deleteUserID int,
 ) (int, error) {
-	// Check if any users are assigned to this group
+	// Members are counted in the group's tenant only. A login homed in
+	// another tenant can still list the group; once it is deleted
+	// GetGrantsForGroups skips it, so that leftover id is inert.
 	checkQuery := `
 		SELECT COUNT(*)
 		FROM app_user
-		WHERE $1 = ANY(app_user_group_membership_list) AND delete_user_id IS NULL`
+		WHERE $1 = ANY(app_user_group_membership_list)
+		  AND security_context_id = $2 AND delete_user_id IS NULL`
 	var count int
 	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, checkQuery, groupID).Scan(&count)
+		return r.db.QueryRow(ctx, checkQuery, groupID, securityContext).
+			Scan(&count)
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to check user assignments: %w", err)
@@ -305,22 +296,8 @@ func (r *AppUserGroupRepository) DeleteAppUserGroup(
 	}
 
 	if result.RowsAffected() == 0 {
-		// Check if group exists
-		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user_group WHERE app_user_group_id = $1 AND delete_user_id IS NULL)`
-		err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx, checkQuery, groupID).Scan(&exists)
-		})
-		if err != nil {
-			return 0, fmt.Errorf(
-				"failed to check user group existence: %w",
-				err,
-			)
-		}
-		if !exists {
-			return 0, ErrNotFound
-		}
-		return 0, ErrConflict
+		return 0, zeroRowOutcome(ctx, r.db, appUserGroupTable,
+			appUserGroupPK, groupID, securityContext)
 	}
 
 	return groupID, nil

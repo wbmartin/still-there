@@ -241,6 +241,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserPassword() {
 		newHash,
 		1234567891.456,
 		2,
+		1,
 	)
 	s.NoError(err)
 
@@ -260,8 +261,9 @@ func (s *UserRepositoryTestSuite) TestUpdateUserPasswordNotFound() {
 		"newhash",
 		1234567890.123,
 		1,
+		1,
 	)
-	s.Error(err)
+	s.ErrorIs(err, ErrNotFound)
 	s.Contains(err.Error(), "user not found")
 }
 
@@ -366,6 +368,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserTOTPSeed() {
 		newSeed,
 		expectedUpdateTS,
 		2,
+		1,
 	)
 	s.NoError(err)
 	s.Greater(newUpdateTS, expectedUpdateTS)
@@ -384,9 +387,9 @@ func (s *UserRepositoryTestSuite) TestUpdateUserTOTPSeed() {
 		"newseed",
 		expectedUpdateTS,
 		2,
+		1,
 	)
-	s.Error(err)
-	s.Contains(err.Error(), "user not found or concurrent modification")
+	s.ErrorIs(err, ErrConflict)
 
 	// Test update non-existent user
 	_, err = s.repo.UpdateUserTOTPSeed(
@@ -395,9 +398,9 @@ func (s *UserRepositoryTestSuite) TestUpdateUserTOTPSeed() {
 		"seed",
 		1234567890.123,
 		2,
+		1,
 	)
-	s.Error(err)
-	s.Contains(err.Error(), "user not found or concurrent modification")
+	s.ErrorIs(err, ErrNotFound)
 }
 
 func (s *UserRepositoryTestSuite) TestUpdateUserMFAExempt() {
@@ -427,6 +430,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserMFAExempt() {
 		true,
 		expectedUpdateTS,
 		2,
+		1,
 	)
 	s.NoError(err)
 	s.Greater(newUpdateTS, expectedUpdateTS)
@@ -445,9 +449,9 @@ func (s *UserRepositoryTestSuite) TestUpdateUserMFAExempt() {
 		false,
 		expectedUpdateTS,
 		2,
+		1,
 	)
-	s.Error(err)
-	s.Contains(err.Error(), "user not found or concurrent modification")
+	s.ErrorIs(err, ErrConflict)
 }
 
 func (s *UserRepositoryTestSuite) TestUpdateUser() {
@@ -574,8 +578,9 @@ func (s *UserRepositoryTestSuite) TestDeleteUser() {
 		"newhash",
 		1234567890.123,
 		2,
+		1,
 	)
-	s.Error(err) // Should fail because user is deleted
+	s.ErrorIs(err, ErrNotFound) // the user is deleted
 
 	// Test delete non-existent user
 	_, err = s.repo.DeleteUser(
@@ -742,4 +747,103 @@ func (s *UserRepositoryTestSuite) TestOwnProfileRoundTrip() {
 	s.ErrorIs(err, ErrNotFound)
 	_, err = s.repo.RetrieveUserByID(context.Background(), created.AppUserID, 999)
 	s.ErrorIs(err, ErrNotFound)
+}
+
+// otherTenantUser creates a live user in tenant 2, never the caller (1)'s.
+func (s *UserRepositoryTestSuite) otherTenantUser(
+	userName string,
+) *model.AppUserModel {
+	user := &model.AppUserModel{
+		UserName:                   userName,
+		PwHash:                     "$2a$10$other.tenant.hash",
+		FirstName:                  "Other",
+		LastName:                   "Tenant",
+		Email:                      "other@example.com",
+		SecurityContext:            2,
+		AppUserGroupMembershipList: []int{},
+		CreateTS:                   CurrentTimestamp(),
+		CreateUserID:               1,
+		UpdateTS:                   CurrentTimestamp(),
+		UpdateUserID:               1,
+	}
+	created, err := s.repo.CreateUser(context.Background(), user, 2)
+	s.Require().NoError(err)
+	return created
+}
+
+// Another tenant's id, even with its real update_ts, reads as absent from
+// every write: ErrNotFound (404), never ErrConflict (409), and the row is
+// untouched.
+func (s *UserRepositoryTestSuite) TestUserWriteOtherSecurityContextIsNotFound() {
+	ctx := context.Background()
+	other := s.otherTenantUser("RepoTestOtherCtxUser")
+
+	err := s.repo.UpdateUser(ctx, &model.AppUserModel{
+		AppUserID: other.AppUserID, UserName: "RepoTestOtherCtxRenamed",
+		AppUserGroupMembershipList: []int{}, UpdateTS: CurrentTimestamp(),
+		UpdateUserID: 1,
+	}, other.UpdateTS, 1)
+	s.ErrorIs(err, ErrNotFound)
+
+	_, err = s.repo.DeleteUser(
+		ctx, other.AppUserID, 1, other.UpdateTS, CurrentTimestamp(), 1)
+	s.ErrorIs(err, ErrNotFound)
+
+	err = s.repo.UpdateUserPassword(
+		ctx, other.AppUserID, "changed", CurrentTimestamp(), 1, 1)
+	s.ErrorIs(err, ErrNotFound)
+	_, err = s.repo.UpdateUserTOTPSeed(
+		ctx, other.AppUserID, "SEED", other.UpdateTS, 1, 1)
+	s.ErrorIs(err, ErrNotFound)
+	_, err = s.repo.UpdateUserMFASetup(
+		ctx, other.AppUserID, true, other.UpdateTS, 1, 1)
+	s.ErrorIs(err, ErrNotFound)
+	_, err = s.repo.UpdateUserMFAExempt(
+		ctx, other.AppUserID, true, other.UpdateTS, 1, 1)
+	s.ErrorIs(err, ErrNotFound)
+
+	_, err = s.repo.AddUserListToGroup(ctx, []int{other.AppUserID}, 1,
+		[]float64{other.UpdateTS}, 1, 1)
+	s.ErrorIs(err, ErrConflict)
+
+	unchanged, err := s.repo.RetrieveUserByID(ctx, other.AppUserID, 2)
+	s.Require().NoError(err)
+	s.Equal(other.UserName, unchanged.UserName)
+	s.Equal(other.PwHash, unchanged.PwHash)
+	s.Equal(other.UpdateTS, unchanged.UpdateTS)
+	s.Empty(unchanged.AppUserGroupMembershipList)
+
+	// The row's own tenant still writes.
+	_, err = s.repo.DeleteUser(
+		ctx, other.AppUserID, 2, other.UpdateTS, CurrentTimestamp(), 1)
+	s.NoError(err)
+}
+
+// A stale update_ts on a membership write is a conflict (409), not a 500.
+func (s *UserRepositoryTestSuite) TestMembershipWriteStaleUpdateTSIsConflict() {
+	ctx := context.Background()
+	user := &model.AppUserModel{
+		UserName:                   "RepoTestStaleMembership",
+		PwHash:                     "$2a$10$test.hash",
+		SecurityContext:            1,
+		AppUserGroupMembershipList: []int{1},
+		CreateTS:                   CurrentTimestamp(),
+		CreateUserID:               1,
+		UpdateTS:                   CurrentTimestamp(),
+		UpdateUserID:               1,
+	}
+	created, err := s.repo.CreateUser(ctx, user, 1)
+	s.Require().NoError(err)
+	staleTS := created.UpdateTS - 1
+
+	_, err = s.repo.AddUserListToGroup(ctx, []int{created.AppUserID}, 3,
+		[]float64{staleTS}, 1, 1)
+	s.ErrorIs(err, ErrConflict)
+	_, err = s.repo.RemoveUserListFromGroup(ctx, []int{created.AppUserID}, 1,
+		[]float64{staleTS}, 1, 1)
+	s.ErrorIs(err, ErrConflict)
+
+	unchanged, err := s.repo.RetrieveUserByID(ctx, created.AppUserID, 1)
+	s.Require().NoError(err)
+	s.Equal([]int{1}, unchanged.AppUserGroupMembershipList)
 }

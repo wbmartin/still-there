@@ -153,9 +153,9 @@ func TestChangeOwnPassword_EndsTheOtherSessions(t *testing.T) {
 	repo := new(MockUserRepository)
 	repo.On("RetrieveUserByUserName", mock.Anything, "alice").
 		Return(&model.AppUserModel{AppUserID: 1, UserName: "alice",
-			PwHash: hash}, nil)
+			PwHash: hash, SecurityContext: 1}, nil)
 	repo.On("UpdateUserPassword",
-		mock.Anything, 1, mock.Anything, mock.Anything, 1).Return(nil)
+		mock.Anything, 1, mock.Anything, mock.Anything, 1, 1).Return(nil)
 	grantList := []int{model.GrantChangeOwnPassword}
 	current := sessionToken(t, s, "alice", 1, "session-one", grantList)
 	otherDevice := sessionToken(t, s, "alice", 1, "session-two", grantList)
@@ -197,9 +197,10 @@ func TestChangeOtherUserPassword_EndsTheirSessions(t *testing.T) {
 	s := testServices(t)
 	repo := new(MockUserRepository)
 	repo.On("RetrieveUserList", mock.Anything, 1, []int{9}, float64(0)).
-		Return([]*model.AppUserModel{{AppUserID: 9, UserName: "bob"}}, nil)
+		Return([]*model.AppUserModel{{AppUserID: 9, UserName: "bob",
+			SecurityContext: 1}}, nil)
 	repo.On("UpdateUserPassword",
-		mock.Anything, 9, mock.Anything, mock.Anything, 1).Return(nil)
+		mock.Anything, 9, mock.Anything, mock.Anything, 1, 1).Return(nil)
 	admin := sessionToken(t, s, "alice", 1, "session-admin",
 		[]int{model.GrantChangeOtherUserPassword})
 	bob := sessionToken(t, s, "bob", 9, "session-bob", nil)

@@ -106,142 +106,6 @@ doc/105:199: "no row written" is no reason to skip.
 - **Decision:** \[ \] pull / \[ \] adapt / \[X \] skip
 - BRANDON: I said skip because it's a not changing SERVER side data so seems fine to skip CSRF
 
-### B012 — Cross-tenant ids answered 409; unscoped writes and member count
-
-- **Priority:** P1  **Area:** go-api, tests, docs
-- **GRC:** `src/internal/repository/scope.go:1-72`; `user_repository.go:220-244,246-270,307,343-397,496,550,586,595-720`; `app_user_group_repository.go:199-204,220-237,260`; `tests/test_security_context_isolation.py:24-40,228-293`; `doc/105-api-srv-tech-spec.md:503-521`; `src/api-srv/README.md:209`; `tickets/03-done/RG0014-login-layer-repository-drift/RG0014-login-layer-repository-drift.md:44-52,66,97,109,180`   **PROTO:** `src/api-srv/internal/repository/user_repository.go:186-212,214-300,405-421,457-473,478-594` (`EXISTS` :409,461,696); `app_user_group_repository.go:192-210,224-240,265-280` (:196,269); `handler/app_user_group_handler.go:240-255`; `tests/test_security_context_isolation.py:99-112,297`; `doc/900-database-guidelines.md`; `src/api-srv/README.md:141`; `tickets/01-open/PS0010-api-entity-template.md:36-102`
-- **Ticket:** RG0014 / `c85313a`, `b5d15fe`, `b3a1ea2`; PS0010 drift half
-- **What:** PROTO's zero-row `EXISTS` ignores tenant: another tenant's id gets
-409 (existence leak); group delete counts members across tenants. GRC:
-`existsInContext` 404; writes carry the row's own tenant.
-- **Port notes:** 4 signatures + fakes; `rows.Err()`. Pytest via `db` (B018).
-Rule into doc/900, README:141.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-All PROTO paths are under `src/api-srv/internal/`. Every user and group
-`UPDATE` already carries the caller's tenant. When it matches zero rows, a
-second query explains why: absent (404) or stale `update_ts` (409). That
-query has no tenant (`repository/app_user_group_repository.go:196-197`):
-`SELECT EXISTS(... WHERE app_user_group_id = $1 AND delete_user_id IS NULL)`.
-The same check sits in `UpdateAppUserGroup` (`:196`), `DeleteAppUserGroup`
-(`:269`), `UpdateUser` (`repository/user_repository.go:409`) and
-`DeleteUser` (`:461`).
-
-**(1) Existence oracle (security hole, low severity).** An admin in tenant
-1 sends `PUT /appUserGroup` or `DELETE /user` with any id and `updateTs: 0`.
-The scoped write misses; the unscoped `EXISTS` finds the row if it lives in
-*any* tenant, so the answer is 409 "modified by another user"
-(`handler/app_user_group_handler.go:239-246`), not 404. Ids are serial, so
-walking them maps other tenants' ids. Nothing crosses the boundary but the
-answer. It needs the user or group admin grant. **Correction:** doc/700
-lists `user_repository.go:696` here; that check (`UpdateOwnProfile`) is
-already scoped (`:697`). The template entity is too
-(`example_repository.go:165-166`).
-
-**(2) Group delete counts members in every tenant.**
-`app_user_group_repository.go:225-227` runs `COUNT(*) ... WHERE $1 =
-ANY(app_user_group_membership_list)` with no tenant, and the count reaches
-the client: 409 "cannot delete group: N users are assigned to it"
-(`handler/app_user_group_handler.go:342-348`).
-
-**(3) Writes with no tenant (defence-in-depth gap, not reachable).**
-`UpdateUserPassword`, `UpdateUserTOTPSeed`, `UpdateUserMFASetup`,
-`UpdateUserMFAExempt` (`user_repository.go:191,220,249,278`) and the bulk
-membership writes (`:508,567`) match `app_user_id` alone. Every caller
-loads the row in the caller's tenant first (`handler/user_handler.go:787-809`,
-`:1026`; `handler/user_mfa_handler.go:708`), so no route crosses today. A
-future handler that skips the pre-check would. `UpdateUserMFAExempt` has no
-production caller.
-
-**(4) Correctness bugs in the same code.** The bulk writes return plain
-`fmt.Errorf` on zero rows (`user_repository.go:519-524,578-583`), so
-`errors.Is(err, repository.ErrConflict)` at `handler/user_handler.go:822`
-never fires: a stale `updateTs` answers 500. Four row loops
-(`user_repository.go:94,338`; `app_user_group_repository.go:47,98`) never
-check `rows.Err()`, so a mid-stream failure returns a short list as success.
-
-#### What GRC changed
-
-RG0014 (`c85313a`, `b5d15fe`, `b3a1ea2`), login-layer repositories:
-
-1. `src/internal/repository/scope.go:30-50` adds `existsInContext`
-   (predicate always `<pk> = $1 AND security_context_id = $2 AND
-   delete_user_id IS NULL`, table names are constants `:10-16`) and
-   `zeroRowOutcome` (`:56-72`): false is `ErrNotFound`, true `ErrConflict`.
-   Callers: `user_repository.go:496,550,586`,
-   `app_user_group_repository.go:201,260`.
-2. Member count scoped: `AND security_context_id = $2`
-   (`app_user_group_repository.go:222-226`).
-3. Bulk writes add `security_context_id = $6` (`user_repository.go:628,692`)
-   and answer `ErrConflict` on zero rows, ambiguous on purpose (`:639-641`).
-4. The four self-service writes take the **row's own** tenant as a new
-   last parameter (`user_repository.go:220-227`), not the JWT's: after
-   `/changeSecurityContext` the active tenant is not the home tenant.
-   Callers pass `user.SecurityContext` (`handler/auth_handler.go:991-998`).
-5. Row loops check `rows.Err()` (e.g. `user_repository.go:458`).
-6. `RetrieveUserByUserName` and `GetGrantsForGroups` stay unscoped by
-   design, written up in `doc/105-api-srv-tech-spec.md:503-520`.
-
-Tests: Go `TestUpdateAppUserGroupOtherSecurityContextIsNotFound`,
-`TestDeleteAppUserGroupInUse` (`app_user_group_repository_test.go:317,379`),
-`TestUpdateUserPasswordOtherSecurityContext` (`user_repository_test.go:279`);
-pytest `test_cross_security_context_group_is_404_not_409`
-(`tests/test_security_context_isolation.py:228-293`): inserts a tenant-3
-group via `db`, PUT and DELETE with its real `updateTs` both 404, row
-untouched and unlisted.
-
-#### Proposed fix for PROTO
-
-1. **New `repository/scope.go`** with `existsInContext`/`zeroRowOutcome`.
-   Trap: GRC's take `Querier` (`entity_repository.go:18`), which PROTO
-   lacks; take `*pgxpool.Pool`. Keep `ExecuteWithRetry` until B028 deletes
-   `retry.go`.
-2. **`UpdateUser`, `DeleteUser`, `UpdateAppUserGroup`,
-   `DeleteAppUserGroup`**: replace the inline `EXISTS` with `zeroRowOutcome`.
-3. **Member count** (`app_user_group_repository.go:224-227`): add the
-   tenant. Keep the "cannot delete group" text so
-   `handler/app_user_group_handler.go:342` still matches; GRC's `ErrInUse`
-   and `ClientMessageError` belong to B028.
-4. **Four writes**: add `securityContext int` last in the repo,
-   `UserRepositoryInterface` (`handler/user_handler.go:49-76`) and
-   `MockUserRepository` (`handler/user_handler_test.go`). Callers pass the
-   loaded row's `SecurityContext`, never `jwtClaims.SecurityContext`:
-   `handler/auth_handler.go:835`, `handler/user_handler.go:1062`,
-   `handler/user_mfa_handler.go:322,564,738` (all already hold the row).
-   Password: wrap `ErrNotFound` keeping "user not found" text
-   (`user_repository_test.go:264`); the other three use `zeroRowOutcome`,
-   so their text asserts (`:388,399,449`) become `errors.Is`.
-5. **Bulk writes**: add `AND security_context_id = $6`; wrap `ErrConflict`
-   in the zero-row error, turning the dead 500 into 409.
-6. **`rows.Err()`** after the four loops. Skip GRC's
-   `UpdateUserAccountStatus` and `RetrieveBlockedUserNameList` (B034).
-7. **Docs**: rule "the check that explains a zero-row write uses the
-   write's tenant predicate; two named lookups are exempt" into
-   `doc/900-database-guidelines.md` and the `internal/repository/` line at
-   `src/api-srv/README.md:141`. Tick the group line of PS0010
-   (`tickets/01-open/PS0010-api-entity-template.md:40-41`).
-
-Dependencies: B028 overlaps steps 3-5, need not land first. The pytest needs
-B018: PROTO has no `db` fixture or `psycopg2` and tests hit `loc_proto_db`.
-
-Tests:
-- Go: the four `zeroRowOutcome` callers and `UpdateUserPassword`, given
-  another tenant's id (real `update_ts`), return `ErrNotFound`.
-- pytest: port GRC's 404-not-409 test, seeding tenant 3 (never 1 or 2).
-- pytest: stale `updateTs` on `/addUserListToGroup` answers 409, not 500.
-
-#### Open question for Brandon
-
-A user homed in tenant A can hold a tenant B group (how
-`GetGrantsForGroups`, `user_repository.go:80-83`, grants a second context).
-The scoped count lets B's admin delete that group while A's user still
-lists it. Accept that, as GRC does? Recommendation: yes; the group is B's
-and `GetGrantsForGroups` skips deleted groups, so the leftover id is inert.
-
 ### B013 — Admin "Change Password" for another user always 400s
 
 - **Priority:** P1  **Area:** web-app
@@ -8851,3 +8715,141 @@ What cap should the copy-me example handlers carry, given a bulk
 `POST /exampleList` can legitimately exceed 64 KiB? Recommendation: a
 separate `maxEntityBodyBytes = 1 << 20` (1 MiB) in `example_handler.go`, so
 derived apps inherit a cap they raise per entity.
+
+### B012 — COMPLETED — Cross-tenant ids answered 409; unscoped writes and member count
+
+- **Completed:** 2026-10-02. New `repository/scope.go` `zeroRowOutcome` (takes `*pgxpool.Pool`, no Querier port) explains zero-row writes with the tenant predicate in UpdateUser/DeleteUser/UpdateAppUserGroup/DeleteAppUserGroup and the three MFA writes, so another tenant's id is 404, never 409. `UpdateUserPassword`, `UpdateUserTOTPSeed`, `UpdateUserMFASetup`, `UpdateUserMFAExempt` take the loaded row's own tenant (interface, mock and callers in auth/user/user_mfa handlers updated); bulk membership writes match the tenant and wrap `ErrConflict` (stale updateTs now 409, was 500); the group-delete member count is scoped to the group's tenant (open question: took the recommendation); four row loops check `rows.Err()`. Deviations: Go and pytest cross-tenant tests use tenant 2 (doc/900: isolation is 1 vs 2), not GRC's 3; pytest probes seed groups 4/5 with `updateTs: 0` via the API (no `db` fixture until B018), and DELETE /user cross-tenant is covered only by Go repo tests (no tenant-2 user is seeded); PS0010 tick skipped (no `tickets/` folder); `ErrInUse`/`ClientMessageError` left for B028. Rule added to doc/105 (Optimistic Locking), doc/900 and src/api-srv/README.md. Tests: all green, go=278 unit=41 e2e=9 py=79
+
+- **Priority:** P1  **Area:** go-api, tests, docs
+- **GRC:** `src/internal/repository/scope.go:1-72`; `user_repository.go:220-244,246-270,307,343-397,496,550,586,595-720`; `app_user_group_repository.go:199-204,220-237,260`; `tests/test_security_context_isolation.py:24-40,228-293`; `doc/105-api-srv-tech-spec.md:503-521`; `src/api-srv/README.md:209`; `tickets/03-done/RG0014-login-layer-repository-drift/RG0014-login-layer-repository-drift.md:44-52,66,97,109,180`   **PROTO:** `src/api-srv/internal/repository/user_repository.go:186-212,214-300,405-421,457-473,478-594` (`EXISTS` :409,461,696); `app_user_group_repository.go:192-210,224-240,265-280` (:196,269); `handler/app_user_group_handler.go:240-255`; `tests/test_security_context_isolation.py:99-112,297`; `doc/900-database-guidelines.md`; `src/api-srv/README.md:141`; `tickets/01-open/PS0010-api-entity-template.md:36-102`
+- **Ticket:** RG0014 / `c85313a`, `b5d15fe`, `b3a1ea2`; PS0010 drift half
+- **What:** PROTO's zero-row `EXISTS` ignores tenant: another tenant's id gets
+409 (existence leak); group delete counts members across tenants. GRC:
+`existsInContext` 404; writes carry the row's own tenant.
+- **Port notes:** 4 signatures + fakes; `rows.Err()`. Pytest via `db` (B018).
+Rule into doc/900, README:141.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+All PROTO paths are under `src/api-srv/internal/`. Every user and group
+`UPDATE` already carries the caller's tenant. When it matches zero rows, a
+second query explains why: absent (404) or stale `update_ts` (409). That
+query has no tenant (`repository/app_user_group_repository.go:196-197`):
+`SELECT EXISTS(... WHERE app_user_group_id = $1 AND delete_user_id IS NULL)`.
+The same check sits in `UpdateAppUserGroup` (`:196`), `DeleteAppUserGroup`
+(`:269`), `UpdateUser` (`repository/user_repository.go:409`) and
+`DeleteUser` (`:461`).
+
+**(1) Existence oracle (security hole, low severity).** An admin in tenant
+1 sends `PUT /appUserGroup` or `DELETE /user` with any id and `updateTs: 0`.
+The scoped write misses; the unscoped `EXISTS` finds the row if it lives in
+*any* tenant, so the answer is 409 "modified by another user"
+(`handler/app_user_group_handler.go:239-246`), not 404. Ids are serial, so
+walking them maps other tenants' ids. Nothing crosses the boundary but the
+answer. It needs the user or group admin grant. **Correction:** doc/700
+lists `user_repository.go:696` here; that check (`UpdateOwnProfile`) is
+already scoped (`:697`). The template entity is too
+(`example_repository.go:165-166`).
+
+**(2) Group delete counts members in every tenant.**
+`app_user_group_repository.go:225-227` runs `COUNT(*) ... WHERE $1 =
+ANY(app_user_group_membership_list)` with no tenant, and the count reaches
+the client: 409 "cannot delete group: N users are assigned to it"
+(`handler/app_user_group_handler.go:342-348`).
+
+**(3) Writes with no tenant (defence-in-depth gap, not reachable).**
+`UpdateUserPassword`, `UpdateUserTOTPSeed`, `UpdateUserMFASetup`,
+`UpdateUserMFAExempt` (`user_repository.go:191,220,249,278`) and the bulk
+membership writes (`:508,567`) match `app_user_id` alone. Every caller
+loads the row in the caller's tenant first (`handler/user_handler.go:787-809`,
+`:1026`; `handler/user_mfa_handler.go:708`), so no route crosses today. A
+future handler that skips the pre-check would. `UpdateUserMFAExempt` has no
+production caller.
+
+**(4) Correctness bugs in the same code.** The bulk writes return plain
+`fmt.Errorf` on zero rows (`user_repository.go:519-524,578-583`), so
+`errors.Is(err, repository.ErrConflict)` at `handler/user_handler.go:822`
+never fires: a stale `updateTs` answers 500. Four row loops
+(`user_repository.go:94,338`; `app_user_group_repository.go:47,98`) never
+check `rows.Err()`, so a mid-stream failure returns a short list as success.
+
+#### What GRC changed
+
+RG0014 (`c85313a`, `b5d15fe`, `b3a1ea2`), login-layer repositories:
+
+1. `src/internal/repository/scope.go:30-50` adds `existsInContext`
+   (predicate always `<pk> = $1 AND security_context_id = $2 AND
+   delete_user_id IS NULL`, table names are constants `:10-16`) and
+   `zeroRowOutcome` (`:56-72`): false is `ErrNotFound`, true `ErrConflict`.
+   Callers: `user_repository.go:496,550,586`,
+   `app_user_group_repository.go:201,260`.
+2. Member count scoped: `AND security_context_id = $2`
+   (`app_user_group_repository.go:222-226`).
+3. Bulk writes add `security_context_id = $6` (`user_repository.go:628,692`)
+   and answer `ErrConflict` on zero rows, ambiguous on purpose (`:639-641`).
+4. The four self-service writes take the **row's own** tenant as a new
+   last parameter (`user_repository.go:220-227`), not the JWT's: after
+   `/changeSecurityContext` the active tenant is not the home tenant.
+   Callers pass `user.SecurityContext` (`handler/auth_handler.go:991-998`).
+5. Row loops check `rows.Err()` (e.g. `user_repository.go:458`).
+6. `RetrieveUserByUserName` and `GetGrantsForGroups` stay unscoped by
+   design, written up in `doc/105-api-srv-tech-spec.md:503-520`.
+
+Tests: Go `TestUpdateAppUserGroupOtherSecurityContextIsNotFound`,
+`TestDeleteAppUserGroupInUse` (`app_user_group_repository_test.go:317,379`),
+`TestUpdateUserPasswordOtherSecurityContext` (`user_repository_test.go:279`);
+pytest `test_cross_security_context_group_is_404_not_409`
+(`tests/test_security_context_isolation.py:228-293`): inserts a tenant-3
+group via `db`, PUT and DELETE with its real `updateTs` both 404, row
+untouched and unlisted.
+
+#### Proposed fix for PROTO
+
+1. **New `repository/scope.go`** with `existsInContext`/`zeroRowOutcome`.
+   Trap: GRC's take `Querier` (`entity_repository.go:18`), which PROTO
+   lacks; take `*pgxpool.Pool`. Keep `ExecuteWithRetry` until B028 deletes
+   `retry.go`.
+2. **`UpdateUser`, `DeleteUser`, `UpdateAppUserGroup`,
+   `DeleteAppUserGroup`**: replace the inline `EXISTS` with `zeroRowOutcome`.
+3. **Member count** (`app_user_group_repository.go:224-227`): add the
+   tenant. Keep the "cannot delete group" text so
+   `handler/app_user_group_handler.go:342` still matches; GRC's `ErrInUse`
+   and `ClientMessageError` belong to B028.
+4. **Four writes**: add `securityContext int` last in the repo,
+   `UserRepositoryInterface` (`handler/user_handler.go:49-76`) and
+   `MockUserRepository` (`handler/user_handler_test.go`). Callers pass the
+   loaded row's `SecurityContext`, never `jwtClaims.SecurityContext`:
+   `handler/auth_handler.go:835`, `handler/user_handler.go:1062`,
+   `handler/user_mfa_handler.go:322,564,738` (all already hold the row).
+   Password: wrap `ErrNotFound` keeping "user not found" text
+   (`user_repository_test.go:264`); the other three use `zeroRowOutcome`,
+   so their text asserts (`:388,399,449`) become `errors.Is`.
+5. **Bulk writes**: add `AND security_context_id = $6`; wrap `ErrConflict`
+   in the zero-row error, turning the dead 500 into 409.
+6. **`rows.Err()`** after the four loops. Skip GRC's
+   `UpdateUserAccountStatus` and `RetrieveBlockedUserNameList` (B034).
+7. **Docs**: rule "the check that explains a zero-row write uses the
+   write's tenant predicate; two named lookups are exempt" into
+   `doc/900-database-guidelines.md` and the `internal/repository/` line at
+   `src/api-srv/README.md:141`. Tick the group line of PS0010
+   (`tickets/01-open/PS0010-api-entity-template.md:40-41`).
+
+Dependencies: B028 overlaps steps 3-5, need not land first. The pytest needs
+B018: PROTO has no `db` fixture or `psycopg2` and tests hit `loc_proto_db`.
+
+Tests:
+- Go: the four `zeroRowOutcome` callers and `UpdateUserPassword`, given
+  another tenant's id (real `update_ts`), return `ErrNotFound`.
+- pytest: port GRC's 404-not-409 test, seeding tenant 3 (never 1 or 2).
+- pytest: stale `updateTs` on `/addUserListToGroup` answers 409, not 500.
+
+#### Open question for Brandon
+
+A user homed in tenant A can hold a tenant B group (how
+`GetGrantsForGroups`, `user_repository.go:80-83`, grants a second context).
+The scoped count lets B's admin delete that group while A's user still
+lists it. Accept that, as GRC does? Recommendation: yes; the group is B's
+and `GetGrantsForGroups` skips deleted groups, so the leftover id is inert.

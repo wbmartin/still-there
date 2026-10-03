@@ -51,6 +51,7 @@ type UserRepositoryInterface interface {
 		hashedPassword string,
 		now float64,
 		updateUserID int,
+		securityContext int,
 	) error
 	UpdateUserTOTPSeed(
 		ctx context.Context,
@@ -58,6 +59,7 @@ type UserRepositoryInterface interface {
 		totpSeed string,
 		updateTS float64,
 		updateUserID int,
+		securityContext int,
 	) (float64, error)
 	UpdateUserMFASetup(
 		ctx context.Context,
@@ -65,6 +67,7 @@ type UserRepositoryInterface interface {
 		mfaSetup bool,
 		expectedUpdateTS float64,
 		updateUserID int,
+		securityContext int,
 	) (float64, error)
 	UpdateUserMFAExempt(
 		ctx context.Context,
@@ -72,6 +75,7 @@ type UserRepositoryInterface interface {
 		mfaExempt bool,
 		updateTS float64,
 		updateUserID int,
+		securityContext int,
 	) (float64, error)
 	AddUserListToGroup(
 		ctx context.Context,
@@ -1079,6 +1083,7 @@ func (h *UserHandler) ChangeOtherUserPassword(
 		hashedPassword,
 		now,
 		jwtClaims.UserID,
+		user.SecurityContext,
 	)
 	if err != nil {
 		app.WriteError(

@@ -317,3 +317,95 @@ func (s *AppUserGroupRepositoryTestSuite) TestRetrieveMemberUserNameList() {
 	s.NoError(err)
 	s.Empty(memberList)
 }
+
+// createGroupIn creates a live group in securityContext.
+func (s *AppUserGroupRepositoryTestSuite) createGroupIn(
+	groupName string, securityContext int,
+) *model.AppUserGroupModel {
+	group := &model.AppUserGroupModel{
+		GroupName:       groupName,
+		UserGrantList:   []int{},
+		SecurityContext: securityContext,
+		CreateTS:        CurrentTimestamp(),
+		CreateUserID:    1,
+		UpdateTS:        CurrentTimestamp(),
+		UpdateUserID:    1,
+	}
+	created, err := s.repo.CreateAppUserGroup(
+		context.Background(), group, securityContext)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() {
+		_, _ = s.db.Exec(context.Background(),
+			"DELETE FROM app_user_group WHERE app_user_group_id = $1",
+			created.AppUserGroupID)
+	})
+	return created
+}
+
+// Another tenant's group id, with its real update_ts, is not found (404),
+// never a conflict (409); a stale update_ts in the caller's tenant still is.
+func (s *AppUserGroupRepositoryTestSuite) TestGroupWriteOtherSecurityContextIsNotFound() {
+	ctx := context.Background()
+	other := s.createGroupIn("RepoTestOtherCtxGroup", 2)
+
+	err := s.repo.UpdateAppUserGroup(ctx, &model.AppUserGroupModel{
+		AppUserGroupID: other.AppUserGroupID, GroupName: "RepoTestRenamed",
+		UserGrantList: []int{}, UpdateTS: CurrentTimestamp(), UpdateUserID: 1,
+	}, other.UpdateTS, 1)
+	s.ErrorIs(err, ErrNotFound)
+
+	_, err = s.repo.DeleteAppUserGroup(ctx, other.AppUserGroupID, 1,
+		other.UpdateTS, CurrentTimestamp(), 1)
+	s.ErrorIs(err, ErrNotFound)
+
+	unchanged, err := s.repo.RetrieveAppUserGroupListByIDList(
+		ctx, []int{other.AppUserGroupID}, 2)
+	s.Require().NoError(err)
+	s.Require().Len(unchanged, 1)
+	s.Equal("RepoTestOtherCtxGroup", unchanged[0].GroupName)
+
+	_, err = s.repo.DeleteAppUserGroup(ctx, other.AppUserGroupID, 2,
+		other.UpdateTS-1, CurrentTimestamp(), 1)
+	s.ErrorIs(err, ErrConflict)
+}
+
+// The delete guard counts members in the group's tenant only: a login homed
+// in another tenant that still lists the id does not block the delete.
+func (s *AppUserGroupRepositoryTestSuite) TestDeleteAppUserGroupCountsOwnTenantMembersOnly() {
+	ctx := context.Background()
+	userRepository := NewUserRepository(s.db)
+	group := s.createGroupIn("RepoTestMemberCountGroup", 2)
+
+	createMember := func(userName string, securityContext int) {
+		_, err := userRepository.CreateUser(ctx, &model.AppUserModel{
+			UserName:                   userName,
+			PwHash:                     "$2a$10$test.hash",
+			SecurityContext:            securityContext,
+			AppUserGroupMembershipList: []int{group.AppUserGroupID},
+			CreateTS:                   CurrentTimestamp(),
+			CreateUserID:               1,
+			UpdateTS:                   CurrentTimestamp(),
+			UpdateUserID:               1,
+		}, securityContext)
+		s.Require().NoError(err)
+		s.T().Cleanup(func() {
+			_, _ = s.db.Exec(context.Background(),
+				"DELETE FROM app_user WHERE user_name = $1", userName)
+		})
+	}
+
+	createMember("RepoTestForeignMember", 1)
+	createMember("RepoTestOwnMember", 2)
+	_, err := s.repo.DeleteAppUserGroup(ctx, group.AppUserGroupID, 2,
+		group.UpdateTS, CurrentTimestamp(), 1)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "cannot delete group: 1 users are assigned")
+
+	_, err = s.db.Exec(ctx,
+		"DELETE FROM app_user WHERE user_name = 'RepoTestOwnMember'")
+	s.Require().NoError(err)
+	deletedID, err := s.repo.DeleteAppUserGroup(ctx, group.AppUserGroupID, 2,
+		group.UpdateTS, CurrentTimestamp(), 1)
+	s.NoError(err)
+	s.Equal(group.AppUserGroupID, deletedID)
+}
