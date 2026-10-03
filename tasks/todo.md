@@ -8,16 +8,36 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 
 ## 0. Waiting on Brandon
 
-- **Decide B093, B094, B095** (pull/adapt/skip in doc/700, under "Bugs
-  found in PROTO along the way"). B093: `bin/600-bundle-uat` stops at the
-  Vite build unless `VITE_API_PROXY_URL` is set
-  (`src/web-app/vite.config.ts` throws in production mode). B094:
+- **Decide B093-B098** (pull/adapt/skip in doc/700, under "Bugs found in
+  PROTO along the way"). B093: `bin/600-bundle-uat` stops at the Vite
+  build unless `VITE_API_PROXY_URL` is set (`src/web-app/vite.config.ts`
+  throws in production mode); it also blocks `bin/110` and `bin/600`
+  production web builds. B094:
   `/mfaSetup` and `/mfaVerify` never read the `BLOCKED*` flag on their
   session path (rate check runs before `CheckJWT`); matters after an API
-  restart. B095: six bash scripts lack `set -o pipefail`.
-- **Local dev DB: apply migrations 0004 (B034) and 0005 (B035)** before the
-  next `bin/215-run-api-srv` or `bin/600-bundle-uat`; the API exits at
-  start otherwise.
+  restart. B095: six bash scripts lack `set -o pipefail`. B096: grant id
+  numbering convention (new ids only; shipped ids pinned by
+  `testdata/grants.json`). B097: `mfa_exempt` accepted by the API from any
+  user admin (refuse it, or report exempt logins on a host). B098: `example`
+  has no cross-tenant repository test (tenant 2 vs 3).
+- **Dev DB:** run `bin/205-migrate-db` to apply 0004/0005 (B034, B035)
+  before the next `bin/215-run-api-srv` or `bin/600-bundle-uat`; the API
+  exits at start otherwise.
+- **`etc/uat-deploy.env`:** set `UAT_DOMAIN` (B072). Until set, presales
+  deploys install no nginx site.
+- **Decide B071:** add a `migrate invite <user>` subcommand to replace the
+  hand psql INSERT in doc/330 A9? The export scrub refuses a live login
+  named `admin`: rename or delete the seeded dev admin before a real
+  export.
+- **Optional reviews:** B062 rows-per-page [10,15,25,50,100] default 15 vs
+  GRC [10,20,25,50,100] default 25; B063 added unused
+  `components/sticky-filters.tsx` (delete it and its test to defer); B066
+  changed shared `use-auth-guard` to return DENIED; B069 zod 4.1.13 not
+  bumped to 4.6.5 (no advisory).
+- **After GRC RG0044 (repo reset) runs:** update doc/350 (B082, marked
+  "Not yet run").
+- **Attribution note:** commits 8dd505f..388c0ae (B085-B090) say "Claude
+  Opus 5.5" but were written by Sonnet; not rewritten (pushed).
 - **Existing UAT host `api-srv.env` needs hand edits before the next
   deploy** (deploys never overwrite that file): add `LOG_LEVEL=info`
   (B031: required, the API will not start without it); add
@@ -40,7 +60,8 @@ recommendation. Done items sit under `# Completed` at the end of that file.
   `*-proto-api.service`, `daemon-reload` (B045/B046); `HOOK_TIMEOUT=3600`
   and postgresql-client on the UAT build host (B047); recopy the nginx
   site, `nginx -t`, reload, check `curl -6` (B048); recopy UAT build and
-  prd promote together, then one deliberately red UAT run (B058). The first
+  prd promote together, then one deliberately red UAT run (B058); B074:
+  `svc-proto` user, sandboxed unit, UAT monitors moved to prd shrmpl-etc. The first
   Go gate run needs network for staticcheck; Go 1.26 where
   `GOTOOLCHAIN=local` (B040).
 - **Follow-up:** the switcher context-switch pytest still mutates the seeded
@@ -52,22 +73,14 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 
 ## 1. Queue (doc/700 items not done, not skipped), in order
 
-Next: **B062**. Then B063-B066, B069-B078, B080-B083, B085-B088, B090.
-24 items (pull or adapt; Brandon treats them alike). B089 is done (folded
-into B038). B093-B095 join the queue once decided.
+The decided queue is empty: B062-B066, B069-B078, B080-B083, B085-B088 and
+B090 are done (B089 folded into B038, B091 removed the ticket system).
+Remaining work is only items awaiting Brandon's decision: B093, B094,
+B095, B096, B097, B098. Once one is decided pull or adapt, work it with
+the §2 procedure.
 Skipped, do not do: B002, B005, B015, B049, B050, B057, B067, B068, B079,
 B084, B092. B067 (audit log) is skipped, so B035 stripped GRC's audit
 calls; keep audit writes out of later items too.
-
-Known partial overlaps:
-- B088: nothing remains. B027 replaced `etc/uat-api-srv.env.example`
-  with `etc/uat-api-srv.env.template` (no cut sentence, no empty header)
-  and B041 fixed the `.gitignore` comment (now names `bin/300-run-tests`).
-  Verify, then move it to `# Completed` with no code change.
-- B075: B041 already removed doc/902's `npm run test:unit` reference; the
-  rest of B075 stands.
-- B086's expansion was corrected by B075's: the script exists in Brandon's
-  external loc-postgres repo; the defect is the doc depending on it.
 
 ## 2. How each item is worked (the procedure every item so far used)
 
@@ -77,10 +90,11 @@ Known partial overlaps:
    edit an existing migration, ~80 columns, `fooList` names).
 3. Add the tests the fix steps name; update tests that pinned the bug.
 4. `bin/300-run-tests all` fully green before completing; counts must not
-   drop without an explanation. Last full run at `e86c084`:
-   infra=15 docs=499 go=698 unit=87 e2e=13 py=103, govulncheck clean,
-   `gofmt -l` empty. The run fails if it changes `git status`; do not
-   edit files while it runs.
+   drop without an explanation. Last full run at `388c0ae`:
+   infra=15 docs=705 go=708 unit=105 e2e=70 py=103, govulncheck clean,
+   `gofmt -l` empty. The gate has `infra` and `docs` modes, skip-fails,
+   and a clean-tree check: the run fails if it changes `git status`; do
+   not edit files while it runs.
    Infra/script items are also verified in a throwaway `ubuntu:24.04`
    container (shellcheck, `nginx -t`, `fail2ban-regex`, real permission
    runs), showing old failing and new passing.
