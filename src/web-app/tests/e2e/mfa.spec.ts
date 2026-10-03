@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { expectDashboard, loginThroughForm, session } from "./fixtures/auth";
+import {
+  expectDashboard,
+  loginThroughForm,
+  session,
+  signOut,
+} from "./fixtures/auth";
 import { api } from "./fixtures/api-client";
 import { freshTotpCode } from "./fixtures/totp";
 
@@ -32,7 +37,7 @@ test.describe("mfa", () => {
 
     // Sign out; the second sign-in is verify only: no QR, no secret, and
     // no request to /mfaSetup at all.
-    await page.getByRole("button", { name: "Logout" }).click();
+    await signOut(page);
     await expect(page).toHaveURL(/\/login/);
     const mfaSetupRequestList: string[] = [];
     page.on("request", (request) => {

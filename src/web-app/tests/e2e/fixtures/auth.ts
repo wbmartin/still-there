@@ -41,3 +41,9 @@ export const expectDashboard = async (page: Page): Promise<void> => {
   ).toBeVisible();
   await expect(page.getByText(/Total Examples: \d+/)).toBeVisible();
 };
+
+/** Sign out through the header's account menu. */
+export const signOut = async (page: Page): Promise<void> => {
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Logout" }).click();
+};

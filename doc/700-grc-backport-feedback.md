@@ -242,114 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B025 — Left nav scrolls independently of the main screen
-
-- **Priority:** P2  **Area:** web-app
-- **GRC:** `components/grc/shell.tsx:4,26,65,69,87-98,100-102,149-165`   **PROTO:** `app.tsx:146-199` (`<nav>` :180-191, `<main>` :193-195); `index.css` notification rule
-- **Ticket:** `75ed426` (shell base `e666896`)
-- **What:** PROTO's nav scrolls away with the page; no fixed header or phone
-layout. GRC: AppShell header + 240 px navbar (Burger under `sm`); the nav list
-in `AppShell.Section grow component={ScrollArea}` scrolls on its own.
-- **Port notes:** Rewrite `AppLayout`: header + account menu (GRC :87-98),
-navbar NavLinks, main `Outlet`. Drop GRC extras. Fix `index.css`
-notifications. Then B063.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-All paths are under `src/web-app/`. Every route, including `/login`,
-renders inside `AppLayout` (`app.tsx:80-84`). `AppLayout` is a plain
-two-column flex row inside a centred Mantine `Container size="xl"` (1320
-px), with the nav shown only when signed in (`app.tsx:176-195`):
-
-```tsx
-<Flex>
-  {authState === 'YES' && (
-    <nav style={{ width: '200px', padding: '1rem', borderRight: ... }}>
-  <main style={{ flex: 1, padding: '1rem' }}>
-```
-
-Nothing is fixed or scrolls on its own: the whole document scrolls, and
-the nav scrolls with it. What a user sees:
-
-1. **Short window or long list.** Scroll down a 50-row list and the nav,
-   including Logout (`:187-189`), leaves the screen. To change page the
-   user scrolls back to the top. There is no header, so the app name,
-   the signed-in user and sign-out have no fixed home.
-2. **Phone (360-414 px wide).** There is no breakpoint. The nav keeps its
-   200 px; after container and `main` padding the page column gets
-   roughly 100-150 px. List tables and edit forms overflow sideways or wrap one
-   word per line. There is no way to hide the nav.
-3. **A derived app adds nav entries.** The list grows the page; with
-   15-20 entries on a laptop the lower links sit below the fold.
-
-Separately, `index.css:45-52` positions toasts against a 1024 px column,
-but the content is 1320 px wide, so on wide screens toasts float inside
-the content. It also repeats the selector from `:35`.
-
-UX problem, not a security or correctness bug.
-
-#### What GRC changed
-
-GRC's `src/web-app/components/grc/shell.tsx` uses Mantine `AppShell`
-(base `e666896`; nav scroll in `75ed426`):
-
-- A fixed 56 px header and a 240 px navbar that collapses below the `sm`
-  breakpoint, opened by a `Burger` shown only on small screens
-  (`shell.tsx:26,28,65,69`):
-  ```tsx
-  <AppShell header={{ height: HEADER_HEIGHT }} navbar={{ width: 240,
-    breakpoint: "sm", collapsed: { mobile: !opened } }} padding="md">
-  ```
-- An account `Menu` in the header holds Account settings and Sign out
-  (`:87-96`).
-- The nav list sits in a section that scrolls by itself under the fixed
-  header (`:100-102`):
-  ```tsx
-  <AppShell.Section grow component={ScrollArea} type="auto">
-  ```
-- Page content renders in `AppShell.Main` (`:151-165`).
-
-GRC kept the same toast rule (`src/web-app/index.css:45-51`). No shell
-test.
-
-#### Proposed fix for PROTO
-
-1. **Rewrite `AppLayout`** (`app.tsx:146-200`) on `AppShell`: header with
-   `Burger` (`hiddenFrom="sm"`), the app name from `constants/app`
-   (`APP_NAME`, already used by `pages/login.tsx:2`), and an account
-   `Menu` (Profile, Logout) copied from GRC `:87-96`; navbar with PROTO's
-   five `NavLink`s in `AppShell.Section grow component={ScrollArea}`;
-   `AppShell.Main` holding the existing `UNREACHABLE` notice or `Outlet`.
-   Drop the `Center`/`Container`/`Flex` wrappers.
-2. **Signed-out pages** (`/login`, `/mfaSetup`) use the same layout: pass
-   `disabled={authState !== 'YES'}` so they show no header or navbar.
-3. **Close the mobile nav on navigation.** GRC only toggles
-   (`shell.tsx:28,69`), so on a phone the drawer stays open over the page
-   after a link is tapped. Call `close()` in a `useEffect` on
-   `location.pathname`.
-4. **Leave out** every GRC extra: search box, as-of date, role `Select`,
-   badges, engagement alerts, `usePinnedPageHeader` (B063) and the 31
-   icons (`@tabler/icons-react` is already a dependency if wanted).
-5. **`index.css:45-52`**: delete the 1024 px positioning rule and let
-   `<Notifications position="bottom-right" />` (`main.tsx:15`) place
-   toasts; keep the width clamp at `:39-43`.
-6. Then B063 (pinned page header, sticky filter row) builds on this.
-7. Tests. vitest: render `AppLayout` signed in and assert the nav links
-   and account menu; signed out, assert no navbar. Playwright: at
-   375x667, open the burger, tap "Examples", assert the drawer closes;
-   at 1280x500, scroll the example list, assert header and nav stay put.
-
-#### Open question for Brandon
-
-Should Logout move into a header account menu (GRC) or stay as the last
-nav entry (PROTO today)? Recommendation: header menu, since it stays
-visible however long the nav grows in a derived app.
-
-Brandon: Header
-
 ### B026 — Server deploy runbooks: doc/330, doc/331, doc/340, infra/sql
 
 - **Priority:** P2  **Area:** docs, infra, tickets
@@ -8868,3 +8760,112 @@ Take GRC's `root:shrmpl-hook 1775` app root, or keep the root `root:root`
 and move the swap into a hook-owned `web/` parent (nginx `root` changes)?
 Recommendation: 1775, because GRC already runs it on real hosts and the
 sticky bit protects everything root and www-data own.
+
+### B025 — COMPLETED — Left nav scrolls independently of the main screen
+- **Completed:** 2026-10-02. `AppLayout` in `src/web-app/app.tsx` is now a Mantine `AppShell`: fixed 56 px header (burger under `sm`, `APP_NAME`, account menu with Profile and Logout), 240 px navbar whose links sit in `AppShell.Section grow component={ScrollArea}`, and `AppShell.Main` with the `UNREACHABLE` notice or `Outlet`; the shell is `disabled` unless signed in. Logout moved from the nav into the header menu (Brandon: Header); the five grant-gated nav links are unchanged. The phone drawer closes via `onClick` on each link rather than a `useEffect` on the pathname, so tapping the page already shown also closes it. `index.css` loses the 1024 px toast positioning rule. Deviations: no vitest render test (would need `@testing-library/react`, not a dependency); the Playwright scroll test runs at 1280x200 because five links fit in a 400 px window. Tests: new `tests/e2e/app-shell.spec.ts`; `smoke` and `mfa` specs sign out through a new `signOut` fixture (account menu). Tests: all green, go=279 unit=42 e2e=12 py=79
+
+- **Priority:** P2  **Area:** web-app
+- **GRC:** `components/grc/shell.tsx:4,26,65,69,87-98,100-102,149-165`   **PROTO:** `app.tsx:146-199` (`<nav>` :180-191, `<main>` :193-195); `index.css` notification rule
+- **Ticket:** `75ed426` (shell base `e666896`)
+- **What:** PROTO's nav scrolls away with the page; no fixed header or phone
+layout. GRC: AppShell header + 240 px navbar (Burger under `sm`); the nav list
+in `AppShell.Section grow component={ScrollArea}` scrolls on its own.
+- **Port notes:** Rewrite `AppLayout`: header + account menu (GRC :87-98),
+navbar NavLinks, main `Outlet`. Drop GRC extras. Fix `index.css`
+notifications. Then B063.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+All paths are under `src/web-app/`. Every route, including `/login`,
+renders inside `AppLayout` (`app.tsx:80-84`). `AppLayout` is a plain
+two-column flex row inside a centred Mantine `Container size="xl"` (1320
+px), with the nav shown only when signed in (`app.tsx:176-195`):
+
+```tsx
+<Flex>
+  {authState === 'YES' && (
+    <nav style={{ width: '200px', padding: '1rem', borderRight: ... }}>
+  <main style={{ flex: 1, padding: '1rem' }}>
+```
+
+Nothing is fixed or scrolls on its own: the whole document scrolls, and
+the nav scrolls with it. What a user sees:
+
+1. **Short window or long list.** Scroll down a 50-row list and the nav,
+   including Logout (`:187-189`), leaves the screen. To change page the
+   user scrolls back to the top. There is no header, so the app name,
+   the signed-in user and sign-out have no fixed home.
+2. **Phone (360-414 px wide).** There is no breakpoint. The nav keeps its
+   200 px; after container and `main` padding the page column gets
+   roughly 100-150 px. List tables and edit forms overflow sideways or wrap one
+   word per line. There is no way to hide the nav.
+3. **A derived app adds nav entries.** The list grows the page; with
+   15-20 entries on a laptop the lower links sit below the fold.
+
+Separately, `index.css:45-52` positions toasts against a 1024 px column,
+but the content is 1320 px wide, so on wide screens toasts float inside
+the content. It also repeats the selector from `:35`.
+
+UX problem, not a security or correctness bug.
+
+#### What GRC changed
+
+GRC's `src/web-app/components/grc/shell.tsx` uses Mantine `AppShell`
+(base `e666896`; nav scroll in `75ed426`):
+
+- A fixed 56 px header and a 240 px navbar that collapses below the `sm`
+  breakpoint, opened by a `Burger` shown only on small screens
+  (`shell.tsx:26,28,65,69`):
+  ```tsx
+  <AppShell header={{ height: HEADER_HEIGHT }} navbar={{ width: 240,
+    breakpoint: "sm", collapsed: { mobile: !opened } }} padding="md">
+  ```
+- An account `Menu` in the header holds Account settings and Sign out
+  (`:87-96`).
+- The nav list sits in a section that scrolls by itself under the fixed
+  header (`:100-102`):
+  ```tsx
+  <AppShell.Section grow component={ScrollArea} type="auto">
+  ```
+- Page content renders in `AppShell.Main` (`:151-165`).
+
+GRC kept the same toast rule (`src/web-app/index.css:45-51`). No shell
+test.
+
+#### Proposed fix for PROTO
+
+1. **Rewrite `AppLayout`** (`app.tsx:146-200`) on `AppShell`: header with
+   `Burger` (`hiddenFrom="sm"`), the app name from `constants/app`
+   (`APP_NAME`, already used by `pages/login.tsx:2`), and an account
+   `Menu` (Profile, Logout) copied from GRC `:87-96`; navbar with PROTO's
+   five `NavLink`s in `AppShell.Section grow component={ScrollArea}`;
+   `AppShell.Main` holding the existing `UNREACHABLE` notice or `Outlet`.
+   Drop the `Center`/`Container`/`Flex` wrappers.
+2. **Signed-out pages** (`/login`, `/mfaSetup`) use the same layout: pass
+   `disabled={authState !== 'YES'}` so they show no header or navbar.
+3. **Close the mobile nav on navigation.** GRC only toggles
+   (`shell.tsx:28,69`), so on a phone the drawer stays open over the page
+   after a link is tapped. Call `close()` in a `useEffect` on
+   `location.pathname`.
+4. **Leave out** every GRC extra: search box, as-of date, role `Select`,
+   badges, engagement alerts, `usePinnedPageHeader` (B063) and the 31
+   icons (`@tabler/icons-react` is already a dependency if wanted).
+5. **`index.css:45-52`**: delete the 1024 px positioning rule and let
+   `<Notifications position="bottom-right" />` (`main.tsx:15`) place
+   toasts; keep the width clamp at `:39-43`.
+6. Then B063 (pinned page header, sticky filter row) builds on this.
+7. Tests. vitest: render `AppLayout` signed in and assert the nav links
+   and account menu; signed out, assert no navbar. Playwright: at
+   375x667, open the burger, tap "Examples", assert the drawer closes;
+   at 1280x500, scroll the example list, assert header and nav stay put.
+
+#### Open question for Brandon
+
+Should Logout move into a header account menu (GRC) or stay as the last
+nav entry (PROTO today)? Recommendation: header menu, since it stays
+visible however long the nav grows in a derived app.
+
+Brandon: Header

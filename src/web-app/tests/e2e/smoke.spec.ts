@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { expectDashboard, loginThroughForm } from "./fixtures/auth";
+import {
+  expectDashboard,
+  loginThroughForm,
+  signOut,
+} from "./fixtures/auth";
 
 // Proves the harness itself before anything is built on it: the stack
 // starts, the fixtures exist, the saved session is accepted, and the login
@@ -35,7 +39,7 @@ test.describe("signing in and out", () => {
 
     // Logout must end the session, not just the view: a protected URL
     // afterwards has to bounce back to the form.
-    await page.getByRole("button", { name: "Logout" }).click();
+    await signOut(page);
     await expect(page).toHaveURL(/\/login/);
     await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/login/);
