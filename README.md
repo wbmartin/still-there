@@ -78,6 +78,7 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 | File | Description |
 |------|-------------|
 | [doc/105-api-srv-tech-spec.md](doc/105-api-srv-tech-spec.md) | API server tech spec: endpoints, auth flow, security, database design, code conventions |
+| [doc/110-security-architecture.md](doc/110-security-architecture.md) | Security architecture: trust boundaries, tenant isolation, threats and controls marked met / partial / open |
 | [doc/900-database-guidelines.md](doc/900-database-guidelines.md) | Database design rules (naming, timestamps, multi-tenancy, no FKs/triggers) |
 
 ### Development Guides

@@ -261,6 +261,9 @@ The password key is `password` everywhere a password is set
 
 ## Security
 
+The mechanics. What they defend, the trust boundaries and which controls
+are met, partial or open: `doc/110-security-architecture.md`.
+
 ### Authentication
 - **JWT**: HS256 signed with `JWT_SECRET`, carried in the `auth` cookie
 - **Password Hashing**: Argon2id with time=3, memory=64MB, threads=4, key length=32
@@ -420,7 +423,9 @@ the only one when the API is reached without nginx (local dev).
 4. **CSRF Protection**: Compare `X-CSRF-Token` header with last 3 chars of
    session ID (safe methods — GET, HEAD, OPTIONS, TRACE — are exempt);
    missing or wrong is 403 with `"code": "CSRF"`. A mismatch is logged
-   (`CSM0`) without either token: both are slices of a session ID
+   (`CSM0`) without either token: both are slices of a session ID. The
+   token is 12 bits; the real defence is the `SameSite=Strict`, `HttpOnly`
+   cookie (doc/110, threat 1.7)
 5. **RBAC**: Verify user has required grant for the JWT's security
    context; 403 `Permission denied (grant "<SHORT_CODE>" required)`
 
@@ -511,6 +516,9 @@ frame, referrer, HSTS) on the web locations only, so each API header
 arrives once.
 
 ### Multi-tenancy
+Isolation is application code only (no row-level security); the rule and
+which tables have a cross-tenant test are in doc/110, Tenant isolation.
+
 - **Security Context**: Integer identifier for tenant isolation
 - **Data Segregation**: All queries filter by `security_context_id`, taken
   from the JWT; a handler overwrites any tenant a client sends

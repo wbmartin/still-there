@@ -27,6 +27,11 @@ This section describes how I'd like an AI to think and respond for database desi
   tenant reads as absent, so an id is never confirmed across tenants. Two
   named lookups are exempt: `RetrieveUserByUserName` and
   `GetGrantsForGroups` (see doc/105, Optimistic Locking).
+- Isolation is enforced in application code only: no row-level security,
+  and the API role reads and writes every tenant. A new tenant table ships
+  with a cross-tenant negative test at the repository layer (read, update,
+  delete of another tenant's row answer not-found); the threat model and
+  the per-table list are in `doc/110-security-architecture.md`.
 - Don't create foreign keys / Postgres references within the database - managed in the application layer similar to how nosql is managed.
 - Don't create triggers for updating dates within the database - managed by the application layer.
 - Schema changes are versioned SQL files applied by the project's own migrator (`src/api-srv/cmd/migrate`); see "Schema changes" below. No third-party migration framework.

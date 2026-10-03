@@ -48,7 +48,9 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
   no tenant 1: `sql/fixtures/test-tenant-lock.sql` puts
   `CHECK (security_context_id <> 1)` on every tenant table, and isolation is
   proved between 2 and 3. Fixtures, tests and derived apps keep this
-  numbering.
+  numbering. Isolation is application code only (no row-level security), so
+  every new tenant table ships a cross-tenant negative test
+  (`doc/110-security-architecture.md`).
 - Security checks are called explicitly in each handler (JWT → rate limit →
   CSRF → authorization → `CheckAllChecksComplete`); exceptions are written in
   the handler, not hidden in middleware. Non-negotiable.

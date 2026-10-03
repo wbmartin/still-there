@@ -710,82 +710,6 @@ given it moves authorization differences into a matrix? Recommend an ADR
 that permits it only for derived apps past ~10 entities, never the
 template.
 
-### B077 — Security architecture doc for the template
-
-- **Priority:** P3  **Area:** docs, infra
-- **GRC:** `doc/requirements/20-architecture.md:22,24-26,33,40,58,60,186`; `doc/requirements/22-threat-model.md:85-131,143-150,156-160,214-217,227-238,246-253,306-309,320-324,330-344,349-359,366-368`; `doc/331-prd-postsales-cutover.md:283-290`   **PROTO:** new `doc/110-security-architecture.md` (or doc/105 Security `:151-225`); `doc/900-database-guidelines.md:1-43`; `doc/105-api-srv-tech-spec.md:7-18`; `infra/README.md:185-187`
-- **Ticket:** GRC spec (A-002, A-004, A-038, A-047, A-049; C-1..C-14)
-- **What:** App-layer isolation (no RLS) so a cross-tenant test per table;
-cross-tenant 404 never 403; STRIDE for B1/B2/B7 (T-9 `mfa_exempt` humans, T-11
-3-char CSRF); testable controls; pull-based backup target.
-- **Port notes:** Cite `scoped_query.go`; mark controls PROTO meets; A-047 vs
-PS0016 UUID.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-PROTO has security mechanisms but no written model of what they defend.
-`doc/105-api-srv-tech-spec.md:151-225` lists controls (auth, RBAC, the
-per-request checks, headers); multi-tenancy is five lines (`:221-225`):
-
-    - **Data Segregation**: All queries filter by `security_context`
-
-Nothing says isolation is enforced only in application code (no Postgres
-RLS), so nothing says what follows: each tenant table needs a
-cross-tenant negative test, and a missed predicate has nothing behind it.
-`repository/scoped_query.go:8-24` encodes the rule for list reads, but
-writes and `EXISTS` checks do not use it, and another tenant's id answers
-409, which leaks existence (B012). Other gaps a model would surface:
-`mfa_exempt` is one column an admin can set through the API
-(`repository/user_repository.go:273-286`); the CSRF token is the session
-id's last 3 characters (`handler/auth_handler.go:354,488,646`); the prd
-backup pushes to `REMOTE_SERVER` by `scp` (`infra/README.md:185-187`), so
-the primary holds credentials to its own backups. Docs gap; the derived
-app inherits the template's risks without a list of them.
-
-#### What GRC changed
-
-GRC wrote a product spec, not a template doc. `doc/requirements/20-architecture.md:22`
-(A-002): "Isolation is enforced at the application layer only ... **No
-Postgres row-level security**"; `:24-26`: "Every new tenant-scoped table
-must ship with a cross-tenant negative test or CI fails". A-004 `:33` no
-hard delete; A-047 `:58` integer keys, never UUIDs; A-049 `:60` enums as
-text; A-038 `:186` pull-based backup. `22-threat-model.md:85-131` sets
-trust boundaries B1-B7 as a table; STRIDE rows include T-9 `mfa_exempt`
-(`:144`, residual **H**), T-11 3-char CSRF (`:146`), T-14 403-vs-404
-enumeration (`:149`), T-2 missing predicate (`:156`). `:227-238` and
-`:246-253` state the consequences; C-1, C-4, C-6, C-7, C-9..C-11, C-14
-(`:306-309,320-324,330-344,349-359,366-368`) are testable controls.
-Correction: GRC's own backup is push too (`prd-grc-backup-all:46`, `scp`
-to `REMOTE_SERVER`; `doc/331-prd-postsales-cutover.md:283-290`), so
-A-038 is a GRC intent, not GRC practice. No tests pin the doc.
-
-#### Proposed fix for PROTO
-
-1. New `doc/110-security-architecture.md` (doc/105 keeps the mechanics,
-   links to it). Sections: boundaries B1 (internet to API), B2 (API to
-   Postgres), B7 (operations) only; B3-B6 are GRC features (vault,
-   worker, external users, support, blobs).
-2. Isolation rule: app-layer only, cite `scoped_query.go`; cross-tenant id
-   answers 404, never 403/409 (lands with B012); one negative test per
-   tenant table (`tests/test_security_context_isolation.py`).
-3. A STRIDE table for B1/B2/B7, each row marked "met / partial / open"
-   against PROTO code: T-9 (`mfa_exempt`), T-11 (3-char CSRF, B004),
-   T-14 (B012), T-2, T-43/A-038 (push backup).
-4. Controls adapted from C-1, C-7, C-9, C-10; drop C-6's magic links
-   unless B035 lands; drop C-14 unless B067 lands.
-5. A-047 vs PS0016: say PROTO keeps integer keys and shows a UUID column
-   only as an attribute (`0002_example_jsonb_uuid.sql:1-3`).
-6. Link from `CLAUDE.md` Conventions and `doc/900`. Tests: none new.
-
-#### Open question for Brandon
-
-Should the template doc set a rule that `mfa_exempt` is forbidden on
-human accounts in production (GRC C-7)? Recommendation: yes, stated as
-policy now, enforced by a test once B010/B018 land.
-
 ### B078 — Testing hygiene rules
 
 - **Priority:** P3  **Area:** docs, tests
@@ -1673,7 +1597,7 @@ None.
 
 Found by RG0043 (§2 numbering), unfixed in GRC; PROTO has the same code.
 
-- 12-bit CSRF token `sessionID[len-3:]`: GRC `security/app_helper.go:541`, `auth/token.go:13-19`; PROTO `security/app_helper.go:517-520` (2.2). Rationale (SameSite + HttpOnly is the defence) belongs in doc/105 (B077).
+- 12-bit CSRF token `sessionID[len-3:]`: GRC `security/app_helper.go:541`, `auth/token.go:13-19`; PROTO `security/app_helper.go:517-520` (2.2). Rationale (SameSite + HttpOnly is the defence) belongs in doc/105 (B077). **Documented in doc/105 Security Checks and doc/110 threat 1.7 (B077); the token is unchanged.**
 - `http.Server` without Read/ReadHeader/Write/Idle timeouts: GRC `cmd/server/main.go:252-255`; PROTO `cmd/server/main.go:201-204` (2.5).
 - Numeric config keys silently 0; `TOTP_ENCRYPTION_KEY`/`JWT_SECRET` length and `FAILED_LOGIN_*_DURATION` grammar unchecked (500 per failed login): GRC `config/config.go:177-262`; PROTO `config/config.go:84-205` (2.6).
 - `/mfaVerify` ignores counter write errors: GRC `user_mfa_handler.go:440-452`; PROTO `:540-552` (2.7; fix in B008).
@@ -9000,3 +8924,80 @@ only once; "the form now records which route id it was loaded for".
 
 None.
 - **Completed:** 2026-10-03. Already covered: the store-test example and the B013 body fix (B013: `tests/app-user-store.test.ts`); PROTO's vitest runs under jsdom from `tests/`. Re-checked against code: zustand 5.0.15 does flag a misspelled key in a bare `set({...})` literal, so the rule is narrowed to what escapes: the updater form and an `as Partial<Store>` cast (`create-entity-store.ts`). `src/web-app/README.md`: Entity Stores gains three store rules (body keys are the Go `json` tags, since `decodeJSONBody` drops unknown keys; the store throws and the page tells the user; the `set` key-check gap); the copy table gains `tests/examples-store.test.ts`; the house pattern says edit pages load once per route id (`requestedId` ref; list pages keep `hasFetched`) and never render a form for a record that did not load. Code: `example-edit-page.tsx`, `app-user-edit-page.tsx`, `app-user-group-edit-page.tsx` record `{ id, found }` per route id, reload on a new id (`new` resets the form), drop a stale response, show title + `<Alert />` for a non-numeric, empty or failed load, and notify on a load error; `app-user-edit-page.tsx` no longer shows a stale "Blocked" badge on Add User. Beyond the item (rule 2 in the copy source): `example-list-page.tsx` and `app-user-list-page.tsx` deletes now notify success/failure (the example list said "Error is handled in store", which was false); the example list refresh after a delete no longer reports a refresh failure as a failed delete. doc/810 WEB-APP pointer follows; `scripts/doc-paths-allow.txt` lists the new `tests/widget-store.test.ts` copy target. New tests: vitest `tests/examples-store.test.ts` (4: readExampleById URL + cache refresh, create/update/delete URL and body); Playwright `example-pages.spec.ts` (2: missing id shows the Alert and no form; `history.go(-2)` between two edit pages reloads the form), both failing on the old page. Tests: all green, infra=15 docs=611 go=707 unit=105 e2e=70 py=103 (docs +8 path tokens, unit +4, e2e +2).
+
+### B077 — COMPLETED — Security architecture doc for the template
+
+- **Priority:** P3  **Area:** docs, infra
+- **GRC:** `doc/requirements/20-architecture.md:22,24-26,33,40,58,60,186`; `doc/requirements/22-threat-model.md:85-131,143-150,156-160,214-217,227-238,246-253,306-309,320-324,330-344,349-359,366-368`; `doc/331-prd-postsales-cutover.md:283-290`   **PROTO:** new `doc/110-security-architecture.md` (or doc/105 Security `:151-225`); `doc/900-database-guidelines.md:1-43`; `doc/105-api-srv-tech-spec.md:7-18`; `infra/README.md:185-187`
+- **Ticket:** GRC spec (A-002, A-004, A-038, A-047, A-049; C-1..C-14)
+- **What:** App-layer isolation (no RLS) so a cross-tenant test per table;
+cross-tenant 404 never 403; STRIDE for B1/B2/B7 (T-9 `mfa_exempt` humans, T-11
+3-char CSRF); testable controls; pull-based backup target.
+- **Port notes:** Cite `scoped_query.go`; mark controls PROTO meets; A-047 vs
+PS0016 UUID.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+PROTO has security mechanisms but no written model of what they defend.
+`doc/105-api-srv-tech-spec.md:151-225` lists controls (auth, RBAC, the
+per-request checks, headers); multi-tenancy is five lines (`:221-225`):
+
+    - **Data Segregation**: All queries filter by `security_context`
+
+Nothing says isolation is enforced only in application code (no Postgres
+RLS), so nothing says what follows: each tenant table needs a
+cross-tenant negative test, and a missed predicate has nothing behind it.
+`repository/scoped_query.go:8-24` encodes the rule for list reads, but
+writes and `EXISTS` checks do not use it, and another tenant's id answers
+409, which leaks existence (B012). Other gaps a model would surface:
+`mfa_exempt` is one column an admin can set through the API
+(`repository/user_repository.go:273-286`); the CSRF token is the session
+id's last 3 characters (`handler/auth_handler.go:354,488,646`); the prd
+backup pushes to `REMOTE_SERVER` by `scp` (`infra/README.md:185-187`), so
+the primary holds credentials to its own backups. Docs gap; the derived
+app inherits the template's risks without a list of them.
+
+#### What GRC changed
+
+GRC wrote a product spec, not a template doc. `doc/requirements/20-architecture.md:22`
+(A-002): "Isolation is enforced at the application layer only ... **No
+Postgres row-level security**"; `:24-26`: "Every new tenant-scoped table
+must ship with a cross-tenant negative test or CI fails". A-004 `:33` no
+hard delete; A-047 `:58` integer keys, never UUIDs; A-049 `:60` enums as
+text; A-038 `:186` pull-based backup. `22-threat-model.md:85-131` sets
+trust boundaries B1-B7 as a table; STRIDE rows include T-9 `mfa_exempt`
+(`:144`, residual **H**), T-11 3-char CSRF (`:146`), T-14 403-vs-404
+enumeration (`:149`), T-2 missing predicate (`:156`). `:227-238` and
+`:246-253` state the consequences; C-1, C-4, C-6, C-7, C-9..C-11, C-14
+(`:306-309,320-324,330-344,349-359,366-368`) are testable controls.
+Correction: GRC's own backup is push too (`prd-grc-backup-all:46`, `scp`
+to `REMOTE_SERVER`; `doc/331-prd-postsales-cutover.md:283-290`), so
+A-038 is a GRC intent, not GRC practice. No tests pin the doc.
+
+#### Proposed fix for PROTO
+
+1. New `doc/110-security-architecture.md` (doc/105 keeps the mechanics,
+   links to it). Sections: boundaries B1 (internet to API), B2 (API to
+   Postgres), B7 (operations) only; B3-B6 are GRC features (vault,
+   worker, external users, support, blobs).
+2. Isolation rule: app-layer only, cite `scoped_query.go`; cross-tenant id
+   answers 404, never 403/409 (lands with B012); one negative test per
+   tenant table (`tests/test_security_context_isolation.py`).
+3. A STRIDE table for B1/B2/B7, each row marked "met / partial / open"
+   against PROTO code: T-9 (`mfa_exempt`), T-11 (3-char CSRF, B004),
+   T-14 (B012), T-2, T-43/A-038 (push backup).
+4. Controls adapted from C-1, C-7, C-9, C-10; drop C-6's magic links
+   unless B035 lands; drop C-14 unless B067 lands.
+5. A-047 vs PS0016: say PROTO keeps integer keys and shows a UUID column
+   only as an attribute (`0002_example_jsonb_uuid.sql:1-3`).
+6. Link from `CLAUDE.md` Conventions and `doc/900`. Tests: none new.
+
+#### Open question for Brandon
+
+Should the template doc set a rule that `mfa_exempt` is forbidden on
+human accounts in production (GRC C-7)? Recommendation: yes, stated as
+policy now, enforced by a test once B010/B018 land.
+- **Completed:** 2026-10-03. New `doc/110-security-architecture.md`, every claim re-checked against code: deployment shape (nginx, loopback API as `svc-proto`, `proto_app` DML role, in-process KV); boundaries B1 internet-to-API, B2 API-to-Postgres, B3 operations (renumbered from GRC's B1/B2/B7, since B3-B6 are GRC features); tenant isolation is application code only (no RLS): JWT tenant, `scoped_query.go`, write predicates and `zeroRowOutcome` (404 never 409, B012), test-tenant lock, soft deletes (an app rule: `db_writer` holds ALL PRIVILEGES), integer keys with `example_uuid` as attribute only (A-047 vs PS0016); a per-table cross-tenant test list: `app_user`, `app_user_group`, `user_invite` met, `example` partial (no cross-tenant test). STRIDE rows met/partial/open: HS256 JWT (`iss` not checked), revocation lost on restart, lockout, TOTP replay, `mfa_exempt` (open), 12-bit CSRF with SameSite=Strict + HttpOnly as the real defence (B004/appendix 2.2 rationale), route contract (B039), block flag with B094 open, `ip:` bucket and CSP (B059), `admin` exemption / no server timeouts / 2x burst / HSTS preload / `totp_seed` select as appendix opens, XFF + required loopback bind (B007/B016/B061), invite links (B035), DML role and secrets at rest, systemd sandbox (B074; presales unit lighter: partial), TOTP key kept with backups, push backup open against the pull target (A-038), export scrub (B071; presales unscrubbed), monitors placement, fail2ban. Controls kept from C-1, C-6 (as invite links), C-7, C-10, C-4; C-14 dropped (B067 skipped), C-9 host-access logging listed as open. Open question taken as recommended: doc states the policy that `mfa_exempt` is never on a human account in production; not enforced by a test, since the API accepts it from ADD_USER/CHG_USER holders and a production policy has no in-repo test beyond the export scrub clearing it (follow-up for Brandon: refuse it in the API or report exempt logins on a host). Links: doc/105 Security intro, CSRF step and Multi-tenancy; `CLAUDE.md` Conventions; doc/900; README doc table. Appendix CSRF line marked documented. No code change, no new tests. Tests: all green, infra=15 docs=655 go=707 unit=105 e2e=70 py=103 (docs +44 path tokens), govulncheck clean, gofmt clean.
