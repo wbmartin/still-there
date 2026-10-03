@@ -242,115 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B044 — tests/README.md rewrite
-
-- **Priority:** P2  **Area:** tests, docs
-- **GRC:** `tests/README.md:1-9,90-97,105-114,116-123`   **PROTO:** `tests/README.md:1-61` (dev server :15-20,29-32; pyotp :61; `test_own_profile.py`/`test_zz_mfa_totp.py` absent)
-- **Ticket:** RG0041 / `31970ae`; RG0006; RG0003
-- **What:** PROTO's README runs pytest against the dev API on 8080 and is stale
-on files and deps. GRC states test API + tenant 2 only, MFA ordering/XFF,
-helpers, reports.
-- **Port notes:** Write fresh for bin/300; GRC's is stale at :79,84,129,136.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Doc gap: `tests/README.md` (61 lines) is the only guide to the pytest
-suite, and parts of it are wrong or missing. A new developer following
-it can point the suite at the dev database.
-
-**(1) It offers a manual run against the dev API.**
-
-```bash
-# tests/README.md:18-19
-bin/215-run-api-srv                        # reads TEST_BASE_URL from etc/loc-api-srv.env
-TEST_BASE_URL=https://localhost:8080 tests/.venv/bin/python -m pytest tests/
-```
-
-`bin/215` serves the developer's database. The suite creates and deletes
-users, groups and examples, changes `basic`'s profile, and locks
-accounts. Run this way it does that to the dev data in tenant 1, under
-dev rate limits. It also says `https` on `:19` while `:5` says there is
-no TLS locally and `:32` says `http`.
-
-**(2) The configuration section describes code that does not exist.**
-`:29-32` says `bin/300-run-tests` reads `TEST_BASE_URL` from
-`etc/loc-api-srv.env` "or the file `$TEST_API_ENV` points at".
-`TEST_API_ENV` appears nowhere in `bin/`, `tests/` or `etc/`. The real
-flow: `bin/300-run-tests:148-155` copies `etc/e2e-api-srv.env` (with the
-two rate limits taken from the dev file), reads `TEST_BASE_URL` from that
-copy (`:156`, `http://127.0.0.1:8082` per `etc/e2e-api-srv.env:60`),
-refuses if something already listens there (`:158-160`), starts a private
-API, and exports `TEST_BASE_URL` to pytest (`:200`).
-
-**(3) The file list is stale.** `:49-57` omits `test_own_profile.py`
-(GET/PUT `/me`) and `test_zz_mfa_totp.py` (enrol, verify, lockout).
-`:61` lists "pytest, requests, pytest-html"; `tests/requirements.txt`
-also pins `pyotp==2.9.0`. Nothing explains the `test_a_` / `test_z_` /
-`test_zz_` prefixes: pytest collects alphabetically, so the rate-limit
-and lockout tests run last on purpose (`tests/test_auth_flow.py:110-112`
-says so in a comment).
-
-**(4) Missing rules:** which tenant tests may touch, how lockout tests
-avoid locking the shared loopback IP, where reports go, and that the run
-must leave `git status` clean.
-
-#### What GRC changed
-
-RG0041 (`31970ae`) and RG0006/RG0003 rewrote GRC's `tests/README.md`:
-
-- `:3`: the suite runs against the **test** API, "tenant 2 of the scratch
-  `loc_radley_grc_e2e_db`, never the real database or tenant 1 (RG0041;
-  `conftest.py` aborts otherwise)".
-- `:5-9`: each pinned dependency with the advisory that set its floor.
-- `:90-97`: per-file coverage. The MFA file is collected last
-  (`test_zz_`), and "every request that can increment a counter carries
-  its own `X-Forwarded-For` (a fresh address per run)" so lockouts never
-  touch the loopback bucket; the lockout runs on a throwaway user.
-- `:105-114`: `TestClient`, the MFA helpers and each fixture.
-- `:116-123`: reports under `tmp/test-reports/`, gitignored (RG0006).
-
-GRC's own copy is stale too: `:79` says the script reads
-`etc/loc-api-srv.env` (it reads `etc/loc-test-api-srv.env`), and `:84`,
-`:129`, `:136` still show port 8080 and the dev env file. Copying it
-would import those errors.
-
-#### Proposed fix for PROTO
-
-Write `tests/README.md` fresh around `bin/300-run-tests py`. Sections:
-
-1. **What it is**: HTTP tests against a private API on `:8082` over the
-   scratch `E2E_DB` (`etc/loc-test.env`), started and stopped by
-   `bin/300`. Tenant rule per B018 (tests act in tenant 2 only).
-2. **Running**: `bin/300-run-tests py`, and `all`. Manual run only
-   against an API started from `etc/e2e-api-srv.env`, never `bin/215`.
-3. **Configuration**: the real flow from `bin/300-run-tests:141-160,200`,
-   including why the rate limits are copied from the dev file.
-4. **Files**: every `test_*.py`, with the ordering prefixes explained.
-5. **Client and fixtures**: `TestClient`, `test_client`,
-   `basic_user_client`, `example_tracker` (`tests/conftest.py:14,147,
-   169,194`); add `api_env` and `db` when B018 adds them.
-6. **Lockout hygiene**: per-run `X-Forwarded-For` and a throwaway lockout
-   user, once B019 lands; until then, say the MFA file runs last because
-   it locks the loopback IP.
-7. **Requirements**: list all four pins; point at B017 for the bumps.
-8. **Reports and clean tree**: `tmp/test-reports/`, `tmp/test-logs/`;
-   `git status` empty after a run (B041).
-
-Traps: no `bin/320`, `bin/216`, `bin/510 --go-only`, `grc` fixture,
-`test_grc_api.py`, eslint step or `matrix.json` in PROTO. Use names from
-`etc/app.env`-derived files, not `loc_radley_grc_*`. Write it last in
-the test batch (after B017, B018, B019, B043) so it describes the
-final state.
-
-Tests: none; check every command in it by running it once.
-
-#### Open question for Brandon
-
-None.
-
 ### B045 — infra scripts derive names from the app root; shared copies equal
 
 - **Priority:** P2  **Area:** infra, docs
@@ -8907,3 +8798,115 @@ Tests: pytest only; this item is the tests.
 #### Open question for Brandon
 
 None.
+
+### B044 — COMPLETED — tests/README.md rewrite
+
+- **Priority:** P2  **Area:** tests, docs
+- **GRC:** `tests/README.md:1-9,90-97,105-114,116-123`   **PROTO:** `tests/README.md:1-61` (dev server :15-20,29-32; pyotp :61; `test_own_profile.py`/`test_zz_mfa_totp.py` absent)
+- **Ticket:** RG0041 / `31970ae`; RG0006; RG0003
+- **What:** PROTO's README runs pytest against the dev API on 8080 and is stale
+on files and deps. GRC states test API + tenant 2 only, MFA ordering/XFF,
+helpers, reports.
+- **Port notes:** Write fresh for bin/300; GRC's is stale at :79,84,129,136.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Doc gap: `tests/README.md` (61 lines) is the only guide to the pytest
+suite, and parts of it are wrong or missing. A new developer following
+it can point the suite at the dev database.
+
+**(1) It offers a manual run against the dev API.**
+
+```bash
+# tests/README.md:18-19
+bin/215-run-api-srv                        # reads TEST_BASE_URL from etc/loc-api-srv.env
+TEST_BASE_URL=https://localhost:8080 tests/.venv/bin/python -m pytest tests/
+```
+
+`bin/215` serves the developer's database. The suite creates and deletes
+users, groups and examples, changes `basic`'s profile, and locks
+accounts. Run this way it does that to the dev data in tenant 1, under
+dev rate limits. It also says `https` on `:19` while `:5` says there is
+no TLS locally and `:32` says `http`.
+
+**(2) The configuration section describes code that does not exist.**
+`:29-32` says `bin/300-run-tests` reads `TEST_BASE_URL` from
+`etc/loc-api-srv.env` "or the file `$TEST_API_ENV` points at".
+`TEST_API_ENV` appears nowhere in `bin/`, `tests/` or `etc/`. The real
+flow: `bin/300-run-tests:148-155` copies `etc/e2e-api-srv.env` (with the
+two rate limits taken from the dev file), reads `TEST_BASE_URL` from that
+copy (`:156`, `http://127.0.0.1:8082` per `etc/e2e-api-srv.env:60`),
+refuses if something already listens there (`:158-160`), starts a private
+API, and exports `TEST_BASE_URL` to pytest (`:200`).
+
+**(3) The file list is stale.** `:49-57` omits `test_own_profile.py`
+(GET/PUT `/me`) and `test_zz_mfa_totp.py` (enrol, verify, lockout).
+`:61` lists "pytest, requests, pytest-html"; `tests/requirements.txt`
+also pins `pyotp==2.9.0`. Nothing explains the `test_a_` / `test_z_` /
+`test_zz_` prefixes: pytest collects alphabetically, so the rate-limit
+and lockout tests run last on purpose (`tests/test_auth_flow.py:110-112`
+says so in a comment).
+
+**(4) Missing rules:** which tenant tests may touch, how lockout tests
+avoid locking the shared loopback IP, where reports go, and that the run
+must leave `git status` clean.
+
+#### What GRC changed
+
+RG0041 (`31970ae`) and RG0006/RG0003 rewrote GRC's `tests/README.md`:
+
+- `:3`: the suite runs against the **test** API, "tenant 2 of the scratch
+  `loc_radley_grc_e2e_db`, never the real database or tenant 1 (RG0041;
+  `conftest.py` aborts otherwise)".
+- `:5-9`: each pinned dependency with the advisory that set its floor.
+- `:90-97`: per-file coverage. The MFA file is collected last
+  (`test_zz_`), and "every request that can increment a counter carries
+  its own `X-Forwarded-For` (a fresh address per run)" so lockouts never
+  touch the loopback bucket; the lockout runs on a throwaway user.
+- `:105-114`: `TestClient`, the MFA helpers and each fixture.
+- `:116-123`: reports under `tmp/test-reports/`, gitignored (RG0006).
+
+GRC's own copy is stale too: `:79` says the script reads
+`etc/loc-api-srv.env` (it reads `etc/loc-test-api-srv.env`), and `:84`,
+`:129`, `:136` still show port 8080 and the dev env file. Copying it
+would import those errors.
+
+#### Proposed fix for PROTO
+
+Write `tests/README.md` fresh around `bin/300-run-tests py`. Sections:
+
+1. **What it is**: HTTP tests against a private API on `:8082` over the
+   scratch `E2E_DB` (`etc/loc-test.env`), started and stopped by
+   `bin/300`. Tenant rule per B018 (tests act in tenant 2 only).
+2. **Running**: `bin/300-run-tests py`, and `all`. Manual run only
+   against an API started from `etc/e2e-api-srv.env`, never `bin/215`.
+3. **Configuration**: the real flow from `bin/300-run-tests:141-160,200`,
+   including why the rate limits are copied from the dev file.
+4. **Files**: every `test_*.py`, with the ordering prefixes explained.
+5. **Client and fixtures**: `TestClient`, `test_client`,
+   `basic_user_client`, `example_tracker` (`tests/conftest.py:14,147,
+   169,194`); add `api_env` and `db` when B018 adds them.
+6. **Lockout hygiene**: per-run `X-Forwarded-For` and a throwaway lockout
+   user, once B019 lands; until then, say the MFA file runs last because
+   it locks the loopback IP.
+7. **Requirements**: list all four pins; point at B017 for the bumps.
+8. **Reports and clean tree**: `tmp/test-reports/`, `tmp/test-logs/`;
+   `git status` empty after a run (B041).
+
+Traps: no `bin/320`, `bin/216`, `bin/510 --go-only`, `grc` fixture,
+`test_grc_api.py`, eslint step or `matrix.json` in PROTO. Use names from
+`etc/app.env`-derived files, not `loc_radley_grc_*`. Write it last in
+the test batch (after B017, B018, B019, B043) so it describes the
+final state.
+
+Tests: none; check every command in it by running it once.
+
+#### Open question for Brandon
+
+None.
+
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). `tests/README.md` rewritten from the files as they are now: private test API on :8082 over the e2e scratch DB, started by `bin/300-run-tests py` (no manual mode; conftest exits 3 otherwise); the copied env (`tmp/test-logs/py-api-srv.env`) with the two rate limits from `etc/loc-api-srv.env` and `TRUSTED_PROXY_COUNT=1` (one proxy hop); guards; tenants 2/3 and seeded users; `TestClient`, fixtures, `api_env`, `create_throwaway_login`/`delete_user`, CSRF probe; forwarded-IP lockout hygiene and the rate case; every `test_*.py` (incl. `test_own_profile.py`, `test_user_block.py`, `test_user_invite.py`, `test_zz_mfa_totp.py`) with the `a`/`z`/`zz` ordering explained; reports/logs and the clean-tree rule. Requirements section kept (all four pins, pip-audit). No GRC-only names (`grc` fixture, `db`, bin/320). Every path and command named was checked to exist. Docs only. Tests: all green, `gofmt -l` empty: go=687 unit=82 e2e=13 py=102 (unchanged).
+
