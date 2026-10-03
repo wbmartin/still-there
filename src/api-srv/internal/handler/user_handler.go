@@ -240,27 +240,27 @@ func (h *UserHandler) validateUsersSecurityContext(
 // RetrieveUserList handles GET /userList
 func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveUserList")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserRead)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "RetrieveUserList")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantUserRead)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("USR_LIST_START", "ReadUserList invoked")
+	appHelper.Info("USR_LIST_START", "ReadUserList invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse optional appUserIdList query parameter
 	idList, err := GetCommaSeparatedIntListFromQuery(r, "appUserIdList")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
+		appHelper.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
 		return
 	}
-	app.Info(
+	appHelper.Info(
 		"USR_LIST_PARAMS",
 		fmt.Sprintf(
 			"ReadUserList with appUserIdList='%s', idCount=%d",
@@ -283,7 +283,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 		afterUpdateTs,
 	)
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusInternalServerError,
 			fmt.Sprintf(
@@ -297,7 +297,7 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Debug(
+	appHelper.Debug(
 		"USR_LIST_READ",
 		fmt.Sprintf("Users read: idList=%v, count=%d", idList, len(users)),
 	)
@@ -309,9 +309,9 @@ func (h *UserHandler) RetrieveUserList(w http.ResponseWriter, r *http.Request) {
 
 	// Return as JSON
 	wrapper := model.DataWrapper{Data: users}
-	app.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
 
-	app.Info("USR_LIST_DONE", "User list read completed")
+	appHelper.Info("USR_LIST_DONE", "User list read completed")
 }
 
 // RetrieveGrantList handles GET /grantList
@@ -320,17 +320,17 @@ func (h *UserHandler) RetrieveGrantList(
 	r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveGrantList")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserCreate)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "RetrieveGrantList")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantUserCreate)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("GRT_LIST_START", "ReadGrantList invoked")
+	appHelper.Info("GRT_LIST_START", "ReadGrantList invoked")
 
 	// Convert GrantIDToShortCodeMap to array of objects
 	grantList := make(
@@ -345,41 +345,41 @@ func (h *UserHandler) RetrieveGrantList(
 		})
 	}
 
-	app.Debug("GRT_LST_READ", "Grant list read")
+	appHelper.Debug("GRT_LST_READ", "Grant list read")
 	wrapper := model.DataWrapper{Data: grantList}
-	app.WriteJSON(w, http.StatusOK, wrapper)
-	app.Info("GRT_LIST_DONE", "Grant list read completed")
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.Info("GRT_LIST_DONE", "Grant list read completed")
 }
 
 // CreateUser handles POST /user
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "CreateUser")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserCreate)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "CreateUser")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantUserCreate)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("USR_CREATE_START", "CreateUser invoked")
+	appHelper.Info("USR_CREATE_START", "CreateUser invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse request body into CreateUserRequest
 	var req model.CreateUserRequest
-	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
+	if !decodeJSONBody(appHelper, w, r, maxLoginLayerBodyBytes, &req) {
 		return
 	}
 
-	app.Debug("UCP0", "User creation request parsed")
+	appHelper.Debug("UCP0", "User creation request parsed")
 
 	// Validate required fields
 	if req.UserName == "" || req.FirstName == "" || req.LastName == "" ||
 		req.Email == "" {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			fmt.Sprintf(
@@ -398,7 +398,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Validate group memberships are in the same security context
 	if valid, err := h.validateGroupsSecurityContext(req.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context()); !valid ||
 		err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
 			"Access denied: all groups must be in the same security context as the user",
@@ -410,7 +410,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Validate password length
 	if len(req.Password) < 8 {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			fmt.Sprintf(
@@ -442,7 +442,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Hash password
 	hashed, err := auth.HashPassword(req.Password)
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusInternalServerError,
 			fmt.Sprintf(
@@ -463,17 +463,17 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			fmt.Sprintf("Failed to create user: username=%s",
 				req.UserName),
 			"UCF0")
 		return
 	}
 
-	app.Debug("UCD0", "User created")
+	appHelper.Debug("UCD0", "User created")
 	wrapper := model.DataWrapper{Data: createdUser}
-	app.WriteJSON(w, http.StatusCreated, wrapper)
-	app.Info(
+	appHelper.WriteJSON(w, http.StatusCreated, wrapper)
+	appHelper.Info(
 		"USR_CREATE_DONE",
 		fmt.Sprintf(
 			"User creation completed for userId=%d, username='%s'",
@@ -486,31 +486,31 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 // UpdateUser handles PUT /user
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "UpdateUser")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserUpdate)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "UpdateUser")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantUserUpdate)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("USR_UPDATE_START", "UpdateUser invoked")
+	appHelper.Info("USR_UPDATE_START", "UpdateUser invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse request body
 	var user model.AppUserModel
-	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &user) {
+	if !decodeJSONBody(appHelper, w, r, maxLoginLayerBodyBytes, &user) {
 		return
 	}
 
-	app.Debug("UUP0", "User update request parsed")
+	appHelper.Debug("UUP0", "User update request parsed")
 
 	// Validate required fields
 	if user.AppUserID == 0 || user.UserName == "" {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			fmt.Sprintf(
@@ -527,7 +527,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Validate group memberships are in the same security context
 	if valid, err := h.validateGroupsSecurityContext(user.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context()); !valid ||
 		err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
 			"Access denied: all groups must be in the same security context as the user",
@@ -537,7 +537,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info(
+	appHelper.Info(
 		"USR_UPDATE_PARAMS",
 		fmt.Sprintf(
 			"UpdateUser for userId=%d, username='%s'",
@@ -558,7 +558,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		r, h.userRepo, jwtClaims.SecurityContext, user.AppUserID,
 	)
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusInternalServerError,
 			fmt.Sprintf("Failed to read user: app_user_id=%d", user.AppUserID),
@@ -576,23 +576,23 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			fmt.Sprintf("Failed to update user: app_user_id=%d",
 				user.AppUserID),
 			"USR_UPD_FAIL")
 		return
 	}
 
-	app.Debug("UUD0", "User updated")
+	appHelper.Debug("UUD0", "User updated")
 	// Name, groups and MFA exemption are in the login's tokens.
 	if !revokeUserSessionList(
-		app, w, h.appsrv, priorUserName, user.UserName,
+		appHelper, w, h.appsrv, priorUserName, user.UserName,
 	) {
 		return
 	}
 	wrapper := model.DataWrapper{Data: user}
-	app.WriteJSON(w, http.StatusOK, wrapper)
-	app.Info(
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.Info(
 		"USR_UPDATE_DONE",
 		fmt.Sprintf(
 			"User update completed for userId=%d, username='%s'",
@@ -605,35 +605,35 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 // DeleteUser handles DELETE /user
 func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "DeleteUser")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserDelete)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "DeleteUser")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantUserDelete)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("USR_DELETE_START", "DeleteUser invoked")
+	appHelper.Info("USR_DELETE_START", "DeleteUser invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse query parameters
 	userID, err := GetIntFromQuery(r, "appUserId")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
+		appHelper.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
 		return
 	}
 
-	app.Info(
+	appHelper.Info(
 		"USR_DELETE_PARAMS",
 		fmt.Sprintf("DeleteUser for userId=%d", userID),
 	)
 
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
-		app.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
+		appHelper.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
 		return
 	}
 
@@ -641,7 +641,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		r, h.userRepo, jwtClaims.SecurityContext, userID,
 	)
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusInternalServerError,
 			fmt.Sprintf("Failed to read user: app_user_id=%d", userID),
@@ -662,14 +662,14 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		jwtClaims.UserID,
 	)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			fmt.Sprintf("Failed to delete user: app_user_id=%d",
 				userID),
 			"UDF0")
 		return
 	}
 
-	if !revokeUserSessionList(app, w, h.appsrv, deletedUserName) {
+	if !revokeUserSessionList(appHelper, w, h.appsrv, deletedUserName) {
 		return
 	}
 	data := map[string]any{
@@ -677,8 +677,8 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		"appUserId": deletedID,
 	}
 	wrapper := model.DataWrapper{Data: data}
-	app.WriteJSON(w, http.StatusOK, wrapper)
-	app.Info(
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.Info(
 		"USR_DELETE_DONE",
 		fmt.Sprintf("User deletion completed for userId=%d", deletedID),
 	)
@@ -690,19 +690,21 @@ func (h *UserHandler) AddUserListToGroupHandler(
 	r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "AddUserListToGroupHandler")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserGroupUpdate)
+	appHelper := security.NewAppHelper(
+		w, r, h.appsrv, "AddUserListToGroupHandler",
+	)
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantUserGroupUpdate)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("ADD_USR_GRP_S", "AddUserListToGroup invoked")
+	appHelper.Info("ADD_USR_GRP_S", "AddUserListToGroup invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse request
 	var req struct {
@@ -710,13 +712,13 @@ func (h *UserHandler) AddUserListToGroupHandler(
 		AppUserGroupID int       `json:"appUserGroupId"`
 		UpdateTsList   []float64 `json:"updateTsList"`
 	}
-	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
+	if !decodeJSONBody(appHelper, w, r, maxLoginLayerBodyBytes, &req) {
 		return
 	}
 
 	if len(req.UserIDList) == 0 ||
 		len(req.UpdateTsList) != len(req.UserIDList) {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			fmt.Sprintf(
@@ -736,7 +738,7 @@ func (h *UserHandler) AddUserListToGroupHandler(
 	if valid, err := h.validateGroupsSecurityContext(
 		[]int{req.AppUserGroupID}, jwtClaims.SecurityContext, r.Context(),
 	); !valid || err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
 			"Access denied: group must be in the same security context",
@@ -750,7 +752,7 @@ func (h *UserHandler) AddUserListToGroupHandler(
 	if valid, err := h.validateUsersSecurityContext(
 		req.UserIDList, jwtClaims.SecurityContext, r.Context(),
 	); !valid || err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
 			"Access denied: all users must be in the same security context",
@@ -770,7 +772,7 @@ func (h *UserHandler) AddUserListToGroupHandler(
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			fmt.Sprintf(
 				"Failed to add users to group: group_id=%d, user_count=%d",
 				req.AppUserGroupID, len(req.UserIDList)),
@@ -778,15 +780,15 @@ func (h *UserHandler) AddUserListToGroupHandler(
 		return
 	}
 
-	app.Info("ADD_USR_GRP_D", "Users added to group successfully")
+	appHelper.Info("ADD_USR_GRP_D", "Users added to group successfully")
 	// Group membership is in every token's grants.
 	if !revokeUserSessionList(
-		app, w, h.appsrv, userNameListOf(updatedUsers)...,
+		appHelper, w, h.appsrv, userNameListOf(updatedUsers)...,
 	) {
 		return
 	}
 	wrapper := model.DataWrapper{Data: updatedUsers}
-	app.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
 }
 
 // RemoveUserListFromGroupHandler handles POST /removeUserListFromGroup
@@ -795,19 +797,21 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 	r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "RemoveUserListFromGroupHandler")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserGroupUpdate)
+	appHelper := security.NewAppHelper(
+		w, r, h.appsrv, "RemoveUserListFromGroupHandler",
+	)
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantUserGroupUpdate)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("REM_USR_GRP_S", "RemoveUserListFromGroup invoked")
+	appHelper.Info("REM_USR_GRP_S", "RemoveUserListFromGroup invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse request
 	var req struct {
@@ -815,13 +819,13 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 		AppUserGroupID int       `json:"appUserGroupId"`
 		UpdateTsList   []float64 `json:"updateTsList"`
 	}
-	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
+	if !decodeJSONBody(appHelper, w, r, maxLoginLayerBodyBytes, &req) {
 		return
 	}
 
 	if len(req.UserIDList) == 0 ||
 		len(req.UpdateTsList) != len(req.UserIDList) {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			"userIdList and updateTsList must be provided and "+
@@ -836,7 +840,7 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 	if valid, err := h.validateGroupsSecurityContext(
 		[]int{req.AppUserGroupID}, jwtClaims.SecurityContext, r.Context(),
 	); !valid || err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
 			"Access denied: group must be in the same security context",
@@ -850,7 +854,7 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 	if valid, err := h.validateUsersSecurityContext(
 		req.UserIDList, jwtClaims.SecurityContext, r.Context(),
 	); !valid || err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
 			"Access denied: all users must be in the same security context",
@@ -870,20 +874,20 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			"Failed to remove users from group", "REM_GRP_FAIL")
 		return
 	}
 
-	app.Info("REM_USR_GRP_D", "Users removed from group successfully")
+	appHelper.Info("REM_USR_GRP_D", "Users removed from group successfully")
 	// Group membership is in every token's grants.
 	if !revokeUserSessionList(
-		app, w, h.appsrv, userNameListOf(updatedUsers)...,
+		appHelper, w, h.appsrv, userNameListOf(updatedUsers)...,
 	) {
 		return
 	}
 	wrapper := model.DataWrapper{Data: updatedUsers}
-	app.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
 }
 
 // ChangeOtherUserPassword handles POST /changeOtherUserPassword
@@ -892,32 +896,34 @@ func (h *UserHandler) ChangeOtherUserPassword(
 	r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "ChangeOtherUserPassword")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantChangeOtherUserPassword)
+	appHelper := security.NewAppHelper(
+		w, r, h.appsrv, "ChangeOtherUserPassword",
+	)
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantChangeOtherUserPassword)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("CPWS", "Change user password invoked")
+	appHelper.Info("CPWS", "Change user password invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse request body
 	var req struct {
 		UserID      int    `json:"appUserId"`
 		NewPassword string `json:"newPassword"`
 	}
-	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
+	if !decodeJSONBody(appHelper, w, r, maxLoginLayerBodyBytes, &req) {
 		return
 	}
 
 	// Validate required fields
 	if req.UserID == 0 || req.NewPassword == "" {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			"appUserId and newPassword are required",
@@ -929,7 +935,7 @@ func (h *UserHandler) ChangeOtherUserPassword(
 
 	// Basic password validation (minimum length)
 	if len(req.NewPassword) < 8 {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			"New password must be at least 8 characters long",
@@ -947,7 +953,7 @@ func (h *UserHandler) ChangeOtherUserPassword(
 		0,
 	)
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusInternalServerError,
 			"Failed to retrieve user",
@@ -957,14 +963,16 @@ func (h *UserHandler) ChangeOtherUserPassword(
 		return
 	}
 	if len(users) == 0 {
-		app.WriteError(w, http.StatusNotFound, "User not found", "NFN0", nil)
+		appHelper.WriteError(
+			w, http.StatusNotFound, "User not found", "NFN0", nil,
+		)
 		return
 	}
 	user := users[0]
 	// An invited login gets its password from its invite link (B035); an
 	// admin-set one would leave it invited and unusable.
 	if user.AccountStatus == model.AccountStatusInvited {
-		app.WriteError(w, http.StatusConflict,
+		appHelper.WriteError(w, http.StatusConflict,
 			"This user has not accepted their invite yet; issue a new "+
 				"invite link instead",
 			"PW_INVITED", nil)
@@ -974,7 +982,7 @@ func (h *UserHandler) ChangeOtherUserPassword(
 	// Hash new password
 	hashedPassword, err := auth.HashPassword(req.NewPassword)
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusInternalServerError,
 			"Failed to process password",
@@ -995,7 +1003,7 @@ func (h *UserHandler) ChangeOtherUserPassword(
 		user.SecurityContext,
 	)
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusInternalServerError,
 			"Failed to update password",
@@ -1005,14 +1013,14 @@ func (h *UserHandler) ChangeOtherUserPassword(
 		return
 	}
 
-	app.Debug("PW_CHANGED", "Password updated for user: "+user.UserName)
-	if !revokeUserSessionList(app, w, h.appsrv, user.UserName) {
+	appHelper.Debug("PW_CHANGED", "Password updated for user: "+user.UserName)
+	if !revokeUserSessionList(appHelper, w, h.appsrv, user.UserName) {
 		return
 	}
 
 	wrapper := model.DataWrapper{
 		Data: map[string]string{"message": "Password changed successfully"},
 	}
-	app.WriteJSON(w, http.StatusOK, wrapper)
-	app.Info("PW_CHANGED", "User password change completed")
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.Info("PW_CHANGED", "User password change completed")
 }

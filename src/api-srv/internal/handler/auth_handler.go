@@ -112,32 +112,35 @@ func AuthHandler(
 		)
 
 		// Create app helper for error handling
-		app := security.NewAppHelper(w, r, appServices, "AuthHandler")
+		appHelper := security.NewAppHelper(w, r, appServices, "AuthHandler")
 		// Login is the one endpoint with nothing to check before the body:
 		// there is no JWT yet, and brute force is answered by the per-IP +
 		// per-username lockout below (7 failures / 5 min), which is stricter
 		// than the per-minute limiter. Written out so the exception is read
 		// here, not inferred.
-		app.SkipJWT()
-		app.SkipRateLimit()
-		app.SkipUserBlock()
-		app.SkipCSRF()
-		app.SkipAuthorization()
-		if !app.CheckAllChecksComplete() {
+		appHelper.SkipJWT()
+		appHelper.SkipRateLimit()
+		appHelper.SkipUserBlock()
+		appHelper.SkipCSRF()
+		appHelper.SkipAuthorization()
+		if !appHelper.CheckAllChecksComplete() {
 			return
 		}
 
 		// Parse request. Nothing has checked rate limit or lockout yet, so
 		// bound what an anonymous caller can make the decoder allocate.
 		var req model.AuthRequestModel
-		if !decodeJSONBody(app, w, r, maxAuthBodyBytes, &req) {
+		if !decodeJSONBody(appHelper, w, r, maxAuthBodyBytes, &req) {
 			return
 		}
 		// user_name is VARCHAR(50); anything longer cannot be a user and would
 		// only overflow the lockout keys in the store. Same answer as a bad
 		// password so the check leaks nothing.
 		if req.UserName == "" || len(req.UserName) > maxUserNameLen {
-			app.WriteError(w, http.StatusUnauthorized, "Invalid credentials", "INVALID_CREDS", nil)
+			appHelper.WriteError(
+				w, http.StatusUnauthorized, "Invalid credentials",
+				"INVALID_CREDS", nil,
+			)
 			return
 		}
 
@@ -156,7 +159,7 @@ func AuthHandler(
 		if err != nil {
 			// The store is in-process, so an error is a bug, not an outage:
 			// fail closed, as MFAVerifyHandler already does.
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Failed to check account lockout",
@@ -166,7 +169,7 @@ func AuthHandler(
 			return
 		}
 		if locked {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusTooManyRequests,
 				"Account is temporarily locked due to too many failed login attempts",
@@ -183,7 +186,7 @@ func AuthHandler(
 		if errors.Is(err, repository.ErrNotFound) {
 			user = nil
 		} else if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Login is temporarily unavailable",
@@ -222,7 +225,7 @@ func AuthHandler(
 			if err != nil {
 				// Fail closed: an uncounted failure is a lockout that never
 				// trips, so this is an outage, not a plain bad password.
-				app.WriteError(
+				appHelper.WriteError(
 					w,
 					http.StatusInternalServerError,
 					"Login is temporarily unavailable",
@@ -231,7 +234,7 @@ func AuthHandler(
 				)
 				return
 			}
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusUnauthorized,
 				"Invalid credentials",
@@ -246,7 +249,7 @@ func AuthHandler(
 			// Generate temp token for MFA
 			tempTokenBytes := make([]byte, 32)
 			if _, err := rand.Read(tempTokenBytes); err != nil {
-				app.WriteError(
+				appHelper.WriteError(
 					w,
 					http.StatusInternalServerError,
 					fmt.Sprintf(
@@ -263,7 +266,7 @@ func AuthHandler(
 			// Store temp token in key-value store with expiration
 			tempTokenKey := "TEMP_AUTH_SUCCESS_" + tempToken
 			if err := appServices.KV.Set(tempTokenKey, req.UserName, "10min"); err != nil {
-				app.WriteError(
+				appHelper.WriteError(
 					w,
 					http.StatusInternalServerError,
 					fmt.Sprintf(
@@ -289,7 +292,7 @@ func AuthHandler(
 			}
 
 			wrapper := model.AuthResponseWrapper{User: response}
-			app.WriteJSON(w, http.StatusOK, wrapper)
+			appHelper.WriteJSON(w, http.StatusOK, wrapper)
 			appServices.Logger.Info("TMP_TKN_ISSUED",
 				"Auth temp token issued for user: "+req.UserName)
 			return
@@ -301,7 +304,7 @@ func AuthHandler(
 			user.AppUserGroupMembershipList,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				fmt.Sprintf(
@@ -327,7 +330,7 @@ func AuthHandler(
 			appServices,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				fmt.Sprintf(
@@ -364,7 +367,7 @@ func AuthHandler(
 			User:      response,
 			CsrfToken: csrfToken,
 		}
-		app.WriteJSON(w, http.StatusOK, wrapper)
+		appHelper.WriteJSON(w, http.StatusOK, wrapper)
 		appServices.Logger.Info(
 			"AUTH_SUCCESS",
 			"Authentication successful for user: "+user.UserName,
@@ -381,13 +384,14 @@ func RefreshHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := security.NewAppHelper(w, r, appServices, "RefreshHandler")
-		app.CheckJWT()
-		app.CheckRateLimitAndUserBlock()
-		app.SkipCSRF()          // CSRF not required for read-only refresh
-		app.SkipAuthorization() // Authorization not required for token refresh
+		appHelper := security.NewAppHelper(w, r, appServices, "RefreshHandler")
+		appHelper.CheckJWT()
+		appHelper.CheckRateLimitAndUserBlock()
+		appHelper.SkipCSRF() // CSRF not required for read-only refresh
+		// Authorization not required for token refresh
+		appHelper.SkipAuthorization()
 
-		if !app.CheckAllChecksComplete() {
+		if !appHelper.CheckAllChecksComplete() {
 			return
 		}
 
@@ -395,10 +399,10 @@ func RefreshHandler(
 			"REFRESH_START",
 			"Refresh request started",
 			"username",
-			app.GetUsername(),
+			appHelper.GetUsername(),
 		)
 
-		jwtClaims := app.GetClaims()
+		jwtClaims := appHelper.GetClaims()
 
 		// Read user
 		user, err := userRepo.RetrieveUserByUserName(
@@ -406,7 +410,7 @@ func RefreshHandler(
 			jwtClaims.Subject,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				fmt.Sprintf(
@@ -425,7 +429,7 @@ func RefreshHandler(
 			user.AppUserGroupMembershipList,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				fmt.Sprintf(
@@ -454,7 +458,7 @@ func RefreshHandler(
 			jwtClaims.SessionID,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				fmt.Sprintf(
@@ -487,7 +491,7 @@ func RefreshHandler(
 			User:      response,
 			CsrfToken: csrfToken,
 		}
-		app.WriteJSON(w, http.StatusOK, wrapper)
+		appHelper.WriteJSON(w, http.StatusOK, wrapper)
 		appServices.Logger.Info(
 			"REFRESH_SUCCESS",
 			"Refresh successful for user: "+user.UserName,
@@ -504,22 +508,24 @@ func ChangeSecurityContextHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create app helper for error handling
-		app := security.NewAppHelper(w, r, appServices, "ChangeSecurityContextHandler")
+		appHelper := security.NewAppHelper(
+			w, r, appServices, "ChangeSecurityContextHandler",
+		)
 
 		// Parse request first to get security context. This precedes the JWT
 		// and rate-limit checks, so bound it.
 		var req model.ChangeSecurityContextRequest
-		if !decodeJSONBody(app, w, r, maxAuthBodyBytes, &req) {
+		if !decodeJSONBody(appHelper, w, r, maxAuthBodyBytes, &req) {
 			return
 		}
 
 		// Security checks
-		app.CheckJWT()
-		app.CheckRateLimitAndUserBlock()
-		app.SkipCSRF()
-		app.SkipAuthorization() // Authorization checked below
+		appHelper.CheckJWT()
+		appHelper.CheckRateLimitAndUserBlock()
+		appHelper.SkipCSRF()
+		appHelper.SkipAuthorization() // Authorization checked below
 
-		if !app.CheckAllChecksComplete() {
+		if !appHelper.CheckAllChecksComplete() {
 			return
 		}
 
@@ -527,10 +533,10 @@ func ChangeSecurityContextHandler(
 			"CHANGE_CTX_START",
 			"Change security context request started",
 			"username",
-			app.GetUsername(),
+			appHelper.GetUsername(),
 		)
 
-		jwtClaims := app.GetClaims()
+		jwtClaims := appHelper.GetClaims()
 		userName := jwtClaims.Subject
 
 		// Read current user
@@ -542,7 +548,7 @@ func ChangeSecurityContextHandler(
 				"username",
 				userName,
 			)
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Internal server error",
@@ -562,9 +568,9 @@ func ChangeSecurityContextHandler(
 				"GRT_FETCH_FAIL",
 				"Failed to get grants for context change: "+err.Error(),
 				"username",
-				app.GetUsername(),
+				appHelper.GetUsername(),
 			)
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				fmt.Sprintf(
@@ -593,7 +599,7 @@ func ChangeSecurityContextHandler(
 				"username",
 				userName,
 			)
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusForbidden,
 				"Security context not available",
@@ -609,9 +615,11 @@ func ChangeSecurityContextHandler(
 
 		// The new context gets a new session id; the old one ends, so a
 		// sign-out still ends every token of this login.
-		err = security.RevokeSession(appServices, app.GetClaims().SessionID)
+		err = security.RevokeSession(
+			appServices, appHelper.GetClaims().SessionID,
+		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Failed to end the previous session",
@@ -628,7 +636,7 @@ func ChangeSecurityContextHandler(
 			appServices,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				fmt.Sprintf(
@@ -664,7 +672,7 @@ func ChangeSecurityContextHandler(
 			User:      response,
 			CsrfToken: csrfToken,
 		}
-		app.WriteJSON(w, http.StatusOK, wrapper)
+		appHelper.WriteJSON(w, http.StatusOK, wrapper)
 		appServices.Logger.Info(
 			"CHANGE_CTX_SUCCESS",
 			"Security context changed for user: "+userName+" to context: "+strconv.Itoa(
@@ -680,28 +688,31 @@ func ChangeSecurityContextHandler(
 func LogoffHandler(appServices *app.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Use AppHelper to extract username from JWT (skip other validations)
-		app := security.NewAppHelper(w, r, appServices, "LogoffHandler")
-		app.CheckJWT()                   // Extract username from JWT
-		app.CheckRateLimitAndUserBlock() // No rate limiting for logoff
-		app.SkipCSRF()                   // No CSRF needed for logoff
-		app.SkipAuthorization()          // No authorization needed for logoff
+		appHelper := security.NewAppHelper(w, r, appServices, "LogoffHandler")
+		appHelper.CheckJWT()                   // Extract username from JWT
+		appHelper.CheckRateLimitAndUserBlock() // No rate limiting for logoff
+		appHelper.SkipCSRF()                   // No CSRF needed for logoff
+		// No authorization needed for logoff
+		appHelper.SkipAuthorization()
 
-		if !app.CheckAllChecksComplete() {
+		if !appHelper.CheckAllChecksComplete() {
 			return
 		}
 
-		app.Logger().Info(
+		appHelper.Logger().Info(
 			"LOGOFF_START",
 			"Logoff request started",
 			"username",
-			app.GetUsername(),
+			appHelper.GetUsername(),
 		)
 
 		// End the session server-side: expiring the cookie only asks the
 		// browser to forget the token; a copy of it would stay valid.
-		err := security.RevokeSession(appServices, app.GetClaims().SessionID)
+		err := security.RevokeSession(
+			appServices, appHelper.GetClaims().SessionID,
+		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Failed to end the session",
@@ -715,11 +726,11 @@ func LogoffHandler(appServices *app.Services) http.HandlerFunc {
 		setAuthCookie(w, "", authCookieExpireNow)
 
 		w.WriteHeader(http.StatusOK)
-		app.Logger().Info(
+		appHelper.Logger().Info(
 			"LOGOFF_SUCCESS",
 			"Logoff successful",
 			"username",
-			app.GetUsername(),
+			appHelper.GetUsername(),
 		)
 	}
 }
@@ -731,13 +742,15 @@ func ChangeOwnPasswordHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := security.NewAppHelper(w, r, appServices, "ChangeOwnPasswordHandler")
-		app.CheckJWT()
-		app.CheckRateLimitAndUserBlock()
-		app.CheckCSRF()
-		app.CheckAuthorization(model.GrantChangeOwnPassword)
+		appHelper := security.NewAppHelper(
+			w, r, appServices, "ChangeOwnPasswordHandler",
+		)
+		appHelper.CheckJWT()
+		appHelper.CheckRateLimitAndUserBlock()
+		appHelper.CheckCSRF()
+		appHelper.CheckAuthorization(model.GrantChangeOwnPassword)
 
-		if !app.CheckAllChecksComplete() {
+		if !appHelper.CheckAllChecksComplete() {
 			return
 		}
 
@@ -745,23 +758,23 @@ func ChangeOwnPasswordHandler(
 			"CHANGE_PW_START",
 			"Change own password request started",
 			"username",
-			app.GetUsername(),
+			appHelper.GetUsername(),
 		)
 
-		jwtClaims := app.GetClaims()
+		jwtClaims := appHelper.GetClaims()
 
 		// Parse request body
 		var req struct {
 			OldPassword string `json:"oldPassword"`
 			NewPassword string `json:"newPassword"`
 		}
-		if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
+		if !decodeJSONBody(appHelper, w, r, maxLoginLayerBodyBytes, &req) {
 			return
 		}
 
 		// Validate required fields
 		if req.OldPassword == "" || req.NewPassword == "" {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusBadRequest,
 				"oldPassword and newPassword are required",
@@ -773,7 +786,7 @@ func ChangeOwnPasswordHandler(
 
 		// Basic password validation (minimum length)
 		if len(req.NewPassword) < 8 {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusBadRequest,
 				fmt.Sprintf(
@@ -792,7 +805,7 @@ func ChangeOwnPasswordHandler(
 			jwtClaims.Subject,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				fmt.Sprintf(
@@ -811,7 +824,7 @@ func ChangeOwnPasswordHandler(
 				"PWD_VFY_FAIL",
 				"Old password verification failed for user: "+jwtClaims.Subject,
 			)
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusUnauthorized,
 				"Old password is incorrect",
@@ -824,7 +837,7 @@ func ChangeOwnPasswordHandler(
 		// Hash new password
 		hashedPassword, err := auth.HashPassword(req.NewPassword)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				fmt.Sprintf(
@@ -848,7 +861,7 @@ func ChangeOwnPasswordHandler(
 			user.SecurityContext,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				fmt.Sprintf(
@@ -868,7 +881,7 @@ func ChangeOwnPasswordHandler(
 			appServices, jwtClaims.Subject, jwtClaims.SessionID,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Password changed; ending the other sessions failed",
@@ -888,7 +901,7 @@ func ChangeOwnPasswordHandler(
 		wrapper := model.DataWrapper{
 			Data: map[string]string{"message": "Password changed successfully"},
 		}
-		app.WriteJSON(w, http.StatusOK, wrapper)
+		appHelper.WriteJSON(w, http.StatusOK, wrapper)
 	}
 }
 

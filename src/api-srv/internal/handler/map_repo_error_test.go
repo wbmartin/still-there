@@ -20,8 +20,8 @@ func answerRepoError(t *testing.T, err error) (int, string) {
 	t.Helper()
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	app := security.NewAppHelper(w, r, testServices(t), "Test")
-	mapRepoError(app, w, err, "Failed to do the thing", "THING_FAIL")
+	appHelper := security.NewAppHelper(w, r, testServices(t), "Test")
+	mapRepoError(appHelper, w, err, "Failed to do the thing", "THING_FAIL")
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	return w.Code, body["error"]

@@ -27,9 +27,9 @@ func decodeOnce(
 	s := testServices(t)
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
-	app := security.NewAppHelper(w, r, s, "Test")
+	appHelper := security.NewAppHelper(w, r, s, "Test")
 	var dst map[string]any
-	return w, decodeJSONBody(app, w, r, maxBytes, &dst)
+	return w, decodeJSONBody(appHelper, w, r, maxBytes, &dst)
 }
 
 func TestDecodeJSONBody(t *testing.T) {

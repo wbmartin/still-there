@@ -116,25 +116,25 @@ const minPasswordLength = 8
 func (h *UserInviteHandler) CreateInvitedUser(
 	w http.ResponseWriter, r *http.Request,
 ) {
-	app := security.NewAppHelper(w, r, h.appsrv, "CreateInvitedUser")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserCreate)
-	if !app.CheckAllChecksComplete() {
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "CreateInvitedUser")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantUserCreate)
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("USR_INVITE_START", "CreateInvitedUser invoked")
-	jwtClaims := app.GetClaims()
+	appHelper.Info("USR_INVITE_START", "CreateInvitedUser invoked")
+	jwtClaims := appHelper.GetClaims()
 
 	var req model.CreateInvitedUserRequest
-	if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
+	if !decodeJSONBody(appHelper, w, r, maxLoginLayerBodyBytes, &req) {
 		return
 	}
 	if req.UserName == "" || req.FirstName == "" || req.LastName == "" ||
 		req.Email == "" {
-		app.WriteError(w, http.StatusBadRequest,
+		appHelper.WriteError(w, http.StatusBadRequest,
 			"userName, firstName, lastName and email are required",
 			"BRQ0", nil)
 		return
@@ -145,7 +145,7 @@ func (h *UserInviteHandler) CreateInvitedUser(
 		req.AppUserGroupMembershipList, jwtClaims.SecurityContext,
 	)
 	if !valid || err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
 			"Access denied: all groups must be in the same security context as the user",
@@ -155,7 +155,7 @@ func (h *UserInviteHandler) CreateInvitedUser(
 		return
 	}
 
-	token, tokenHash, expiresTS, ok := h.newInvite(app, w)
+	token, tokenHash, expiresTS, ok := h.newInvite(appHelper, w)
 	if !ok {
 		return
 	}
@@ -179,18 +179,18 @@ func (h *UserInviteHandler) CreateInvitedUser(
 		expiresTS, jwtClaims.UserID,
 	)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			fmt.Sprintf("Failed to invite user: username=%s", req.UserName),
 			"USR_INVITE_FAIL")
 		return
 	}
 
-	app.WriteJSON(w, http.StatusCreated, model.DataWrapper{
+	appHelper.WriteJSON(w, http.StatusCreated, model.DataWrapper{
 		Data: model.UserInviteIssuedModel{
 			User: created, InviteToken: token, ExpiresTS: expiresTS,
 		},
 	})
-	app.Info("USR_INVITE_DONE",
+	appHelper.Info("USR_INVITE_DONE",
 		fmt.Sprintf("Invited userId=%d, username='%s'",
 			created.AppUserID, created.UserName))
 }
@@ -201,21 +201,21 @@ func (h *UserInviteHandler) CreateInvitedUser(
 func (h *UserInviteHandler) ReissueInvite(
 	w http.ResponseWriter, r *http.Request,
 ) {
-	app := security.NewAppHelper(w, r, h.appsrv, "ReissueInvite")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserUpdate)
-	if !app.CheckAllChecksComplete() {
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "ReissueInvite")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantUserUpdate)
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	jwtClaims := app.GetClaims()
-	req, ok := decodeInviteTarget(app, w, r)
+	jwtClaims := appHelper.GetClaims()
+	req, ok := decodeInviteTarget(appHelper, w, r)
 	if !ok {
 		return
 	}
-	token, tokenHash, expiresTS, ok := h.newInvite(app, w)
+	token, tokenHash, expiresTS, ok := h.newInvite(appHelper, w)
 	if !ok {
 		return
 	}
@@ -224,19 +224,19 @@ func (h *UserInviteHandler) ReissueInvite(
 		expiresTS, jwtClaims.UserID,
 	)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			fmt.Sprintf("Failed to reissue invite: appUserId=%d",
 				req.AppUserID),
 			"USR_INVITE_REISSUE_FAIL")
 		return
 	}
 
-	app.WriteJSON(w, http.StatusOK, model.DataWrapper{
+	appHelper.WriteJSON(w, http.StatusOK, model.DataWrapper{
 		Data: model.UserInviteIssuedModel{
 			InviteToken: token, ExpiresTS: expiresTS,
 		},
 	})
-	app.Info("USR_INVITE_REISSUED",
+	appHelper.Info("USR_INVITE_REISSUED",
 		fmt.Sprintf("Invite reissued for appUserId=%d", req.AppUserID))
 }
 
@@ -245,17 +245,17 @@ func (h *UserInviteHandler) ReissueInvite(
 func (h *UserInviteHandler) RevokeInvite(
 	w http.ResponseWriter, r *http.Request,
 ) {
-	app := security.NewAppHelper(w, r, h.appsrv, "RevokeInvite")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantUserUpdate)
-	if !app.CheckAllChecksComplete() {
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "RevokeInvite")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantUserUpdate)
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	jwtClaims := app.GetClaims()
-	req, ok := decodeInviteTarget(app, w, r)
+	jwtClaims := appHelper.GetClaims()
+	req, ok := decodeInviteTarget(appHelper, w, r)
 	if !ok {
 		return
 	}
@@ -264,17 +264,17 @@ func (h *UserInviteHandler) RevokeInvite(
 		jwtClaims.UserID,
 	)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			fmt.Sprintf("Failed to revoke invite: appUserId=%d",
 				req.AppUserID),
 			"USR_INVITE_REVOKE_FAIL")
 		return
 	}
 
-	app.WriteJSON(w, http.StatusOK, model.DataWrapper{
+	appHelper.WriteJSON(w, http.StatusOK, model.DataWrapper{
 		Data: map[string]string{"message": "Invite revoked"},
 	})
-	app.Info("USR_INVITE_REVOKED",
+	appHelper.Info("USR_INVITE_REVOKED",
 		fmt.Sprintf("Invite revoked for appUserId=%d", req.AppUserID))
 }
 
@@ -284,26 +284,26 @@ func (h *UserInviteHandler) RevokeInvite(
 func (h *UserInviteHandler) CheckInvite(
 	w http.ResponseWriter, r *http.Request,
 ) {
-	app := security.NewAppHelper(w, r, h.appsrv, "CheckInvite")
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "CheckInvite")
 	// The link is the credential. Each exception is stated here:
 	// no JWT: the person holding the link has never signed in
-	app.SkipJWT()
+	appHelper.SkipJWT()
 	// the per-address bucket; the per-token and per-address lockout in
 	// decodeInviteToken is the stricter throttle on guessing
-	app.CheckRateLimit()
+	appHelper.CheckRateLimit()
 	// the block list is keyed by JWT subject, and there is none
-	app.SkipUserBlock()
+	appHelper.SkipUserBlock()
 	// CSRF needs a session to derive the expected token from. The forgery
 	// it guards against cannot happen here: a cross-site page cannot know
 	// the 256-bit token the body must carry, and the answer sets no cookie
-	app.SkipCSRF()
+	appHelper.SkipCSRF()
 	// the token is the authorization: RetrieveLiveInvite
-	app.SkipAuthorization()
-	if !app.CheckAllChecksComplete() {
+	appHelper.SkipAuthorization()
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	_, tokenHash, ok := h.decodeInviteToken(app, w, r)
+	_, tokenHash, ok := h.decodeInviteToken(appHelper, w, r)
 	if !ok {
 		return
 	}
@@ -311,10 +311,10 @@ func (h *UserInviteHandler) CheckInvite(
 		r.Context(), tokenHash, model.Now(),
 	)
 	if err != nil {
-		h.refuseInvite(app, w, r, tokenHash, err)
+		h.refuseInvite(appHelper, w, r, tokenHash, err)
 		return
 	}
-	app.WriteJSON(w, http.StatusOK, model.DataWrapper{Data: preview})
+	appHelper.WriteJSON(w, http.StatusOK, model.DataWrapper{Data: preview})
 }
 
 // RedeemInvite handles POST /inviteRedeem (public): set the password, make
@@ -323,27 +323,27 @@ func (h *UserInviteHandler) CheckInvite(
 func (h *UserInviteHandler) RedeemInvite(
 	w http.ResponseWriter, r *http.Request,
 ) {
-	app := security.NewAppHelper(w, r, h.appsrv, "RedeemInvite")
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "RedeemInvite")
 	// The same exceptions as CheckInvite, for the same reasons: no session
 	// exists, the per-address bucket and the invite lockout throttle, and
 	// the token is the credential (RetrieveLiveInvite, RedeemInvite).
-	app.SkipJWT()
-	app.CheckRateLimit()
-	app.SkipUserBlock()
-	app.SkipCSRF()
-	app.SkipAuthorization()
-	if !app.CheckAllChecksComplete() {
+	appHelper.SkipJWT()
+	appHelper.CheckRateLimit()
+	appHelper.SkipUserBlock()
+	appHelper.SkipCSRF()
+	appHelper.SkipAuthorization()
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	req, tokenHash, ok := h.decodeInviteToken(app, w, r)
+	req, tokenHash, ok := h.decodeInviteToken(appHelper, w, r)
 	if !ok {
 		return
 	}
 	// The password rule first: a password no login could have costs no
 	// database read.
 	if len(req.Password) < minPasswordLength {
-		app.WriteError(w, http.StatusBadRequest,
+		appHelper.WriteError(w, http.StatusBadRequest,
 			fmt.Sprintf("Password must be at least %d characters long",
 				minPasswordLength),
 			"BRQ0", nil)
@@ -355,12 +355,12 @@ func (h *UserInviteHandler) RedeemInvite(
 	if _, err := h.userInviteRepository.RetrieveLiveInvite(
 		r.Context(), tokenHash, model.Now(),
 	); err != nil {
-		h.refuseInvite(app, w, r, tokenHash, err)
+		h.refuseInvite(appHelper, w, r, tokenHash, err)
 		return
 	}
 	pwHash, err := auth.HashPassword(req.Password)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError,
+		appHelper.WriteError(w, http.StatusInternalServerError,
 			"Failed to process password", "UCH0", err)
 		return
 	}
@@ -369,14 +369,14 @@ func (h *UserInviteHandler) RedeemInvite(
 		security.ClientIP(r, h.appsrv.Config.TrustedProxyCount),
 	)
 	if err != nil {
-		h.refuseInvite(app, w, r, tokenHash, err)
+		h.refuseInvite(appHelper, w, r, tokenHash, err)
 		return
 	}
 
-	app.WriteJSON(w, http.StatusOK, model.DataWrapper{
+	appHelper.WriteJSON(w, http.StatusOK, model.DataWrapper{
 		Data: map[string]string{"userName": userName},
 	})
-	app.Info("INVITE_REDEEMED", "Invite redeemed for user: "+userName)
+	appHelper.Info("INVITE_REDEEMED", "Invite redeemed for user: "+userName)
 }
 
 // decodeInviteToken reads the body, refuses a locked-out address or token,

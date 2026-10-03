@@ -37,19 +37,19 @@ func (h *ErrorReportHandler) HandleErrorReport(
 	r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appServices, "HandleErrorReport")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantLogon)
+	appHelper := security.NewAppHelper(w, r, h.appServices, "HandleErrorReport")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantLogon)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
 	// Bounded before it is read; the truncation below protects only the log
 	// line.
-	body, ok := readBody(app, w, r, maxErrorReportBodyBytes)
+	body, ok := readBody(appHelper, w, r, maxErrorReportBodyBytes)
 	if !ok {
 		return
 	}
@@ -58,7 +58,9 @@ func (h *ErrorReportHandler) HandleErrorReport(
 	if len(report) > maxErrorReportLogChars {
 		report = report[:maxErrorReportLogChars] + "...[truncated]"
 	}
-	app.Error("CLER", "Client Error Report: "+report)
+	appHelper.Error("CLER", "Client Error Report: "+report)
 
-	app.WriteJSON(w, http.StatusOK, map[string]string{"status": "reported"})
+	appHelper.WriteJSON(
+		w, http.StatusOK, map[string]string{"status": "reported"},
+	)
 }

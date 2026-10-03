@@ -79,27 +79,27 @@ func AdminBlockUserHandler(
 		name, logCode = "AdminBlockUserHandler", "ADM_BLK"
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		app := security.NewAppHelper(w, r, appServices, name)
-		app.CheckJWT()
-		app.CheckRateLimitAndUserBlock()
-		app.CheckCSRF()
-		app.CheckAuthorization(model.GrantUserBlock)
-		if !app.CheckAllChecksComplete() {
+		appHelper := security.NewAppHelper(w, r, appServices, name)
+		appHelper.CheckJWT()
+		appHelper.CheckRateLimitAndUserBlock()
+		appHelper.CheckCSRF()
+		appHelper.CheckAuthorization(model.GrantUserBlock)
+		if !appHelper.CheckAllChecksComplete() {
 			return
 		}
 
 		var req model.BlockUserRequest
-		if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
+		if !decodeJSONBody(appHelper, w, r, maxLoginLayerBodyBytes, &req) {
 			return
 		}
 		if req.UserName == "" {
-			app.WriteError(w, http.StatusBadRequest,
+			appHelper.WriteError(w, http.StatusBadRequest,
 				"userName is required", "BLK_NO_USER", nil)
 			return
 		}
-		claims := app.GetClaims()
+		claims := appHelper.GetClaims()
 		if block && req.UserName == claims.Subject {
-			app.WriteError(w, http.StatusBadRequest,
+			appHelper.WriteError(w, http.StatusBadRequest,
 				"You cannot block your own login", "BLK_SELF", nil)
 			return
 		}
@@ -107,12 +107,12 @@ func AdminBlockUserHandler(
 		target, err := userBlockRepository.RetrieveUserByUserName(
 			r.Context(), req.UserName)
 		if err != nil {
-			mapRepoError(app, w, err, "Failed to read user", "BLK_READ")
+			mapRepoError(appHelper, w, err, "Failed to read user", "BLK_READ")
 			return
 		}
 		if target.SecurityContext != claims.SecurityContext {
 			// another tenant's login: not found, never forbidden
-			app.WriteError(w, http.StatusNotFound, "Not found",
+			appHelper.WriteError(w, http.StatusNotFound, "Not found",
 				"NOT_FOUND_ERROR", nil)
 			return
 		}
@@ -122,7 +122,7 @@ func AdminBlockUserHandler(
 			want, from = model.AccountStatusBlocked, model.AccountStatusActive
 		}
 		if target.AccountStatus != from {
-			app.WriteError(w, http.StatusConflict,
+			appHelper.WriteError(w, http.StatusConflict,
 				fmt.Sprintf("%s is %s, not %s", target.UserName,
 					target.AccountStatus, from),
 				"BLK_STATE", nil)
@@ -134,7 +134,7 @@ func AdminBlockUserHandler(
 			claims.UserID, target.SecurityContext,
 		)
 		if err != nil {
-			mapRepoError(app, w, err, "Failed to change the block",
+			mapRepoError(appHelper, w, err, "Failed to change the block",
 				"BLK_WRITE")
 			return
 		}
@@ -147,23 +147,23 @@ func AdminBlockUserHandler(
 			err = appServices.KV.Del(blockedKey(target.UserName))
 		}
 		if err != nil {
-			app.WriteError(w, http.StatusInternalServerError,
+			appHelper.WriteError(w, http.StatusInternalServerError,
 				"Saved; the session flag failed", "BLK_KV", err)
 			return
 		}
 		if block && !revokeUserSessionList(
-			app, w, appServices, target.UserName,
+			appHelper, w, appServices, target.UserName,
 		) {
 			return
 		}
 
-		app.WriteJSON(w, http.StatusOK, model.DataWrapper{
+		appHelper.WriteJSON(w, http.StatusOK, model.DataWrapper{
 			Data: map[string]any{
 				"userName":      target.UserName,
 				"accountStatus": want,
 				"updateTs":      newUpdateTS,
 			},
 		})
-		app.Info(logCode, name+" completed for user: "+target.UserName)
+		appHelper.Info(logCode, name+" completed for user: "+target.UserName)
 	}
 }

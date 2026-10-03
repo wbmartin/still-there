@@ -55,25 +55,27 @@ func (h *ProfileHandler) RetrieveOwnProfile(
 	w http.ResponseWriter, r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveOwnProfile")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantLogon)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "RetrieveOwnProfile")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantLogon)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("ME_RD_START", "RetrieveOwnProfile invoked")
+	appHelper.Info("ME_RD_START", "RetrieveOwnProfile invoked")
 
-	user, ok := h.retrieveOwnRow(app, w, r, "ME_RD_FAIL")
+	user, ok := h.retrieveOwnRow(appHelper, w, r, "ME_RD_FAIL")
 	if !ok {
 		return
 	}
 
-	app.WriteJSON(w, http.StatusOK, model.DataWrapper{Data: user.OwnProfile()})
-	app.Info("ME_RD_DONE", "RetrieveOwnProfile completed")
+	appHelper.WriteJSON(
+		w, http.StatusOK, model.DataWrapper{Data: user.OwnProfile()},
+	)
+	appHelper.Info("ME_RD_DONE", "RetrieveOwnProfile completed")
 }
 
 // UpdateOwnProfile handles PUT /me: first/last name, email and the
@@ -82,20 +84,22 @@ func (h *ProfileHandler) UpdateOwnProfile(
 	w http.ResponseWriter, r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "UpdateOwnProfile")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantLogon)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "UpdateOwnProfile")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantLogon)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("ME_UP_START", "UpdateOwnProfile invoked")
+	appHelper.Info("ME_UP_START", "UpdateOwnProfile invoked")
 
 	var req ProfileUpdateRequest
-	if !decodeJSONBody(app, w, r, maxAuthBodyBytes+maxPreferenceBytes, &req) {
+	if !decodeJSONBody(
+		appHelper, w, r, maxAuthBodyBytes+maxPreferenceBytes, &req,
+	) {
 		return
 	}
 
@@ -105,32 +109,32 @@ func (h *ProfileHandler) UpdateOwnProfile(
 	req.Email = strings.TrimSpace(req.Email)
 	switch {
 	case req.FirstName == "" || req.LastName == "":
-		app.WriteError(w, http.StatusBadRequest,
+		appHelper.WriteError(w, http.StatusBadRequest,
 			"firstName and lastName are required", "BAD_REQUEST", nil)
 		return
 	case utf8.RuneCountInString(req.FirstName) > 200 ||
 		utf8.RuneCountInString(req.LastName) > 200 ||
 		utf8.RuneCountInString(req.Email) > 200:
-		app.WriteError(w, http.StatusBadRequest,
+		appHelper.WriteError(w, http.StatusBadRequest,
 			"firstName, lastName and email are at most 200 characters",
 			"BAD_REQUEST", nil)
 		return
 	case !isPlainEmailAddress(req.Email):
-		app.WriteError(w, http.StatusBadRequest, "email is not valid",
+		appHelper.WriteError(w, http.StatusBadRequest, "email is not valid",
 			"BAD_REQUEST", nil)
 		return
 	case req.UpdateTS == 0:
-		app.WriteError(w, http.StatusBadRequest, "updateTs is required",
+		appHelper.WriteError(w, http.StatusBadRequest, "updateTs is required",
 			"BAD_REQUEST", nil)
 		return
 	case !isPreferenceDocument(req.PreferenceJSONB):
-		app.WriteError(w, http.StatusBadRequest,
+		appHelper.WriteError(w, http.StatusBadRequest,
 			"preferenceJsonb must be a JSON object of at most 8 KiB",
 			"BAD_REQUEST", nil)
 		return
 	}
 
-	user, ok := h.retrieveOwnRow(app, w, r, "ME_UP_FAIL")
+	user, ok := h.retrieveOwnRow(appHelper, w, r, "ME_UP_FAIL")
 	if !ok {
 		return
 	}
@@ -143,19 +147,23 @@ func (h *ProfileHandler) UpdateOwnProfile(
 		req.UpdateTS,
 	)
 	if err != nil {
-		mapRepoError(app, w, err, "Failed to update profile", "ME_UP_FAIL")
+		mapRepoError(
+			appHelper, w, err, "Failed to update profile", "ME_UP_FAIL",
+		)
 		return
 	}
 
 	// Return the row as stored so the client's next PUT carries the lock.
 	user, err = h.userRepo.RetrieveUserByUserName(r.Context(), user.UserName)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError,
+		appHelper.WriteError(w, http.StatusInternalServerError,
 			"Profile updated but could not be re-read", "ME_UP_FAIL", err)
 		return
 	}
-	app.WriteJSON(w, http.StatusOK, model.DataWrapper{Data: user.OwnProfile()})
-	app.Info("ME_UP_DONE", "UpdateOwnProfile completed")
+	appHelper.WriteJSON(
+		w, http.StatusOK, model.DataWrapper{Data: user.OwnProfile()},
+	)
+	appHelper.Info("ME_UP_DONE", "UpdateOwnProfile completed")
 }
 
 // retrieveOwnRow reads the caller's row by the JWT's subject. user_name is

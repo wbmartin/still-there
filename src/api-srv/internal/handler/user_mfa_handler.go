@@ -23,22 +23,24 @@ func UserSelfCreateHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create app helper
-		app := security.NewAppHelper(w, r, appServices, "UserSelfCreateHandler")
+		appHelper := security.NewAppHelper(
+			w, r, appServices, "UserSelfCreateHandler",
+		)
 
 		// No auth required for self-create
-		app.Logger().Info(
+		appHelper.Logger().Info(
 			"USC0",
 			"User self-create request started",
 			"username",
 			"anonymous",
 		)
-		app.SkipJWT() // Public endpoint
-		app.CheckRateLimit()
-		app.SkipUserBlock()
-		app.SkipCSRF()          // No CSRF for public registration
-		app.SkipAuthorization() // Public
+		appHelper.SkipJWT() // Public endpoint
+		appHelper.CheckRateLimit()
+		appHelper.SkipUserBlock()
+		appHelper.SkipCSRF()          // No CSRF for public registration
+		appHelper.SkipAuthorization() // Public
 
-		if !app.CheckAllChecksComplete() {
+		if !appHelper.CheckAllChecksComplete() {
 			return
 		}
 
@@ -47,13 +49,13 @@ func UserSelfCreateHandler(
 			Username string `json:"username"`
 			Password string `json:"password"`
 		}
-		if !decodeJSONBody(app, w, r, maxAuthBodyBytes, &req) {
+		if !decodeJSONBody(appHelper, w, r, maxAuthBodyBytes, &req) {
 			return
 		}
 
 		// Validate input
 		if req.Username == "" || req.Password == "" {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusBadRequest,
 				"Username and password are required",
@@ -64,7 +66,7 @@ func UserSelfCreateHandler(
 		}
 
 		if len(req.Password) < 8 {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusBadRequest,
 				"Password must be at least 8 characters long",
@@ -80,12 +82,12 @@ func UserSelfCreateHandler(
 			req.Username,
 		)
 		if err != nil && !errors.Is(err, repository.ErrNotFound) {
-			app.WriteError(w, http.StatusInternalServerError,
+			appHelper.WriteError(w, http.StatusInternalServerError,
 				"Error checking username availability", "ISE0", err)
 			return
 		}
 		if existingUser != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusConflict,
 				"Username already taken",
@@ -98,7 +100,7 @@ func UserSelfCreateHandler(
 		// Hash password
 		hashedPassword, err := auth.HashPassword(req.Password)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Failed to process password",
@@ -136,11 +138,11 @@ func UserSelfCreateHandler(
 			1,
 		) // Self-created users go in security context 1
 		if err != nil {
-			mapRepoError(app, w, err, "Failed to create user", "UCF0")
+			mapRepoError(appHelper, w, err, "Failed to create user", "UCF0")
 			return
 		}
 
-		app.Logger().Info(
+		appHelper.Logger().Info(
 			"USCC",
 			"User self-created successfully",
 			"username",
@@ -152,7 +154,7 @@ func UserSelfCreateHandler(
 		wrapper := model.DataWrapper{
 			Data: map[string]string{"message": "User created successfully"},
 		}
-		app.WriteJSON(w, http.StatusCreated, wrapper)
+		appHelper.WriteJSON(w, http.StatusCreated, wrapper)
 	}
 }
 
@@ -163,10 +165,10 @@ func MFASetupHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := security.NewAppHelper(w, r, appServices, "MFASetupHandler")
-		app.CheckRateLimitAndUserBlock()
-		app.SkipCSRF()
-		app.SkipAuthorization() // MFA setup is user-specific
+		appHelper := security.NewAppHelper(w, r, appServices, "MFASetupHandler")
+		appHelper.CheckRateLimitAndUserBlock()
+		appHelper.SkipCSRF()
+		appHelper.SkipAuthorization() // MFA setup is user-specific
 
 		var userName string
 		// Check for temp token in request body first
@@ -178,7 +180,7 @@ func MFASetupHandler(
 		// CheckAllChecksComplete(). That makes bounding it the only protection
 		// available: an unauthenticated caller reaches this line, and a
 		// rate-limited one does too, because nothing checks blocked first.
-		bodyBytes, ok := readBody(app, w, r, maxAuthBodyBytes)
+		bodyBytes, ok := readBody(appHelper, w, r, maxAuthBodyBytes)
 		if !ok {
 			return
 		}
@@ -187,8 +189,8 @@ func MFASetupHandler(
 			// Temp token path - skip JWT for temp token authentication.
 			// The other checks (rate limit, user block) have already run;
 			// this is where a failed one stops the request.
-			app.SkipJWT()
-			if !app.CheckAllChecksComplete() {
+			appHelper.SkipJWT()
+			if !appHelper.CheckAllChecksComplete() {
 				return
 			}
 			tempToken := tempReq.TempToken
@@ -197,7 +199,7 @@ func MFASetupHandler(
 				"TEMP_AUTH_SUCCESS_" + tempToken,
 			)
 			if err != nil || userNameBytes == "" {
-				app.WriteError(
+				appHelper.WriteError(
 					w,
 					http.StatusUnauthorized,
 					"Invalid temp token",
@@ -209,15 +211,15 @@ func MFASetupHandler(
 			userName = userNameBytes
 		} else {
 			// JWT path, there is no standard authorization/csrf for the temp token path
-			app.CheckJWT()
-			if !app.CheckAllChecksComplete() {
+			appHelper.CheckJWT()
+			if !appHelper.CheckAllChecksComplete() {
 				return
 			}
-			jwtClaims := app.GetClaims()
+			jwtClaims := appHelper.GetClaims()
 			userName = jwtClaims.Subject
 		}
 
-		app.Info(
+		appHelper.Info(
 			"MFA_STP_STRT",
 			"MFA setup request started for user: "+userName,
 		)
@@ -225,12 +227,12 @@ func MFASetupHandler(
 		// Get current user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
 		if err != nil {
-			mapRepoError(app, w, err, "Failed to retrieve user", "USF0")
+			mapRepoError(appHelper, w, err, "Failed to retrieve user", "USF0")
 			return
 		}
 
 		if user.MFAExempt {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusBadRequest,
 				"MFA not required for this user",
@@ -244,7 +246,7 @@ func MFASetupHandler(
 		// again. Returning it here would hand the seed and its QR code to
 		// anyone holding a temp token, which takes only the password.
 		if user.MFAEnrolled() {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusConflict,
 				"MFA is already set up: enter the code from your authenticator app",
@@ -264,7 +266,7 @@ func MFASetupHandler(
 				appServices.Config.TOTPEncryptionKey,
 			)
 			if err != nil {
-				app.WriteError(
+				appHelper.WriteError(
 					w,
 					http.StatusInternalServerError,
 					"Failed to decrypt TOTP secret",
@@ -281,20 +283,29 @@ func MFASetupHandler(
 			var err error
 			secret, err = auth.GenerateTOTPSecret()
 			if err != nil {
-				app.WriteError(w, http.StatusInternalServerError, "Failed to generate secret", "SGF0", err)
+				appHelper.WriteError(
+					w, http.StatusInternalServerError,
+					"Failed to generate secret", "SGF0", err,
+				)
 				return
 			}
 
 			// Validate generated secret
 			if !auth.ValidateTOTPSecret(secret) {
-				app.WriteError(w, http.StatusInternalServerError, "Generated invalid TOTP secret", "TOTP_INVALID_SECRET", nil)
+				appHelper.WriteError(
+					w, http.StatusInternalServerError,
+					"Generated invalid TOTP secret", "TOTP_INVALID_SECRET", nil,
+				)
 				return
 			}
 
 			// Encrypt and save
 			encrypted, err := auth.EncryptTOTPSeed(secret, appServices.Config.TOTPEncryptionKey)
 			if err != nil {
-				app.WriteError(w, http.StatusInternalServerError, "Failed to encrypt TOTP secret", "TSE0", err)
+				appHelper.WriteError(
+					w, http.StatusInternalServerError,
+					"Failed to encrypt TOTP secret", "TSE0", err,
+				)
 				return
 			}
 			_, err = userRepo.UpdateUserTOTPSeed(
@@ -302,7 +313,9 @@ func MFASetupHandler(
 				user.AppUserID, user.SecurityContext,
 			)
 			if err != nil {
-				mapRepoError(app, w, err, "Failed to save TOTP secret", "TSS0")
+				mapRepoError(
+					appHelper, w, err, "Failed to save TOTP secret", "TSS0",
+				)
 				return
 			}
 		}
@@ -314,7 +327,7 @@ func MFASetupHandler(
 			secret,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Failed to generate TOTP URI",
@@ -327,7 +340,7 @@ func MFASetupHandler(
 		// Generate QR code image
 		png, err := qrcode.Encode(qrCodeUrl, qrcode.Medium, 256)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Failed to generate QR code",
@@ -346,8 +359,8 @@ func MFASetupHandler(
 		}
 
 		wrapper := model.DataWrapper{Data: response}
-		app.WriteJSON(w, http.StatusOK, wrapper)
-		app.Info("MFA_STP_DATA", "MFA setup data provided")
+		appHelper.WriteJSON(w, http.StatusOK, wrapper)
+		appHelper.Info("MFA_STP_DATA", "MFA setup data provided")
 	}
 }
 
@@ -358,10 +371,12 @@ func MFAVerifyHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := security.NewAppHelper(w, r, appServices, "MFAVerifyHandler")
-		app.CheckRateLimitAndUserBlock()
-		app.SkipCSRF()
-		app.SkipAuthorization()
+		appHelper := security.NewAppHelper(
+			w, r, appServices, "MFAVerifyHandler",
+		)
+		appHelper.CheckRateLimitAndUserBlock()
+		appHelper.SkipCSRF()
+		appHelper.SkipAuthorization()
 
 		// Parse request
 		var req struct {
@@ -370,7 +385,7 @@ func MFAVerifyHandler(
 		}
 		// Same reasoning as MFASetupHandler: read before the auth gate, so
 		// bound it.
-		if !decodeJSONBody(app, w, r, maxAuthBodyBytes, &req) {
+		if !decodeJSONBody(appHelper, w, r, maxAuthBodyBytes, &req) {
 			return
 		}
 
@@ -379,15 +394,15 @@ func MFAVerifyHandler(
 			// Temp token path - skip JWT for temp token authentication.
 			// The other checks (rate limit, user block) have already run;
 			// this is where a failed one stops the request.
-			app.SkipJWT()
-			if !app.CheckAllChecksComplete() {
+			appHelper.SkipJWT()
+			if !appHelper.CheckAllChecksComplete() {
 				return
 			}
 			userNameBytes, err := appServices.KV.Get(
 				"TEMP_AUTH_SUCCESS_" + req.TempToken,
 			)
 			if err != nil || userNameBytes == "" {
-				app.WriteError(
+				appHelper.WriteError(
 					w,
 					http.StatusUnauthorized,
 					"Invalid temp token",
@@ -399,15 +414,15 @@ func MFAVerifyHandler(
 			userName = userNameBytes
 		} else {
 			// JWT path
-			app.CheckJWT()
-			if !app.CheckAllChecksComplete() {
+			appHelper.CheckJWT()
+			if !appHelper.CheckAllChecksComplete() {
 				return
 			}
-			jwtClaims := app.GetClaims()
+			jwtClaims := appHelper.GetClaims()
 			userName = jwtClaims.Subject
 		}
 
-		app.Info(
+		appHelper.Info(
 			"MFA_VFY_STRT",
 			"MFA verify request started for user: "+userName,
 		)
@@ -415,13 +430,13 @@ func MFAVerifyHandler(
 		// Get user
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
 		if err != nil {
-			mapRepoError(app, w, err, "Failed to retrieve user", "USF0")
+			mapRepoError(appHelper, w, err, "Failed to retrieve user", "USF0")
 			return
 		}
 
 		// Only check MFA setup for logged-in users (JWT path), not during initial setup (temp token path)
 		if !user.MFASetup && req.TempToken == "" {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusBadRequest,
 				"MFA not set up. Please complete MFA setup first.",
@@ -433,7 +448,7 @@ func MFAVerifyHandler(
 
 		// Decrypt TOTP secret; an admin reset leaves '' rather than NULL
 		if user.TOTPSeed == nil || *user.TOTPSeed == "" {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusBadRequest,
 				"TOTP secret not found. Please restart MFA setup.",
@@ -447,7 +462,7 @@ func MFAVerifyHandler(
 			appServices.Config.TOTPEncryptionKey,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Failed to decrypt TOTP secret",
@@ -463,7 +478,7 @@ func MFAVerifyHandler(
 		)
 		locked, err := isAccountLocked(appServices.KV, clientIP, userName)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Failed to check account lockout",
@@ -473,7 +488,7 @@ func MFAVerifyHandler(
 			return
 		}
 		if locked {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusTooManyRequests,
 				"Account is temporarily locked due to too many failed login attempts",
@@ -495,7 +510,7 @@ func MFAVerifyHandler(
 			)
 			if err != nil {
 				// Fail closed: a code accepted unrecorded is replayable.
-				app.WriteError(
+				appHelper.WriteError(
 					w,
 					http.StatusInternalServerError,
 					"Login is temporarily unavailable",
@@ -517,7 +532,7 @@ func MFAVerifyHandler(
 			if err != nil {
 				// Fail closed: an uncounted failure is a lockout that never
 				// trips, so this is an outage, not a plain bad password.
-				app.WriteError(
+				appHelper.WriteError(
 					w,
 					http.StatusInternalServerError,
 					"Login is temporarily unavailable",
@@ -526,7 +541,7 @@ func MFAVerifyHandler(
 				)
 				return
 			}
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusUnauthorized,
 				"Invalid TOTP code",
@@ -547,7 +562,7 @@ func MFAVerifyHandler(
 				user.SecurityContext,
 			)
 			if err != nil {
-				app.Logger().Error(
+				appHelper.Logger().Error(
 					"MFA_SETUP_UPDATE_FAIL",
 					"Failed to update MFA setup status for user: "+userName+", error: "+err.Error(),
 					"username",
@@ -566,7 +581,7 @@ func MFAVerifyHandler(
 				user.AppUserGroupMembershipList,
 			)
 			if err != nil {
-				app.WriteError(
+				appHelper.WriteError(
 					w,
 					http.StatusInternalServerError,
 					"Failed to get grants",
@@ -583,7 +598,7 @@ func MFAVerifyHandler(
 				appServices,
 			)
 			if err != nil {
-				app.WriteError(
+				appHelper.WriteError(
 					w,
 					http.StatusInternalServerError,
 					"Failed to create JWT",
@@ -607,7 +622,10 @@ func MFAVerifyHandler(
 			if err := appServices.KV.Del(
 				"TEMP_AUTH_SUCCESS_" + req.TempToken,
 			); err != nil {
-				app.Logger().Error("MFA_TT_DEL_FAIL", "Failed to delete temp token: "+err.Error())
+				appHelper.Logger().Error(
+					"MFA_TT_DEL_FAIL",
+					"Failed to delete temp token: "+err.Error(),
+				)
 			}
 
 			// Return full user data
@@ -636,16 +654,18 @@ func MFAVerifyHandler(
 				User:      response,
 				CsrfToken: csrfToken,
 			}
-			app.WriteJSON(w, http.StatusOK, wrapper)
-			app.Info(
+			appHelper.WriteJSON(w, http.StatusOK, wrapper)
+			appHelper.Info(
 				"MFA_ONB_CMP",
 				"MFA onboarding completed for user: "+userName,
 			)
 		} else {
 			// For logged in users, just confirm
 			wrapper := model.DataWrapper{Data: map[string]string{"message": "MFA verified successfully"}}
-			app.WriteJSON(w, http.StatusOK, wrapper)
-			app.Info("MFA_VFY_OK", "MFA verification successful for user: "+userName)
+			appHelper.WriteJSON(w, http.StatusOK, wrapper)
+			appHelper.Info(
+				"MFA_VFY_OK", "MFA verification successful for user: "+userName,
+			)
 		}
 	}
 }
@@ -657,35 +677,37 @@ func AdminResetUserMFAHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Security checks
-		app := security.NewAppHelper(w, r, appServices, "AdminResetUserMFAHandler")
-		app.CheckJWT()
-		app.CheckRateLimitAndUserBlock()
-		app.CheckCSRF()
-		app.CheckAuthorization(model.GrantResetUserMFA)
+		appHelper := security.NewAppHelper(
+			w, r, appServices, "AdminResetUserMFAHandler",
+		)
+		appHelper.CheckJWT()
+		appHelper.CheckRateLimitAndUserBlock()
+		appHelper.CheckCSRF()
+		appHelper.CheckAuthorization(model.GrantResetUserMFA)
 
-		if !app.CheckAllChecksComplete() {
+		if !appHelper.CheckAllChecksComplete() {
 			return
 		}
 
-		app.Info("ADM_RST_MFA_S", "Admin reset MFA request started")
+		appHelper.Info("ADM_RST_MFA_S", "Admin reset MFA request started")
 
 		// Parse request
 		var req struct {
 			UserID int `json:"userId"`
 		}
-		if !decodeJSONBody(app, w, r, maxLoginLayerBodyBytes, &req) {
+		if !decodeJSONBody(appHelper, w, r, maxLoginLayerBodyBytes, &req) {
 			return
 		}
 
 		// Get target user
 		users, err := userRepo.RetrieveUserList(
 			r.Context(),
-			app.GetClaims().SecurityContext,
+			appHelper.GetClaims().SecurityContext,
 			[]int{req.UserID},
 			0,
 		)
 		if err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Failed to retrieve user",
@@ -695,7 +717,7 @@ func AdminResetUserMFAHandler(
 			return
 		}
 		if len(users) == 0 {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusNotFound,
 				"User not found",
@@ -712,7 +734,7 @@ func AdminResetUserMFAHandler(
 		if err := appServices.KV.Del(
 			totpLastStepKey(targetUser.UserName),
 		); err != nil {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"Failed to reset MFA",
@@ -728,15 +750,17 @@ func AdminResetUserMFAHandler(
 			targetUser.AppUserID,
 			"",
 			targetUser.UpdateTS,
-			app.GetClaims().UserID,
+			appHelper.GetClaims().UserID,
 			targetUser.SecurityContext,
 		)
 		if err != nil {
-			mapRepoError(app, w, err, "Failed to reset MFA", "MFRE")
+			mapRepoError(appHelper, w, err, "Failed to reset MFA", "MFRE")
 			return
 		}
 
-		if !revokeUserSessionList(app, w, appServices, targetUser.UserName) {
+		if !revokeUserSessionList(
+			appHelper, w, appServices, targetUser.UserName,
+		) {
 			return
 		}
 		wrapper := model.DataWrapper{
@@ -745,8 +769,8 @@ func AdminResetUserMFAHandler(
 				"updateTs": newUpdateTS,
 			},
 		}
-		app.WriteJSON(w, http.StatusOK, wrapper)
-		app.Info(
+		appHelper.WriteJSON(w, http.StatusOK, wrapper)
+		appHelper.Info(
 			"ADM_RST_MFA_D",
 			"Admin reset MFA completed for user: "+targetUser.UserName,
 		)

@@ -17,12 +17,12 @@ import (
 
 // Every handler runs its own security checks, explicitly, in its own body:
 //
-//	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveExample")
-//	app.CheckJWT()
-//	app.CheckRateLimitAndUserBlock()
-//	app.CheckCSRF()
-//	app.CheckAuthorization(model.GrantExampleRead)
-//	if !app.CheckAllChecksComplete() { return }
+//	appHelper := security.NewAppHelper(w, r, h.appsrv, "RetrieveExample")
+//	appHelper.CheckJWT()
+//	appHelper.CheckRateLimitAndUserBlock()
+//	appHelper.CheckCSRF()
+//	appHelper.CheckAuthorization(model.GrantExampleRead)
+//	if !appHelper.CheckAllChecksComplete() { return }
 //
 // An endpoint that needs less writes the difference with Skip* calls in the
 // same place, so an auditor reads the whole policy in the handler. This is

@@ -72,24 +72,24 @@ func (h *ExampleHandler) RetrieveExample(
 	r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveExample")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantExampleRead)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "RetrieveExample")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantExampleRead)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("READ_EX_START", "ReadExample invoked")
+	appHelper.Info("READ_EX_START", "ReadExample invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse query parameters
 	exampleID, err := GetIntFromQuery(r, "exampleId")
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			err.Error(),
@@ -106,45 +106,47 @@ func (h *ExampleHandler) RetrieveExample(
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			fmt.Sprintf("Failed to retrieve example: example_id=%d",
 				exampleID),
 			"GET_EX_FAIL")
 		return
 	}
 
-	app.Debug("EX_RETRIEVED", fmt.Sprintf("Example retrieved: %+v", example))
+	appHelper.Debug(
+		"EX_RETRIEVED", fmt.Sprintf("Example retrieved: %+v", example),
+	)
 	wrapper := model.DataWrapper{Data: example}
-	app.WriteJSON(w, http.StatusOK, wrapper)
-	app.Info("GET_EX_DONE", "Example retrieval completed")
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.Info("GET_EX_DONE", "Example retrieval completed")
 }
 
 // CreateExample handles POST /example
 func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "CreateExample")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantExampleCreate)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "CreateExample")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantExampleCreate)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("EX_CR_START", "CreateExample invoked")
+	appHelper.Info("EX_CR_START", "CreateExample invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse request body
 	var example model.ExampleModel
-	if !decodeJSONBody(app, w, r, maxEntityBodyBytes, &example) {
+	if !decodeJSONBody(appHelper, w, r, maxEntityBodyBytes, &example) {
 		return
 	}
 
 	// Validate required fields
 	if example.ExampleText == "" {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			"example_text is required for create example",
@@ -172,7 +174,7 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusInternalServerError,
 			fmt.Sprintf(
@@ -186,10 +188,12 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Debug("EX_CREATED", fmt.Sprintf("Example created: %+v", createdExample))
+	appHelper.Debug(
+		"EX_CREATED", fmt.Sprintf("Example created: %+v", createdExample),
+	)
 	wrapper := model.DataWrapper{Data: createdExample}
-	app.WriteJSON(w, http.StatusCreated, wrapper)
-	app.Info(
+	appHelper.WriteJSON(w, http.StatusCreated, wrapper)
+	appHelper.Info(
 		"EX_CR_DONE",
 		fmt.Sprintf(
 			"Example creation completed for exampleId=%d",
@@ -201,34 +205,34 @@ func (h *ExampleHandler) CreateExample(w http.ResponseWriter, r *http.Request) {
 // UpdateExample handles PUT /example
 func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "UpdateExample")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantExampleUpdate)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "UpdateExample")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantExampleUpdate)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("EX_UP_START", "UpdateExample invoked")
+	appHelper.Info("EX_UP_START", "UpdateExample invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse request body
 	var example model.ExampleModel
-	if !decodeJSONBody(app, w, r, maxEntityBodyBytes, &example) {
+	if !decodeJSONBody(appHelper, w, r, maxEntityBodyBytes, &example) {
 		return
 	}
 
-	app.Debug(
+	appHelper.Debug(
 		"UPDATE_PARSE_REQ",
 		fmt.Sprintf("Example update request parsed: %+v", example),
 	)
 
 	// Validate required fields
 	if example.ExampleID == 0 || example.ExampleText == "" {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			fmt.Sprintf(
@@ -244,7 +248,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if example.ExampleID == 0 || example.ExampleText == "" {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			fmt.Sprintf(
@@ -258,7 +262,7 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info(
+	appHelper.Info(
 		"EX_UP_PARAMS",
 		fmt.Sprintf("UpdateExample for exampleId=%d", example.ExampleID),
 	)
@@ -275,17 +279,17 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 	// Update example with optimistic locking
 	err := h.exampleRepo.UpdateExample(r.Context(), &example, clientUpdateTS)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			fmt.Sprintf("Failed to update example: example_id=%d",
 				example.ExampleID),
 			"UPDATE_EX_FAIL")
 		return
 	}
 
-	app.Debug("EX_UPDATED", fmt.Sprintf("Example updated: %+v", example))
+	appHelper.Debug("EX_UPDATED", fmt.Sprintf("Example updated: %+v", example))
 	wrapper := model.DataWrapper{Data: example}
-	app.WriteJSON(w, http.StatusOK, wrapper)
-	app.Info(
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.Info(
 		"EX_UP_DONE",
 		fmt.Sprintf(
 			"Example update completed for exampleId=%d",
@@ -297,24 +301,24 @@ func (h *ExampleHandler) UpdateExample(w http.ResponseWriter, r *http.Request) {
 // DeleteExample handles DELETE /example
 func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "DeleteExample")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantExampleDelete)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "DeleteExample")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantExampleDelete)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("EX_DEL_START", "DeleteExample invoked")
+	appHelper.Info("EX_DEL_START", "DeleteExample invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse query parameters
 	exampleID, err := GetIntFromQuery(r, "exampleId")
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			err.Error(),
@@ -324,14 +328,14 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Info(
+	appHelper.Info(
 		"EX_DEL_PARAMS",
 		fmt.Sprintf("DeleteExample for exampleId=%d", exampleID),
 	)
 
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			err.Error(),
@@ -354,7 +358,7 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		jwtClaims.UserID,
 	)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			fmt.Sprintf("Failed to delete example: example_id=%d",
 				exampleID),
 			"DELETE_EX_FAIL")
@@ -366,8 +370,8 @@ func (h *ExampleHandler) DeleteExample(w http.ResponseWriter, r *http.Request) {
 		"example_id": deletedID,
 	}
 	wrapper := model.DataWrapper{Data: data}
-	app.WriteJSON(w, http.StatusOK, wrapper)
-	app.Info(
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.Info(
 		"EX_DEL_DONE",
 		fmt.Sprintf("Example deletion completed for exampleId=%d", deletedID),
 	)
@@ -379,24 +383,24 @@ func (h *ExampleHandler) RetrieveExampleList(
 	r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveExampleList")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantExampleRead)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "RetrieveExampleList")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantExampleRead)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("EX_LIST_START", "ReadExampleList invoked")
+	appHelper.Info("EX_LIST_START", "ReadExampleList invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse query parameters
 	idList, err := GetCommaSeparatedIntListFromQuery(r, "exampleIdList")
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			err.Error(),
@@ -408,7 +412,7 @@ func (h *ExampleHandler) RetrieveExampleList(
 
 	afterUpdateTs, err := GetOptionalFloatFromQuery(r, "afterUpdateTs")
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			err.Error(),
@@ -426,7 +430,7 @@ func (h *ExampleHandler) RetrieveExampleList(
 		afterUpdateTs,
 	)
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusInternalServerError,
 			fmt.Sprintf(
@@ -447,9 +451,11 @@ func (h *ExampleHandler) RetrieveExampleList(
 
 	// Return as JSON
 	wrapper := model.DataWrapper{Data: examples}
-	app.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
 
-	app.Info("EX_LIST_RET", fmt.Sprintf("Returned %d examples", len(examples)))
+	appHelper.Info(
+		"EX_LIST_RET", fmt.Sprintf("Returned %d examples", len(examples)),
+	)
 }
 
 // CreateExampleList handles POST /exampleList
@@ -458,27 +464,27 @@ func (h *ExampleHandler) CreateExampleList(
 	r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "CreateExampleList")
-	app.Info("EX_BLK_CR_ST", "CreateExampleList invoked")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantExampleCreate)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "CreateExampleList")
+	appHelper.Info("EX_BLK_CR_ST", "CreateExampleList invoked")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantExampleCreate)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse request body
 	var exampleList []model.ExampleModel
-	if !decodeJSONBody(app, w, r, maxEntityBodyBytes, &exampleList) {
+	if !decodeJSONBody(appHelper, w, r, maxEntityBodyBytes, &exampleList) {
 		return
 	}
 
 	if len(exampleList) == 0 {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			"At least one example required for bulk create",
@@ -491,7 +497,7 @@ func (h *ExampleHandler) CreateExampleList(
 	// Validate required fields
 	for i, example := range exampleList {
 		if example.ExampleText == "" {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusBadRequest,
 				fmt.Sprintf(
@@ -537,7 +543,7 @@ func (h *ExampleHandler) CreateExampleList(
 		for i, ex := range examplePtrList {
 			exampleTexts[i] = ex.ExampleText
 		}
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusInternalServerError,
 			fmt.Sprintf(
@@ -553,13 +559,13 @@ func (h *ExampleHandler) CreateExampleList(
 
 	// Return the created examples with IDs
 	wrapper := model.DataWrapper{Data: createdExamples}
-	app.WriteJSON(w, http.StatusCreated, wrapper)
+	appHelper.WriteJSON(w, http.StatusCreated, wrapper)
 
 	createdIds := make([]int, len(createdExamples))
 	for i, ex := range createdExamples {
 		createdIds[i] = ex.ExampleID
 	}
-	app.Info(
+	appHelper.Info(
 		"EX_BLK_CR_RET",
 		fmt.Sprintf(
 			"Created %d examples: ids=%v",
@@ -575,28 +581,28 @@ func (h *ExampleHandler) UpdateExampleList(
 	r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "UpdateExampleList")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantExampleUpdate)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "UpdateExampleList")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantExampleUpdate)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("EX_BLK_UP_ST", "UpdateExampleList invoked")
+	appHelper.Info("EX_BLK_UP_ST", "UpdateExampleList invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse request body
 	var exampleList []model.ExampleModel
-	if !decodeJSONBody(app, w, r, maxEntityBodyBytes, &exampleList) {
+	if !decodeJSONBody(appHelper, w, r, maxEntityBodyBytes, &exampleList) {
 		return
 	}
 
 	if len(exampleList) == 0 {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			"At least one example required for bulk update",
@@ -616,7 +622,7 @@ func (h *ExampleHandler) UpdateExampleList(
 		examplePtrList[i] = &exampleList[i]
 		originalUpdateTSList[i] = exampleList[i].UpdateTS
 		if examplePtrList[i].ExampleID == 0 {
-			app.WriteError(
+			appHelper.WriteError(
 				w,
 				http.StatusBadRequest,
 				fmt.Sprintf("Example %d missing example_id in bulk update", i),
@@ -637,7 +643,7 @@ func (h *ExampleHandler) UpdateExampleList(
 		jwtClaims.SecurityContext,
 	)
 	if err != nil {
-		mapRepoError(app, w, err,
+		mapRepoError(appHelper, w, err,
 			fmt.Sprintf("Failed to update examples: count=%d",
 				len(examplePtrList)),
 			"BULK_UPDATE_FAIL")
@@ -647,9 +653,9 @@ func (h *ExampleHandler) UpdateExampleList(
 	// Return success
 	data := map[string]string{"message": "Examples updated successfully"}
 	wrapper := model.DataWrapper{Data: data}
-	app.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
 
-	app.Info(
+	appHelper.Info(
 		"EX_BLK_UP_RET",
 		fmt.Sprintf("Updated %d examples", len(exampleList)),
 	)
@@ -661,24 +667,24 @@ func (h *ExampleHandler) DeleteExampleList(
 	r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "DeleteExampleList")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantExampleDelete)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "DeleteExampleList")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantExampleDelete)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("EX_BLK_DEL_ST", "DeleteExampleList invoked")
+	appHelper.Info("EX_BLK_DEL_ST", "DeleteExampleList invoked")
 
-	jwtClaims := app.GetClaims()
+	jwtClaims := appHelper.GetClaims()
 
 	// Parse query parameters
 	idList, err := GetCommaSeparatedIntListFromQuery(r, "exampleIdList")
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			err.Error(),
@@ -690,7 +696,7 @@ func (h *ExampleHandler) DeleteExampleList(
 
 	updateTimestampList, err := GetCommaSeparatedFloats(r, "updateTs")
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			err.Error(),
@@ -701,7 +707,7 @@ func (h *ExampleHandler) DeleteExampleList(
 	}
 
 	if len(idList) != len(updateTimestampList) {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			fmt.Sprintf(
@@ -716,7 +722,7 @@ func (h *ExampleHandler) DeleteExampleList(
 	}
 
 	if len(idList) == 0 {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusBadRequest,
 			"At least one id required for bulk delete",
@@ -739,7 +745,7 @@ func (h *ExampleHandler) DeleteExampleList(
 		jwtClaims.UserID,
 	)
 	if err != nil {
-		app.WriteError(
+		appHelper.WriteError(
 			w,
 			http.StatusInternalServerError,
 			fmt.Sprintf(
@@ -759,9 +765,9 @@ func (h *ExampleHandler) DeleteExampleList(
 		"exampleIdList": deletedIDList,
 	}
 	wrapper := model.DataWrapper{Data: data}
-	app.WriteJSON(w, http.StatusOK, wrapper)
+	appHelper.WriteJSON(w, http.StatusOK, wrapper)
 
-	app.Info(
+	appHelper.Info(
 		"EX_BLK_DEL_RET",
 		fmt.Sprintf(
 			"Deleted %d examples: ids=%v",

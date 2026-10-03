@@ -442,12 +442,12 @@ route wrapper, by decision: the policy for an endpoint is read in
 the handler, not inferred from a chain. The shape every entity handler has:
 
 ```go
-app := security.NewAppHelper(w, r, h.appsrv, "RetrieveExample")
-app.CheckJWT()
-app.CheckRateLimitAndUserBlock()
-app.CheckCSRF()
-app.CheckAuthorization(model.GrantExampleRead)
-if !app.CheckAllChecksComplete() {
+appHelper := security.NewAppHelper(w, r, h.appsrv, "RetrieveExample")
+appHelper.CheckJWT()
+appHelper.CheckRateLimitAndUserBlock()
+appHelper.CheckCSRF()
+appHelper.CheckAuthorization(model.GrantExampleRead)
+if !appHelper.CheckAllChecksComplete() {
     return
 }
 ```
