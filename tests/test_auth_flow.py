@@ -1,5 +1,4 @@
 import os
-import random
 import statistics
 import time
 import uuid
@@ -112,25 +111,16 @@ class TestAuthentication:
         pass
 
     # MFA enrolment, verification, temp-token replay and the MFA lockout are
-    # in tests/test_zz_mfa_totp.py (it runs last because the lockout locks
-    # the shared IP out of /auth).
+    # in tests/test_zz_mfa_totp.py.
 
 
-# The pytest API (bin/300-run-tests) trusts one X-Forwarded-For hop, so each
-# case below sends from its own address in 198.18.0.0/15 and never spends the
-# loopback address's lockout allowance the rest of the suite logs in from.
-RUN_OCTET = random.randint(0, 255)
-
-
-def run_ip(host: int) -> str:
-    return f"198.18.{RUN_OCTET}.{host}"
-
-
-def _login(base_url: str, forwarded_for: str, user_name: str, password: str):
+# Each case below signs in from its own new_forwarded_ip() address, so it
+# never spends the loopback allowance the rest of the suite logs in from.
+def _login(base_url: str, client_ip: str, user_name: str, password: str):
     return requests.post(
         f"{base_url}/auth",
         json={"userName": user_name, "password": password},
-        headers={"X-Forwarded-For": forwarded_for},
+        headers=forwarded_for(client_ip),
     )
 
 
@@ -156,6 +146,7 @@ class TestLoginEnumeration:
         assert create_response.status_code == 201, create_response.text
         created = create_response.json()["data"]
         try:
+            wrong_ip, unknown_ip = new_forwarded_ip(), new_forwarded_ip()
             wrong_list, unknown_list, body_set = [], [], set()
             # Five of each, interleaved, each kind from its own address:
             # under the lockout threshold for both addresses and the user.
@@ -164,11 +155,11 @@ class TestLoginEnumeration:
                     started = time.perf_counter()
                     if kind == "wrong":
                         response = _login(
-                            base_url, run_ip(1), created["userName"], "nope"
+                            base_url, wrong_ip, created["userName"], "nope"
                         )
                     else:
                         response = _login(
-                            base_url, run_ip(2), _unknown_name(), "nope"
+                            base_url, unknown_ip, _unknown_name(), "nope"
                         )
                     elapsed = time.perf_counter() - started
                     assert response.status_code == 401, response.text
@@ -191,8 +182,8 @@ class TestLoginEnumeration:
 
     def test_unknown_name_attempts_reach_the_lockout(self):
         base_url = os.environ["TEST_BASE_URL"]
-        threshold = int(os.environ.get("FAILED_LOGIN_ATTEMPT_THRESHOLD", "7"))
-        locked_ip = run_ip(3)
+        threshold = failed_login_threshold()
+        locked_ip, other_ip = new_forwarded_ip(), new_forwarded_ip()
         user_name = _unknown_name()
         for attempt in range(threshold):
             response = _login(base_url, locked_ip, user_name, "guess")
@@ -203,18 +194,18 @@ class TestLoginEnumeration:
         assert response.status_code == 429, response.text
 
         # The name is locked from any address.
-        response = _login(base_url, run_ip(5), user_name, "guess")
+        response = _login(base_url, new_forwarded_ip(), user_name, "guess")
         assert response.status_code == 429, response.text
 
         # A forged entry left of the one the proxy appended is ignored: the
         # request still comes from the locked address.
         response = _login(
-            base_url, f"{run_ip(4)}, {locked_ip}", _unknown_name(), "guess"
+            base_url, f"{other_ip}, {locked_ip}", _unknown_name(), "guess"
         )
         assert response.status_code == 429, response.text
 
         # Another address with another name is not locked.
-        response = _login(base_url, run_ip(4), _unknown_name(), "guess")
+        response = _login(base_url, other_ip, _unknown_name(), "guess")
         assert response.status_code == 401, response.text
 
 
@@ -223,7 +214,7 @@ class TestLoginCounterReset:
 
     def test_success_between_typos_does_not_lock_the_user(self, test_client):
         base_url = test_client.base_url
-        threshold = int(os.environ.get("FAILED_LOGIN_ATTEMPT_THRESHOLD", "7"))
+        threshold = failed_login_threshold()
         suffix = uuid.uuid4().hex[:12]
         password = "typos123!"
         create_response = test_client.make_request("POST", "/user", json={
@@ -238,7 +229,7 @@ class TestLoginCounterReset:
         assert create_response.status_code == 201, create_response.text
         created = create_response.json()["data"]
         user_name = created["userName"]
-        typing_ip, later_ip = run_ip(6), run_ip(7)
+        typing_ip, later_ip = new_forwarded_ip(), new_forwarded_ip()
         try:
             for attempt in range(threshold - 1):
                 response = _login(base_url, typing_ip, user_name, "typo")
@@ -272,7 +263,7 @@ class TestBodyLimits:
 
     def test_oversized_login_body_is_413(self):
         base_url = os.environ["TEST_BASE_URL"]
-        login_ip = run_ip(8)
+        login_ip = new_forwarded_ip()
         # 5 KiB of password, over the 4 KiB cap on /auth.
         response = _login(base_url, login_ip, "admin", "a" * 5120)
         assert response.status_code == 413, response.text
@@ -305,4 +296,10 @@ class TestBodyLimits:
 
 
 # Import TestClient for use in this module
-from conftest import TEST_TENANT, TestClient
+from conftest import (
+    TEST_TENANT,
+    TestClient,
+    failed_login_threshold,
+    forwarded_for,
+    new_forwarded_ip,
+)

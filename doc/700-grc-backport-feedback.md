@@ -240,142 +240,6 @@ published password off UAT hosts that already have it but makes the host
 env file the only source of truth? Recommendation: yes, and check the
 existing UAT host once by hand in the same ticket.
 
-### B019 — MFA pytest harness: per-run XFF, throwaway lockout user
-
-- **Priority:** P1  **Area:** tests
-- **GRC:** `tests/conftest.py:55-68,87-137,161-206`; `tests/test_zz_mfa_totp.py:1-26,38-61,68-81,91-110,116-192,237-264,417-495,498-503`; `tests/README.md:90-97`   **PROTO:** `tests/conftest.py:31-68` (`pytest.fail` :49-50); `tests/test_zz_mfa_totp.py:1-155` (:28-45, :49-108, default 7 at :122); `src/api-srv/internal/security/app_helper.go:308-311`
-- **Ticket:** RG0003 / `37978ce`; RG0042 / `63ccf75`; RG0043 / `dd8b4c3`
-- **What:** PROTO locks out loopback and the shared `mfa` user, so re-runs fail.
-GRC: MFA client, fresh XFF per test, disposable lockout user, threshold via
-`api_env`, nine cases.
-- **Port notes:** Prereq for B001/B009/B010 tests. Relies on XFF trust
-(appendix). Case split restructures PS0020 behaviour.
-- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-A test-harness quality gap, not a product bug: the MFA file spends shared
-lockout state and cannot tell a lockout from a rate limit.
-
-**(1) The lockout test locks loopback and the shared `mfa` user.** The
-file says so itself (`tests/test_zz_mfa_totp.py:3-4`): "the lockout case
-spends the shared IP's failed-attempt allowance, which would lock every
-later test out of /auth". The test sends wrong codes as the seeded `mfa`
-user from 127.0.0.1 (`:131-135`), then checks `/auth` is locked (`:142-145`).
-The server keys both counters on that IP and that name
-(`src/api-srv/internal/handler/auth_handler.go:67,71`):
-```go
-ipCount, err := kv.Incr("loginfail-ip-"+ip, ...
-userCount, err := kv.Incr("loginfail-user-"+username, ...
-```
-So after the test, `loginlock-ip-127.0.0.1` and `loginlock-user-mfa` live
-for `FAILED_LOGIN_LOCKOUT_DURATION` (5 min, `etc/e2e-api-srv.env:31`).
-
-**(2) When that bites.** `bin/300-run-tests py` rebuilds the database
-(`bin/300-run-tests:138`) and starts a fresh API (`:169`), and the KV store
-is in-process, so a `bin/300` re-run starts clean. The doc's "re-runs fail"
-is true only for the manual mode in `tests/README.md:18-19` (pytest against
-a long-running `bin/215` API). There, a re-run within 5 minutes fails at
-the first fixture: `admin` signs in from 127.0.0.1 and gets 429. A run that
-fails mid-file leaves `mfa` enrolled, so the next run fails at `:60`
-(`mfaAlreadySetup is False`) until the DB is reset by hand.
-
-**(3) One bucket for the whole suite.** Every test comes from 127.0.0.1
-and nothing clears the IP counter on success (`auth_handler.go:246` is
-commented out, B010), so the suite stays under 7 failures by luck.
-
-**(4) The lockout assertion is loose.** `/mfaSetup` and `/mfaVerify` are
-rate-limited per IP (`user_mfa_handler.go:384`; key from `ClientIP` at
-`security/app_helper.go:360`, 20 per minute). The file sends 16 such
-requests from 127.0.0.1. The test only checks `assert 429 in statuses` and
-`statuses[-1] == 429` (`test_zz_mfa_totp.py:138-139`), and the rate limit
-also answers 429 ("Rate limit exceeded", `app_helper.go:380`). A rate-limit
-429 would pass as a lockout. Minor: the wrong code is the literal "000000"
-(`:66,134`), which is a valid code about once in a million.
-
-**(5) No MFA client.** `TestClient.authenticate` fails on any temp token
-(`tests/conftest.py:49-50`), so each MFA step is a hand-rolled request,
-and the threshold comes from pytest's env with a default of 7
-(`test_zz_mfa_totp.py:122`), not from the server's config.
-
-#### What GRC changed
-
-RG0003 (`37978ce`) rewrote the file after a fixed-address draft failed a
-back-to-back run; RG0042 (`63ccf75`), RG0043 (`dd8b4c3`) added cases.
-
-1. **Client helpers** in `tests/conftest.py`: `MFARequired` carries the
-   temp token (`:55-68`); `authenticate(..., totp_secret, headers)`
-   completes `/mfaVerify` itself (`:87-117`); `begin_auth`, `mfa_setup`,
-   `mfa_verify`, `adopt_session` (`:161-206`). `fresh_code` (`:30-40`)
-   never reuses a TOTP step, needed once replay is refused (B009).
-2. **Per-run client addresses** (`tests/test_zz_mfa_totp.py:45-58`):
-   ```python
-   RUN_OCTET = random.randint(0, 255)
-   def run_ip(host: int) -> str:
-       return f"198.18.{RUN_OCTET}.{host}"
-   ```
-   One address per test in 198.18.0.0/15, sent as `X-Forwarded-For` on
-   every request that can count (`fwd`, `:64-65`).
-3. **Throwaway lockout user** (`:417-495`): admin creates
-   `mfalock<uuid>`, enrols it, sends exactly `threshold` wrong codes and
-   asserts each is 401, then asserts 429 with the lockout message (not the
-   rate-limit one) and that `/auth` is locked too; `finally` deletes it.
-4. **Threshold from the server's env file** via `api_env`
-   (`:498-503`, `conftest.py:287-297`). `wrong_code` (`:68-81`) uses a
-   code from minutes ago instead of "000000".
-
-Correction: the doc says "nine cases". RG0003 shipped nine; the file now
-has 11 (RG0042 added `:194`, RG0043 `:266`). **Trap:** GRC still trusts
-the first XFF entry (`src/internal/security/client_ip.go:25-30`), so its
-harness works only because its server is still spoofable.
-
-#### Proposed fix for PROTO
-
-B007 makes `ClientIP` take the entry `TRUSTED_PROXY_COUNT` hops from the
-right, `RemoteAddr` only at 0 (local dev). At 0 every pytest request keys
-on 127.0.0.1 whatever it sends, so per-test XFF needs one trusted hop.
-
-1. **`bin/300-run-tests:153`**: add `TRUSTED_PROXY_COUNT=1` to the sed that
-   builds `py-api-srv.env`, so pytest plays the proxy. Safe: that instance
-   binds 127.0.0.1 (`etc/e2e-api-srv.env:58`) and serves only the scratch
-   DB. Leave `etc/e2e-api-srv.env` (Playwright) and `etc/loc-api-srv.env`
-   at 0. A request without the header still keys on `RemoteAddr`.
-2. **`tests/conftest.py`**: port `MFARequired`, the `authenticate`
-   signature, `begin_auth`, `mfa_setup`, `mfa_verify`, `adopt_session`,
-   `fresh_code`. Leave out `require_test_tenant` (B018) and the GRC `db`,
-   `grc` fixtures. Port `api_env`, reading the file named by an exported
-   `TEST_API_ENV` (B018 exports it), not GRC's hard-coded
-   `etc/loc-test-api-srv.env`. Have conftest fail fast when
-   `TRUSTED_PROXY_COUNT` in that file is not 1.
-3. **`tests/test_zz_mfa_totp.py`**: split the two PROTO tests into GRC's
-   cases with `fwd(run_ip(n))` on every counted request, `wrong_code`,
-   `failed_login_threshold()`. The throwaway user must send `"pwHash"`,
-   not GRC's `"password"`: PROTO's `CreateUserRequest` maps `pwHash`
-   (`src/api-srv/internal/model/security_model.go:111`) until B038.
-4. **Cases that wait on other items**: enrolled login gets 409 (B001;
-   today PROTO asserts the leak, `test_zz_mfa_totp.py:103`); code replay
-   (B009); counters reset on success and grant 9020 (B010; PROTO checks
-   `GrantUserUpdate`, `user_mfa_handler.go:684`). Port each with its item.
-   Portable now: temp token not a session, enrolment, wrong code keeps
-   the token, right code gives a session, temp-token replay, admin reset
-   (PROTO's "TOTP secret not found..." matches, `user_mfa_handler.go:487`),
-   throwaway lockout.
-5. **`tests/README.md`**: pytest runs through `bin/300` (or an API with
-   `TRUSTED_PROXY_COUNT=1`); fix or drop the manual mode at `:18-19`.
-
-Tests: pytest as above; Go, B007's `ClientIP` table test; pytest, after a
-lock on X, `X-Forwarded-For: Y, X` is still 429 (forged prefix ignored).
-
-#### Open question for Brandon
-
-Should the manual "pytest against your own `bin/215` API" mode stay
-supported (which forces `TRUSTED_PROXY_COUNT=1` into `etc/loc-api-srv.env`
-too), or does pytest run only through `bin/300`? Recommendation: `bin/300`
-only, so no developer config ever trusts a forged header.
-Brandon: Bin/300
-
 ### B020 — Nightly backup cannot write its dump
 
 - **Priority:** P1  **Area:** infra
@@ -8862,3 +8726,140 @@ forbids that user. Which? Recommendation: GRC's shape, because a test
 database that can hold tenant 1 cannot catch a test that silently writes
 there, and 2-vs-3 proves the same isolation property.
 Brandon: accept reccomendation.
+
+### B019 — COMPLETED — MFA pytest harness: per-run XFF, throwaway lockout user
+- **Completed:** 2026-10-02. `tests/conftest.py` gains `api_env()`, `failed_login_threshold()`, `new_forwarded_ip()` (198.18.0.0/15, a /24 per run from the start second plus a per-call host counter) and `forwarded_for()`, and the session-start guard now exits (status 3) unless the test API's env sets `TRUSTED_PROXY_COUNT=1`; `test_auth_flow.py` (B007/B010 cases) uses them instead of its own `run_ip`. `test_zz_mfa_totp.py` sends a per-test forwarded address on every /auth, /mfaSetup, /mfaVerify, uses `wrong_code()` instead of "000000", and its lockout case enrols a throwaway `mfalock<hex>` user (pwHash), asserts exactly threshold 401s then 429 with the lockout message (distinct from "Rate limit exceeded", so no Go change) and deletes it in `finally`; header caveat dropped, `zz` name kept as history only. Deviation: GRC's MFA client helpers (`MFARequired`, `begin_auth` etc.) and its 11-case split were not ported; the existing four cases already cover the portable behaviour, and `tests/README.md` now documents bin/300-only runs, the proxy guard and the forwarded-address helper. `bin/300-run-tests py` run twice back to back, both 79 passed. Tests: all green, go=279 unit=42 e2e=10 py=79
+
+- **Priority:** P1  **Area:** tests
+- **GRC:** `tests/conftest.py:55-68,87-137,161-206`; `tests/test_zz_mfa_totp.py:1-26,38-61,68-81,91-110,116-192,237-264,417-495,498-503`; `tests/README.md:90-97`   **PROTO:** `tests/conftest.py:31-68` (`pytest.fail` :49-50); `tests/test_zz_mfa_totp.py:1-155` (:28-45, :49-108, default 7 at :122); `src/api-srv/internal/security/app_helper.go:308-311`
+- **Ticket:** RG0003 / `37978ce`; RG0042 / `63ccf75`; RG0043 / `dd8b4c3`
+- **What:** PROTO locks out loopback and the shared `mfa` user, so re-runs fail.
+GRC: MFA client, fresh XFF per test, disposable lockout user, threshold via
+`api_env`, nine cases.
+- **Port notes:** Prereq for B001/B009/B010 tests. Relies on XFF trust
+(appendix). Case split restructures PS0020 behaviour.
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+A test-harness quality gap, not a product bug: the MFA file spends shared
+lockout state and cannot tell a lockout from a rate limit.
+
+**(1) The lockout test locks loopback and the shared `mfa` user.** The
+file says so itself (`tests/test_zz_mfa_totp.py:3-4`): "the lockout case
+spends the shared IP's failed-attempt allowance, which would lock every
+later test out of /auth". The test sends wrong codes as the seeded `mfa`
+user from 127.0.0.1 (`:131-135`), then checks `/auth` is locked (`:142-145`).
+The server keys both counters on that IP and that name
+(`src/api-srv/internal/handler/auth_handler.go:67,71`):
+```go
+ipCount, err := kv.Incr("loginfail-ip-"+ip, ...
+userCount, err := kv.Incr("loginfail-user-"+username, ...
+```
+So after the test, `loginlock-ip-127.0.0.1` and `loginlock-user-mfa` live
+for `FAILED_LOGIN_LOCKOUT_DURATION` (5 min, `etc/e2e-api-srv.env:31`).
+
+**(2) When that bites.** `bin/300-run-tests py` rebuilds the database
+(`bin/300-run-tests:138`) and starts a fresh API (`:169`), and the KV store
+is in-process, so a `bin/300` re-run starts clean. The doc's "re-runs fail"
+is true only for the manual mode in `tests/README.md:18-19` (pytest against
+a long-running `bin/215` API). There, a re-run within 5 minutes fails at
+the first fixture: `admin` signs in from 127.0.0.1 and gets 429. A run that
+fails mid-file leaves `mfa` enrolled, so the next run fails at `:60`
+(`mfaAlreadySetup is False`) until the DB is reset by hand.
+
+**(3) One bucket for the whole suite.** Every test comes from 127.0.0.1
+and nothing clears the IP counter on success (`auth_handler.go:246` is
+commented out, B010), so the suite stays under 7 failures by luck.
+
+**(4) The lockout assertion is loose.** `/mfaSetup` and `/mfaVerify` are
+rate-limited per IP (`user_mfa_handler.go:384`; key from `ClientIP` at
+`security/app_helper.go:360`, 20 per minute). The file sends 16 such
+requests from 127.0.0.1. The test only checks `assert 429 in statuses` and
+`statuses[-1] == 429` (`test_zz_mfa_totp.py:138-139`), and the rate limit
+also answers 429 ("Rate limit exceeded", `app_helper.go:380`). A rate-limit
+429 would pass as a lockout. Minor: the wrong code is the literal "000000"
+(`:66,134`), which is a valid code about once in a million.
+
+**(5) No MFA client.** `TestClient.authenticate` fails on any temp token
+(`tests/conftest.py:49-50`), so each MFA step is a hand-rolled request,
+and the threshold comes from pytest's env with a default of 7
+(`test_zz_mfa_totp.py:122`), not from the server's config.
+
+#### What GRC changed
+
+RG0003 (`37978ce`) rewrote the file after a fixed-address draft failed a
+back-to-back run; RG0042 (`63ccf75`), RG0043 (`dd8b4c3`) added cases.
+
+1. **Client helpers** in `tests/conftest.py`: `MFARequired` carries the
+   temp token (`:55-68`); `authenticate(..., totp_secret, headers)`
+   completes `/mfaVerify` itself (`:87-117`); `begin_auth`, `mfa_setup`,
+   `mfa_verify`, `adopt_session` (`:161-206`). `fresh_code` (`:30-40`)
+   never reuses a TOTP step, needed once replay is refused (B009).
+2. **Per-run client addresses** (`tests/test_zz_mfa_totp.py:45-58`):
+   ```python
+   RUN_OCTET = random.randint(0, 255)
+   def run_ip(host: int) -> str:
+       return f"198.18.{RUN_OCTET}.{host}"
+   ```
+   One address per test in 198.18.0.0/15, sent as `X-Forwarded-For` on
+   every request that can count (`fwd`, `:64-65`).
+3. **Throwaway lockout user** (`:417-495`): admin creates
+   `mfalock<uuid>`, enrols it, sends exactly `threshold` wrong codes and
+   asserts each is 401, then asserts 429 with the lockout message (not the
+   rate-limit one) and that `/auth` is locked too; `finally` deletes it.
+4. **Threshold from the server's env file** via `api_env`
+   (`:498-503`, `conftest.py:287-297`). `wrong_code` (`:68-81`) uses a
+   code from minutes ago instead of "000000".
+
+Correction: the doc says "nine cases". RG0003 shipped nine; the file now
+has 11 (RG0042 added `:194`, RG0043 `:266`). **Trap:** GRC still trusts
+the first XFF entry (`src/internal/security/client_ip.go:25-30`), so its
+harness works only because its server is still spoofable.
+
+#### Proposed fix for PROTO
+
+B007 makes `ClientIP` take the entry `TRUSTED_PROXY_COUNT` hops from the
+right, `RemoteAddr` only at 0 (local dev). At 0 every pytest request keys
+on 127.0.0.1 whatever it sends, so per-test XFF needs one trusted hop.
+
+1. **`bin/300-run-tests:153`**: add `TRUSTED_PROXY_COUNT=1` to the sed that
+   builds `py-api-srv.env`, so pytest plays the proxy. Safe: that instance
+   binds 127.0.0.1 (`etc/e2e-api-srv.env:58`) and serves only the scratch
+   DB. Leave `etc/e2e-api-srv.env` (Playwright) and `etc/loc-api-srv.env`
+   at 0. A request without the header still keys on `RemoteAddr`.
+2. **`tests/conftest.py`**: port `MFARequired`, the `authenticate`
+   signature, `begin_auth`, `mfa_setup`, `mfa_verify`, `adopt_session`,
+   `fresh_code`. Leave out `require_test_tenant` (B018) and the GRC `db`,
+   `grc` fixtures. Port `api_env`, reading the file named by an exported
+   `TEST_API_ENV` (B018 exports it), not GRC's hard-coded
+   `etc/loc-test-api-srv.env`. Have conftest fail fast when
+   `TRUSTED_PROXY_COUNT` in that file is not 1.
+3. **`tests/test_zz_mfa_totp.py`**: split the two PROTO tests into GRC's
+   cases with `fwd(run_ip(n))` on every counted request, `wrong_code`,
+   `failed_login_threshold()`. The throwaway user must send `"pwHash"`,
+   not GRC's `"password"`: PROTO's `CreateUserRequest` maps `pwHash`
+   (`src/api-srv/internal/model/security_model.go:111`) until B038.
+4. **Cases that wait on other items**: enrolled login gets 409 (B001;
+   today PROTO asserts the leak, `test_zz_mfa_totp.py:103`); code replay
+   (B009); counters reset on success and grant 9020 (B010; PROTO checks
+   `GrantUserUpdate`, `user_mfa_handler.go:684`). Port each with its item.
+   Portable now: temp token not a session, enrolment, wrong code keeps
+   the token, right code gives a session, temp-token replay, admin reset
+   (PROTO's "TOTP secret not found..." matches, `user_mfa_handler.go:487`),
+   throwaway lockout.
+5. **`tests/README.md`**: pytest runs through `bin/300` (or an API with
+   `TRUSTED_PROXY_COUNT=1`); fix or drop the manual mode at `:18-19`.
+
+Tests: pytest as above; Go, B007's `ClientIP` table test; pytest, after a
+lock on X, `X-Forwarded-For: Y, X` is still 429 (forged prefix ignored).
+
+#### Open question for Brandon
+
+Should the manual "pytest against your own `bin/215` API" mode stay
+supported (which forces `TRUSTED_PROXY_COUNT=1` into `etc/loc-api-srv.env`
+too), or does pytest run only through `bin/300`? Recommendation: `bin/300`
+only, so no developer config ever trusts a forged header.
+Brandon: Bin/300

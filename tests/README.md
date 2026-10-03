@@ -31,8 +31,34 @@ whenever `requirements.txt` changes), checks
 - `TEST_BASE_URL` — that file's `TEST_BASE_URL` (`http://127.0.0.1:8082`).
 
 Before any request, `conftest.py` exits the run with status 3 unless both
-are set, `TEST_BASE_URL` equals the one in `TEST_API_ENV`, and that file's
-`DATABASE_URL` names a scratch database (`*_test_db` / `*_e2e_db`).
+are set, `TEST_BASE_URL` equals the one in `TEST_API_ENV`, that file's
+`DATABASE_URL` names a scratch database (`*_test_db` / `*_e2e_db`), and it
+sets `TRUSTED_PROXY_COUNT=1`. `bin/300` writes that last key into its copy
+only; `etc/e2e-api-srv.env` (Playwright) and `etc/loc-api-srv.env` stay at
+0, so no developer API ever trusts a client-sent `X-Forwarded-For`. The
+suite therefore runs only through `bin/300`; there is no manual mode.
+
+## Forwarded addresses and lockouts
+
+The server counts failed logins and unauthenticated requests per client
+address, and locks an address or a name after
+`FAILED_LOGIN_ATTEMPT_THRESHOLD` failures (read from `TEST_API_ENV` by
+`failed_login_threshold()`). The rest of the suite signs in from loopback,
+so a test that spends that allowance sends its own address instead:
+
+```python
+client_ip = new_forwarded_ip()           # conftest.py
+requests.post(url, json=body, headers=forwarded_for(client_ip))
+```
+
+`new_forwarded_ip()` hands out a new address from 198.18.0.0/15 on every
+call: a /24 picked by the run's start second (runs started under 512 s
+apart never share one) and a host counter within it (no two tests in a run
+share one). With one trusted hop the server keys on that header, so a
+lockout case never locks loopback or the next run. The MFA lockout case
+also enrols and deletes its own throwaway user rather than locking the
+seeded `mfa` user, and tells the lockout 429 from the rate limiter's by the
+`error` message.
 
 Tenants: the fixture logins live in `TEST_TENANT = 2`; seed groups 4 and 5
 in `OTHER_TENANT = 3`, the side the isolation tests aim at. Tenant 1 does
@@ -69,6 +95,8 @@ authenticates in one step. Fixtures:
   group grant edit end live sessions (old cookie gets 401)
 - `test_user_management.py` — user management operations (admin only)
 - `test_z_error_scenarios.py` — error conditions and status codes
+- `test_zz_mfa_totp.py` — TOTP enrolment, sign-in, code and temp-token
+  replay, admin reset, and the MFA lockout
 
 ## Requirements
 

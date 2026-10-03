@@ -1,3 +1,5 @@
+import functools
+import itertools
 import os
 import pytest
 import requests
@@ -34,13 +36,52 @@ def _read_env_file(path: str) -> Dict[str, str]:
     return values
 
 
+@functools.lru_cache(maxsize=None)
+def api_env() -> Dict[str, str]:
+    """The config the test API was started from (TEST_API_ENV)."""
+    return _read_env_file(os.environ["TEST_API_ENV"])
+
+
+def failed_login_threshold() -> int:
+    """Failures that lock an address or a name, as the server counts them."""
+    return int(api_env()["FAILED_LOGIN_ATTEMPT_THRESHOLD"])
+
+
+# The test API trusts one X-Forwarded-For hop (checked in require_test_api),
+# so a test that counts towards a lockout or a per-address rate limit sends
+# its own address from 198.18.0.0/15 (benchmarking range, never a real
+# client) and leaves loopback, which the rest of the suite signs in from,
+# untouched. Each run takes the /24 its start second picks out of 512: runs
+# started under 512 s apart never share one, and anything older is past the
+# 5 min lockout and attempt window.
+_FORWARDED_RUN_BLOCK = int(time.time()) % 512
+_forwarded_host_counter = itertools.count(1)
+
+
+def new_forwarded_ip() -> str:
+    """An address no other call in this run (or a recent run) returned."""
+    host = next(_forwarded_host_counter)
+    if host > 254:
+        raise RuntimeError("forwarded addresses used up for this run")
+    second_octet = 18 + _FORWARDED_RUN_BLOCK // 256
+    third_octet = _FORWARDED_RUN_BLOCK % 256
+    return f"198.{second_octet}.{third_octet}.{host}"
+
+
+def forwarded_for(client_ip: str) -> Dict[str, str]:
+    """Headers that make a request come from client_ip."""
+    return {"X-Forwarded-For": client_ip}
+
+
 def require_test_api() -> None:
     """Refuse to start unless TEST_BASE_URL is the private test API.
 
     TEST_API_ENV names the config the test API was started from
     (bin/300-run-tests exports it). TEST_BASE_URL must equal that file's
     TEST_BASE_URL, and its DATABASE_URL must name a scratch database, so a
-    hand-set URL can never aim the suite's writes at a developer's API.
+    hand-set URL can never aim the suite's writes at a developer's API. It
+    must trust exactly one proxy hop, or every new_forwarded_ip() request
+    would key on loopback and the lockout cases would lock the suite out.
     """
     api_env_path = os.environ.get("TEST_API_ENV")
     base_url = os.environ.get("TEST_BASE_URL")
@@ -51,22 +92,29 @@ def require_test_api() -> None:
             returncode=WRONG_TARGET_EXIT_CODE,
         )
     try:
-        api_env = _read_env_file(api_env_path)
+        api_config = _read_env_file(api_env_path)
     except OSError as error:
         pytest.exit(f"TEST_API_ENV {api_env_path} unreadable: {error}",
                     returncode=WRONG_TARGET_EXIT_CODE)
-    expected_base_url = api_env.get("TEST_BASE_URL", "")
+    expected_base_url = api_config.get("TEST_BASE_URL", "")
     if base_url.rstrip("/") != expected_base_url.rstrip("/"):
         pytest.exit(
             f"TEST_BASE_URL {base_url} is not the test API's "
             f"({expected_base_url!r} in {api_env_path}): refusing to run",
             returncode=WRONG_TARGET_EXIT_CODE,
         )
-    database_name = urlparse(api_env.get("DATABASE_URL", "")).path.lstrip("/")
+    database_name = urlparse(api_config.get("DATABASE_URL", "")).path.lstrip("/")
     if not database_name.endswith(("_test_db", "_e2e_db")):
         pytest.exit(
             f"{api_env_path} serves database {database_name!r}, not a "
             "scratch database (*_test_db / *_e2e_db): refusing to run",
+            returncode=WRONG_TARGET_EXIT_CODE,
+        )
+    proxy_count = api_config.get("TRUSTED_PROXY_COUNT", "")
+    if proxy_count != "1":
+        pytest.exit(
+            f"{api_env_path} sets TRUSTED_PROXY_COUNT={proxy_count!r}, not 1: "
+            "per-test X-Forwarded-For addresses would all key on loopback",
             returncode=WRONG_TARGET_EXIT_CODE,
         )
 

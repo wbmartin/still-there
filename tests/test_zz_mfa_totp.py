@@ -1,13 +1,14 @@
 """The TOTP second factor, end to end.
 
-Runs last (zz): the lockout case spends the shared IP's failed-attempt
-allowance, which would lock every later test out of /auth.
+Every request that counts towards a lockout or a per-address rate limit
+comes from the test's own new_forwarded_ip() address, and the lockout case
+locks a throwaway user, so nothing here spends loopback's or a seeded user's
+allowance. The zz prefix is history: the file no longer has to run last, and
+the name is kept so references to it stay valid.
 
 Fixture user `mfa` (password basic123!) is not MFA-exempt and is seeded
 with no seed, so enrolment is part of the test and nothing depends on the
-environment's TOTP_ENCRYPTION_KEY. The admin session that resets the user
-at the end is taken BEFORE the lockout, because the lockout also locks the
-IP out of /auth (resetUserMFA itself needs only a session + CSRF).
+environment's TOTP_ENCRYPTION_KEY. Each case leaves it un-enrolled.
 """
 import os
 import time
@@ -17,10 +18,19 @@ import pyotp
 import pytest
 import requests
 
-from conftest import TestClient, require_test_tenant
+from conftest import (
+    TestClient,
+    failed_login_threshold,
+    forwarded_for,
+    new_forwarded_ip,
+    require_test_tenant,
+)
 
 MFA_USER = "mfa"
 MFA_PASSWORD = "basic123!"
+LOCKED_MESSAGE = (
+    "Account is temporarily locked due to too many failed login attempts"
+)
 
 
 # The API accepts a code once: a step at or below the last one it accepted
@@ -45,17 +55,41 @@ def fresh_code(secret: str) -> str:
         time.sleep(30 - now % 30 + 0.5)
 
 
+def wrong_code(secret: str) -> str:
+    """A well-formed code from an hour ago, outside the accepted window."""
+    now_step = int(time.time()) // 30
+    window = {pyotp.TOTP(secret).at((now_step + delta) * 30)
+              for delta in (-1, 0, 1, 2)}
+    step = now_step - 120
+    while pyotp.TOTP(secret).at(step * 30) in window:
+        step -= 1
+    return pyotp.TOTP(secret).at(step * 30)
+
+
 def _base_url() -> str:
     return os.environ["TEST_BASE_URL"]
 
 
-def _password_step(session: requests.Session, enrolled: bool) -> str:
-    """POST /auth for the mfa user: no session yet, a temp token instead.
+def _post(session, path: str, client_ip: str, body: dict) -> requests.Response:
+    return session.post(
+        f"{_base_url()}{path}", json=body, headers=forwarded_for(client_ip)
+    )
+
+
+def _password_step(
+    session: requests.Session,
+    enrolled: bool,
+    client_ip: str,
+    user_name: str = MFA_USER,
+    password: str = MFA_PASSWORD,
+) -> str:
+    """POST /auth for a non-exempt user: no session yet, a temp token instead.
 
     mfaEnrolled tells the web app to verify a code (True) or enrol (False).
     """
-    response = session.post(
-        f"{_base_url()}/auth", json={"userName": MFA_USER, "password": MFA_PASSWORD}
+    response = _post(
+        session, "/auth", client_ip,
+        {"userName": user_name, "password": password},
     )
     assert response.status_code == 200, response.text
     user = response.json()["user"]
@@ -77,27 +111,29 @@ class TestMFATOTP:
     def test_enrol_verify_and_sign_in_again(self):
         admin = TestClient(_base_url())
         admin.authenticate()
+        client_ip = new_forwarded_ip()
 
         # --- Enrolment: password → temp token → setup → verify ---
         session = requests.Session()
-        temp_token = _password_step(session, enrolled=False)
+        temp_token = _password_step(session, False, client_ip)
 
-        response = session.post(f"{_base_url()}/mfaSetup", json={"tempToken": temp_token})
+        response = _post(
+            session, "/mfaSetup", client_ip, {"tempToken": temp_token}
+        )
         assert response.status_code == 200, response.text
         setup = response.json()["data"]
         secret = setup["secret"]
         assert setup["qrCodeImage"]
 
         # A wrong code is refused and leaves the temp token usable.
-        response = session.post(
-            f"{_base_url()}/mfaVerify", json={"tempToken": temp_token, "totpCode": "000000"}
-        )
+        response = _post(session, "/mfaVerify", client_ip, {
+            "tempToken": temp_token, "totpCode": wrong_code(secret),
+        })
         assert response.status_code == 401
 
-        code = fresh_code(secret)
-        response = session.post(
-            f"{_base_url()}/mfaVerify", json={"tempToken": temp_token, "totpCode": code}
-        )
+        response = _post(session, "/mfaVerify", client_ip, {
+            "tempToken": temp_token, "totpCode": fresh_code(secret),
+        })
         assert response.status_code == 200, response.text
         body = response.json()
         require_test_tenant(body["user"])
@@ -117,32 +153,34 @@ class TestMFATOTP:
         assert response.json()["data"]["mfaSetup"] is True
 
         # The temp token is single-use: replaying it with a fresh code fails.
-        response = requests.post(
-            f"{_base_url()}/mfaVerify",
-            json={"tempToken": temp_token, "totpCode": fresh_code(secret)},
-        )
+        response = _post(requests, "/mfaVerify", client_ip, {
+            "tempToken": temp_token, "totpCode": fresh_code(secret),
+        })
         assert response.status_code == 401
 
         # --- Second sign-in: enrolled user, same secret ---
         # /mfaSetup refuses an enrolled user: the stored secret and its QR
         # code are never shown again to a holder of the password alone.
         session2 = requests.Session()
-        temp_token2 = _password_step(session2, enrolled=True)
-        response = session2.post(f"{_base_url()}/mfaSetup", json={"tempToken": temp_token2})
+        temp_token2 = _password_step(session2, True, client_ip)
+        response = _post(
+            session2, "/mfaSetup", client_ip, {"tempToken": temp_token2}
+        )
         assert response.status_code == 409, response.text
         assert secret not in response.text
         assert "qrCodeImage" not in response.text
-        response = session2.post(
-            f"{_base_url()}/mfaVerify",
-            json={"tempToken": temp_token2, "totpCode": fresh_code(secret)},
-        )
+        response = _post(session2, "/mfaVerify", client_ip, {
+            "tempToken": temp_token2, "totpCode": fresh_code(secret),
+        })
         assert response.status_code == 200, response.text
 
         # --- Admin reset: the old secret no longer works ---
         _reset_mfa(admin, app_user_id)
         session3 = requests.Session()
-        temp_token3 = _password_step(session3, enrolled=False)
-        response = session3.post(f"{_base_url()}/mfaSetup", json={"tempToken": temp_token3})
+        temp_token3 = _password_step(session3, False, client_ip)
+        response = _post(
+            session3, "/mfaSetup", client_ip, {"tempToken": temp_token3}
+        )
         assert response.status_code == 200
         assert response.json()["data"]["secret"] != secret
 
@@ -154,24 +192,27 @@ class TestMFATOTP:
         """
         admin = TestClient(_base_url())
         admin.authenticate()
+        client_ip = new_forwarded_ip()
 
         session = requests.Session()
-        temp_token = _password_step(session, enrolled=False)
-        response = session.post(f"{_base_url()}/mfaSetup", json={"tempToken": temp_token})
+        temp_token = _password_step(session, False, client_ip)
+        response = _post(
+            session, "/mfaSetup", client_ip, {"tempToken": temp_token}
+        )
         assert response.status_code == 200, response.text
         secret = response.json()["data"]["secret"]
         code = fresh_code(secret)
-        response = session.post(
-            f"{_base_url()}/mfaVerify", json={"tempToken": temp_token, "totpCode": code}
-        )
+        response = _post(session, "/mfaVerify", client_ip, {
+            "tempToken": temp_token, "totpCode": code,
+        })
         assert response.status_code == 200, response.text
         app_user_id = response.json()["user"]["appUserId"]
 
         session2 = requests.Session()
-        temp_token2 = _password_step(session2, enrolled=True)
-        response = session2.post(
-            f"{_base_url()}/mfaVerify", json={"tempToken": temp_token2, "totpCode": code}
-        )
+        temp_token2 = _password_step(session2, True, client_ip)
+        response = _post(session2, "/mfaVerify", client_ip, {
+            "tempToken": temp_token2, "totpCode": code,
+        })
         assert response.status_code == 401, response.text
         assert response.json()["error"] == "Invalid TOTP code"
         assert "auth" not in session2.cookies
@@ -184,8 +225,7 @@ class TestMFATOTP:
 
         A throwaway group holding READ_USER and UPDATE_USER but not
         RESET_MFA_TOKEN (9020), and an exempt user in it, made here and
-        removed at the end. Runs before the lockout case, which locks the
-        loopback address out of /auth.
+        removed at the end.
         """
         admin = TestClient(_base_url())
         admin.authenticate()
@@ -230,40 +270,79 @@ class TestMFATOTP:
             })
 
     def test_mfa_lockout_after_failed_attempts(self):
-        """MFA failures count towards the login lockout and lock the user."""
+        """Wrong codes count towards the login lockout and lock the user.
+
+        A throwaway user, enrolled here from its own address and deleted at
+        the end: neither loopback nor the seeded mfa user is locked, so a
+        re-run, or any later test, signs in as usual.
+        """
         admin = TestClient(_base_url())
         admin.authenticate()
-        threshold = int(os.environ.get("FAILED_LOGIN_ATTEMPT_THRESHOLD", "7"))
-
-        session = requests.Session()
-        temp_token = _password_step(session, enrolled=False)
-        response = session.post(f"{_base_url()}/mfaSetup", json={"tempToken": temp_token})
-        assert response.status_code == 200
-        app_user_id = None
-
-        statuses = []
-        for _ in range(threshold + 1):
-            response = session.post(
-                f"{_base_url()}/mfaVerify",
-                json={"tempToken": temp_token, "totpCode": "000000"},
+        threshold = failed_login_threshold()
+        client_ip = new_forwarded_ip()
+        user_name = f"mfalock{uuid.uuid4().hex[:12]}"
+        password = "mfalock123!"
+        response = admin.make_request("POST", "/user", json={
+            "userName": user_name,
+            "firstName": "Mfa",
+            "lastName": "Lockout",
+            "email": f"{user_name}@example.com",
+            "pwHash": password,
+            "mfaExempt": False,
+            "appUserGroupMembershipList": [],
+        })
+        assert response.status_code == 201, response.text
+        app_user_id = response.json()["data"]["appUserId"]
+        try:
+            session = requests.Session()
+            temp_token = _password_step(
+                session, False, client_ip, user_name, password
             )
-            statuses.append(response.status_code)
-        assert statuses[0] == 401
-        assert 429 in statuses, statuses
-        assert statuses[-1] == 429
+            response = _post(
+                session, "/mfaSetup", client_ip, {"tempToken": temp_token}
+            )
+            assert response.status_code == 200, response.text
+            secret = response.json()["data"]["secret"]
+            response = _post(session, "/mfaVerify", client_ip, {
+                "tempToken": temp_token, "totpCode": fresh_code(secret),
+            })
+            assert response.status_code == 200, response.text
 
-        # Locked: even the password step is refused now.
-        response = requests.post(
-            f"{_base_url()}/auth", json={"userName": MFA_USER, "password": MFA_PASSWORD}
-        )
-        assert response.status_code == 429
+            session2 = requests.Session()
+            temp_token2 = _password_step(
+                session2, True, client_ip, user_name, password
+            )
+            for attempt in range(threshold):
+                response = _post(session2, "/mfaVerify", client_ip, {
+                    "tempToken": temp_token2, "totpCode": wrong_code(secret),
+                })
+                assert response.status_code == 401, (attempt, response.text)
+                assert response.json()["error"] == "Invalid TOTP code"
 
-        # Leave the user un-enrolled for the next run (the seed is what a
-        # later test would otherwise inherit); the lock expires on its own.
-        response = admin.make_request("GET", "/userList")
-        assert response.status_code == 200
-        for row in response.json()["data"]:
-            if row["userName"] == MFA_USER:
-                app_user_id = row["appUserId"]
-        assert app_user_id is not None
-        _reset_mfa(admin, app_user_id)
+            # Locked: even a right code is refused, with the lockout answer
+            # rather than the rate limiter's (both are 429).
+            response = _post(session2, "/mfaVerify", client_ip, {
+                "tempToken": temp_token2, "totpCode": fresh_code(secret),
+            })
+            assert response.status_code == 429, response.text
+            assert response.json()["error"] == LOCKED_MESSAGE
+            assert "auth" not in session2.cookies
+
+            # The name is locked from any address, password step included.
+            response = _post(requests, "/auth", new_forwarded_ip(), {
+                "userName": user_name, "password": password,
+            })
+            assert response.status_code == 429, response.text
+            assert response.json()["error"] == LOCKED_MESSAGE
+        finally:
+            response = admin.make_request("GET", "/userList")
+            assert response.status_code == 200, response.text
+            row = next(
+                row for row in response.json()["data"]
+                if row["appUserId"] == app_user_id
+            )
+            response = admin.make_request("DELETE", "/user", params={
+                "appUserId": str(app_user_id),
+                "updateTs": f"{row['updateTs']:.7f}",
+            })
+            assert response.status_code == 200, response.text
