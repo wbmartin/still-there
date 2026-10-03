@@ -454,121 +454,6 @@ repository and a prod repository that promote copies into, or accept that
 UAT's credential can move `:prd`? Recommendation: split; it is the only
 way a UAT compromise cannot ship to prod.
 
-### B051 — doc/105 and api-srv README: describe the real API
-
-- **Priority:** P2  **Area:** docs
-- **GRC:** `doc/105-api-srv-tech-spec.md:144-146,213-247` (MFA routes, flow), `:295-308,310-324,352-361` (fail-closed, rate keys, `ClientIP`, check tests), `:337-350` (exceptions table), `:584-588` (single process), `:432-440` (logging); `src/api-srv/README.md:121-132,134-148,150-160`   **PROTO:** `doc/105-api-srv-tech-spec.md:83-112,129-133,163-209,232-248,331-332,337,356`; `src/api-srv/README.md:83-105`; `app_helper.go:364,409,412`; `main.go:157-158,179`; `model/app_user_model.go:9,17`
-- **Ticket:** RG0003 / `37978ce`; RG0011 / `06a1396`; RG0001 / `debb044`; RG0002 / `b33c9b9`; RG0004 / `d761d42`; RG0019 / `8fa36b6`; RG0005 / `5453748`
-- **What:** PROTO omits the MFA routes, shows `/auth2` (:129-133), lists TOTP as
-future (:356), claims stateless scaling (:337). GRC: real routes, exceptions
-table, fail-closed contract, single process.
-- **Port notes:** Write PROTO's truth until B002/B005/B033 land; check B059
-first. README facts follow each code item.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-A docs gap with security weight: `doc/105-api-srv-tech-spec.md` is the API
-spec a derived app and an auditor read, and it misstates routes, grants,
-the MFA flow and the scaling model. Checked against
-`src/api-srv/cmd/server/main.go:130-198` (33 routes) and the handlers.
-
-1. **Endpoint table (`:85-112`).** 26 rows. Seven real routes are missing:
-   `/changeOwnPassword`, `/userSelfCreate`, `/mfaSetup`, `/mfaVerify`,
-   `/changeOtherUserPassword`, `/admin/resetUserMFA`, `/error-report`
-   (`main.go:136,154,157-158,166,179,198`). Four rows name paths that do
-   not exist (`:109-112`, `/userGroupList`, `/userGroup`); the routes are
-   `/appUserGroupList`, `/appUserGroup` (`main.go:186-194`). No grant name
-   in the table exists: `GET_EXAMPLE`, `ADD_USER`, `CHG_USER_GROUP` and the
-   rest are not in `model/grants.go:36-53` (`READ_EXAMPLE`, `CREATE_USER`,
-   `UPDATE_USER_GROUP`). `/grantList` is listed as `GET_USER`; the handler
-   checks `GrantUserCreate` (`handler/user_handler.go:313`).
-2. **MFA flow (`:129-133`)** describes a route that does not exist:
-   ```
-   2. **MFA Auth** (`/auth2`):
-      - Verify TOTP (placeholder implementation)
-   ```
-   The login completes at `POST /mfaVerify` with `{tempToken, totpCode}`
-   (`handler/user_mfa_handler.go:390-391`) against a real TOTP check
-   (`:533`). Enrolment (`/mfaSetup`) is not described at all. A dead
-   `Auth2RequestModel` remains at `model/security_model.go:27-31`.
-3. **`:356`** lists "TOTP implementation for MFA" as a future high
-   priority. It shipped.
-4. **`:337`** "Scaling: Stateless design supports horizontal scaling". False.
-   The same doc (`:127,156,168`) puts temp tokens, blocks and rate limits
-   in the in-process KV, and lockout counters live there too. Two API
-   processes would halve every lockout and reject a temp token minted by the
-   other process. `:331-332` (Runtime Requirements) lists only PostgreSQL.
-5. **Check contract (`:163-209`)** is right on order and `Skip*`, but omits:
-   a KV error fails closed with 500 (`security/app_helper.go:367-373`); the
-   `admin` subject skips rate limit and block (`:348,398`); the rate key is
-   `RPM*<subject>` or `RPM*<ip>` in one namespace (`:364,409,412`);
-   `ClientIP` trusts the first `X-Forwarded-For` entry (`:310-315`).
-   The exceptions list (`:193-204`) leaves out `ChangeSecurityContextHandler`,
-   which skips CSRF (`handler/auth_handler.go:530`) and decodes the body
-   before any check (`:512-525`).
-6. **`src/api-srv/README.md:83-105`** lists the five checks and nothing
-   else: no exceptions, no fail-closed rule, no lockout, no MFA paragraph,
-   no admin exemption. "admin blocks" (`:95`) names a feature no route
-   sets (B034). The route list (`:49-81`) omits `GET /me` and `PUT /me`.
-   True but unwritten: `PwHash` and `TOTPSeed` are `json:"-"`
-   (`model/app_user_model.go:9,17`), so no response carries either.
-
-#### What GRC changed
-
-GRC rewrote the same sections across seven commits as each code fix
-landed: `debb044` (RG0001, fail closed), `b33c9b9` (RG0002), `37978ce`
-(RG0003, MFA), `d761d42` (RG0004), `5453748` (RG0005), `06a1396` (RG0011),
-`8fa36b6` (RG0019). Results in GRC `doc/105-api-srv-tech-spec.md`:
-
-- MFA routes in the table (`:144-146`) and a three-step flow (`:213-247`),
-  "there is no `/auth2` route" (`:227`), seed and hash `json:"-"` (`:241-243`).
-- "the fail-closed contract" (`:295-308`): an unchecked check answers 500;
-  a KV error answers 500.
-- Rate keys, `ClientIP` and the `admin` exemption stated (`:310-324`).
-- "Exceptions, and why each one is allowed" (`:337-350`), a table with a
-  reason per `Skip*`; "anything not here runs all five."
-- Which tests prove the sequence (`:352-361`).
-- "Single process" (`:586-588`): two processes "need a shared store first".
-- README security layer (`:121-160`): fail closed, MFA, body caps.
-
-GRC's text still says `ClientIP` takes the first XFF entry (`:316-318`);
-B007's decision changes that, so do not copy the sentence.
-
-#### Proposed fix for PROTO
-
-1. Regenerate the table at `doc/105:85-112` from `main.go:130-198` and the
-   `CheckAuthorization` argument in each handler, using `grants.go` short
-   codes. Write PROTO's truth today: `/userSelfCreate` (B002),
-   `/error-report` (B033) and the CSRF skip on `/changeSecurityContext`
-   (B005) stay in, each marked with its B-number, until those items land.
-2. Replace `:121-133` with GRC's enrolment and verify steps, trimmed to
-   what PROTO does (no 409 for enrolled users until B001, no counter clear
-   until B010, temp token deleted at `user_mfa_handler.go:624-630`).
-3. Delete `:356`; replace `:337` with the single-process note in `:331-332`.
-4. Add an exceptions table after `:204`, one row per `Skip*` site from the
-   grep above, with the reason from the code comment; add the fail-closed
-   paragraph and the admin exemption as stated facts.
-5. `src/api-srv/README.md:83-105`: one paragraph each for fail closed,
-   lockout, MFA; add `/me` to the route list.
-6. Order: B059 changes the rate-key shape and B007 changes `ClientIP`; write
-   those sentences after they land, or update them in the same PR. B040
-   removes `.golangci.yml` (`doc/105:56,349,381`). B053's checker then
-   guards the paths.
-7. Blind-copy traps: drop GRC resources, the 24 §24.3 matrix, invite routes,
-   `worker.log`, 4 MiB caps; keep `APP_NAME` as the JWT `iss`.
-8. Tests: none for prose. B039 adds the check-sequence tests the new
-   "tested by" paragraph will cite.
-
-#### Open question for Brandon
-
-Should the doc state the `admin` rate-limit and block exemption as
-designed, or should B051 wait for a decision to remove it (doc/700
-appendix flags it for a security look)? Recommendation: document it now as
-it is, with a pointer to the appendix line, so the spec stops hiding it.
-
 ### B052 — Rules: customer data never in git; never assert the unverified
 
 - **Priority:** P2  **Area:** docs
@@ -8917,3 +8802,120 @@ gives a 301; `curl -6 -sI https://<site>/` connects when AAAA exists;
 None.
 
 - **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). In `infra/uat/etc/nginx_uat-proto.example.com` and `infra/prd/etc/nginx_proto.example.com` (still differing only in hostname and app root): the port-80 block is a plain `listen 80; listen [::]:80; server_name <site>; return 301 https://<site>$request_uri;` (Certbot's `if`/`return 404` gone, so a port-80 request naming another host is now redirected to the site instead of 404 when this is the default server); 443 adds `listen [::]:443 ssl;`; `location /api/` adds `proxy_set_header Connection "";` after `proxy_http_version 1.1` and drops the `Origin` line. `X-Forwarded-For $proxy_add_x_forwarded_for` kept, with a comment that ClientIP counts hops from the right; `X-Real-IP` left out; 8088 and `20M` kept. B022's header move had already landed, so step 6 was moot; no presales nginx exists in `bin/6xx`/`etc/` (B072 starts from this). Verified in ubuntu:24.04 (nginx 1.24.0, self-signed certs, a Python HTTP/1.1 stub on 8088 logging each request's client port and headers): `nginx -t` passes for both sites, old and new. 100 `/api/health` calls: old used 100 upstream connections, each sent `Connection: close`, 100 TIME_WAIT; new used 10 (one per worker, held ESTABLISHED), no `Connection` header, no new TIME_WAIT; `Origin` still reaches the API. Listeners: old `0.0.0.0:443 0.0.0.0:80 [::]:80`, new adds `[::]:443`; `curl -6` to `[::1]:443` fails rc=7 old, 200 new. Port 80 with the site host: 301 to `https://<site>/x?y=1` both. certbot's nginx plugin (python3-certbot-nginx in the container) inserts `rewrite ^(/.well-known/acme-challenge/.*) $1 break;` at the top of the matching server block; with that and its challenge location added to the new port-80 block, the challenge path answers 200 and other paths 301, so `uat-proto-renew-web-certs` keeps working. No automated test (none named). Tests: all green, infra=15 go=687 unit=82 e2e=13 py=102, govulncheck clean, gofmt clean.
+
+### B051 — COMPLETED — doc/105 and api-srv README: describe the real API
+
+- **Priority:** P2  **Area:** docs
+- **GRC:** `doc/105-api-srv-tech-spec.md:144-146,213-247` (MFA routes, flow), `:295-308,310-324,352-361` (fail-closed, rate keys, `ClientIP`, check tests), `:337-350` (exceptions table), `:584-588` (single process), `:432-440` (logging); `src/api-srv/README.md:121-132,134-148,150-160`   **PROTO:** `doc/105-api-srv-tech-spec.md:83-112,129-133,163-209,232-248,331-332,337,356`; `src/api-srv/README.md:83-105`; `app_helper.go:364,409,412`; `main.go:157-158,179`; `model/app_user_model.go:9,17`
+- **Ticket:** RG0003 / `37978ce`; RG0011 / `06a1396`; RG0001 / `debb044`; RG0002 / `b33c9b9`; RG0004 / `d761d42`; RG0019 / `8fa36b6`; RG0005 / `5453748`
+- **What:** PROTO omits the MFA routes, shows `/auth2` (:129-133), lists TOTP as
+future (:356), claims stateless scaling (:337). GRC: real routes, exceptions
+table, fail-closed contract, single process.
+- **Port notes:** Write PROTO's truth until B002/B005/B033 land; check B059
+first. README facts follow each code item.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+A docs gap with security weight: `doc/105-api-srv-tech-spec.md` is the API
+spec a derived app and an auditor read, and it misstates routes, grants,
+the MFA flow and the scaling model. Checked against
+`src/api-srv/cmd/server/main.go:130-198` (33 routes) and the handlers.
+
+1. **Endpoint table (`:85-112`).** 26 rows. Seven real routes are missing:
+   `/changeOwnPassword`, `/userSelfCreate`, `/mfaSetup`, `/mfaVerify`,
+   `/changeOtherUserPassword`, `/admin/resetUserMFA`, `/error-report`
+   (`main.go:136,154,157-158,166,179,198`). Four rows name paths that do
+   not exist (`:109-112`, `/userGroupList`, `/userGroup`); the routes are
+   `/appUserGroupList`, `/appUserGroup` (`main.go:186-194`). No grant name
+   in the table exists: `GET_EXAMPLE`, `ADD_USER`, `CHG_USER_GROUP` and the
+   rest are not in `model/grants.go:36-53` (`READ_EXAMPLE`, `CREATE_USER`,
+   `UPDATE_USER_GROUP`). `/grantList` is listed as `GET_USER`; the handler
+   checks `GrantUserCreate` (`handler/user_handler.go:313`).
+2. **MFA flow (`:129-133`)** describes a route that does not exist:
+   ```
+   2. **MFA Auth** (`/auth2`):
+      - Verify TOTP (placeholder implementation)
+   ```
+   The login completes at `POST /mfaVerify` with `{tempToken, totpCode}`
+   (`handler/user_mfa_handler.go:390-391`) against a real TOTP check
+   (`:533`). Enrolment (`/mfaSetup`) is not described at all. A dead
+   `Auth2RequestModel` remains at `model/security_model.go:27-31`.
+3. **`:356`** lists "TOTP implementation for MFA" as a future high
+   priority. It shipped.
+4. **`:337`** "Scaling: Stateless design supports horizontal scaling". False.
+   The same doc (`:127,156,168`) puts temp tokens, blocks and rate limits
+   in the in-process KV, and lockout counters live there too. Two API
+   processes would halve every lockout and reject a temp token minted by the
+   other process. `:331-332` (Runtime Requirements) lists only PostgreSQL.
+5. **Check contract (`:163-209`)** is right on order and `Skip*`, but omits:
+   a KV error fails closed with 500 (`security/app_helper.go:367-373`); the
+   `admin` subject skips rate limit and block (`:348,398`); the rate key is
+   `RPM*<subject>` or `RPM*<ip>` in one namespace (`:364,409,412`);
+   `ClientIP` trusts the first `X-Forwarded-For` entry (`:310-315`).
+   The exceptions list (`:193-204`) leaves out `ChangeSecurityContextHandler`,
+   which skips CSRF (`handler/auth_handler.go:530`) and decodes the body
+   before any check (`:512-525`).
+6. **`src/api-srv/README.md:83-105`** lists the five checks and nothing
+   else: no exceptions, no fail-closed rule, no lockout, no MFA paragraph,
+   no admin exemption. "admin blocks" (`:95`) names a feature no route
+   sets (B034). The route list (`:49-81`) omits `GET /me` and `PUT /me`.
+   True but unwritten: `PwHash` and `TOTPSeed` are `json:"-"`
+   (`model/app_user_model.go:9,17`), so no response carries either.
+
+#### What GRC changed
+
+GRC rewrote the same sections across seven commits as each code fix
+landed: `debb044` (RG0001, fail closed), `b33c9b9` (RG0002), `37978ce`
+(RG0003, MFA), `d761d42` (RG0004), `5453748` (RG0005), `06a1396` (RG0011),
+`8fa36b6` (RG0019). Results in GRC `doc/105-api-srv-tech-spec.md`:
+
+- MFA routes in the table (`:144-146`) and a three-step flow (`:213-247`),
+  "there is no `/auth2` route" (`:227`), seed and hash `json:"-"` (`:241-243`).
+- "the fail-closed contract" (`:295-308`): an unchecked check answers 500;
+  a KV error answers 500.
+- Rate keys, `ClientIP` and the `admin` exemption stated (`:310-324`).
+- "Exceptions, and why each one is allowed" (`:337-350`), a table with a
+  reason per `Skip*`; "anything not here runs all five."
+- Which tests prove the sequence (`:352-361`).
+- "Single process" (`:586-588`): two processes "need a shared store first".
+- README security layer (`:121-160`): fail closed, MFA, body caps.
+
+GRC's text still says `ClientIP` takes the first XFF entry (`:316-318`);
+B007's decision changes that, so do not copy the sentence.
+
+#### Proposed fix for PROTO
+
+1. Regenerate the table at `doc/105:85-112` from `main.go:130-198` and the
+   `CheckAuthorization` argument in each handler, using `grants.go` short
+   codes. Write PROTO's truth today: `/userSelfCreate` (B002),
+   `/error-report` (B033) and the CSRF skip on `/changeSecurityContext`
+   (B005) stay in, each marked with its B-number, until those items land.
+2. Replace `:121-133` with GRC's enrolment and verify steps, trimmed to
+   what PROTO does (no 409 for enrolled users until B001, no counter clear
+   until B010, temp token deleted at `user_mfa_handler.go:624-630`).
+3. Delete `:356`; replace `:337` with the single-process note in `:331-332`.
+4. Add an exceptions table after `:204`, one row per `Skip*` site from the
+   grep above, with the reason from the code comment; add the fail-closed
+   paragraph and the admin exemption as stated facts.
+5. `src/api-srv/README.md:83-105`: one paragraph each for fail closed,
+   lockout, MFA; add `/me` to the route list.
+6. Order: B059 changes the rate-key shape and B007 changes `ClientIP`; write
+   those sentences after they land, or update them in the same PR. B040
+   removes `.golangci.yml` (`doc/105:56,349,381`). B053's checker then
+   guards the paths.
+7. Blind-copy traps: drop GRC resources, the 24 §24.3 matrix, invite routes,
+   `worker.log`, 4 MiB caps; keep `APP_NAME` as the JWT `iss`.
+8. Tests: none for prose. B039 adds the check-sequence tests the new
+   "tested by" paragraph will cite.
+
+#### Open question for Brandon
+
+Should the doc state the `admin` rate-limit and block exemption as
+designed, or should B051 wait for a decision to remove it (doc/700
+appendix flags it for a security look)? Recommendation: document it now as
+it is, with a pointer to the appendix line, so the spec stops hiding it.
+
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line; open question taken as recommended: the `admin` rate-limit/block exemption is stated as it is, with a pointer to the appendix). `doc/105-api-srv-tech-spec.md`: endpoint table regenerated from `cmd/server/main.go` (40 routes, main.go order) with JWT / rate / CSRF / grant columns taken from `routeContractList` in `route_check_contract_test.go` (B039), grants as `grants.go` short codes with ids; notes that `ADD_USER_TO_GROUP`/`REMOVE_USER_FROM_GROUP` are checked by no route. New request-body table with the real wire keys (B038 `password`, `userIdList`, `appUserGroupId`; `/userSelfCreate` lower-case `username`; `/admin/resetUserMFA` `userId`), success/error body shapes, `json:"-"` on `PwHash`/`TOTPSeed`, timestamps corrected to seconds as float64. Security Checks: rate keys `RPM*<subject|ip>*<minute>` and the config keys, refusal messages per check, the `admin` exemption, a fail-closed contract section, an exceptions table (every `Skip*` site with its reason, incl. `/changeSecurityContext` CSRF skip kept by B005 skip and decoded before the JWT, `/userSelfCreate` kept per B002 skip/B035, the B039 finding that `/mfaSetup`/`/mfaVerify` never read the block flag), and a "what proves it" list naming the contract, example and lockout tests. JWT corrected RS256 -> HS256 with `JWT_SECRET`, `iss` = `APP_NAME`; temp token key and TTL; "no `/auth2` route"; `account_status` gains `invited`; the restart limit moved under Session Revocation. Error Handling: 429 includes lockouts, 500 includes fail-closed refusals, and how the web reads a status (B036/B037: 5xx/429 `ApiUnreachableError` banner, session 401 `SessionExpiredError`, else `ApiError` with `status`). Deleted the shipped "TOTP implementation" future item and the stale "43 test cases"; "stateless horizontal scaling" replaced by a single-process note (Runtime Requirements and Operational Considerations); project tree, testing, test data and config pointer (`INVITE_TTL_HOURS` etc.) brought up to date. `src/api-srv/README.md`: `GET`/`PUT /me` added to the route list, pointer to the doc/105 table and contract test, wire keys, and paragraphs for fail closed, exceptions (with the admin exemption), lockout and MFA; "admin blocks" wording fixed; KV bullet adds revocations and the one-process rule. Deviations: B059 (rate-key `ip:` prefix) has not landed, so the key shape is today's; B007 had landed, so `ClientIP` is described from the right. Not done (out of scope, follow-up): the `/changeSecurityContext` row in `route_check_contract_test.go` still says "no CSRF until B005" though B005 was skipped; dead `Auth2RequestModel` and `ChangeCurrentUserPasswordRequest` remain in `model/security_model.go`. Every route and path written was checked against `main.go` and the tree. No new tests (prose). Tests: all green, infra=15 go=687 unit=82 e2e=13 py=102, govulncheck clean, gofmt clean.

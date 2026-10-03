@@ -58,14 +58,22 @@ suite in `tests/`.
 
 ## API Endpoints
 
+Every route `cmd/server/main.go` registers. The full table (checks,
+grant per route, request bodies) is in `doc/105-api-srv-tech-spec.md`
+(Endpoints); `internal/handler/route_check_contract_test.go` fails when a
+route is added without a row there.
+
 All JSON is camelCase. List endpoints take `?<entity>IdList=1,2,3`
-(comma-separated) and `?afterUpdateTs=<ts>` for incremental reads.
+(comma-separated) and `?afterUpdateTs=<ts>` for incremental reads. A
+password is always sent as `password`; group membership bodies are
+`{userIdList, appUserGroupId, updateTsList}`.
 
 ### Authentication
 - `POST /auth` — username/password login
 - `GET /refresh` — refresh session
 - `POST /changeSecurityContext`
 - `POST /changeOwnPassword`
+- `GET /me`, `PUT /me` — the caller's own row (profile + preferences)
 - `POST /logoff`
 - `POST /userSelfCreate` — public self-registration
 - `POST /mfaSetup`, `POST /mfaVerify` — `/auth`'s `mfaEnrolled` sends an
@@ -117,14 +125,43 @@ explicitly, in order, via the `AppHelper` in
 `internal/security/app_helper.go`:
 
 1. `CheckJWT` — parse and validate the cookie
-2. `CheckRateLimitAndUserBlock` — per-user/unauthenticated rate limits and
-   admin blocks (`/admin/blockUser`), backed by the in-process KV
+2. `CheckRateLimitAndUserBlock` — per-minute rate limit (per user name, or
+   per client IP when anonymous) and the `BLOCKED*` flag that
+   `/admin/blockUser` sets, backed by the in-process KV
 3. `CheckCSRF` — `X-CSRF-Token` header must match the last 3 characters of
    the session ID; skipped for GET/HEAD/OPTIONS/TRACE
 4. `CheckAuthorization(grant)` — caller must hold the named grant for
    their current security context
 5. `CheckAllChecksComplete` — every handler calls this before doing any
    work
+
+**Fail closed.** `CheckAllChecksComplete` answers 500 when any of the five
+was neither checked nor skipped, and a KV error inside a check (session
+revocation, rate counter, block flag) is 500, never a pass. The login
+lockout counters and the TOTP replay key follow the same rule.
+
+**Exceptions** are written in the handler with `Skip*` calls, each with a
+reason: `/health` and `/auth` skip all five; `/refresh`, `/logoff` and
+`/changeSecurityContext` skip CSRF and the grant; the public
+`/userSelfCreate`, `/inviteCheck`, `/inviteRedeem` run only the
+per-address rate limit (the invite routes then the lockout); `/mfaSetup` and `/mfaVerify` accept a temp token
+in place of a session. The table with the reason for each is in doc/105
+(Security Checks, Exceptions). The `admin` subject skips the rate limit
+and the block flag (`app_helper.go`), stated there too.
+
+**Lockout.** `/auth` counts failures per client IP and per user name
+(unknown names included, against a dummy hash so timing does not tell);
+`FAILED_LOGIN_ATTEMPT_THRESHOLD` failures within
+`FAILED_LOGIN_ATTEMPT_WINDOW_DURATION` lock both for
+`FAILED_LOGIN_LOCKOUT_DURATION` (429). A wrong TOTP code and a dead
+invite link count toward the same lockout.
+
+**MFA.** A login that is not `mfaExempt` gets a temp token from `/auth`,
+not a session. `/mfaSetup` enrols (TOTP secret stored AES-GCM encrypted
+under `TOTP_ENCRYPTION_KEY`; refused 409 once enrolled), `/mfaVerify`
+checks the code (each code good once) and issues the session. No
+response carries `pw_hash` or `totp_seed`: both are `json:"-"` in
+`internal/model/app_user_model.go`.
 
 A handler reads its body through `decodeJSONBody` / `readBody`
 (`internal/handler/common.go`), which caps it before the first byte is
@@ -151,10 +188,11 @@ No external services: `DATABASE_URL`, `JWT_SECRET`, and
   `log/slog`, writing one logfmt line per call to stderr with a `code=`
   attribute.
 - **`KV`** (`internal/cache/kv.go`): in-process key-value store for
-  rate limits, login lockouts, MFA temp tokens, and user blocks.
-  Process-local — restarting the server clears it. Graduate to a shared
-  store (Redis or similar) once the app runs behind a load balancer with
-  2+ API processes.
+  rate limits, login lockouts, MFA temp tokens and TOTP replay keys,
+  session revocations, and user blocks. Process-local — restarting the
+  server clears it (a revoked token is good again until it expires; block
+  flags are reloaded from the database at start). So the API runs as one
+  process: a second one needs a shared store (Redis or similar) first.
 
 ## Architecture
 
