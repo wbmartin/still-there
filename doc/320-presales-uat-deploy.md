@@ -3,7 +3,7 @@
 > **Two deploy paths exist and they are not interchangeable.** This doc is
 > the presales one. A host on one path cannot be deployed to with the other's
 > tools; moving a host between them is a planned migration
-> (`doc/330-presales-to-postsales-migration.md`).
+> (`doc/330-uat-postsales-cutover.md`).
 >
 > | | Presales — **this doc** | Post-sales — `infra/README.md` |
 > |---|---|---|
@@ -132,6 +132,7 @@ time. The placeholder for it is already staged under `infra/{uat,prd}/` — see
 `infra/README.md`. **Moving an existing host from this path to that one is a
 migration** — binary name, env file, unit, and above all the database's owner all
 change — and the ordered runbook, with rollback, is
-`doc/330-presales-to-postsales-migration.md`. Once a host has been migrated, never run
+`doc/330-uat-postsales-cutover.md`; prod is installed fresh, from the same local
+dump, by `doc/331-prd-postsales-install.md`. Once a host has been migrated, never run
 `bin/600`/`bin/610` against it again: `610` would drop the database and hand it back
 to `proto_app`.

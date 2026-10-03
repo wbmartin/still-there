@@ -73,8 +73,8 @@ if [ "$OLD_MODULE" != "$NEW_MODULE" ]; then
 fi
 
 # --- 3. files and directories that carry the slug in their name --------------
-git ls-files infra | grep -E "(^|[_-])${OLD}[_.-]" | sort -r | while read -r old; do
-  new="$(printf '%s' "$old" | perl -pe "s/(^|[_-])${OLD}([_.-])/\$1${NEW}\$2/g")"
+git ls-files infra | grep -E "(^|[/_-])${OLD}[_.-]" | sort -r | while read -r old; do
+  new="$(printf '%s' "$old" | perl -pe "s/(^|[\/_-])${OLD}([_.-])/\$1${NEW}\$2/g")"
   mkdir -p "$(dirname "$new")"; git mv "$old" "$new"
 done
 

@@ -6,13 +6,18 @@
 > deploy. This tree is staged so that, once a customer agrees and a real
 > UAT/prod pair exists, the full-fat webhook + registry + migrator pipeline
 > can be brought up by filling in files rather than designing them.
+>
+> The runbooks: `doc/330-uat-postsales-cutover.md` moves the presales UAT
+> host onto this pipeline; `doc/331-prd-postsales-install.md` installs prod
+> fresh, from the same local dump; `doc/340-db-host-setup.md` is the
+> database setup both use.
 
 ## Which path am I on?
 
 Two deploy paths exist and they are not interchangeable. A host built with
 the presales scripts has different binary names, env files, units and — the
 part that matters — a different Postgres owner. Moving a host from one to
-the other is a planned migration: `doc/330-presales-to-postsales-migration.md`.
+the other is a planned migration: `doc/330-uat-postsales-cutover.md`.
 
 | | Presales — `doc/320-presales-uat-deploy.md` | Post-sales — **this doc** |
 |---|---|---|
@@ -26,7 +31,7 @@ the other is a planned migration: `doc/330-presales-to-postsales-migration.md`.
 
 Tell them apart on a host: `ls /srv/<env>-proto/libexec` — `api-srv` means
 presales, `proto-api` means post-sales. The full list of names that differ
-is in the migration doc.
+is in `doc/330`.
 
 ## The convention
 
@@ -37,6 +42,7 @@ server, file for file. Two placeholder hosts are committed:
 |--------------|------------------|------|
 | `infra/uat/` | `/srv/uat-proto` | build host: webhook → tests → build → push → install |
 | `infra/prd/` | `/srv/prd-proto` | promotes UAT's digests; never builds |
+| `infra/sql/` | — | `proto-host-db.sql`: the three Postgres roles and the database, either host (`doc/340-db-host-setup.md`) |
 
 **The repo is the source of truth for structure; the filled file lives
 only on the host.**
@@ -146,10 +152,12 @@ root as `shrmpl-hook`, hence group write on the root. The sticky bit (the
 `1` in 1775) lets the hook rename or delete only entries it owns, so
 root's `etc/` and `crt/` and www-data's `log/` stay out of its reach.
 
-## One-time host setup (pointers, not a runbook)
+## One-time host setup (the checklist the runbooks follow)
 
-All as root, once per host. The derived app's own deploy doc is where the
-full runbook belongs.
+All as root, once per host. The paste-ready steps, with checks and
+rollback, are `doc/330-uat-postsales-cutover.md` (UAT, from a presales
+host) and `doc/331-prd-postsales-install.md` (prod, fresh); this list is
+what they do.
 
 1. **Users and dirs.** `useradd -r -s /usr/sbin/nologin -M proto`;
    `mkdir -p /srv/<env>-proto/{bin,etc,libexec,stg,backup,web-pub,log}`;
@@ -160,25 +168,30 @@ full runbook belongs.
    /srv/<env>-proto` must print `root:shrmpl-hook 1775`. On UAT also the
    checkout at `BUILD_STG`, owned by `shrmpl-hook` (anything git or go does
    there as root leaves root-owned files that break the next hook build).
-2. **Postgres roles.** `src/api-srv/sql/roles.sql` (cluster roles
-   `db_reader`/`db_writer`), then `doc/340-db-host-setup.md`
-   by hand: `proto_ddl` (owns the schema; only `proto-migrate` connects as
-   it — `etc/<env>-proto-migrate.env`), `proto_app` (DML only — the
-   API, `etc/<env>-proto-api.env`), and on UAT `proto_ci` (`CREATEDB`,
-   scratch DBs only — `etc/uat-proto-test.env`). Revoke `CONNECT` on the
-   real database from `PUBLIC` so the CI role cannot reach it.
-3. **Bring the DB under the migrator.** Empty DB: `proto-migrate -config
-   <migrate.env> up`. Existing schema that already is 0001: `stamp 1`.
-   Then `status`.
-4. **Env files.** `cp infra/<host>/etc/*.env /srv/<env>-proto/etc/`, fill
+2. **Env files.** `cp infra/<host>/etc/*.env /srv/<env>-proto/etc/`, fill
    every `SERVERONLY`, set owner/mode as the header of each file says.
+   Secrets and database passwords are generated on the host
+   (`openssl rand -hex 32`) straight into the files.
+3. **Postgres roles and the database.** `infra/sql/proto-host-db.sql`
+   (`doc/340-db-host-setup.md`), one idempotent file with the passwords
+   from step 2 on psql's stdin: `db_reader`/`db_writer`, `proto_ddl`
+   (owns the database and schema; only `proto-migrate` connects as it —
+   `etc/<env>-proto-migrate.env`), `proto_app` (DML only — the API,
+   `etc/<env>-proto-api.env`), and on UAT `proto_ci` (`CREATEDB`, scratch
+   DBs only — `etc/uat-proto-test.env`). `CONNECT` on the real database is
+   revoked from `PUBLIC`, so the CI role cannot reach it.
+4. **The data.** The runbooks restore a local `pg_dump --no-owner` as
+   `proto_ddl` (`pg_restore --role`). An empty database instead gets its
+   schema from the first deploy's `proto-migrate up`.
 5. **Scripts and units.** `cp infra/<host>/bin/* /srv/<env>-proto/bin/ &&
    chmod +x`; `cp` the `.service`/`.path` files to `etc/`, symlink into
    `/etc/systemd/system`, `daemon-reload`, `enable --now
-   <env>-proto-restart.path`, `enable <env>-proto-api`. Verify the path
-   unit as the hook user: `sudo -u shrmpl-hook touch
-   /srv/<env>-proto/stg/restart.request` must disappear within seconds and
-   `systemctl show -p MainPID --value <env>-proto-api` must change.
+   <env>-proto-restart.path`, `enable <env>-proto-api`. The first deploy
+   (`*-build` on UAT, `*-promote-uat-and-deploy` on prod) installs the
+   binary and proves the path unit: `install-api` touches
+   `stg/restart.request` and waits for `MainPID` to change. Do not touch
+   it by hand before then: with no binary the unit fails, retries, and can
+   hit its start limit (5 in 120 s) just as the install needs it.
 6. **nginx + certs.** In this order, because the site names
    `crt/<site>/*.pem` and a site that fails `nginx -t` blocks every reload
    of the host's shared nginx: `etc/nginx_<site>` into `sites-available`
@@ -219,5 +232,5 @@ the `proto` → `<app>` rename here too (file names, contents, roles, nginx
 upstream). What is left for a human on this tree: rename `infra/uat/` →
 `infra/<real-uat-host>/` and `infra/prd/` → `infra/<real-prd-host>/`, add
 the `infra/<host>/` bullet to the app's `CLAUDE.md` Layout section, and
-write the runbook. Nothing in `bin/` needs to change for a new host — only
-`etc/`.
+adapt `doc/330` / `doc/331` to the real hosts. Nothing in `bin/` needs to
+change for a new host — only `etc/`.

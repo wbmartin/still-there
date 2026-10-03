@@ -1,81 +1,130 @@
 # Database host setup — the three roles
 
-One-time, per deployed host, by hand, as a superuser. Not embedded, not
-run by `bin/510`, not a migration. Do it after `src/api-srv/sql/roles.sql`
-and before the first `migrate up` (or `migrate stamp`) on that database.
+One-time, per deployed host, as the `postgres` superuser. Not a migration,
+not embedded, not run by `bin/510`. The SQL is one idempotent file,
+`infra/sql/proto-host-db.sql`, run from the runbook that needs it:
+`doc/330-uat-postsales-cutover.md` (UAT) and
+`doc/331-prd-postsales-install.md` (prod). It creates the cluster roles
+itself, so a host does not need `src/api-srv/sql/roles.sql` first.
 
 Three roles, three jobs (names derive from `APP_SLUG`, `etc/app.env`):
 
 | Role | Owns | Connects as it | Where the credential lives |
 |---|---|---|---|
-| `proto_ddl` | every table and sequence; `CREATE` on `public` | **only** `proto-migrate` | `etc/<env>-proto-migrate.env` |
+| `proto_ddl` | the database, the `public` schema, every table and sequence | **only** `proto-migrate` (from `*-install-api`) and the one-time data load | `etc/<env>-proto-migrate.env` |
 | `proto_app` | nothing — `db_reader` + `db_writer`, DML only | the API | `etc/<env>-proto-api.env` |
-| `proto_ci` | only scratch `*_test_db` / `*_e2e_db` databases (`CREATEDB`) | the test harness on a build host | `etc/uat-proto-test.env` (UAT only) |
+| `proto_ci` | only the scratch `*_test_db` / `*_e2e_db` databases it creates (`CREATEDB`) | the test harness on the build host | `etc/uat-proto-test.env`, `etc/uat-proto-e2e-api.env` (UAT only) |
 
 Postgres lets only an object's owner (or a superuser) `ALTER` it. The
 API's role must therefore never own the schema — a compromised API then
-cannot change it — and the migrator's role must own all of it.
+cannot change it — and the migrator's role must own all of it. `REVOKE
+CONNECT ... FROM PUBLIC` keeps the CI role, and any other app's role on a
+shared cluster, off the real database.
 
-`roles.sql` creates `db_reader`, `db_writer` and `proto_app` idempotently
-for local dev and the presales bundle (`bin/610` runs it as
-`000-roles.sql`). The presales path lets `proto_app` own the database
-because it restores a laptop dump wholesale; moving such a host onto this
-model is `doc/330-presales-to-postsales-migration.md`. Locally none of
-this is needed: `bin/510` runs the migrator as `postgres`, which owns
-what it creates.
+`roles.sql` creates `db_reader`, `db_writer` and `proto_app` for local dev
+and the presales bundle (`bin/610` runs it as `000-roles.sql`, with the
+template's literal password). The presales path lets `proto_app` own the
+database because it restores a laptop dump wholesale; a host leaves that
+model by `doc/330-uat-postsales-cutover.md`, which renames the presales
+database aside rather than moving its ownership. Locally none of this is
+needed: `bin/510` runs the migrator as `postgres`, which owns what it
+creates.
 
-## 1. The roles — as a superuser, on the cluster (any database)
+## Run it
 
-```sql
-CREATE ROLE proto_ddl LOGIN PASSWORD '<generate>';
-CREATE ROLE proto_ci  LOGIN PASSWORD '<generate>' CREATEDB;   -- UAT only
-GRANT CONNECT ON DATABASE uat_proto_db TO proto_ddl;
+The runbook's env-file step has already generated each password into its
+env file (`openssl rand -hex 32`). This block reads them back and hands
+them to psql as `\set` lines on stdin, ahead of the SQL file. Nothing goes
+on a command line: `printf` is a shell builtin, and `psql -v name=value`
+would show the password in `ps`. The SQL file is opened by root and piped
+in, because `postgres` cannot read under `/root`.
 
--- Optional but recommended: nothing connects to the real database by
--- accident. Grant CONNECT back only to the roles that need it.
-REVOKE CONNECT ON DATABASE uat_proto_db FROM PUBLIC;
-GRANT  CONNECT ON DATABASE uat_proto_db TO proto_app;
-```
-
-## 2. Ownership and default privileges — inside the database (`\c uat_proto_db`)
-
-Per object, **not** `REASSIGN OWNED BY postgres TO proto_ddl`: REASSIGN
-also tries to move the `public` schema and the database itself, which
-Postgres refuses ("required by the database system"). Indexes follow
-their tables. Reversible by running the same block with the roles
-swapped. On a brand-new database with no tables yet the loops are no-ops.
-
-```sql
-DO $$
-DECLARE r record;
-BEGIN
-  FOR r IN SELECT tablename AS name FROM pg_tables WHERE schemaname = 'public' LOOP
-    EXECUTE format('ALTER TABLE public.%I OWNER TO proto_ddl', r.name);
-  END LOOP;
-  FOR r IN SELECT sequencename AS name FROM pg_sequences WHERE schemaname = 'public' LOOP
-    EXECUTE format('ALTER SEQUENCE public.%I OWNER TO proto_ddl', r.name);
-  END LOOP;
-END $$;
-
-GRANT CREATE ON SCHEMA public TO proto_ddl;
-
--- Anything proto_ddl creates from now on is readable/writable by the app
--- without each migration having to remember the GRANT.
-ALTER DEFAULT PRIVILEGES FOR ROLE proto_ddl IN SCHEMA public GRANT SELECT ON TABLES    TO db_reader;
-ALTER DEFAULT PRIVILEGES FOR ROLE proto_ddl IN SCHEMA public GRANT ALL    ON TABLES    TO db_writer;
-ALTER DEFAULT PRIVILEGES FOR ROLE proto_ddl IN SCHEMA public GRANT ALL    ON SEQUENCES TO db_writer;
-
--- Expect one row: proto_ddl | <table count>
-SELECT tableowner, count(*) FROM pg_tables WHERE schemaname = 'public' GROUP BY 1;
-```
-
-## 3. Bring the database under the migrator — as `proto_ddl`
+Set `ENV` (`uat` or `prd`), `APP_ROOT` and `SQL` (the path to
+`infra/sql/proto-host-db.sql` on the host) as the runbook's variables
+block does; on prod the test env file is absent, so the CI password is
+empty and no CI role is made.
 
 ```bash
-proto-migrate -config etc/uat-proto-migrate.env up        # new, empty database
-proto-migrate -config etc/uat-proto-migrate.env stamp 1   # existing schema that already IS 0001: record, do not run
-proto-migrate -config etc/uat-proto-migrate.env status    # expect: 0001  initial_schema   applied <now> by proto_ddl
+: "${ENV:?}" "${APP_ROOT:?}" "${SQL:?}"
+getv()  { sed -n "s/^$2=//p" "$1" 2>/dev/null | head -1; }
+urlpw() { sed -n 's#^DATABASE_URL=postgres://[^:]*:\([^@]*\)@.*#\1#p' "$1" | head -1; }
+urldb() { sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$1" | head -1; }
+{ printf '\\set db %s\n'     "$(urldb "$APP_ROOT/etc/$ENV-proto-migrate.env")"
+  printf '\\set ddl_pw %s\n' "$(urlpw "$APP_ROOT/etc/$ENV-proto-migrate.env")"
+  printf '\\set app_pw %s\n' "$(urlpw "$APP_ROOT/etc/$ENV-proto-api.env")"
+  printf '\\set ci_pw %s\n'  "$(getv "$APP_ROOT/etc/$ENV-proto-test.env" 'export PGPASSWORD')"
+  cat "$SQL"
+} | sudo -u postgres psql -X
+```
+
+The file stops before changing anything if a variable is missing, a
+password is not hex, or a database of that name exists and `proto_ddl`
+does not own it (a presales database: rename it aside, `doc/330` A1). A
+role that already exists is kept and takes the password and attributes
+given here; run it again with the same env files and nothing changes.
+
+The last thing it prints is the database with its owner and ACL: owner
+`proto_ddl`, and `CONNECT` (`c`) for `proto_ddl` and `proto_app` only —
+`=T/proto_ddl` (temporary tables for `PUBLIC`) is Postgres's default and
+stays.
+
+## Load the data as the DDL role
+
+The dump the runbooks load is made `--no-owner --no-privileges`.
+`pg_restore --role=proto_ddl` creates every object as `proto_ddl`, so it
+owns all of it, and the default privileges the SQL set give `db_reader`
+and `db_writer` their grants as each table is created: no ownership loop,
+no `GRANT` pass. `postgres` runs it and reads the file from stdin, so no
+password is needed and none is on a command line:
+
+```bash
+: "${ENV:?}" "${APP_ROOT:?}" "${DUMP:?}"
+DB=$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$APP_ROOT/etc/$ENV-proto-migrate.env")
+sudo -u postgres pg_restore --no-owner --no-privileges --role=proto_ddl --exit-on-error -d "$DB" < "$DUMP"
+```
+
+`pg_restore` must be the same Postgres major version as the `pg_dump` that
+made the file, or newer; an older one stops with `unsupported version`.
+The dump carries `schema_migration`, so the migrator knows where the
+schema stands.
+
+A host that starts **empty** instead skips the load: the first deploy's
+`*-install-api` runs `proto-migrate up` as `proto_ddl`. A database whose
+schema already **is** `0001` but has no `schema_migration` table is
+recorded, not re-run, as the hook user:
+
+```bash
+: "${ENV:?}" "${APP_ROOT:?}"
+sudo -u shrmpl-hook "$APP_ROOT/libexec/proto-migrate" -config "$APP_ROOT/etc/$ENV-proto-migrate.env" stamp 1
+sudo -u shrmpl-hook "$APP_ROOT/libexec/proto-migrate" -config "$APP_ROOT/etc/$ENV-proto-migrate.env" status
 ```
 
 New migrations start with `go run ./cmd/migrate new <name>` in
 `src/api-srv`, which creates the next `sql/migrations/NNNN_<name>.sql`.
+
+## Verify
+
+Ownership, then what each role may and may not do. The passwords go to
+psql in `PGPASSWORD`, the environment, not on its command line:
+
+```bash
+: "${ENV:?}" "${APP_ROOT:?}"
+urlpw() { sed -n 's#^DATABASE_URL=postgres://[^:]*:\([^@]*\)@.*#\1#p' "$1" | head -1; }
+DB=$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$APP_ROOT/etc/$ENV-proto-migrate.env")
+sudo -u postgres psql -X -d "$DB" -c "SELECT tableowner, count(*) FROM pg_tables WHERE schemaname = 'public' GROUP BY 1"
+PGPASSWORD=$(urlpw "$APP_ROOT/etc/$ENV-proto-api.env") psql -X -h 127.0.0.1 -U proto_app -d "$DB" -c 'SELECT count(*) FROM app_user' -c 'CREATE TABLE nope (i int)'
+```
+
+Expect one owner row, `proto_ddl | <table count>`; then the user count;
+then `ERROR:  permission denied for schema public` — the API's role cannot
+create (or alter, or drop) anything. On UAT, also the CI role:
+
+```bash
+: "${APP_ROOT:?}"
+DB=$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$APP_ROOT/etc/uat-proto-migrate.env")
+PGPASSWORD=$(sed -n 's/^export PGPASSWORD=//p' "$APP_ROOT/etc/uat-proto-test.env") psql -X -h 127.0.0.1 -U proto_ci -d "$DB" -c 'SELECT 1'
+```
+
+Expect `FATAL:  permission denied for database`. After the first deploy,
+`*-install-api` prints `verify: database matches the embedded migrations`
+as `proto_ddl`.

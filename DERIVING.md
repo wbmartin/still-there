@@ -50,8 +50,10 @@ Postgres cluster is the safe default for every derived app.
   slug. Host prep: `doc/320-presales-uat-deploy.md`.
 - **Post-sales** (`infra/`): rename `infra/uat/` → `infra/<real-uat-host>/`
   and `infra/prd/` → `infra/<real-prd-host>/`, then fill the `SERVERONLY`
-  values on the host per `infra/README.md`. Moving a presales host onto
-  this path later is `doc/330-presales-to-postsales-migration.md`.
+  values on the host per `infra/README.md`. Moving the presales UAT host
+  onto this path is `doc/330-uat-postsales-cutover.md`; a fresh prod host
+  is `doc/331-prd-postsales-install.md`. Both say `infra/uat` /
+  `infra/prd`: use the renamed directories.
 
 ## 4. The example entity
 

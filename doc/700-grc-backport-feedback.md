@@ -242,117 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B026 — Server deploy runbooks: doc/330, doc/331, doc/340, infra/sql
-
-- **Priority:** P2  **Area:** docs, infra, tickets
-- **GRC:** `doc/330-uat-postsales-cutover.md:1-330` (what changes :12-29; pre-outage :31-75; vars block :77-86; DB renamed aside :88-96; `svc-` :98-101; deploy key :103-123; 1775 + env fill + `all filled` gate :125-148; roles/data `pw` `sha256sum -c` :150-165; units, build, certs, login :167-201; webhook, pulsecheck, cron, fail2ban :205-283; cleanup, rollback :285-307; Lessons :309-330); `doc/331-prd-postsales-cutover.md:1-469` (`git archive` :8-14; ids :61-87; `fill` :95-104; `get-tar-commit-id` :106-111; SQL on stdin :176-193; cert `--dry-run` :216-253; promote hook :329-359; releases :371-409; rollback :411-430; Lessons :432-469); `doc/340-db-host-setup.md:1-60` (:19-34, :36-44, :46-57); `infra/sql/grc-host-db.sql:1-43`; `infra/README.md:1-15`; `tickets/02-working/RG0013-db-roles-and-postsales-infra/RG0013-db-roles-and-postsales-infra.md:47-80,121-122`; RG0043 md `:335-341,566-577`; RG0013 md `:50-58`   **PROTO:** `doc/320-presales-uat-deploy.md` (keep); `doc/330-presales-to-postsales-migration.md:1-325` (:15, :37, :131, :58-325); new `doc/331-prd-postsales-install.md`; `doc/340-db-host-setup.md:1-81` (:27-70); new `infra/sql/<slug>-host-db.sql`; `infra/README.md:31-97,138-187`
-- **Ticket:** RG0013 / `a57d6ad`, `791b751`, `9de1d94`, `24a474e`, `33523c7`, `50c56fc`, `5bd0fd4`, `c18626f`, `16f3acd`; new PS ticket + `template-` tag (RG0013 :121-122 asks for this)
-- **What:** PROTO 330 is unexercised and cites a missing SQL file; no prod
-runbook exists. GRC ran 330 (UAT cutover) and 331 (prod install); 340 is one
-idempotent psql file, restore as DDL role, negative verify.
-- **Port notes:** Keep GRC numbering and PROTO 330 :18-56, 340 :9-17,:60,:72-78.
-Rename-aside replaces `ALTER OWNER`. Genericize names; drop worker/blobs.
-Paste rules: `: "${APP_ROOT:?}"`, no `<placeholder>`, no zsh inline `#`, no
-argv passwords, `fill` only `SERVERONLY`, `psql < file`, uuid from `/proc`.
-Deps B071, B035, B027; lessons B020-B024, B046, B057, B058, B074.
-- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
-
-Brandon: These docs will have to be adapted for the generic proto template
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Docs and runbook gap; the paste blocks also carry live hazards.
-
-- **doc/330 has never run.** `doc/330-presales-to-postsales-migration.md:14-15`:
-  "Not exercised yet. The first derived app to make this move should
-  correct this document." GRC is that app; its corrections are not here.
-- **It cites a deleted file.** `:37` and `:131` point at
-  `sql/ddl-role-host-setup.sql`; PS0015 deleted it
-  (`tickets/04-archive/PS0015-sql-and-cmd-shape.md:27`). No `infra/sql/`
-  exists.
-- **Ownership is moved in place.** Step 3b (`:129-149`) loops
-  `ALTER TABLE ... OWNER TO proto_ddl` on the live database. Rollback
-  (`:301-325`) reverses the loop or restores a dump: several manual steps.
-- **Paste blocks are unsafe as root.** `:60` and `:321` run
-  `curl -s http://127.0.0.1:<port>/health`; bash reads `<port` as an input
-  redirect and `>/health` as an output one, so the line fails.
-  `:122-123` and doc/340 `:30-31` hold `PASSWORD '<generate>'`. Variables
-  come from an earlier block (`:80-82`) with no `${APP_ROOT:?}` guard, so
-  the rollback's `cp -a ... "$APP_ROOT/etc/"` (`:308`) writes into
-  `/etc/` if the shell lost them.
-- **doc/340 is SQL to copy by hand** (`doc/340-db-host-setup.md:27-70`),
-  hardcodes `uat_proto_db` (`:32,36-37`), and verifies only the owner row
-  (`:68-69`), never that the API role is refused DDL.
-- **No production runbook.** `infra/README.md:138-187` is "pointers, not a
-  runbook"; nothing covers a fresh prod install or later releases.
-
-#### What GRC changed
-
-RG0013 (nine commits, `a57d6ad` to `16f3acd`) ran both moves on real hosts on
-2026-10-01 and recorded Lessons. Section by section, what PROTO lacks:
-
-GRC `doc/330-uat-postsales-cutover.md` (UAT cutover):
-- `:12-29` before/after table: service user, certs, logs, monitors.
-- `:88-96` A1: DB **renamed aside** (`RENAME TO ..._presales`); rollback
-  is one statement. `:98-101` A2: service user `svc-<app>`.
-- `:103-123` A3: per-repo deploy key and ssh alias for `shrmpl-hook`.
-- `:125-148` A4: app root `root:shrmpl-hook 1775` (B024); secrets
-  generated into the files; gate `grep ... SERVERONLY || echo "all filled"`.
-- `:150-165` A5: one SQL file; `sha256sum -c` on the export;
-  `pg_restore --no-owner` as the DDL role. `:205-307`: webhook,
-  pulsecheck, cron, fail2ban, drop-aside a day later, rename-back rollback.
-
-GRC `doc/331-prd-postsales-cutover.md` (fresh prod install, no PROTO
-equivalent): `:8-14,106-111` prod has no checkout, so host files are a
-`git archive` of a pushed commit, checked with `git get-tar-commit-id`;
-`:61-87` ids from `/proc/sys/kernel/random/uuid`; `:95-104` `fill` writes
-only over `SERVERONLY`; `:176-193` SQL on psql stdin (`postgres` cannot
-read under `/root`); `:216-253` first cert with `--dry-run` and `nginx -t`;
-`:329-409` promote hook on `main`, every later release; `:411-469`
-rollback and Lessons.
-
-GRC `doc/340-db-host-setup.md:1-60` + `infra/sql/grc-host-db.sql:1-43`:
-idempotent `\gexec` roles and database; restore as the DDL role, so no
-ownership loop; negative check (`340:56`, `create table nope` must fail).
-
-GRC's own blocks still break two of its rules: `doc/330:153-156` and
-`doc/331:180-183` pass passwords as `psql -v` arguments (visible in `ps`),
-flagged by RG0043 item 22 and not yet fixed; `doc/330` keeps `<stamp>`
-placeholders (`doc/331:453-456`) and `doc/340:56` has `"<api role URL>"`.
-
-#### Proposed fix for PROTO
-
-1. New PS ticket; tag the result `template-<date>` (RG0013 `:121-122`
-   asks for the carry-back plus a new tag).
-2. **`infra/sql/proto-host-db.sql`** from `grc-host-db.sql`, names from
-   `APP_SLUG` (`bin/000-rebrand` rewrites them). Passwords via `\set`
-   lines on stdin ahead of the file, never `-v` on argv.
-3. **doc/340**: keep `:9-17` (role table), `:60` and `:72-78`; replace
-   `:27-70` with "run the file", restore as DDL role, negative verify.
-4. **doc/330** rewrite in GRC's shape: rename aside replaces the
-   `ALTER OWNER` loop; keep PROTO `:18-56` (which-path and names tables).
-   Fix `:37,131`; delete `:14-15` once exercised.
-5. **New doc/331** prod install from GRC 331, generic.
-6. Paste rules in both: open each host block with `: "${APP_ROOT:?}"`;
-   no `<placeholder>`; no inline `#` in zsh blocks; no argv passwords;
-   `fill` only over `SERVERONLY`; `psql < file`; ids from `/proc`.
-7. Leave out worker, blobs, Entra, `bin/620` export (B071), invites (B035).
-8. Fold Lessons in as steps: B020-B024, B046, B057, B058, B074; guard
-   from B027.
-9. Tests: none runnable; B053's path checker catches `:37`-style dead refs.
-
-#### Open question for Brandon
-
-On cutover, does the presales database's data move to the new
-DDL-owned database (dump `--no-owner`, restore as DDL role, original
-renamed aside), or does the host start from a fresh export as GRC did?
-Recommendation: dump and restore the presales data, so UAT testers keep
-their work and rollback is still one rename.
-
-Brandon: Every project will be different, but in general when we go from presales to post sales, we setup UAT and Prod with whatever we've been working on our locals.
-
 ### B027 — Presales deploy: refuse post-sales hosts; generate secrets on host
 
 - **Priority:** P2  **Area:** bin, etc, docs
@@ -8869,3 +8758,115 @@ nav entry (PROTO today)? Recommendation: header menu, since it stays
 visible however long the nav grows in a derived app.
 
 Brandon: Header
+
+### B026 — COMPLETED — Server deploy runbooks: doc/330, doc/331, doc/340, infra/sql
+- **Completed:** 2026-10-02. Rewrote `doc/330` as the UAT cutover runbook (renamed `doc/330-uat-postsales-cutover.md`), added `doc/331-prd-postsales-install.md` (fresh prod install) and rewrote `doc/340` around one idempotent `infra/sql/proto-host-db.sql` (three roles, refuses a database it does not own, passwords as `\set` lines on psql's stdin, restore with `pg_restore --role=proto_ddl`, negative verify); paste blocks follow the rules (guards, no `<placeholder>`, no inline `#` in local blocks, `fill`/`fillpw` over `SERVERONLY` through the environment, ids from `/proc`). Per Brandon's answer both hosts load the same local dump (presales DB renamed aside on UAT); no ticket or `template-` tag (B091); the branch model is described, not prescribed (B057); B046, B058, B074, B027 are noted as pending. Two fixes the runbooks needed: `bin/000-rebrand` now renames slug-led file names (`infra/sql/proto-host-db.sql`), and `roles.sql` grants `db_reader`/`db_writer` only when missing, because the UAT test gate runs it as the CI role and Postgres 16 refuses even a repeat GRANT there. Verified in ubuntu:24.04 + Postgres 16 by running the docs' own blocks (SQL twice: identical state, no notices; app role DML yes, DDL no; CI role CREATEDB but no CONNECT; DDL role `verify`/`up`; rollback), `bash -n`/shellcheck on all 68 blocks, and a rebrand on a scratch copy. Tests: all green, go=279 unit=42 e2e=12 py=79
+
+- **Priority:** P2  **Area:** docs, infra, tickets
+- **GRC:** `doc/330-uat-postsales-cutover.md:1-330` (what changes :12-29; pre-outage :31-75; vars block :77-86; DB renamed aside :88-96; `svc-` :98-101; deploy key :103-123; 1775 + env fill + `all filled` gate :125-148; roles/data `pw` `sha256sum -c` :150-165; units, build, certs, login :167-201; webhook, pulsecheck, cron, fail2ban :205-283; cleanup, rollback :285-307; Lessons :309-330); `doc/331-prd-postsales-cutover.md:1-469` (`git archive` :8-14; ids :61-87; `fill` :95-104; `get-tar-commit-id` :106-111; SQL on stdin :176-193; cert `--dry-run` :216-253; promote hook :329-359; releases :371-409; rollback :411-430; Lessons :432-469); `doc/340-db-host-setup.md:1-60` (:19-34, :36-44, :46-57); `infra/sql/grc-host-db.sql:1-43`; `infra/README.md:1-15`; `tickets/02-working/RG0013-db-roles-and-postsales-infra/RG0013-db-roles-and-postsales-infra.md:47-80,121-122`; RG0043 md `:335-341,566-577`; RG0013 md `:50-58`   **PROTO:** `doc/320-presales-uat-deploy.md` (keep); `doc/330-presales-to-postsales-migration.md:1-325` (:15, :37, :131, :58-325); new `doc/331-prd-postsales-install.md`; `doc/340-db-host-setup.md:1-81` (:27-70); new `infra/sql/<slug>-host-db.sql`; `infra/README.md:31-97,138-187`
+- **Ticket:** RG0013 / `a57d6ad`, `791b751`, `9de1d94`, `24a474e`, `33523c7`, `50c56fc`, `5bd0fd4`, `c18626f`, `16f3acd`; new PS ticket + `template-` tag (RG0013 :121-122 asks for this)
+- **What:** PROTO 330 is unexercised and cites a missing SQL file; no prod
+runbook exists. GRC ran 330 (UAT cutover) and 331 (prod install); 340 is one
+idempotent psql file, restore as DDL role, negative verify.
+- **Port notes:** Keep GRC numbering and PROTO 330 :18-56, 340 :9-17,:60,:72-78.
+Rename-aside replaces `ALTER OWNER`. Genericize names; drop worker/blobs.
+Paste rules: `: "${APP_ROOT:?}"`, no `<placeholder>`, no zsh inline `#`, no
+argv passwords, `fill` only `SERVERONLY`, `psql < file`, uuid from `/proc`.
+Deps B071, B035, B027; lessons B020-B024, B046, B057, B058, B074.
+- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
+
+Brandon: These docs will have to be adapted for the generic proto template
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Docs and runbook gap; the paste blocks also carry live hazards.
+
+- **doc/330 has never run.** `doc/330-presales-to-postsales-migration.md:14-15`:
+  "Not exercised yet. The first derived app to make this move should
+  correct this document." GRC is that app; its corrections are not here.
+- **It cites a deleted file.** `:37` and `:131` point at
+  `sql/ddl-role-host-setup.sql`; PS0015 deleted it
+  (`tickets/04-archive/PS0015-sql-and-cmd-shape.md:27`). No `infra/sql/`
+  exists.
+- **Ownership is moved in place.** Step 3b (`:129-149`) loops
+  `ALTER TABLE ... OWNER TO proto_ddl` on the live database. Rollback
+  (`:301-325`) reverses the loop or restores a dump: several manual steps.
+- **Paste blocks are unsafe as root.** `:60` and `:321` run
+  `curl -s http://127.0.0.1:<port>/health`; bash reads `<port` as an input
+  redirect and `>/health` as an output one, so the line fails.
+  `:122-123` and doc/340 `:30-31` hold `PASSWORD '<generate>'`. Variables
+  come from an earlier block (`:80-82`) with no `${APP_ROOT:?}` guard, so
+  the rollback's `cp -a ... "$APP_ROOT/etc/"` (`:308`) writes into
+  `/etc/` if the shell lost them.
+- **doc/340 is SQL to copy by hand** (`doc/340-db-host-setup.md:27-70`),
+  hardcodes `uat_proto_db` (`:32,36-37`), and verifies only the owner row
+  (`:68-69`), never that the API role is refused DDL.
+- **No production runbook.** `infra/README.md:138-187` is "pointers, not a
+  runbook"; nothing covers a fresh prod install or later releases.
+
+#### What GRC changed
+
+RG0013 (nine commits, `a57d6ad` to `16f3acd`) ran both moves on real hosts on
+2026-10-01 and recorded Lessons. Section by section, what PROTO lacks:
+
+GRC `doc/330-uat-postsales-cutover.md` (UAT cutover):
+- `:12-29` before/after table: service user, certs, logs, monitors.
+- `:88-96` A1: DB **renamed aside** (`RENAME TO ..._presales`); rollback
+  is one statement. `:98-101` A2: service user `svc-<app>`.
+- `:103-123` A3: per-repo deploy key and ssh alias for `shrmpl-hook`.
+- `:125-148` A4: app root `root:shrmpl-hook 1775` (B024); secrets
+  generated into the files; gate `grep ... SERVERONLY || echo "all filled"`.
+- `:150-165` A5: one SQL file; `sha256sum -c` on the export;
+  `pg_restore --no-owner` as the DDL role. `:205-307`: webhook,
+  pulsecheck, cron, fail2ban, drop-aside a day later, rename-back rollback.
+
+GRC `doc/331-prd-postsales-cutover.md` (fresh prod install, no PROTO
+equivalent): `:8-14,106-111` prod has no checkout, so host files are a
+`git archive` of a pushed commit, checked with `git get-tar-commit-id`;
+`:61-87` ids from `/proc/sys/kernel/random/uuid`; `:95-104` `fill` writes
+only over `SERVERONLY`; `:176-193` SQL on psql stdin (`postgres` cannot
+read under `/root`); `:216-253` first cert with `--dry-run` and `nginx -t`;
+`:329-409` promote hook on `main`, every later release; `:411-469`
+rollback and Lessons.
+
+GRC `doc/340-db-host-setup.md:1-60` + `infra/sql/grc-host-db.sql:1-43`:
+idempotent `\gexec` roles and database; restore as the DDL role, so no
+ownership loop; negative check (`340:56`, `create table nope` must fail).
+
+GRC's own blocks still break two of its rules: `doc/330:153-156` and
+`doc/331:180-183` pass passwords as `psql -v` arguments (visible in `ps`),
+flagged by RG0043 item 22 and not yet fixed; `doc/330` keeps `<stamp>`
+placeholders (`doc/331:453-456`) and `doc/340:56` has `"<api role URL>"`.
+
+#### Proposed fix for PROTO
+
+1. New PS ticket; tag the result `template-<date>` (RG0013 `:121-122`
+   asks for the carry-back plus a new tag).
+2. **`infra/sql/proto-host-db.sql`** from `grc-host-db.sql`, names from
+   `APP_SLUG` (`bin/000-rebrand` rewrites them). Passwords via `\set`
+   lines on stdin ahead of the file, never `-v` on argv.
+3. **doc/340**: keep `:9-17` (role table), `:60` and `:72-78`; replace
+   `:27-70` with "run the file", restore as DDL role, negative verify.
+4. **doc/330** rewrite in GRC's shape: rename aside replaces the
+   `ALTER OWNER` loop; keep PROTO `:18-56` (which-path and names tables).
+   Fix `:37,131`; delete `:14-15` once exercised.
+5. **New doc/331** prod install from GRC 331, generic.
+6. Paste rules in both: open each host block with `: "${APP_ROOT:?}"`;
+   no `<placeholder>`; no inline `#` in zsh blocks; no argv passwords;
+   `fill` only over `SERVERONLY`; `psql < file`; ids from `/proc`.
+7. Leave out worker, blobs, Entra, `bin/620` export (B071), invites (B035).
+8. Fold Lessons in as steps: B020-B024, B046, B057, B058, B074; guard
+   from B027.
+9. Tests: none runnable; B053's path checker catches `:37`-style dead refs.
+
+#### Open question for Brandon
+
+On cutover, does the presales database's data move to the new
+DDL-owned database (dump `--no-owner`, restore as DDL role, original
+renamed aside), or does the host start from a fresh export as GRC did?
+Recommendation: dump and restore the presales data, so UAT testers keep
+their work and rollback is still one rename.
+
+Brandon: Every project will be different, but in general when we go from presales to post sales, we setup UAT and Prod with whatever we've been working on our locals.

@@ -39,5 +39,16 @@ BEGIN
 END
 $$;
 
-GRANT db_reader TO proto_app;
-GRANT db_writer TO proto_app;
+-- Granted only when missing: on a build host bin/510 runs this file as the
+-- CI role, which may not GRANT roles (Postgres 16 wants ADMIN OPTION even
+-- for a membership that already exists).
+DO $$
+BEGIN
+    IF NOT pg_has_role('proto_app', 'db_reader', 'MEMBER') THEN
+        GRANT db_reader TO proto_app;
+    END IF;
+    IF NOT pg_has_role('proto_app', 'db_writer', 'MEMBER') THEN
+        GRANT db_writer TO proto_app;
+    END IF;
+END
+$$;

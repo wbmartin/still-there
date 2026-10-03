@@ -77,7 +77,7 @@ to the UI (no typing passwords) — the UI eyeball is the operator's.
   grant roles. `000-roles.sql` in the bundle is the repo's `src/api-srv/sql/roles.sql`
   verbatim (idempotent); `600` refuses to bundle if it is missing or does not name
   `$DB_APP_ROLE`. Never run 600/610 against a host that has been migrated to the
-  `infra/` path — see doc/330-presales-to-postsales-migration.md.
+  `infra/` path — see doc/330-uat-postsales-cutover.md.
 - Previous binaries/web kept as `.prev` (`api-srv.prev`, `proto-migrate.prev`,
   `web-pub.prev`) for a quick manual rollback — see doc/320-presales-uat-deploy.md.
 - A normal deploy restores the whole local dump, so `schema_migration` (if present)
