@@ -217,8 +217,10 @@ the presales `etc/deploy.env` if the host had one; nothing reads it now.
 ```bash
 sudo useradd -r -s /usr/sbin/nologin -M proto            # if absent
 sudo mkdir -p "$APP_ROOT"/{bin,stg,backup}
-sudo chown -R shrmpl-hook:shrmpl-hook "$APP_ROOT"/{bin,libexec,stg,backup}
-sudo chown -R www-data:www-data "$APP_ROOT"/{web-pub,log}
+# the hook swaps web-pub/ in the app root; sticky keeps it off the rest
+sudo chown root:shrmpl-hook "$APP_ROOT" && sudo chmod 1775 "$APP_ROOT"
+sudo chown -R shrmpl-hook:shrmpl-hook "$APP_ROOT"/{bin,libexec,stg,backup,web-pub}
+sudo chown -R www-data:www-data "$APP_ROOT"/log
 
 # binaries: the shipped unit runs libexec/proto-api. Keep the presales
 # api-srv as the rollback until step 8; the first webhook build (step 7)

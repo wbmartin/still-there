@@ -1,4 +1,7 @@
 #!/bin/bash
+# Swaps web-pub/ by renaming entries in the app root, so the root must be
+# root:shrmpl-hook 1775 (infra/README.md step 1): group write lets the hook
+# create and rename, and the sticky bit limits it to entries it owns.
 set -euo pipefail
 
 SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
@@ -14,6 +17,13 @@ WEB_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/proto-web"
 STG_DIR="$SRV_ROOT/stg"
 WEB_PUB_DIR="$SRV_ROOT/web-pub"
 TARBALL="proto-web-client.tar.gz"
+
+TARGET_USER="shrmpl-hook"
+if [ "$(id -un)" != "$TARGET_USER" ]; then
+    echo "[ERROR] Must run as $TARGET_USER (currently $(id -un))."
+    echo "        sudo -u $TARGET_USER -H $0 $*"
+    exit 1
+fi
 
 if [ "${1:-}" = "--pull" ]; then
     TAG="${2:-$DEPLOY_TAG}"
@@ -34,7 +44,7 @@ STAGE_DIR="$WEB_PUB_DIR.incoming.$$"
 OLD_DIR="$WEB_PUB_DIR.old.$$"
 rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR"
-tar -xzf "$SOURCE" -C "$STAGE_DIR"
+tar --no-same-owner -xzf "$SOURCE" -C "$STAGE_DIR"
 
 if [ ! -f "$STAGE_DIR/index.html" ]; then
     echo "[ERROR] Extracted bundle has no index.html -- refusing to publish"
@@ -42,12 +52,12 @@ if [ ! -f "$STAGE_DIR/index.html" ]; then
     exit 1
 fi
 
+# Readable by nginx before it goes live, not after.
+chmod -R a+rX "$STAGE_DIR"
 mkdir -p "$WEB_PUB_DIR"
 mv "$WEB_PUB_DIR" "$OLD_DIR"
 mv "$STAGE_DIR" "$WEB_PUB_DIR"
 rm -rf "$OLD_DIR"
-
-chmod -R a+rX "$WEB_PUB_DIR"
 
 echo "[INFO] Web client published to $WEB_PUB_DIR"
 exit 0

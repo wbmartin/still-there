@@ -128,7 +128,7 @@ for `MainPID` to change before polling `/health`.
 ## Layout on the host
 
 ```
-/srv/<env>-proto/
+/srv/<env>-proto/                                 (root:shrmpl-hook 1775)
 ├── bin/         copies of infra/<host>/bin/      (shrmpl-hook:shrmpl-hook)
 ├── etc/         filled env files, units, nginx   (root:<group> 0640)
 ├── libexec/     proto-api, proto-migrate, proto-api.revision
@@ -136,8 +136,15 @@ for `MainPID` to change before polling `/health`.
 ├── backup/      pre-migrate pg_dump -Fc files
 ├── crt/         TLS certs placed by *-renew-web-certs
 ├── log/         nginx access/error logs (the API logs to journald)
+│                                                 (www-data:www-data)
 └── web-pub/     the extracted React bundle — what nginx serves
+                                                  (shrmpl-hook, a+rX)
 ```
+
+The publish swaps `web-pub/` by creating and renaming entries in the app
+root as `shrmpl-hook`, hence group write on the root. The sticky bit (the
+`1` in 1775) lets the hook rename or delete only entries it owns, so
+root's `etc/` and `crt/` and www-data's `log/` stay out of its reach.
 
 ## One-time host setup (pointers, not a runbook)
 
@@ -146,8 +153,11 @@ full runbook belongs.
 
 1. **Users and dirs.** `useradd -r -s /usr/sbin/nologin -M proto`;
    `mkdir -p /srv/<env>-proto/{bin,etc,libexec,stg,backup,web-pub,log}`;
-   `chown -R shrmpl-hook:shrmpl-hook .../{bin,libexec,stg,backup}`;
-   `chown -R www-data:www-data .../{web-pub,log}`. On UAT also the
+   `chown root:shrmpl-hook /srv/<env>-proto && chmod 1775
+   /srv/<env>-proto`;
+   `chown -R shrmpl-hook:shrmpl-hook .../{bin,libexec,stg,backup,web-pub}`;
+   `chown -R www-data:www-data .../log`. `stat -c '%U:%G %a'
+   /srv/<env>-proto` must print `root:shrmpl-hook 1775`. On UAT also the
    checkout at `BUILD_STG`, owned by `shrmpl-hook` (anything git or go does
    there as root leaves root-owned files that break the next hook build).
 2. **Postgres roles.** `src/api-srv/sql/roles.sql` (cluster roles

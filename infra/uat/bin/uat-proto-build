@@ -35,8 +35,12 @@ done
 for dir in "$SRV_ROOT" "$SRV_ROOT/stg" "$SRV_ROOT/libexec"; do
     mkdir -p "$dir" 2>/dev/null || true
     [ -w "$dir" ] || {
-        echo "[ERROR] $dir is not writable by $TARGET_USER."
-        echo "        chown -R $TARGET_USER:$TARGET_USER $SRV_ROOT   (see infra/README.md)"
+        echo "[ERROR] $dir is not writable by $TARGET_USER (infra/README.md step 1)."
+        if [ "$dir" = "$SRV_ROOT" ]; then
+            echo "        chown root:$TARGET_USER $dir && chmod 1775 $dir"
+        else
+            echo "        chown -R $TARGET_USER:$TARGET_USER $dir"
+        fi
         exit 1
     }
 done

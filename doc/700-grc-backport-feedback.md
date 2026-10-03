@@ -240,141 +240,6 @@ published password off UAT hosts that already have it but makes the host
 env file the only source of truth? Recommendation: yes, and check the
 existing UAT host once by hand in the same ticket.
 
-### B024 — App root `root:shrmpl-hook 1775` so web publish works
-
-- **Priority:** P1  **Area:** infra, docs
-- **GRC:** `infra/uat-unified001/bin/uat-grc-publish-web-client:1-10,41-55`; `infra/README.md:52-65`; `doc/330-uat-postsales-cutover.md:315-316`   **PROTO:** `infra/uat/bin/uat-proto-publish-web-client:29-53` (+ prd); `infra/README.md:124-147`
-- **Ticket:** RG0013 / `3a3fc94`
-- **What:** Publish renames `web-pub/` as `shrmpl-hook` in a root-owned root,
-which PROTO's setup forbids. GRC: root `root:shrmpl-hook 1775`, hook-owned
-`web-pub/`, `--no-same-owner`, chmod before the swap (PROTO after, :50).
-- **Port notes:** Small script change; README/doc in B049, B026.
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-The web publish swaps the live bundle by renaming directories that sit
-directly in the app root. The setup steps make the app root writable only
-by root, and the publish runs as the webhook user. The two cannot both
-hold.
-
-1. Who runs it. `infra/uat/bin/uat-proto-build:5-8` re-execs itself as
-   `shrmpl-hook` and calls the publish at `:128`; the prd copy refuses any
-   other user (`infra/prd/bin/prd-proto-publish-web-client:18-23`).
-2. What the setup makes. `infra/README.md:143-146` (step 1), as root:
-
-       mkdir -p /srv/<env>-proto/{bin,etc,libexec,stg,backup,web-pub,log}
-       chown -R shrmpl-hook:shrmpl-hook .../{bin,libexec,stg,backup}
-       chown -R www-data:www-data .../{web-pub,log}
-
-   `/srv/<env>-proto` itself stays `root:root 0755`. The layout
-   (`:124-136`) gives no owner for the root.
-3. What the publish does, `infra/uat/bin/uat-proto-publish-web-client`:
-
-       33  STAGE_DIR="$WEB_PUB_DIR.incoming.$$"
-       36  mkdir -p "$STAGE_DIR"
-       46  mv "$WEB_PUB_DIR" "$OLD_DIR"
-       47  mv "$STAGE_DIR" "$WEB_PUB_DIR"
-       48  rm -rf "$OLD_DIR"
-       50  chmod -R a+rX "$WEB_PUB_DIR"
-
-   Every one of `:36`, `:46` and `:47` creates or renames an entry in
-   `/srv/<env>-proto`, which needs write on that directory. As
-   `shrmpl-hook` on a root-owned 0755 root, `:36` fails first: `mkdir:
-   cannot create directory '/srv/uat-proto/web-pub.incoming.<pid>':
-   Permission denied`. `set -e` stops the script. Were the root writable,
-   `:48` would fail next: the old `web-pub/` is `www-data`-owned per step
-   1, so the hook cannot delete the files inside it.
-
-What the operator sees: every UAT build passes its tests, pushes, installs
-the new API (`:127`, which only writes inside hook-owned `libexec/` and
-`stg/`), then dies at the publish. Slack reports "proto UAT build FAILED
-... Service state: active" (`uat-proto-build:44-52`). The new API now runs
-behind the old web bundle. Prod's promote-and-deploy fails the same way
-(`prd-proto-promote-uat-and-deploy:37-38`). Correctness bug: no web
-deploy can succeed on a host built from the README. It has never shown
-because `infra/` is a placeholder never run on a host (`infra/README.md:3-8`).
-
-Two smaller defects in the same script:
-
-- `:37`: `tar -xzf` without `--no-same-owner`. The uat copy has no user
-  check, so a run as root restores whatever uid the build host stored.
-- `:50`: `chmod -R a+rX` runs after the swap (`:46-48`). For that moment
-  nginx (`www-data`) serves files with tar's modes; a non-world-readable
-  file answers 403.
-
-Adjacent finding, not in B024 and open in GRC too: `bin/` is hook-owned
-(`infra/README.md:128,145`) yet root's cron runs `bin/*-renew-web-certs`
-and `bin/prd-proto-backup-all` (`:91,93`). Any code a push runs as
-`shrmpl-hook` (the UAT test gate runs the repo's tests) can rewrite a
-script root will execute. No hook script writes into `bin/`, so it can be
-`root:root 0755`. Belongs with B050.
-
-#### What GRC changed
-
-RG0013 (commit `3a3fc94`) lists this among its corrections to PROTO
-(`RG0013 md:51-52`): the publish renames `web-pub/` in the app root as
-`shrmpl-hook`, which PROTO's root-owned root forbids; GRC makes the root
-`root:shrmpl-hook 1775` ("sticky: the hook renames only its own").
-
-- The app root is `root:shrmpl-hook 1775`. Group write lets the hook
-  create and rename entries; the sticky bit (the `1`) lets it rename or
-  delete only entries it owns, so root's `etc/` and www-data's `log/` are
-  safe. GRC `infra/README.md:52-65` gives owner and mode for every
-  directory; `web-pub/` is `shrmpl-hook`, world-readable.
-- `doc/330-uat-postsales-cutover.md:125-131` (step A4) creates it:
-  `chown root:shrmpl-hook $APP && chmod 1775 $APP`, and chowns `web-pub`
-  to the hook. Lessons `:315-316` record the finding.
-- `infra/uat-unified001/bin/uat-grc-publish-web-client` (byte-identical
-  to prd): `:7-10` explains the mode; `:14-17` re-execs as `shrmpl-hook`
-  (`exec sudo -u "$TARGET_USER" -H "$0" "$@"`) instead of refusing;
-  `:47` `tar --no-same-owner -xzf`; `:49` `chmod -R a+rX "$STAGE_DIR"`
-  before the swap at `:51-54`.
-
-No automated test. RG0013's own Checks (`:115-116`) predate any host
-run; GRC has since run the `doc/330` cutover (its Lessons carry entries
-dated during the run) and released to prod (commit `a504af6`).
-
-#### Proposed fix for PROTO
-
-1. `infra/README.md:143-146` (step 1): after `mkdir`, add `chown
-   root:shrmpl-hook /srv/<env>-proto && chmod 1775 /srv/<env>-proto`;
-   move `web-pub` from the `www-data` chown to the `shrmpl-hook` one;
-   keep `log` as `www-data`.
-2. `infra/README.md:124-136` (layout): owner and mode on the root line
-   and on `web-pub/`, with one sentence on the sticky bit. The full
-   owner/mode table is B049.
-3. Both `*-publish-web-client` scripts: `tar --no-same-owner -xzf` at
-   `:37`; move `chmod -R a+rX` from `:50` to before `mkdir -p
-   "$WEB_PUB_DIR"` (`:45`), applied to `$STAGE_DIR`; add a header comment
-   stating the 1775 requirement.
-4. uat copy: add the user guard. Use GRC's `exec sudo -u shrmpl-hook -H
-   "$0" "$@"` in both, or keep prd's refuse-with-hint; either works as
-   long as the two match (B045 makes them byte-identical).
-5. `doc/330-presales-to-postsales-migration.md:218-220` repeats step 1's
-   chowns: same change there (the runbook rewrite is B026).
-6. Optional, with B050: `bin/` to `root:root 0755` (adjacent finding).
-
-Blind-copy traps: GRC's blob and tarball names, `data/`, its service user
-and worker do not exist in PROTO; keep `proto-web` and
-`proto-web-client.tar.gz` (rebranded from `etc/app.env`).
-
-Depends on nothing. Related: B045, B049 (layout), B026, B050 (`bin/`).
-
-Tests: none automated. On a host: `stat -c '%U:%G %a' /srv/<env>-proto`
-shows `root:shrmpl-hook 1775`; `sudo -u shrmpl-hook <bin>/...publish-web-client`
-ends "published"; `sudo -u shrmpl-hook mv /srv/<env>-proto/etc /tmp/x`
-must fail.
-
-#### Open question for Brandon
-
-Take GRC's `root:shrmpl-hook 1775` app root, or keep the root `root:root`
-and move the swap into a hook-owned `web/` parent (nginx `root` changes)?
-Recommendation: 1775, because GRC already runs it on real hosts and the
-sticky bit protects everything root and www-data own.
-
 # P2: template quality, DX, docs
 
 ### B025 — Left nav scrolls independently of the main screen
@@ -8867,3 +8732,139 @@ keep uat at 20? Recommendation: 10 on both, because the template mirrors
 the host and cannot choose a per-app value there.
 
 Brandon: 10 on both
+
+### B024 — COMPLETED — App root `root:shrmpl-hook 1775` so web publish works
+- **Completed:** 2026-10-02. Took GRC's `root:shrmpl-hook 1775` app root (recommendation). `infra/README.md` layout gives owner/mode for the root, `log/` and `web-pub/` plus a sticky-bit note, and step 1 now chowns the root `root:shrmpl-hook` 1775, `web-pub` to the hook and only `log` to www-data; `doc/330-presales-to-postsales-migration.md` step 6 matches. Both `*-publish-web-client` scripts gain a header on the 1775 requirement, `tar --no-same-owner`, and `chmod -R a+rX` on the stage dir before the swap; the uat copy gains prd's refuse-unless-shrmpl-hook guard so the two differ only in env name. `uat-proto-build`'s unwritable-dir hint no longer says `chown -R hook $SRV_ROOT` (which would hand root's etc/crt to the hook): it prints the 1775 command for the root and a per-dir chown for stg/libexec. Not done: B024 step 6 (`bin/` to root:root), since B049/B050 are skipped. Verified in ubuntu:24.04 as shrmpl-hook: old layout fails at `mkdir web-pub.incoming.<pid>: Permission denied`; a 1775 root with www-data web-pub fails at the `mv` (Operation not permitted); the new layout publishes twice cleanly for uat and prd (files hook-owned 644 from a uid-1234 0600 tarball, www-data reads them), root is refused, and the hook cannot mv/rm/rmdir `etc/`, `crt/` or `log/`. Tests: all green, go=279 unit=42 e2e=10 py=79
+
+- **Priority:** P1  **Area:** infra, docs
+- **GRC:** `infra/uat-unified001/bin/uat-grc-publish-web-client:1-10,41-55`; `infra/README.md:52-65`; `doc/330-uat-postsales-cutover.md:315-316`   **PROTO:** `infra/uat/bin/uat-proto-publish-web-client:29-53` (+ prd); `infra/README.md:124-147`
+- **Ticket:** RG0013 / `3a3fc94`
+- **What:** Publish renames `web-pub/` as `shrmpl-hook` in a root-owned root,
+which PROTO's setup forbids. GRC: root `root:shrmpl-hook 1775`, hook-owned
+`web-pub/`, `--no-same-owner`, chmod before the swap (PROTO after, :50).
+- **Port notes:** Small script change; README/doc in B049, B026.
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+The web publish swaps the live bundle by renaming directories that sit
+directly in the app root. The setup steps make the app root writable only
+by root, and the publish runs as the webhook user. The two cannot both
+hold.
+
+1. Who runs it. `infra/uat/bin/uat-proto-build:5-8` re-execs itself as
+   `shrmpl-hook` and calls the publish at `:128`; the prd copy refuses any
+   other user (`infra/prd/bin/prd-proto-publish-web-client:18-23`).
+2. What the setup makes. `infra/README.md:143-146` (step 1), as root:
+
+       mkdir -p /srv/<env>-proto/{bin,etc,libexec,stg,backup,web-pub,log}
+       chown -R shrmpl-hook:shrmpl-hook .../{bin,libexec,stg,backup}
+       chown -R www-data:www-data .../{web-pub,log}
+
+   `/srv/<env>-proto` itself stays `root:root 0755`. The layout
+   (`:124-136`) gives no owner for the root.
+3. What the publish does, `infra/uat/bin/uat-proto-publish-web-client`:
+
+       33  STAGE_DIR="$WEB_PUB_DIR.incoming.$$"
+       36  mkdir -p "$STAGE_DIR"
+       46  mv "$WEB_PUB_DIR" "$OLD_DIR"
+       47  mv "$STAGE_DIR" "$WEB_PUB_DIR"
+       48  rm -rf "$OLD_DIR"
+       50  chmod -R a+rX "$WEB_PUB_DIR"
+
+   Every one of `:36`, `:46` and `:47` creates or renames an entry in
+   `/srv/<env>-proto`, which needs write on that directory. As
+   `shrmpl-hook` on a root-owned 0755 root, `:36` fails first: `mkdir:
+   cannot create directory '/srv/uat-proto/web-pub.incoming.<pid>':
+   Permission denied`. `set -e` stops the script. Were the root writable,
+   `:48` would fail next: the old `web-pub/` is `www-data`-owned per step
+   1, so the hook cannot delete the files inside it.
+
+What the operator sees: every UAT build passes its tests, pushes, installs
+the new API (`:127`, which only writes inside hook-owned `libexec/` and
+`stg/`), then dies at the publish. Slack reports "proto UAT build FAILED
+... Service state: active" (`uat-proto-build:44-52`). The new API now runs
+behind the old web bundle. Prod's promote-and-deploy fails the same way
+(`prd-proto-promote-uat-and-deploy:37-38`). Correctness bug: no web
+deploy can succeed on a host built from the README. It has never shown
+because `infra/` is a placeholder never run on a host (`infra/README.md:3-8`).
+
+Two smaller defects in the same script:
+
+- `:37`: `tar -xzf` without `--no-same-owner`. The uat copy has no user
+  check, so a run as root restores whatever uid the build host stored.
+- `:50`: `chmod -R a+rX` runs after the swap (`:46-48`). For that moment
+  nginx (`www-data`) serves files with tar's modes; a non-world-readable
+  file answers 403.
+
+Adjacent finding, not in B024 and open in GRC too: `bin/` is hook-owned
+(`infra/README.md:128,145`) yet root's cron runs `bin/*-renew-web-certs`
+and `bin/prd-proto-backup-all` (`:91,93`). Any code a push runs as
+`shrmpl-hook` (the UAT test gate runs the repo's tests) can rewrite a
+script root will execute. No hook script writes into `bin/`, so it can be
+`root:root 0755`. Belongs with B050.
+
+#### What GRC changed
+
+RG0013 (commit `3a3fc94`) lists this among its corrections to PROTO
+(`RG0013 md:51-52`): the publish renames `web-pub/` in the app root as
+`shrmpl-hook`, which PROTO's root-owned root forbids; GRC makes the root
+`root:shrmpl-hook 1775` ("sticky: the hook renames only its own").
+
+- The app root is `root:shrmpl-hook 1775`. Group write lets the hook
+  create and rename entries; the sticky bit (the `1`) lets it rename or
+  delete only entries it owns, so root's `etc/` and www-data's `log/` are
+  safe. GRC `infra/README.md:52-65` gives owner and mode for every
+  directory; `web-pub/` is `shrmpl-hook`, world-readable.
+- `doc/330-uat-postsales-cutover.md:125-131` (step A4) creates it:
+  `chown root:shrmpl-hook $APP && chmod 1775 $APP`, and chowns `web-pub`
+  to the hook. Lessons `:315-316` record the finding.
+- `infra/uat-unified001/bin/uat-grc-publish-web-client` (byte-identical
+  to prd): `:7-10` explains the mode; `:14-17` re-execs as `shrmpl-hook`
+  (`exec sudo -u "$TARGET_USER" -H "$0" "$@"`) instead of refusing;
+  `:47` `tar --no-same-owner -xzf`; `:49` `chmod -R a+rX "$STAGE_DIR"`
+  before the swap at `:51-54`.
+
+No automated test. RG0013's own Checks (`:115-116`) predate any host
+run; GRC has since run the `doc/330` cutover (its Lessons carry entries
+dated during the run) and released to prod (commit `a504af6`).
+
+#### Proposed fix for PROTO
+
+1. `infra/README.md:143-146` (step 1): after `mkdir`, add `chown
+   root:shrmpl-hook /srv/<env>-proto && chmod 1775 /srv/<env>-proto`;
+   move `web-pub` from the `www-data` chown to the `shrmpl-hook` one;
+   keep `log` as `www-data`.
+2. `infra/README.md:124-136` (layout): owner and mode on the root line
+   and on `web-pub/`, with one sentence on the sticky bit. The full
+   owner/mode table is B049.
+3. Both `*-publish-web-client` scripts: `tar --no-same-owner -xzf` at
+   `:37`; move `chmod -R a+rX` from `:50` to before `mkdir -p
+   "$WEB_PUB_DIR"` (`:45`), applied to `$STAGE_DIR`; add a header comment
+   stating the 1775 requirement.
+4. uat copy: add the user guard. Use GRC's `exec sudo -u shrmpl-hook -H
+   "$0" "$@"` in both, or keep prd's refuse-with-hint; either works as
+   long as the two match (B045 makes them byte-identical).
+5. `doc/330-presales-to-postsales-migration.md:218-220` repeats step 1's
+   chowns: same change there (the runbook rewrite is B026).
+6. Optional, with B050: `bin/` to `root:root 0755` (adjacent finding).
+
+Blind-copy traps: GRC's blob and tarball names, `data/`, its service user
+and worker do not exist in PROTO; keep `proto-web` and
+`proto-web-client.tar.gz` (rebranded from `etc/app.env`).
+
+Depends on nothing. Related: B045, B049 (layout), B026, B050 (`bin/`).
+
+Tests: none automated. On a host: `stat -c '%U:%G %a' /srv/<env>-proto`
+shows `root:shrmpl-hook 1775`; `sudo -u shrmpl-hook <bin>/...publish-web-client`
+ends "published"; `sudo -u shrmpl-hook mv /srv/<env>-proto/etc /tmp/x`
+must fail.
+
+#### Open question for Brandon
+
+Take GRC's `root:shrmpl-hook 1775` app root, or keep the root `root:root`
+and move the swap into a hook-owned `web/` parent (nginx `root` changes)?
+Recommendation: 1775, because GRC already runs it on real hosts and the
+sticky bit protects everything root and www-data own.
