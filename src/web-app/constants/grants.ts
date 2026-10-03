@@ -1,6 +1,8 @@
 // Grant ID constants. Mirrors src/api-srv/internal/model/grants.go by hand;
 // when a grant is added there, run bin/305-update-grants-fixture and add it
-// here. tests/contract.test.ts fails while the two disagree.
+// here. tests/contract.test.ts fails while the two disagree. Numbering
+// convention for new ids (never renumber shipped ones): see the header of
+// grants.go and doc/810.
 const grantConstants = {
   LOGON: 1,
   READ_EXAMPLE: 1001,

@@ -6,7 +6,7 @@ This document outlines the steps and key points for creating a new entity type i
 - Follow naming conventions: snake_case for DB/JSON, camelCase for TS/Go fields.
 - Use optimistic locking with `update_ts`.
 - Soft deletes: Set `delete_ts` instead of hard delete.
-- Grants: Create entity-specific grants in grants.go starting at appropriate numbers (e.g., 1001+ for typical new entities, 9000+ for user/security groups. a new entity takes the next free block of ten and numbers Read, Create, Update, Delete in that order from its first number N, as `Example` does (READ 1001, CREATE 1002, UPDATE 1003, DELETE 1004) and user groups do (9010-9013); `User` (9001 CREATE, 9002 READ, 9003 UPDATE, 9004 DELETE) is the older order, not the pattern. The rest of the block is room for extra grants). Use CRUD verbs: Read, Create, Update, Delete.
+- Grants: see "Grant id convention" below. Use CRUD verbs: Read, Create, Update, Delete.
 - Separate list and edit pages for better UX and navigation.
  - **CRITICAL**: Always use query string parameters with entity-specific names (e.g., `?appUserId=123`, `?appUserGroupId=456`, `?exampleId=789`) for edit and delete operations instead of path parameters (e.g., `/entity/123`) to maintain URL flexibility and avoid changing route patterns. This ensures consistency and prevents routing issues. Do not use generic names like `?entityId=`; always use the specific entity name followed by `Id`.
 - **Configuration**: Do not supply default values in config parsing code. All required configuration values must be explicitly set in the environment file to ensure correct setup and easier troubleshooting. Defaults can mask configuration issues.
@@ -76,7 +76,7 @@ This document outlines the steps and key points for creating a new entity type i
    - Example: `ExampleHandler` in `example_handler.go`.
 
 4. **Grants** (`src/api-srv/internal/model/grants.go`):
-   - Add constants: `GrantEntityRead = N`, `GrantEntityCreate = N+1`, `GrantEntityUpdate = N+2`, `GrantEntityDelete = N+3` (N is the block's first number, 1001 for `Example`).
+   - Add constants per the "Grant id convention" below: `GrantEntityRead = N`, `GrantEntityCreate = N+1`, `GrantEntityUpdate = N+2`, `GrantEntityDelete = N+3`, N being a multiple of ten.
    - Update `AllKnownGrants` and `GrantIDToShortCodeMap`.
    - Run `bin/305-update-grants-fixture` and add the same ids to
      `src/web-app/constants/grants.ts`; `src/web-app/tests/contract.test.ts`
@@ -91,7 +91,7 @@ This document outlines the steps and key points for creating a new entity type i
 
 6. **Quirks**:
    - Separate handlers for related entities (e.g., `UserGroupHandler` separate from `UserHandler`).
-   - Grants start at 1001 for examples, 9010 for user and security related entities..
+   - Grant ids: see "Grant id convention" below.
    - Delete checks for dependencies (e.g., users in groups).
 
 ## WEB-APP
@@ -154,3 +154,27 @@ Adding a column touches each layer once. The worked case is
 - **WEB-APP**: `types/example-type.ts`, `stores/examples-store.ts`, `pages/example-list-page.tsx`, `pages/example-edit-page.tsx`
 
 Use this as a checklist for new entities. Update as needed for future quirks.
+
+## Grant id convention (new ids only)
+
+A new entity takes the next free block of ten: N is a multiple of ten
+that no shipped grant uses, and the ids are
+
+| Offset | Grant  |
+|--------|--------|
+| N+0    | Read   |
+| N+1    | Create |
+| N+2    | Update |
+| N+3    | Delete |
+| N+4..N+9 | extras for that entity (block, reset, ...), in the order added |
+
+Application-wide grants stay outside entity blocks. User and security
+entities use the 9xxx range; ordinary entities use 1xxx upward.
+
+Shipped ids are never renumbered. They are stored in group rows, pinned by
+`src/api-srv/internal/model/testdata/grants.json` (B054) and mirrored in
+`src/web-app/constants/grants.ts`, so a renumber is a data migration. The
+shipped ids that break the convention stay as they are: `Example` runs
+1001-1004 (block 1000, offset by one), `User` runs CREATE 9001, READ 9002,
+UPDATE 9003, DELETE 9004 (older order), 9008, 9009 and 9020 are extras
+with unexplained gaps, and 8001 is the own-password grant.

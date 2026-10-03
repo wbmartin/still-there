@@ -866,24 +866,6 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
   returns the new status and the session cookie still works.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ X\] skip  (new, not yet decided)
 
-### B096 — Grant ids follow no one numbering convention
-- **Priority:** P3  **Area:** go-api, web-app, docs
-- **GRC:** not checked   **PROTO:** `src/api-srv/internal/model/grants.go:9-12` (Example 1001-1004, Read first), `:15` (8001), `:18-19` (User `CREATE` 9001 then `READ` 9002), `:26-29` (User group `READ` 9010 then `CREATE` 9011), `:22-23` (9008, 9009), `:35` (9020)
-- **Ticket:** found while writing doc/810 for B090 (2026-10-03)
-- **What:** Ids are grouped by entity but not ordered the same way: Example
-  and user groups run READ, CREATE, UPDATE, DELETE, while User runs CREATE,
-  READ, UPDATE, DELETE. Gaps (9005-9007, 9016-9019) are unexplained, and
-  the "admin user" and "user group" blocks share the 9xxx range. doc/810
-  now describes this as it is. Ids are stored in group rows and pinned by
-  `src/api-srv/internal/model/testdata/grants.json` (B054) and
-  `src/web-app/constants/grants.ts`, so a renumber is a data migration.
-- **Port notes:** Recommend a convention for new ids only: one block of ten
-  per entity, order READ, CREATE, UPDATE, DELETE, then extras; write it in
-  doc/810 and leave every shipped id alone. Renumber only with a migration
-  that rewrites stored grant ids plus a fixture refresh
-  (`-update-grants` in `grants_fixture_test.go:20`); not recommended.
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip  (new, not yet decided)
-
 ### B097 — `mfa_exempt` is policy-only: the API accepts it from any user admin
 - **Priority:** P2  **Area:** go-api, docs
 - **GRC:** not checked   **PROTO:** `src/api-srv/internal/handler/user_handler.go:434` (create copies `req.MFAExempt`, grant check `:361`), `:493` (update, grant check), `src/api-srv/internal/handler/user_invite_handler.go:170`, `src/api-srv/internal/handler/auth_handler.go:248` (login skips TOTP when exempt), `doc/110-threat-model.md` rows 1.6 and 3.5 (policy, status open)
@@ -9063,3 +9045,22 @@ None.
   change.
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip  (Brandon: as recommended, 2026-10-03)
 - **Completed:** 2026-10-03. `set -euo pipefail` in `bin/100`, `215`, `216`, `220` (had none), `510`, `515`. `-u`: `bin/215` `$1` -> `${1:-}`; the rest already used `${VAR:-}` for optionals. `-e` paths that may fail already had `|| true`. Pipelines: `docker ps | grep -qx` (510, 515) now `grep -qx ... <<< "$(docker ps ... || true)"` so `grep -q` closing early cannot SIGPIPE the left side; `bin/515` `psql -lqt | cut | grep -qw` now captures `psql -lqt` first, so a failed psql stops the script instead of reading as "database missing" and exec'ing the DROP-and-rebuild `bin/510`. shellcheck and `bash -n` clean on all six in `ubuntu:24.04`. Hand runs: `bin/100` builds, `bin/216` stops nothing cleanly, `bin/515` reseeds the e2e db, `bin/220` starts vite (timeout-killed), `bin/215 -d` starts and the API exits at once on the dev DB (`account_status` column missing: 0004/0005 not applied; not this item), `bin/510` runs in the gate. Tests: all green, infra=15 docs=705 go=715 unit=105 e2e=70 py=103 (unchanged).
+
+### B096 — COMPLETED — Grant ids follow no one numbering convention
+- **Priority:** P3  **Area:** go-api, web-app, docs
+- **GRC:** not checked   **PROTO:** `src/api-srv/internal/model/grants.go:9-12` (Example 1001-1004, Read first), `:15` (8001), `:18-19` (User `CREATE` 9001 then `READ` 9002), `:26-29` (User group `READ` 9010 then `CREATE` 9011), `:22-23` (9008, 9009), `:35` (9020)
+- **Ticket:** found while writing doc/810 for B090 (2026-10-03)
+- **What:** Ids are grouped by entity but not ordered the same way: Example
+  and user groups run READ, CREATE, UPDATE, DELETE, while User runs CREATE,
+  READ, UPDATE, DELETE. Gaps (9005-9007, 9016-9019) are unexplained, and
+  the "admin user" and "user group" blocks share the 9xxx range. doc/810
+  now describes this as it is. Ids are stored in group rows and pinned by
+  `src/api-srv/internal/model/testdata/grants.json` (B054) and
+  `src/web-app/constants/grants.ts`, so a renumber is a data migration.
+- **Port notes:** Recommend a convention for new ids only: one block of ten
+  per entity, order READ, CREATE, UPDATE, DELETE, then extras; write it in
+  doc/810 and leave every shipped id alone. Renumber only with a migration
+  that rewrites stored grant ids plus a fixture refresh
+  (`-update-grants` in `grants_fixture_test.go:20`); not recommended.
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip  (Brandon: as recommended, 2026-10-03)
+- **Completed:** 2026-10-03. Convention for new ids only: one block of ten per entity from a multiple of ten, N+0 Read, N+1 Create, N+2 Update, N+3 Delete, N+4..N+9 extras. Written as a section in doc/810 (replacing the inline note) and as a header comment in `grants.go`; `grants.ts` header points to both. No grant id changed; shipped ids never renumbered (stored in groups, pinned by `testdata/grants.json`). Tests: unchanged, infra=15 docs=705 go=715 unit=105 e2e=70 py=103.

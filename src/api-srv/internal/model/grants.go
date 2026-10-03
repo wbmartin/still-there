@@ -1,6 +1,14 @@
 package model
 
-// Grant constants (centralized for all entities and application-wide)
+// Grant constants (centralized for all entities and application-wide).
+//
+// Convention for NEW ids: one block of ten per entity, starting at a
+// multiple of ten no shipped grant uses. N+0 Read, N+1 Create, N+2 Update,
+// N+3 Delete, N+4..N+9 extras. User and security entities use 9xxx,
+// others 1xxx upward. Shipped ids are never renumbered: they are stored in
+// group rows and pinned by testdata/grants.json (B054), so the existing
+// Example (1001-1004) and User (9001 Create, 9002 Read, ...) layouts stay.
+// See doc/810-create-new-entity-type-notes.md.
 const (
 	// Application-wide grants
 	GrantLogon = 1
