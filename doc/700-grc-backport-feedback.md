@@ -852,67 +852,6 @@ global "remove completed tasks/todo.md"? Recommend: commit it, queue only.
 
 # Bugs found in PROTO along the way
 
-### B090 — Doc paths that do not exist
-
-- **Priority:** P3  **Area:** docs
-- **GRC:** `infra/sql/grc-host-db.sql:1-43` (fixes the doc/330 case)   **PROTO:** `doc/330-presales-to-postsales-migration.md:37,131` (`sql/ddl-role-host-setup.sql`); `doc/810-create-new-entity-type-notes.md:20,30,51,55,61`; `doc/340-db-host-setup.md:13,21`
-- **Ticket:** none
-- **What:** B053's linter: 35 of 207 tokens missing; doc/330's SQL file never
-existed.
-- **Port notes:** doc/330 via B026; rest by hand or B053.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Docs bug: some backticked paths in `doc/` name files not in the repo.
-GRC's RG0011 checker (B053), run read-only against PROTO with PROTO's
-package roots and `doc/700` excluded, reports 34 misses in 6 documents
-(the item's "35 of 207 in 16 docs" was another run). Most are not defects.
-
-**Real, doc/330.** `doc/330-presales-to-postsales-migration.md:37` lists
-`sql/ddl-role-host-setup.sql` as the post-sales DB setup; `:131` sends the
-reader to its header for why `REASSIGN OWNED` fails. The item says the
-file "never existed"; wrong. PS0001 (`e6aeb0e`) added it and PS0015
-(`0981ddb`, "doc/340-db-host-setup.md replaces the commented-out SQL
-file") deleted it. doc/330 was not updated, so an operator moving a host
-to post-sales hits a dead pointer at the database-ownership step.
-
-**Real, trivial.** `doc/810-create-new-entity-type-notes.md:20` names
-`user-group-edit-page.tsx`; the file is `app-user-group-edit-page.tsx`.
-
-**Not defects (the item overstates):** `doc/810:30` resolves under
-`src/api-srv/sql/`. `doc/810:51,55,61` (`entity_model.go` etc.) are
-deliberate placeholders. `doc/340-db-host-setup.md:13`
-(`etc/uat-proto-test.env`) is a host path whose source is
-`infra/uat/etc/uat-proto-test.env`; `:21` (`000-roles.sql`) is the name
-`bin/600-bundle-uat:97` gives `roles.sql` in the bundle. doc/320/330's
-`deploy.sh`, `db.sql` and `etc/api-srv.env` are bundle or host files.
-`doc/050:35` names "the old `sql/010-initialcreate.sql`" on purpose.
-
-#### What GRC changed
-
-GRC replaced the pointer with a real file: `infra/sql/grc-host-db.sql:1-12`
-is an idempotent, superuser-run host setup creating ddl/app/ci roles
-"(ProtoStack PS0015's model)", called from GRC's doc/330 at `:74` and
-`:153`. RG0011 added the checker. No other tests.
-
-#### Proposed fix for PROTO
-
-1. `doc/330:37`: replace the SQL path with `doc/340-db-host-setup.md`.
-2. `doc/330:131`: explain the `REASSIGN OWNED` refusal inline or point at
-   doc/340. If B026 (runbooks, `infra/sql`) is ported, point at its host
-   SQL file instead, in B026's change; do not copy GRC's role names.
-3. `doc/810:20`: `app-user-group-edit-page.tsx`.
-4. If B053 is ported, allowlist the placeholder and host-path tokens or
-   write them as `<entity>_model.go`, which the checker skips.
-5. Test: B053's checker, wired into `bin/300` or the ticket skill.
-
-#### Open question for Brandon
-
-None.
-
 ### B092 — Wrong old password on "change my password" signs the user out
 - **Priority:** P2  **Area:** go-api, web-app
 - **GRC:** not checked   **PROTO:** `src/api-srv/internal/handler/auth_handler.go` `ChangeOwnPasswordHandler` ("Old password is incorrect", 401); `src/web-app/stores/auth-store.ts` (the change-password call, not `anonymous`)
@@ -9010,3 +8949,65 @@ GRC's `.gitignore` has `tmp/` at `:6` with no script-name comment.
 
 None.
 - **Completed:** 2026-10-03. Already done by earlier items; doc move only, no file change. (1) The cut-off "It intentionally omits" sentence and (2) the empty `# --- logging / KV ---` header were fixed in B016 (see its note) and the example file was then replaced by `etc/uat-api-srv.env.template` in B027 (checked: complete header, no logging section, no dangling header; no `*.example` left under `etc/`). (3) `.gitignore` now reads "Logs (bin/300-run-tests writes its own under tmp/, ignored above)" over `logs/` and `*.log`, fixed by B041 (checked). Tree grep for `intentionally omits`, `logging / KV` and `200-run-tests` finds only doc/700. Tests: all green, infra=15 docs=705 go=708 unit=105 e2e=70 py=103
+
+### B090 — COMPLETED — Doc paths that do not exist
+
+- **Priority:** P3  **Area:** docs
+- **GRC:** `infra/sql/grc-host-db.sql:1-43` (fixes the doc/330 case)   **PROTO:** `doc/330-presales-to-postsales-migration.md:37,131` (`sql/ddl-role-host-setup.sql`); `doc/810-create-new-entity-type-notes.md:20,30,51,55,61`; `doc/340-db-host-setup.md:13,21`
+- **Ticket:** none
+- **What:** B053's linter: 35 of 207 tokens missing; doc/330's SQL file never
+existed.
+- **Port notes:** doc/330 via B026; rest by hand or B053.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Docs bug: some backticked paths in `doc/` name files not in the repo.
+GRC's RG0011 checker (B053), run read-only against PROTO with PROTO's
+package roots and `doc/700` excluded, reports 34 misses in 6 documents
+(the item's "35 of 207 in 16 docs" was another run). Most are not defects.
+
+**Real, doc/330.** `doc/330-presales-to-postsales-migration.md:37` lists
+`sql/ddl-role-host-setup.sql` as the post-sales DB setup; `:131` sends the
+reader to its header for why `REASSIGN OWNED` fails. The item says the
+file "never existed"; wrong. PS0001 (`e6aeb0e`) added it and PS0015
+(`0981ddb`, "doc/340-db-host-setup.md replaces the commented-out SQL
+file") deleted it. doc/330 was not updated, so an operator moving a host
+to post-sales hits a dead pointer at the database-ownership step.
+
+**Real, trivial.** `doc/810-create-new-entity-type-notes.md:20` names
+`user-group-edit-page.tsx`; the file is `app-user-group-edit-page.tsx`.
+
+**Not defects (the item overstates):** `doc/810:30` resolves under
+`src/api-srv/sql/`. `doc/810:51,55,61` (`entity_model.go` etc.) are
+deliberate placeholders. `doc/340-db-host-setup.md:13`
+(`etc/uat-proto-test.env`) is a host path whose source is
+`infra/uat/etc/uat-proto-test.env`; `:21` (`000-roles.sql`) is the name
+`bin/600-bundle-uat:97` gives `roles.sql` in the bundle. doc/320/330's
+`deploy.sh`, `db.sql` and `etc/api-srv.env` are bundle or host files.
+`doc/050:35` names "the old `sql/010-initialcreate.sql`" on purpose.
+
+#### What GRC changed
+
+GRC replaced the pointer with a real file: `infra/sql/grc-host-db.sql:1-12`
+is an idempotent, superuser-run host setup creating ddl/app/ci roles
+"(ProtoStack PS0015's model)", called from GRC's doc/330 at `:74` and
+`:153`. RG0011 added the checker. No other tests.
+
+#### Proposed fix for PROTO
+
+1. `doc/330:37`: replace the SQL path with `doc/340-db-host-setup.md`.
+2. `doc/330:131`: explain the `REASSIGN OWNED` refusal inline or point at
+   doc/340. If B026 (runbooks, `infra/sql`) is ported, point at its host
+   SQL file instead, in B026's change; do not copy GRC's role names.
+3. `doc/810:20`: `app-user-group-edit-page.tsx`.
+4. If B053 is ported, allowlist the placeholder and host-path tokens or
+   write them as `<entity>_model.go`, which the checker skips.
+5. Test: B053's checker, wired into `bin/300` or the ticket skill.
+
+#### Open question for Brandon
+
+None.
+- **Completed:** 2026-10-03. Mostly done earlier; one real fix here. doc/330 (the `sql/ddl-role-host-setup.sql` pointers; B026 `e063d88`), doc/810:20 (`app-user-group-edit-page.tsx`; B053 `f017833`) and doc/340 were fixed by earlier items; B053's `docs` gate now fails on any backticked path that does not resolve (705 tokens, all resolve), which is the item's test. Added because the item names doc/810: its grant-numbering text said READ is xx0/CREATE xx1; `grants.go` has Example READ 1001/CREATE 1002/UPDATE 1003/DELETE 1004 and user groups 9010-9013 (User is the older 9001 CREATE, 9002 READ order). `doc/810` now says: next free block, Read, Create, Update, Delete in order from the first number N, and the step 4 line reads `N`, `N+1`, `N+2`, `N+3`. No code, no test. Tests: all green, infra=15 docs=705 go=708 unit=105 e2e=70 py=103

@@ -6,7 +6,7 @@ This document outlines the steps and key points for creating a new entity type i
 - Follow naming conventions: snake_case for DB/JSON, camelCase for TS/Go fields.
 - Use optimistic locking with `update_ts`.
 - Soft deletes: Set `delete_ts` instead of hard delete.
-- Grants: Create entity-specific grants in grants.go starting at appropriate numbers (e.g., 1001+ for typical new entities, 9000+ for user/security groups. each new entity should start with ###0 for READ, ###1 for CREATE, ###2 UPDATE, ###3 for DELETE so that the 10s place groups them together with room in between for additional grants). Use CRUD verbs: Read, Create, Update, Delete.
+- Grants: Create entity-specific grants in grants.go starting at appropriate numbers (e.g., 1001+ for typical new entities, 9000+ for user/security groups. a new entity takes the next free block of ten and numbers Read, Create, Update, Delete in that order from its first number N, as `Example` does (READ 1001, CREATE 1002, UPDATE 1003, DELETE 1004) and user groups do (9010-9013); `User` (9001 CREATE, 9002 READ, 9003 UPDATE, 9004 DELETE) is the older order, not the pattern. The rest of the block is room for extra grants). Use CRUD verbs: Read, Create, Update, Delete.
 - Separate list and edit pages for better UX and navigation.
  - **CRITICAL**: Always use query string parameters with entity-specific names (e.g., `?appUserId=123`, `?appUserGroupId=456`, `?exampleId=789`) for edit and delete operations instead of path parameters (e.g., `/entity/123`) to maintain URL flexibility and avoid changing route patterns. This ensures consistency and prevents routing issues. Do not use generic names like `?entityId=`; always use the specific entity name followed by `Id`.
 - **Configuration**: Do not supply default values in config parsing code. All required configuration values must be explicitly set in the environment file to ensure correct setup and easier troubleshooting. Defaults can mask configuration issues.
@@ -76,7 +76,7 @@ This document outlines the steps and key points for creating a new entity type i
    - Example: `ExampleHandler` in `example_handler.go`.
 
 4. **Grants** (`src/api-srv/internal/model/grants.go`):
-   - Add constants: `GrantEntityRead = 1xx0`, `GrantEntityCreate = 1xx1`, `GrantEntityUpdate = 1xx2`, `GrantEntityDelete = 1xx3`.
+   - Add constants: `GrantEntityRead = N`, `GrantEntityCreate = N+1`, `GrantEntityUpdate = N+2`, `GrantEntityDelete = N+3` (N is the block's first number, 1001 for `Example`).
    - Update `AllKnownGrants` and `GrantIDToShortCodeMap`.
    - Run `bin/305-update-grants-fixture` and add the same ids to
      `src/web-app/constants/grants.ts`; `src/web-app/tests/contract.test.ts`
