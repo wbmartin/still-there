@@ -6,6 +6,7 @@ import requests
 import time
 import warnings
 import urllib3
+import uuid
 from typing import Dict, Optional, List, Tuple
 from urllib.parse import urlparse
 
@@ -267,6 +268,66 @@ class TestClient:
             if cleaned > 0:
                 print(f"Cleaned up {cleaned} test users")
             self.created_users.clear()
+
+
+# A /changeOwnPassword body for the CSRF cases. The route is core (LOGON
+# only) and checks CSRF before it reads the body, so the cases survive a
+# derived app deleting the /example scaffold; "x" is never the password, so
+# a request that got past CSRF would still change nothing.
+CHANGE_PASSWORD_PROBE = {"currentPassword": "x", "newPassword": "y"}
+
+
+def assert_csrf_refused(response, message: str) -> None:
+    """403 from the CSRF check itself, not some other refusal."""
+    assert response.status_code == 403, response.text
+    assert response.json() == {"error": message, "code": "CSRF"}
+
+
+BASIC_USER_GROUP_ID = 1  # seed group in TEST_TENANT; carries LOGON
+
+
+def create_throwaway_login(
+    admin_client: TestClient, prefix: str
+) -> Tuple[TestClient, Dict]:
+    """A new MFA-exempt Basic User login, signed in: (client, created row).
+
+    For a test that edits the row it signs in as, or spends that login's
+    rate-limit bucket, so no shared fixture user is ever left changed or
+    throttled. Pair with delete_user.
+    """
+    user_name = f"{prefix}{uuid.uuid4().hex[:12]}"
+    password = f"Tmp-{uuid.uuid4().hex[:12]}!"
+    response = admin_client.make_request("POST", "/user", json={
+        "userName": user_name,
+        "firstName": "Throwaway",
+        "lastName": "Login",
+        "email": f"{user_name}@example.com",
+        "password": password,
+        "mfaExempt": True,
+        "appUserGroupMembershipList": [BASIC_USER_GROUP_ID],
+    })
+    assert response.status_code == 201, response.text[:300]
+    created = response.json()["data"]
+    client = TestClient(admin_client.base_url)
+    try:
+        client.authenticate(user_name, password)
+    except Exception:
+        delete_user(admin_client, created["appUserId"])
+        raise
+    return client, created
+
+
+def delete_user(admin_client: TestClient, app_user_id: int) -> None:
+    """Delete a user at its current updateTs (the admin is never throttled)."""
+    rows = admin_client.make_request(
+        "GET", "/userList", params={"appUserIdList": str(app_user_id)}
+    ).json()["data"]
+    if rows:
+        response = admin_client.make_request("DELETE", "/user", params={
+            "appUserId": str(app_user_id),
+            "updateTs": f"{rows[0]['updateTs']:.7f}",
+        })
+        assert response.status_code == 200, response.text[:300]
 
 
 @pytest.fixture(scope="class")

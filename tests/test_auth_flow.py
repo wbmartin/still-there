@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 import statistics
 import time
@@ -34,32 +36,33 @@ class TestAuthentication:
         with pytest.raises(requests.HTTPError):
             client.authenticate("invalid", "invalid")
 
+    # CSRF cases post CHANGE_PASSWORD_PROBE (conftest.py) to a core route.
     def test_csrf_protection(self, test_client):
         """Test that CSRF protection is working"""
         # Try request without CSRF token
         response = test_client.session.post(
-            f"{test_client.base_url}/example",
-            json={"exampleText": "Test"},
+            f"{test_client.base_url}/changeOwnPassword",
+            json=CHANGE_PASSWORD_PROBE,
         )
-        assert response.status_code == 403  # Should be forbidden
+        assert_csrf_refused(response, "Missing CSRF token")
 
         # Try request with invalid CSRF token
         response = test_client.session.post(
-            f"{test_client.base_url}/example",
-            json={"exampleText": "Test"},
+            f"{test_client.base_url}/changeOwnPassword",
+            json=CHANGE_PASSWORD_PROBE,
             headers={"X-CSRF-Token": "invalid"},
         )
-        assert response.status_code == 403
+        assert_csrf_refused(response, "CSRF validation failed")
 
     def test_authenticated_request_without_csrf(self, test_client):
         """Test that authenticated requests still need CSRF for state changes"""
         # This should fail even with valid JWT because CSRF is required for POST
         response = test_client.session.post(
-            f"{test_client.base_url}/example",
-            json={"exampleText": "Test"},
+            f"{test_client.base_url}/changeOwnPassword",
+            json=CHANGE_PASSWORD_PROBE,
             cookies={"auth": test_client.jwt_token},
         )
-        assert response.status_code == 403
+        assert_csrf_refused(response, "Missing CSRF token")
 
     def test_get_request_no_csrf_needed(self, test_client):
         """Test that GET requests don't require CSRF tokens"""
@@ -90,6 +93,35 @@ class TestAuthentication:
         with pytest.raises(requests.HTTPError):
             response = client.session.post(f"{client.base_url}/auth", json={})
             response.raise_for_status()
+
+    def test_user_name_bounds_answer_like_bad_credentials(self):
+        """An empty or over-50-character userName is the same 401 as a wrong
+        password (app_user.user_name is VARCHAR(50)), refused before any
+        lookup; 50 characters is still looked up."""
+        base_url = os.environ["TEST_BASE_URL"]
+        bad_password = _login(
+            base_url, new_forwarded_ip(), _unknown_name(), "admin123!"
+        )
+        assert bad_password.status_code == 401, bad_password.text
+        assert bad_password.json() == {"error": "Invalid credentials"}
+        for user_name in ("", "a" * 51, "a" * 300, "b" * 50):
+            response = _login(
+                base_url, new_forwarded_ip(), user_name, "admin123!"
+            )
+            assert response.status_code == 401, (len(user_name), response.text)
+            assert response.text == bad_password.text, len(user_name)
+
+    def test_jwt_issuer_is_the_app_name_without_quotes(self):
+        """iss is APP_NAME as the config parser reads it: no quotes."""
+        client = TestClient(os.environ["TEST_BASE_URL"])
+        client.authenticate("admin", "admin123!")
+        assert client.jwt_token is not None
+        payload_segment = client.jwt_token.split(".")[1]
+        padding = "=" * (-len(payload_segment) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload_segment + padding))
+        assert claims["iss"] == api_env()["APP_NAME"], claims["iss"]
+        assert '"' not in claims["iss"] and "'" not in claims["iss"]
+        assert claims["sub"] == "admin"
 
     def test_health_check(self):
         """Test that health endpoint works without authentication"""
@@ -345,8 +377,11 @@ class TestSessionCookie:
 
 # Import TestClient for use in this module
 from conftest import (
+    CHANGE_PASSWORD_PROBE,
     TEST_TENANT,
     TestClient,
+    api_env,
+    assert_csrf_refused,
     failed_login_threshold,
     forwarded_for,
     new_forwarded_ip,

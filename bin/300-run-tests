@@ -258,12 +258,13 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     API_LOG="$LOG_DIR/py-api.log"
     # The e2e config lifts the rate limits so Playwright's page-load bursts
     # cannot fail the suite. The pytest suite asserts the opposite --
-    # tests/test_z_error_scenarios.py drives a non-exempt user past the limit
-    # and expects a 429 -- and is written against the developer values in
-    # etc/loc-api-srv.env. So this instance runs on a COPY of the e2e config
-    # with just those two keys taken from the developer file, and
-    # TRUSTED_PROXY_COUNT=1 so pytest plays the proxy: a lockout case sends
-    # its own X-Forwarded-For and never locks the shared loopback address.
+    # tests/test_z_error_scenarios.py drives a non-exempt login past the
+    # limit it reads from TEST_API_ENV and expects a 429 -- which needs a
+    # limit a burst reaches in seconds. So this instance runs on a COPY of
+    # the e2e config with just those two keys taken from the developer
+    # file, and TRUSTED_PROXY_COUNT=1 so pytest plays the proxy: a lockout
+    # case sends its own X-Forwarded-For and never locks the shared loopback
+    # address.
     # Safe because this instance binds 127.0.0.1 and serves a scratch DB.
     PY_API_ENV="$LOG_DIR/py-api-srv.env"
     DEV_ENV="$PROJECT_ROOT/etc/loc-api-srv.env"

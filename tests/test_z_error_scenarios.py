@@ -16,7 +16,7 @@ class TestErrorScenarios:
         # Set invalid auth cookie directly in session
         test_client.session.cookies.set("auth", "invalid.jwt.token", path="/")
 
-        response = test_client.make_request("GET", "/example", params={"exampleId": 1})
+        response = test_client.make_request("GET", "/me")
         assert response.status_code == 401
 
         # Restore original JWT token for subsequent tests
@@ -24,33 +24,30 @@ class TestErrorScenarios:
         if original_jwt:
             test_client.session.cookies.set("auth", original_jwt, path="/")
 
+    # CSRF cases post CHANGE_PASSWORD_PROBE (conftest.py) to a core route.
     def test_missing_csrf_token_returns_403(self, test_client):
         """Test that POST/PUT/DELETE requests without CSRF token return 403"""
-        # Temporarily remove CSRF token
         original_csrf = test_client.csrf_token
         test_client.csrf_token = None
-
-        response = test_client.make_request(
-            "POST", "/example", json={"exampleText": "Test"}
-        )
-        assert response.status_code == 403
-
-        # Restore CSRF token
-        test_client.csrf_token = original_csrf
+        try:
+            response = test_client.make_request(
+                "POST", "/changeOwnPassword", json=CHANGE_PASSWORD_PROBE
+            )
+        finally:
+            test_client.csrf_token = original_csrf
+        assert_csrf_refused(response, "Missing CSRF token")
 
     def test_invalid_csrf_token_returns_403(self, test_client):
         """Test that invalid CSRF tokens return 403"""
-        # Set invalid CSRF token
         original_csrf = test_client.csrf_token
         test_client.csrf_token = "invalid-csrf-token"
-
-        response = test_client.make_request(
-            "POST", "/example", json={"exampleText": "Test"}
-        )
-        assert response.status_code == 403
-
-        # Restore CSRF token
-        test_client.csrf_token = original_csrf
+        try:
+            response = test_client.make_request(
+                "POST", "/changeOwnPassword", json=CHANGE_PASSWORD_PROBE
+            )
+        finally:
+            test_client.csrf_token = original_csrf
+        assert_csrf_refused(response, "CSRF validation failed")
 
     def test_optimistic_locking_conflict_returns_409(self, test_client):
         """Test that concurrent updates with stale timestamps return 409"""
@@ -178,24 +175,40 @@ class TestErrorScenarios:
         # Should return 409 for conflict or succeed if timestamps are handled differently
         assert response.status_code in [200, 409]
 
-    def test_rate_limiting_returns_429(self, basic_user_client):
-        """Test that exceeding rate limits returns 429 for basic users (not exempt)"""
-        # Test authenticated user rate limiting (limit: 200 per minute)
-        # Use an authenticated endpoint that goes through security checks
-        responses = []
-        for i in range(250):  # Exceed limit to trigger rate limiting
-            response = basic_user_client.make_request(
-                "GET", "/example", params={"exampleId": 999999}
-            )
-            responses.append(response.status_code)
-            if response.status_code == 429:
-                break
-            time.sleep(0.01)  # Small delay to avoid overwhelming
+    def test_rate_limiting_returns_429(self, test_client):
+        """A non-admin login gets exactly MAX_USER_REQ_PER_MIN requests in a
+        minute, then 429 (admin is exempt).
 
-        # At least one request should be rate limited
-        assert 429 in responses, (
-            f"Expected 429 in responses, got: {responses[:10]}... (showing first 10)"
-        )
+        The limit is read from the config the test API runs on, so raising
+        the dev value cannot break the test. The limiter counts per login
+        per clock minute (RPM*<user>*<minute>), so the burst starts with
+        enough of the minute left to finish in one bucket, sends with no
+        sleep, and runs as a throwaway login: its bucket starts empty and
+        nothing is left throttled when it is deleted.
+        """
+        limit = int(api_env()["MAX_USER_REQ_PER_MIN"])
+        client, created = create_throwaway_login(test_client, "ratelimit")
+        try:
+            seconds_left = 60 - time.time() % 60
+            if seconds_left < RATE_BURST_SECONDS:
+                time.sleep(seconds_left + 0.2)
+            started_minute = int(time.time() // 60)
+            status_list = []
+            for _ in range(limit + 1):
+                response = client.make_request("GET", "/me")
+                status_list.append(response.status_code)
+                if response.status_code == 429:
+                    break
+            assert int(time.time() // 60) == started_minute, (
+                "burst crossed a minute boundary; raise RATE_BURST_SECONDS"
+            )
+            assert status_list[:limit] == [200] * limit, (
+                f"non-200 before the limit: {sorted(set(status_list[:limit]))}"
+            )
+            assert status_list[limit:] == [429], status_list[limit:]
+            assert response.json() == {"error": "Rate limit exceeded"}
+        finally:
+            delete_user(test_client, created["appUserId"])
 
 
 # class TestAccountLockout:
@@ -218,4 +231,15 @@ class TestErrorScenarios:
 
 
 # Import TestClient for use in this module
-from conftest import TestClient
+from conftest import (
+    CHANGE_PASSWORD_PROBE,
+    TestClient,
+    api_env,
+    assert_csrf_refused,
+    create_throwaway_login,
+    delete_user,
+)
+
+# Seconds a rate-limit burst may take; started with less of the minute
+# left, the test waits for the next one.
+RATE_BURST_SECONDS = 20

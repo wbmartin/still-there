@@ -242,120 +242,6 @@ existing UAT host once by hand in the same ticket.
 
 # P2: template quality, DX, docs
 
-### B043 — pytest: core tests off `/example`; regression gates
-
-- **Priority:** P2  **Area:** tests
-- **GRC:** `tests/test_auth_flow.py:36-61,93-121,225-253`; `tests/test_z_error_scenarios.py:74-98`; `tests/test_security_context_isolation.py:295-421`; `tests/test_user_management.py:196-214,216-278,280-301,303-331`; `tests/test_own_profile.py:1-11,25-59,62-67,127-167,201-217,235-261`   **PROTO:** `tests/test_auth_flow.py:34-59,89`; `tests/test_z_error_scenarios.py:27-55,179-197`; `tests/test_security_context_isolation.py`; `tests/test_user_management.py:196`; `tests/test_own_profile.py:9-69`; `bin/300-run-tests:142-155`; `bin/300-run-tests:140-155`; `handler/app_user_group_handler.go:364`; `src/api-srv/internal/auth/jwt.go:44`; `auth_handler.go:25-26,158`
-- **Ticket:** `bab2d0d`; `7bceb6b`; RG0041 / `8e05f63`; RG0001 / `d2ad0c8`; RG0005 / `b6c0412`; RG0014 / `b3a1ea2`; RG0002 / `95c7e61`; RG0016 / `47fa7c4`
-- **What:** CSRF tests target `/changeOwnPassword`, surviving a derived app's
-scaffold deletion; rate-limit test reads the server limit and aligns to the
-minute. New gates that pass today: userName bounds, JWT `iss`, error classes,
-`totpSeed` absent, duplicate 409, own-profile on a throwaway login.
-- **Port notes:** Needs `api_env`/`db` (B018). GRC `/me` wraps `data.profile`;
-PROTO `data`. Keys per B038.
-- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
-
-**Expanded (2026-10-02).**
-
-#### What is wrong in PROTO today
-
-Quality gap in the pytest suite (`tests/`). Three things: core security
-tests hang off the scaffold entity, two tests are fragile, and several
-behaviours that hold today have no test to keep them holding.
-
-**(1) Core tests use `/example`.** The CSRF tests post to the scaffold
-route:
-
-```python
-# tests/test_auth_flow.py:37-40 (same at :44-48, :54-58)
-response = test_client.session.post(
-    f"{test_client.base_url}/example",
-    json={"exampleText": "Test", "securityContext": 1},
-```
-
-`tests/test_z_error_scenarios.py:33-35,47-49` and the rate-limit test
-(`:184-186`) do the same. A derived app deletes `/example` first. The
-CSRF tests then get 404 or 405 and fail, or get rewritten in a hurry, and
-the template's CSRF regression test is lost with the scaffold. None of
-them checks the error body, so any 403 passes.
-
-**(2) The rate-limit test is fragile.** It hardcodes the limit in a
-comment and sends `range(250)` with `time.sleep(0.01)`
-(`test_z_error_scenarios.py:181-191`). It only passes because
-`bin/300-run-tests:148-155` copies `MAX_USER_REQ_PER_MIN=200` from
-`etc/loc-api-srv.env:19` into the test API. Raise the dev limit above 250
-and it fails. The limiter buckets by clock minute
-(`src/api-srv/internal/security/app_helper.go:404-409`,
-`RPM*<user>*<minute>`); a burst that starts late in a minute splits
-across two buckets and may never see a 429.
-
-**(3) The own-profile test edits a shared fixture user.**
-`tests/test_own_profile.py:9-62` changes `basic`'s name, e-mail and
-preferences, then restores them at the end. A failed assert in between
-leaves `basic` modified for every later test. It also reads `/me` as
-`data` (`:13`).
-
-**(4) Behaviour that holds today but is unpinned:**
-- `/auth` refuses an empty or >50-char `userName` with the same 401
-  (`src/api-srv/internal/handler/auth_handler.go:25-26,158-160`).
-- JWT `iss` is `APP_NAME` without quotes (`auth/jwt.go:44`;
-  `config/config.go:55` strips quotes).
-- `/userList` never carries `totpSeed` (only Go pins it,
-  `handler/user_handler_test.go:840`).
-- Duplicate user name or group name answers 409, and deleting a group
-  with members answers 409 by string match
-  (`handler/app_user_group_handler.go:342`).
-- `DELETE /appUserGroup` returns the deleted id
-  (`handler/app_user_group_handler.go:364`).
-
-When B028 replaces string matching with sentinels, nothing over HTTP
-proves the status codes survived.
-
-#### What GRC changed
-
-- `bab2d0d` (scaffold removal) re-pointed CSRF tests at
-  `/changeOwnPassword` (`tests/test_auth_flow.py:36-61`). That route
-  needs only LOGON and runs CSRF before the body.
-- `7bceb6b` + RG0041 `8e05f63`: the rate test reads the limit with
-  `api_env("MAX_USER_REQ_PER_MIN")`, waits for a fresh minute, sends
-  `limit + 50` with no sleep, then waits out the minute
-  (`tests/test_z_error_scenarios.py:74-98`).
-- RG0001 `d2ad0c8`: userName bounds 0, 51, 300 are 401, and 50 is looked
-  up (`test_auth_flow.py:93-121`). RG0005 `b6c0412`: `iss` equals
-  `api_env("APP_NAME")`, no quotes (`:225-253`).
-- RG0014 `b3a1ea2`: duplicate, in-use and invalid-value keep 409/409/400
-  (`test_security_context_isolation.py:295-421`). RG0002 `95c7e61`:
-  deleted group id (`test_user_management.py:303-331`); plus `totpSeed`
-  absent (`:196-214`) and duplicate 409s (`:216-301`).
-- RG0016 `47fa7c4`: own-profile tests run on a throwaway login created
-  and deleted by a class fixture (`test_own_profile.py:1-67`).
-
-#### Proposed fix for PROTO
-
-1. CSRF tests in `test_auth_flow.py:34-59` and
-   `test_z_error_scenarios.py:27-53`: post to `/changeOwnPassword` with
-   `{"currentPassword": "x", "newPassword": "y"}`; also assert the error
-   text ("Missing CSRF token" / "CSRF validation failed").
-2. Rate test: read the limit from the test API's env (needs B018's
-   `api_env`), align to the minute, no sleep, wait out the minute after.
-   Target `/me` (LOGON only) instead of `/example`.
-3. Own profile: a class fixture that creates a throwaway user in the
-   Basic group, signs in, and deletes it after. Keep PROTO's `data`
-   shape for `/me`; GRC's `data.profile` is from its own `/me` change.
-4. New gates, each passing today: userName bounds; JWT `iss`
-   (`APP_NAME` from the test env); `totpSeed` absent from `/userList`;
-   duplicate user and group 409; group in use 409; deleted group id.
-5. Keys per B038 (`password`, `userIdList`). Leave out GRC's `grc`
-   fixture, `/controlList`, `invalid-value` 400 (needs B028's
-   `ErrInvalidValue`) and any 413 case (B011).
-
-Depends on B018 (`api_env`, tenant 2 users) and B038 (wire keys).
-Tests: pytest only; this item is the tests.
-
-#### Open question for Brandon
-
-None.
-
 ### B044 — tests/README.md rewrite
 
 - **Priority:** P2  **Area:** tests, docs
@@ -8906,3 +8792,118 @@ Tests: Go unit test for the env-key reader; a smoke run with
 Should `bin/330` start its own private API like `bin/300 py`, or require
 one already running on 8082? Recommend: start its own, so a load run can
 never hit the dev database by accident.
+
+### B043 — COMPLETED — pytest: core tests off `/example`; regression gates
+- **Completed:** 2026-10-03. Pulled per the recommendation (no Brandon line). (1) CSRF cases in `test_auth_flow.py` and `test_z_error_scenarios.py` post `CHANGE_PASSWORD_PROBE` to `/changeOwnPassword` and assert the whole refusal body via `assert_csrf_refused` (403, `{"error": "Missing CSRF token" | "CSRF validation failed", "code": "CSRF"}`); the invalid-JWT 401 case moved from `GET /example` to `GET /me` too, and the CSRF cases restore the token in `finally`. (2) Rate test reads `MAX_USER_REQ_PER_MIN` via `api_env()`, waits for the next clock minute only when under 20 s of it remain, bursts `/me` with no sleep and asserts exactly `limit` 200s then one 429 ("Rate limit exceeded"), failing loudly if the burst crossed a minute. Deviation: it runs as a throwaway Basic User login deleted after (admin is exempt), not `basic`, so its bucket starts empty and nothing is left throttled: no wait-out-the-minute sleep (GRC sleeps up to 2 min). (3) `test_own_profile.py` round trip runs on a class-scoped throwaway login (`own_login`); PROTO's `/me` `data` shape kept. The switcher context-switch test still edits and restores the seeded `switcher` (it needs a two-tenant login; not in this item). New conftest helpers `create_throwaway_login` / `delete_user`, `BASIC_USER_GROUP_ID`. (4) New gates, all passing on first run: userName bounds ("", 51, 300 refused; 50 looked up; body identical to a wrong password, each from its own forwarded IP); JWT `iss` == `api_env()["APP_NAME"]`, no quotes; no `totpSeed` in `/userList` (`mfaSetup`/`mfaExempt` present); duplicate user name 409 on create and rename; duplicate group name 409; group in use 409 with the count message, then after `/removeUserListFromGroup` (B038 keys `userIdList`/`appUserGroupId`) the delete returns `userGroupId` == the id. Each cleans up in `finally`. Left out per step 5: `grc` fixture, `/controlList`, invalid-value 400, 413. `bin/300` py comment and `tests/README.md` (helpers, rate case, CSRF probe, file list incl. the missing `test_own_profile.py`) updated; full rewrite stays B044. Tests: all green, govulncheck clean, `gofmt -l` empty: go=687 unit=82 e2e=13 py=102 (py +6: the new gates).
+
+- **Priority:** P2  **Area:** tests
+- **GRC:** `tests/test_auth_flow.py:36-61,93-121,225-253`; `tests/test_z_error_scenarios.py:74-98`; `tests/test_security_context_isolation.py:295-421`; `tests/test_user_management.py:196-214,216-278,280-301,303-331`; `tests/test_own_profile.py:1-11,25-59,62-67,127-167,201-217,235-261`   **PROTO:** `tests/test_auth_flow.py:34-59,89`; `tests/test_z_error_scenarios.py:27-55,179-197`; `tests/test_security_context_isolation.py`; `tests/test_user_management.py:196`; `tests/test_own_profile.py:9-69`; `bin/300-run-tests:142-155`; `bin/300-run-tests:140-155`; `handler/app_user_group_handler.go:364`; `src/api-srv/internal/auth/jwt.go:44`; `auth_handler.go:25-26,158`
+- **Ticket:** `bab2d0d`; `7bceb6b`; RG0041 / `8e05f63`; RG0001 / `d2ad0c8`; RG0005 / `b6c0412`; RG0014 / `b3a1ea2`; RG0002 / `95c7e61`; RG0016 / `47fa7c4`
+- **What:** CSRF tests target `/changeOwnPassword`, surviving a derived app's
+scaffold deletion; rate-limit test reads the server limit and aligns to the
+minute. New gates that pass today: userName bounds, JWT `iss`, error classes,
+`totpSeed` absent, duplicate 409, own-profile on a throwaway login.
+- **Port notes:** Needs `api_env`/`db` (B018). GRC `/me` wraps `data.profile`;
+PROTO `data`. Keys per B038.
+- **Decision:** \[X\] pull / \[ \] adapt / \[ \] skip  (per recommendation, 2026-10-02)
+
+**Expanded (2026-10-02).**
+
+#### What is wrong in PROTO today
+
+Quality gap in the pytest suite (`tests/`). Three things: core security
+tests hang off the scaffold entity, two tests are fragile, and several
+behaviours that hold today have no test to keep them holding.
+
+**(1) Core tests use `/example`.** The CSRF tests post to the scaffold
+route:
+
+```python
+# tests/test_auth_flow.py:37-40 (same at :44-48, :54-58)
+response = test_client.session.post(
+    f"{test_client.base_url}/example",
+    json={"exampleText": "Test", "securityContext": 1},
+```
+
+`tests/test_z_error_scenarios.py:33-35,47-49` and the rate-limit test
+(`:184-186`) do the same. A derived app deletes `/example` first. The
+CSRF tests then get 404 or 405 and fail, or get rewritten in a hurry, and
+the template's CSRF regression test is lost with the scaffold. None of
+them checks the error body, so any 403 passes.
+
+**(2) The rate-limit test is fragile.** It hardcodes the limit in a
+comment and sends `range(250)` with `time.sleep(0.01)`
+(`test_z_error_scenarios.py:181-191`). It only passes because
+`bin/300-run-tests:148-155` copies `MAX_USER_REQ_PER_MIN=200` from
+`etc/loc-api-srv.env:19` into the test API. Raise the dev limit above 250
+and it fails. The limiter buckets by clock minute
+(`src/api-srv/internal/security/app_helper.go:404-409`,
+`RPM*<user>*<minute>`); a burst that starts late in a minute splits
+across two buckets and may never see a 429.
+
+**(3) The own-profile test edits a shared fixture user.**
+`tests/test_own_profile.py:9-62` changes `basic`'s name, e-mail and
+preferences, then restores them at the end. A failed assert in between
+leaves `basic` modified for every later test. It also reads `/me` as
+`data` (`:13`).
+
+**(4) Behaviour that holds today but is unpinned:**
+- `/auth` refuses an empty or >50-char `userName` with the same 401
+  (`src/api-srv/internal/handler/auth_handler.go:25-26,158-160`).
+- JWT `iss` is `APP_NAME` without quotes (`auth/jwt.go:44`;
+  `config/config.go:55` strips quotes).
+- `/userList` never carries `totpSeed` (only Go pins it,
+  `handler/user_handler_test.go:840`).
+- Duplicate user name or group name answers 409, and deleting a group
+  with members answers 409 by string match
+  (`handler/app_user_group_handler.go:342`).
+- `DELETE /appUserGroup` returns the deleted id
+  (`handler/app_user_group_handler.go:364`).
+
+When B028 replaces string matching with sentinels, nothing over HTTP
+proves the status codes survived.
+
+#### What GRC changed
+
+- `bab2d0d` (scaffold removal) re-pointed CSRF tests at
+  `/changeOwnPassword` (`tests/test_auth_flow.py:36-61`). That route
+  needs only LOGON and runs CSRF before the body.
+- `7bceb6b` + RG0041 `8e05f63`: the rate test reads the limit with
+  `api_env("MAX_USER_REQ_PER_MIN")`, waits for a fresh minute, sends
+  `limit + 50` with no sleep, then waits out the minute
+  (`tests/test_z_error_scenarios.py:74-98`).
+- RG0001 `d2ad0c8`: userName bounds 0, 51, 300 are 401, and 50 is looked
+  up (`test_auth_flow.py:93-121`). RG0005 `b6c0412`: `iss` equals
+  `api_env("APP_NAME")`, no quotes (`:225-253`).
+- RG0014 `b3a1ea2`: duplicate, in-use and invalid-value keep 409/409/400
+  (`test_security_context_isolation.py:295-421`). RG0002 `95c7e61`:
+  deleted group id (`test_user_management.py:303-331`); plus `totpSeed`
+  absent (`:196-214`) and duplicate 409s (`:216-301`).
+- RG0016 `47fa7c4`: own-profile tests run on a throwaway login created
+  and deleted by a class fixture (`test_own_profile.py:1-67`).
+
+#### Proposed fix for PROTO
+
+1. CSRF tests in `test_auth_flow.py:34-59` and
+   `test_z_error_scenarios.py:27-53`: post to `/changeOwnPassword` with
+   `{"currentPassword": "x", "newPassword": "y"}`; also assert the error
+   text ("Missing CSRF token" / "CSRF validation failed").
+2. Rate test: read the limit from the test API's env (needs B018's
+   `api_env`), align to the minute, no sleep, wait out the minute after.
+   Target `/me` (LOGON only) instead of `/example`.
+3. Own profile: a class fixture that creates a throwaway user in the
+   Basic group, signs in, and deletes it after. Keep PROTO's `data`
+   shape for `/me`; GRC's `data.profile` is from its own `/me` change.
+4. New gates, each passing today: userName bounds; JWT `iss`
+   (`APP_NAME` from the test env); `totpSeed` absent from `/userList`;
+   duplicate user and group 409; group in use 409; deleted group id.
+5. Keys per B038 (`password`, `userIdList`). Leave out GRC's `grc`
+   fixture, `/controlList`, `invalid-value` 400 (needs B028's
+   `ErrInvalidValue`) and any 413 case (B011).
+
+Depends on B018 (`api_env`, tenant 2 users) and B038 (wire keys).
+Tests: pytest only; this item is the tests.
+
+#### Open question for Brandon
+
+None.

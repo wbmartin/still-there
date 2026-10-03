@@ -60,6 +60,19 @@ also enrols and deletes its own throwaway user rather than locking the
 seeded `mfa` user, and tells the lockout 429 from the rate limiter's by the
 `error` message.
 
+A test that edits the row it signs in as, or spends a login's rate-limit
+bucket, makes its own login with `create_throwaway_login(test_client,
+prefix)` (a Basic User in tenant 2) and removes it with
+`delete_user(test_client, app_user_id)`, so no seeded user is ever left
+edited or throttled: the `/me` round trip and the rate-limit case do.
+The rate-limit case reads `MAX_USER_REQ_PER_MIN` from `TEST_API_ENV` and
+starts its burst with enough of the clock minute left (the limiter buckets
+per login per minute) to expect exactly that many 200s, then a 429.
+
+CSRF cases post `CHANGE_PASSWORD_PROBE` to `/changeOwnPassword` and check
+the refusal with `assert_csrf_refused`: a core route, so a derived app
+that deletes the `/example` scaffold keeps them.
+
 Tenants: the fixture logins live in `TEST_TENANT = 2`; seed groups 4 and 5
 in `OTHER_TENANT = 3`, the side the isolation tests aim at. Tenant 1 does
 not exist in a test database (`sql/fixtures/test-tenant-lock.sql`). Every
@@ -85,11 +98,14 @@ authenticates in one step. Fixtures:
 ## Test Files
 
 - `test_a_example_crud.py` — full lifecycle of example CRUD
-- `test_auth_flow.py` — authentication and CSRF token handling
+- `test_auth_flow.py` — authentication and CSRF token handling;
+  userName bounds; JWT `iss` is `APP_NAME`
 - `test_basic_user_authorization.py` — basic users denied admin-only ops
 - `test_bulk_operations.py` — bulk CRUD via `/exampleList`
 - `test_error_reporting.py` — `POST /error-report` takes a signed-in
   caller's report; no session → 401, no CSRF → 403
+- `test_own_profile.py` — GET/PUT `/me` on a throwaway login; the row
+  stays home after `/changeSecurityContext`
 - `test_security_context_isolation.py` — tenant 2 cannot use or probe
   tenant 3's groups; client-sent tenants are ignored
 - `test_session_revocation.py` — sign-out, an admin password change and a
@@ -99,7 +115,9 @@ authenticates in one step. Fixtures:
 - `test_user_invite.py` — invite links: an invited login cannot sign in;
   check, redeem (once) and sign in; reissue/revoke; one 404 for any dead
   link; 409 on an admin-set password; 403 without CREATE_USER or CSRF
-- `test_user_management.py` — user management operations (admin only)
+- `test_user_management.py` — user management operations (admin only);
+  no `totpSeed` in `/userList`; duplicate user and group names, and a
+  group still in use, are 409; a group delete returns its id
 - `test_z_error_scenarios.py` — error conditions and status codes
 - `test_zz_mfa_totp.py` — TOTP enrolment, sign-in, code and temp-token
   replay, admin reset, and the MFA lockout

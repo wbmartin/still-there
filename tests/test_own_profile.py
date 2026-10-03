@@ -3,24 +3,41 @@ import os
 import pytest
 import requests
 
-from conftest import OTHER_TENANT, TEST_TENANT, TestClient
+from conftest import (
+    OTHER_TENANT,
+    TEST_TENANT,
+    TestClient,
+    create_throwaway_login,
+    delete_user,
+)
+
+
+@pytest.fixture(scope="class")
+def own_login(test_client):
+    """A throwaway Basic User login for the class, deleted after it, so a
+    failed assert never leaves a shared fixture user edited."""
+    client, created = create_throwaway_login(test_client, "profile")
+    yield client, created
+    delete_user(test_client, created["appUserId"])
 
 
 class TestOwnProfile:
     """GET/PUT /me: a user reads and edits their own row and preferences,
     with LOGON only; the row is always the caller's, never one named in
-    the body. Restores the fixture user at the end."""
+    the body. Runs on a throwaway login (own_login)."""
 
-    def test_basic_user_profile_round_trip(self, basic_user_client):
-        client = basic_user_client
+    def test_profile_round_trip(self, own_login):
+        client, created = own_login
 
         response = client.make_request("GET", "/me")
         assert response.status_code == 200
         me = response.json()["data"]
-        assert me["userName"] == "basic"
+        assert me["appUserId"] == created["appUserId"]
+        assert me["userName"] == created["userName"]
+        assert me["securityContext"] == TEST_TENANT
         assert "pwHash" not in me and "totpSeed" not in me
         assert "password" not in me
-        assert "preferenceJsonb" not in me  # fixture user has never saved any
+        assert "preferenceJsonb" not in me  # a new login has saved none
         original = {k: me[k] for k in ("firstName", "lastName", "email")}
 
         # Update name, email and preferences; an appUserId in the body is
@@ -56,8 +73,8 @@ class TestOwnProfile:
             response = client.make_request("PUT", "/me", json=bad)
             assert response.status_code == 400, bad
 
-        # GET reflects the save; then put the fixture user back, clearing
-        # the preferences (absent → NULL → absent).
+        # GET reflects the save; a PUT without preferences clears them
+        # (absent → NULL → absent).
         response = client.make_request("GET", "/me")
         assert response.json()["data"]["preferenceJsonb"]["rowsPerPage"] == 25
         response = client.make_request(
