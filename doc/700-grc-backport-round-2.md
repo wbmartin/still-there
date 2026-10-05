@@ -122,6 +122,10 @@ The load-test script refuses a `--base-url` on its command line.
 `--base-url`, `-base-url` and `--env` in bin/330.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Adapted:
+bin/216 kills a pid on 5173 only if its argv is also this checkout's vite,
+so another checkout's dev vite on 5173 survives (GRC kills any listener);
+bin/330 also refuses `--env`/`-env` and runs the check before the DB rebuild.
 
 ### C013 — `.gitignore` and the tracker-secret rule
 

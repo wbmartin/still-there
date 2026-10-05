@@ -13,8 +13,9 @@
 # MFA-exempt user in the test tenant (2), so the per-user rate limiter runs
 # on every request (the admin login skips it). The load test reads the
 # password from the file itself (-env), never from argv, and refuses a login
-# outside tenant 2. The report and both binaries land under tmp/
-# (gitignored).
+# outside tenant 2. --base-url and --env are refused on the command line:
+# both come from the test env file. The report and both binaries land
+# under tmp/ (gitignored).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,6 +37,20 @@ case "$E2E_DB" in
 esac
 case "$E2E_API_ENV" in /*) ;; *) E2E_API_ENV="$PROJECT_ROOT/$E2E_API_ENV" ;; esac
 [ -r "$E2E_API_ENV" ] || { echo "[ERROR] e2e API env not readable: $E2E_API_ENV"; exit 1; }
+
+# The URL and the credentials file are this script's: they come from
+# $TEST_ENV (via E2E_API_ENV). Go's flag package keeps the last value, so a
+# --base-url or --env in "$@" would re-aim the load at another API (the
+# developer's on 8080); refuse them, in every spelling flag accepts.
+for arg in "$@"; do
+    case "$arg" in
+        --base-url|--base-url=*|-base-url|-base-url=*|--env|--env=*|-env|-env=*)
+            echo "[ERROR] $arg is not accepted: the API URL and env file"
+            echo "        come from $TEST_ENV (E2E_API_ENV=$E2E_API_ENV)"
+            exit 1 ;;
+    esac
+done
+
 env_value() { grep -E "^$1=" "$E2E_API_ENV" | head -1 | cut -d= -f2- | tr -d ' '; }
 API_BASE_URL="$(env_value TEST_BASE_URL)"
 LOAD_USER="$(env_value TEST_PERSONA_USER)"

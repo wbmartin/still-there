@@ -70,7 +70,8 @@ To stop the api server, `./bin/216-stop-local-stack` (below), or
 `kill $(cat tmp/api-srv/server.pid)` for a background run. `bin/215` (on
 restart) and `bin/216` match this checkout's binary plus config path, so
 another checkout's API and `bin/300`'s private instance on 8082 keep
-running; `bin/216` stops only this checkout's vite.
+running. `bin/216` stops only this checkout's vite listening on :5173, so
+Playwright's vite on :5182 (`bin/230`) survives.
 
 ## Local Stack
 
@@ -203,6 +204,9 @@ To load test the API (starts and stops its own private instance, like
   request). The binary takes `--user` and `--env <file>`, reads
   `TEST_PERSONA_PASSWORD` from the file (there is no `--password`; argv
   shows in `ps` and shell history), and refuses a login outside tenant 2.
+- The URL and the `--env` file are the script's own, from the test env
+  file: `bin/330` refuses `--base-url` and `--env` (any spelling) on its
+  command line, so the load cannot be re-aimed at the developer's 8080.
   Extra flags pass through (`--duration`, `--concurrency`, `--iterations`,
   `--output`).
 

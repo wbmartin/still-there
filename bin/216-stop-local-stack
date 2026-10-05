@@ -1,7 +1,9 @@
 #!/bin/bash
-# Stop the local stack: the API server (bin/215) and the vite dev server (bin/220).
-# Only this checkout's: another checkout's (or another project's) API and
-# vite keep running. pgrep -f patterns are extended regexes over the argv.
+# Stop the local stack: the API server (bin/215) and the vite dev server
+# (bin/220). Only this checkout's dev stack: another checkout's (or another
+# project's) API and vite keep running, and so does a test run -- bin/300's
+# private API on 8082 and Playwright's vite on 5182 (bin/230). pgrep -f
+# patterns are extended regexes over the argv.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -12,9 +14,24 @@ source "$PROJECT_ROOT/etc/app.env"
 API_PATTERN="$PROJECT_ROOT/dist/$APP_SLUG-api"
 API_PATTERN+=" $PROJECT_ROOT/etc/loc-api-srv.env"
 # npm run dev / npx vite run "node <web-app>/node_modules/.bin/vite [args]";
-# ( |$) so vitest (.bin/vitest) is spared. Playwright's vite on 5182 from
-# this checkout matches too.
+# ( |$) so vitest (.bin/vitest) is spared.
 VITE_PATTERN="$PROJECT_ROOT/src/web-app/node_modules/\.bin/vite( |$)"
+# The dev vite is the one listening on 5173: vite's default, which bin/220
+# and vite.config.ts leave alone, so this is the only place it is written.
+# Matching the pattern alone would also stop Playwright's vite on 5182.
+DEV_WEB_PORT=5173
+
+# This checkout's vite listening on DEV_WEB_PORT, one pid per line; nothing
+# when none is (lsof exits 1 on no match).
+dev_vite_pid_list() {
+    local pid
+    for pid in $(lsof -ti "tcp:$DEV_WEB_PORT" -sTCP:LISTEN 2>/dev/null \
+            || true); do
+        if ps -o args= -p "$pid" 2>/dev/null | grep -Eq "$VITE_PATTERN"; then
+            echo "$pid"
+        fi
+    done
+}
 
 KILLED=false
 if pkill -f "$API_PATTERN" 2>/dev/null; then
@@ -22,10 +39,14 @@ if pkill -f "$API_PATTERN" 2>/dev/null; then
 else
     echo "No $APP_SLUG-api running"
 fi
-if pkill -f "$VITE_PATTERN" 2>/dev/null; then
-    echo "Killed vite"; KILLED=true
+DEV_VITE_PID_LIST="$(dev_vite_pid_list)"
+if [ -n "$DEV_VITE_PID_LIST" ]; then
+    # shellcheck disable=SC2086 # one pid per word
+    kill -TERM $DEV_VITE_PID_LIST 2>/dev/null || true
+    echo "Killed vite on :$DEV_WEB_PORT ($(echo $DEV_VITE_PID_LIST))"
+    KILLED=true
 else
-    echo "No vite running"
+    echo "No vite on :$DEV_WEB_PORT from this checkout"
 fi
 
 if [ "$KILLED" = true ]; then sleep 2; fi
