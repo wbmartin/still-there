@@ -756,6 +756,15 @@ func TestDeleteUser(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 		})
 	}
+
+	t.Run("own login (alice, 7) → 400, repository untouched",
+		func(t *testing.T) {
+			repo := new(MockUserRepository)
+			w := deleteUser(t, repo, "/user?appUserId=7&updateTs=12.5")
+			assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), "your own login")
+			assert.Empty(t, repo.Calls, "no repository call, no delete")
+		})
 }
 
 func TestRetrieveUserList(t *testing.T) {

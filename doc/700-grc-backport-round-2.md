@@ -233,6 +233,9 @@ admin can delete themselves.
 the user's own row in the web app.
 - **Size:** S
 - **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
+  optional web change was taken: Delete is hidden on the caller's own
+  login (list row and edit page), matched by user name as Block is.
 
 # P2: infra and operations
 

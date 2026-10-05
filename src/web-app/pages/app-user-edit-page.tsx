@@ -566,7 +566,7 @@ function UserEditPage() {
                {isBlocked ? "Unblock" : "Block"}
              </Button>
            )}
-           {!isNew && (
+           {!isNew && form.values.userName !== ownUserName && (
              <Button color="red" onClick={handleDeleteClick}>
                Delete
              </Button>

@@ -119,7 +119,7 @@ is the login lockout instead. **CSRF** `CheckCSRF` (never on GET).
 | GET | /userList | Yes | user+block | (GET) | READ_USER (9002) | Logins of the caller's tenant |
 | POST | /user | Yes | user+block | Yes | CREATE_USER (9001) | Create a login with a password |
 | PUT | /user | Yes | user+block | Yes | UPDATE_USER (9003) | Update a login |
-| DELETE | /user | Yes | user+block | Yes | DELETE_USER (9004) | Soft delete a login |
+| DELETE | /user | Yes | user+block | Yes | DELETE_USER (9004) | Soft delete a login (400 for the caller's own) |
 | POST | /changeOtherUserPassword | Yes | user+block | Yes | CHANGE_USER_PW (9009) | Set another login's password |
 | POST | /addUserListToGroup | Yes | user+block | Yes | UPDATE_USER_GROUP (9012) | Add logins to a group |
 | POST | /removeUserListFromGroup | Yes | user+block | Yes | UPDATE_USER_GROUP (9012) | Remove logins from a group |

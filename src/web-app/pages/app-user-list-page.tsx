@@ -13,6 +13,7 @@ import {
 } from "@mantine/core";
 import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
+import { useAuthStore } from "../stores/auth-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { useRowsPerPage } from "../hooks/use-preference";
 import { confirmDelete } from "../utils/confirm-delete";
@@ -25,6 +26,8 @@ import { reportError } from "../utils/report-error";
 
 function UserAdminPage() {
   const authState = useAuthGuard([grants.READ_USER]);
+  // The server refuses deleting one's own login (DEL_SELF); hide the button.
+  const ownUserName = useAuthStore((state) => state.userName);
   const {
     itemList: userList,
     loading,
@@ -239,15 +242,17 @@ function UserAdminPage() {
                   >
                     Edit
                   </Button>
-                  <Button
-                    size="xs"
-                    color="red"
-                    onClick={() => {
-                      handleDeleteClick(user.appUserId);
-                    }}
-                  >
-                    Delete
-                  </Button>
+                  {user.userName !== ownUserName && (
+                    <Button
+                      size="xs"
+                      color="red"
+                      onClick={() => {
+                        handleDeleteClick(user.appUserId);
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  )}
                 </Group>
               </Table.Td>
             </Table.Tr>

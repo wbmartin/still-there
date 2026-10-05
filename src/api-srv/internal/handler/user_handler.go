@@ -651,6 +651,14 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf("DeleteUser for userId=%d", userID),
 	)
 
+	// No admin deletes their own login, as none blocks it (BLK_SELF): the
+	// last admin could otherwise leave a tenant with nobody to manage users.
+	if userID == jwtClaims.UserID {
+		appHelper.WriteError(w, http.StatusBadRequest,
+			"You cannot delete your own login", "DEL_SELF", nil)
+		return
+	}
+
 	updateTS, err := GetFloatFromQuery(r, "updateTs")
 	if err != nil {
 		appHelper.WriteError(w, http.StatusBadRequest, err.Error(), "PRQ0", nil)
