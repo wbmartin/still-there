@@ -92,6 +92,27 @@ floor is current, the list it walks is complete).
   (`git log` per file).
 - [ ] 0 `os.Getenv`/`os.LookupEnv` outside tests; config comes only from
   the flat `KEY=VALUE` file.
+- [ ] Passwords hash with argon2id at the parameters in
+  `internal/auth/password.go`; every secret compare (password hash, TOTP
+  code) uses `subtle.ConstantTimeCompare`; 0 `math/rand` imports in
+  `src/api-srv`, so every token, salt and id comes from `crypto/rand`.
+- [ ] Invite tokens are stored hashed, never raw; the JWT parser refuses
+  any signing method but the one it issues (`internal/auth/jwt.go`).
+- [ ] Every `http.Cookie` the API sets is `HttpOnly`, `Secure` and
+  `SameSite=Strict`; CORS answers only an origin listed in
+  `CORS_ALLOWED_ORIGINS`, compared exactly (no wildcard, no suffix
+  match).
+- [ ] 0 SQL built from input: every value binds as `$N`; a
+  `fmt.Sprintf` or `+` in a query joins only constants and column names
+  written in code (`grep -rn 'Sprintf\|" +' internal/repository`, each
+  hit read).
+- [ ] 0 hard `DELETE` in app code (`grep -rni 'DELETE FROM'` over
+  non-test `.go` files); rows are soft-deleted through `delete_ts` and
+  `delete_user_id`.
+- [ ] Every handler reads its body through `decodeJSONBody` or
+  `readBody` (`internal/handler/common.go`), which cap it: 0
+  `json.NewDecoder(r.Body)` or `io.ReadAll(r.Body)` anywhere else, and
+  every public or login-layer write uses one of the small caps.
 - [ ] `gofmt`, `go vet`, `staticcheck`, `govulncheck` clean; every
   `//lint:ignore` has a reason that is still true. *(gate)*
 - [ ] Lists are `fooList`, never plurals (variables, functions, routes).
@@ -124,11 +145,32 @@ floor is current, the list it walks is complete).
   per-host value is inlined in a script. Shared host scripts are
   byte-identical across hosts. *(gate: `bin/300-run-tests infra`.)*
 - [ ] `etc/*.env` in git carry no real secret (local dev values only).
+- [ ] Env keys match the code: every key in an API env file
+  (`etc/*-api-srv.env*`, `infra/*/etc/*-api.env`) is one
+  `internal/config/config.go` reads, or a `TEST_*` key the test harness
+  reads; every key `config.go` requires is in each. A key nothing reads
+  is an M: the reader trusts it does something.
+- [ ] 0 passwords in argv: no password, or URL carrying one, is a
+  command-line argument (`psql`, `pg_dump`, `migrate -url`), where `ps`
+  and shell history show it; it travels in `PG*` variables or a
+  mode-600 file. Grep `bin/`, `infra/*/bin/` and the runbooks for those
+  tools and read where each URL comes from.
+- [ ] Every root paste block writes each variable set in an earlier
+  block as `${VAR:?}` inside every destructive or path-building command
+  that uses it (`rm`, `mv`, `cp`, `chown`, `chmod`, `mkdir`, `tar -C`,
+  `sed -i`), in the runbooks and `infra/README.md`. A `: "${VAR:?}"`
+  line on top does not count (`infra/README.md` "Release checklist"
+  says why).
+- [ ] 0 `curl | sh` (or `wget ... | bash`) in scripts, runbooks or docs.
 
 **Data and docs**
 
 - [ ] Customer data never in git: fixtures, seeds and `examples/` are
   synthetic; no export or file derived from one in any commit.
+- [ ] 0 exports or bundles left in `dist/` or `tmp/` (gitignored is not
+  gone): `find dist tmp -type f` for dumps, archives and spreadsheets.
+  The schema-only output the gate writes under `tmp/test-logs/` is not
+  an export.
 - [ ] Nothing fabricated reaches a screen, report or log: no placeholder
   counts, invented metrics or defaulted-in missing values.
 - [ ] Every backticked repo path in the docs exists.
@@ -136,6 +178,29 @@ floor is current, the list it walks is complete).
   `scripts/doc-paths-allow.txt` entries still have true reasons.)*
 - [ ] Docs describe the tree as it is (routes, env keys, scripts,
   skills); nothing names a removed feature as live.
+- [ ] Every `bin/` script has a row in `doc/902-project-commands.md`
+  (`for s in bin/*; do grep -q "^|.*${s#bin/}" doc/902-project-commands.md
+  || echo "$s"; done` prints nothing).
+- [ ] Every file in `doc/` is linked from the README doc index.
+- [ ] 0 undated counts in prose: a count of tests, routes, findings or
+  lines carries the date or commit it was taken at, or gives the command
+  that produces it.
+- [ ] Every paste block runs from where its lead-in says (host, user,
+  directory): its relative paths resolve from that directory, and a host
+  block does not assume a checkout.
+- [ ] A historical doc (a decision log, a finished plan, a superseded
+  runbook) says so in its header; every other doc reads as current.
+
+**Tasks**
+
+- [ ] Every finished item in `tasks/todo.md` §0 is checked off with a
+  reason and date, or removed; 0 done items still read as open.
+- [ ] 0 items carried as "unverified" across sessions: each is verified
+  or struck.
+- [ ] A plan doc's status matches the code, and every branch it cites
+  exists on origin (`git ls-remote --heads origin <branch>`).
+- [ ] The customer's people appear by person id, never by name, in
+  `tasks/`, docs and commit messages (`git log --all --format=%B`).
 
 ## Report
 
@@ -154,7 +219,11 @@ order. **A report without "Not covered" is incomplete.**
    scanned, 0 secrets"). This is what lets the next reviewer skip an area.
 4. **Not covered** — what was not read or could not be checked: live host
    state, files skipped, areas read only by grep sweep, anything a pass
-   ran out of time on.
+   ran out of time on. Name two kinds explicitly: generated files
+   (`doc/003-schema-reference.sql`, `model/testdata/grants.json`,
+   lockfiles), and whether each was read or only trusted to its
+   generator and gate; and docs historical by label, each named, with
+   whether it was read or skipped because of the label.
 5. **Suggested batches** — findings, by id, grouped into changes that
    can land independently (one area, one reviewer), H first.
 

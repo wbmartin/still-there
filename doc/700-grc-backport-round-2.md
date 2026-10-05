@@ -297,6 +297,9 @@ lines below.
   historical by label.
 - **Size:** S
 - **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; Tasks
+  is its own checklist group, the dist/tmp line sits under Data and
+  docs; the doc/902 row check is not yet in `bin/300-run-tests docs`.
 
 ### C019 — Handoff skill corrections
 
