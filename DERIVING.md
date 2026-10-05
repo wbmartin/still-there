@@ -92,6 +92,8 @@ every miss 404.
   sections carry over as they are.
 - `CLAUDE.md`: add a "Template lineage" section (the block in §8) before
   `DERIVING.md` goes; it is the only record of where the app came from.
+- An external tracker's URL, project ids and token live in a user-level
+  skill or a gitignored root env file, never in the repo.
 - `README.md`: title, first paragraph, and drop this file's mention if you
   do not want derivation instructions in the derived app. `DERIVING.md`
   itself can go.

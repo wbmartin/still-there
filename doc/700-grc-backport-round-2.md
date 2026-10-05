@@ -153,6 +153,9 @@ call".
   narrow `/*-token` pattern.
 - **Size:** S
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Ignores
+  root-only `/*-token`, not the exact name: the name is a derived app's,
+  and no tracked file matches.
 
 ### C014 — Retire `doc/310`: it copies a host's TLS private key to a laptop
 

@@ -26,9 +26,12 @@ password" answers 401, so the web signs the user out.
   done.
 - **Follow-up:** the switcher context-switch pytest still mutates the seeded
   `switcher` user (B043).
-- **Unknown file `radley-uat-builder-token`** appeared untracked in the repo
-  root during the B033 test run and then vanished. Never committed
-  (`git log --all -- radley-uat-builder-token` is empty). Check what wrote it.
+- **Closed (C013): unknown file `radley-uat-builder-token`**, seen
+  untracked in the repo root during the B033 run, then gone. Never
+  committed. Its name matches the radley-grc tracker's ("Radley House")
+  builder-agent token file, which GRC gitignored in d364daa/d202ac6, so
+  that tooling most likely wrote it while running in this checkout.
+  `.gitignore` now ignores `/*-token` at the root.
 
 ## Host work
 
