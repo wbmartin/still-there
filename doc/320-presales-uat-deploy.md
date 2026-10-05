@@ -172,6 +172,14 @@ sudo ./<app>_bundle_YYYYMMDD_hhmm/deploy.sh              # replaces DB + binary 
 sudo ./<app>_bundle_YYYYMMDD_hhmm/deploy.sh --no-db      # keep the server's current DB
 ```
 
+The bundle holds a full `pg_dump` of the local database, so `600` does not
+leave it in `dist/`: a successful scp deletes the local tarball (the host
+copy in `/tmp` is the one `deploy.sh` runs from); a failed scp keeps it and
+prints the `scp` to retry; `--no-scp` keeps it for you to copy and delete.
+A failed build removes its staging directory. Every run then names any
+earlier bundle still in `dist/` and prints the `rm` for each; it never
+deletes one itself.
+
 `610-deploy-uat` first refuses a post-sales host (below), writes `api-srv.env` if
 it is missing, installs the systemd unit and the nginx site if they are missing,
 then stops the service, optionally drops/recreates/restores the DB

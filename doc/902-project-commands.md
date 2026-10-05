@@ -20,7 +20,7 @@ database, `6xx` deploy. Details follow in the sections below.
 | `bin/400-make-local-dev-certs [host]` | Self-signed cert in `etc/crt/` for testing `ENABLE_TLS=true` |
 | `bin/510-reset-test-db [dbname]` | DROP + rebuild a scratch `_test_db` / `_e2e_db` |
 | `bin/515-reseed-db [dbname]` | TRUNCATE + re-seed a scratch database |
-| `bin/600-bundle-uat` | Presales: build, dump, bundle and scp to UAT |
+| `bin/600-bundle-uat` | Presales: build, dump, bundle, scp to UAT, delete the local bundle |
 | `bin/605-survey-host <ssh-host>` | Read-only post-sales host survey |
 | `bin/610-deploy-uat` | Presales: shipped in the bundle, run on the UAT host with sudo |
 | `bin/620-export-tenant-data <out-dir>` | Scrubbed dump of the local database for a host |
@@ -275,6 +275,9 @@ sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside
   missing key stops the run.
 - The first deploy installs the nginx site from `etc/uat-nginx-site.conf.template`
   for `UAT_DOMAIN` and prints the `certbot --nginx` line (doc/320).
+- The bundle holds a full DB dump: a successful scp deletes the local copy;
+  a failed scp or `--no-scp` keeps it. Earlier bundles left in `dist/` are
+  listed with the `rm` to run, never deleted automatically (doc/320).
 - See doc/320-presales-uat-deploy.md. Run `./bin/300-run-tests` first.
 - Post-sales pipeline placeholders: `infra/{uat,prd}/` (see `infra/README.md`).
 

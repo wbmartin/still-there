@@ -338,6 +338,10 @@ exact case.
 `--no-scp` build, list the earlier bundles found and print the `rm -f`.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
+  Recommend: a failed scp keeps the bundle and prints the retry; a failed
+  build removes its staging dir (EXIT trap); the earlier-bundle list
+  prints on every run, not only `--no-scp`.
 
 ### C010 — Release branches advance by merge commit, checked first
 
