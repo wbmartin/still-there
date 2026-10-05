@@ -102,7 +102,7 @@ id shrmpl-hook >/dev/null || echo "missing: the shrmpl-hook user"
 
 ```bash
 : "${UAT_SSH:?}"
-bin/605-survey-host "$UAT_SSH"
+bin/605-survey-host "${UAT_SSH:?}"
 ```
 
 **0.2 Local: the ids.** The nackmon check-in code and the webhook id are
@@ -117,9 +117,11 @@ your usual review if it is protected:
 : "${UAT_SSH:?}"
 N=infra/prd/shrmpl-etc/nack-monitors
 H=infra/uat/shrmpl-etc/hooks
-git mv "$N/uat-proto-renew-web-certs_NACKID.env" "$N/uat-proto-renew-web-certs_$(ssh "$UAT_SSH" cat /proc/sys/kernel/random/uuid).env"
-git mv "$H/build-proto_HOOKID.env" "$H/build-proto_$(ssh "$UAT_SSH" cat /proc/sys/kernel/random/uuid).env"
-ls $N $H
+NACK_ID=$(ssh "${UAT_SSH:?}" cat /proc/sys/kernel/random/uuid)
+HOOK_ID=$(ssh "${UAT_SSH:?}" cat /proc/sys/kernel/random/uuid)
+git mv "${N:?}/uat-proto-renew-web-certs_NACKID.env" "${N:?}/uat-proto-renew-web-certs_${NACK_ID:?}.env"
+git mv "${H:?}/build-proto_HOOKID.env" "${H:?}/build-proto_${HOOK_ID:?}.env"
+ls ${N:?} ${H:?}
 git commit -m "uat-proto: nackmon check-in id and build hook id"
 git push
 ```
@@ -130,7 +132,7 @@ before A8. Locally:
 
 ```bash
 : "${MON_SSH:?}"
-scp infra/prd/shrmpl-etc/nack-monitors/uat-proto-renew-web-certs_*.env "$MON_SSH:/tmp/"
+scp infra/prd/shrmpl-etc/nack-monitors/uat-proto-renew-web-certs_*.env "${MON_SSH:?}:/tmp/"
 ```
 
 On the monitoring host, as root. `REF` is an existing monitor whose owner
@@ -141,9 +143,9 @@ and follow the agent's docs). The block ends in `vi`: set
 ```bash
 M=/srv/shrmpl/etc/nack-monitors
 F=$(ls /tmp/uat-proto-renew-web-certs_*.env | head -1); echo "F=$F"
-REF=$(ls "$M"/*.env | head -1); echo "REF=$REF"
-install -o "$(stat -c %U "$REF")" -g "$(stat -c %G "$REF")" -m "$(stat -c %a "$REF")" "$F" "$M/" && rm "$F"
-vi "$M/${F##*/}"
+REF=$(ls "${M:?}"/*.env | head -1); echo "REF=$REF"
+install -o "$(stat -c %U "${REF:?}")" -g "$(stat -c %G "${REF:?}")" -m "$(stat -c %a "${REF:?}")" "${F:?}" "${M:?}/" && rm "${F:?}"
+vi "${M:?}/${F##*/}"
 ```
 
 ```bash
@@ -184,11 +186,11 @@ as the manifest's `pg_dump=` line or newer.
 
 ```bash
 : "${UAT_SSH:?}" "${EXPORT_DIR:?}"
-bin/620-export-tenant-data "$EXPORT_DIR"
+bin/620-export-tenant-data "${EXPORT_DIR:?}"
 source etc/app.env
-DUMP=$(ls -t "$EXPORT_DIR"/$APP_SLUG-data-*.dump | head -1)
+DUMP=$(ls -t "${EXPORT_DIR:?}"/${APP_SLUG:?}-data-*.dump | head -1)
 echo "$DUMP"
-scp "$DUMP" "$DUMP.sha256" "$UAT_SSH:/tmp/"
+scp "${DUMP:?}" "${DUMP:?}.sha256" "${UAT_SSH:?}:/tmp/"
 ```
 
 ## A. Cutover — UAT is down from A1 to A8
@@ -204,7 +206,7 @@ REPO=/build-stg/proto; I=$REPO/infra/uat; SQL=$REPO/infra/sql/proto-host-db.sql
 getv()  { sed -n "s/^$2=//p" "$1" 2>/dev/null | head -1; }
 urlpw() { sed -n 's#^DATABASE_URL=postgres://[^:]*:\([^@]*\)@.*#\1#p' "$1" | head -1; }
 urldb() { sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$1" | head -1; }
-idof()  { f=$(ls "$REPO"/infra/*/shrmpl-etc/"$1/$2"_*.env 2>/dev/null | head -1); f=${f##*/"$2"_}; echo "${f%.env}"; }
+idof()  { f=$(ls "${REPO:?}"/infra/*/shrmpl-etc/"$1/$2"_*.env 2>/dev/null | head -1); f=${f##*/"$2"_}; echo "${f%.env}"; }
 fill()  { [ -n "$3" ] || { echo "[skip] $2: no value, fill it by hand"; return; }
   ( umask 077; K="$2" V="$3" awk 'index($0, ENVIRON["K"] "=") == 1 && /SERVERONLY/ { print ENVIRON["K"] "=" ENVIRON["V"]; next } { print }' "$1" > "$1.new" ) && cat "$1.new" > "$1" && rm "$1.new"; }
 fillpw() { ( umask 077; R="$2" V="$3" awk '{ s = ENVIRON["R"] ":SERVERONLY@"; i = index($0, s) } i { $0 = substr($0, 1, i - 1) ENVIRON["R"] ":" ENVIRON["V"] "@" substr($0, i + length(s)) } { print }' "$1" > "$1.new" ) && cat "$1.new" > "$1" && rm "$1.new"; }
@@ -226,14 +228,14 @@ its challenge from. `/api/` answers 502 until A7.
 ```bash
 : "${APP_ROOT:?}" "${OLD:?}"
 systemctl stop uat-proto-api
-mkdir -p "$OLD"
-[ -d "$OLD/etc" ] || cp -a "$APP_ROOT/etc" "$OLD/etc"
-[ -d "$OLD/web-pub" ] || cp -a "$APP_ROOT/web-pub" "$OLD/web-pub"
-[ -d "$OLD/libexec" ] || mv "$APP_ROOT/libexec" "$OLD/libexec"
-rm -f "$APP_ROOT/etc/api-srv.env" "$APP_ROOT/etc/deploy.env"
-rm -rf "$APP_ROOT/web-pub.prev"
-OLD_DB=$(urldb "$OLD/etc/api-srv.env"); echo "OLD_DB=$OLD_DB"
-sudo -u postgres psql -X -v ON_ERROR_STOP=1 -c "ALTER DATABASE \"$OLD_DB\" RENAME TO \"${OLD_DB}_presales\""
+mkdir -p "${OLD:?}"
+[ -d "${OLD:?}/etc" ] || cp -a "${APP_ROOT:?}/etc" "${OLD:?}/etc"
+[ -d "${OLD:?}/web-pub" ] || cp -a "${APP_ROOT:?}/web-pub" "${OLD:?}/web-pub"
+[ -d "${OLD:?}/libexec" ] || mv "${APP_ROOT:?}/libexec" "${OLD:?}/libexec"
+rm -f "${APP_ROOT:?}/etc/api-srv.env" "${APP_ROOT:?}/etc/deploy.env"
+rm -rf "${APP_ROOT:?}/web-pub.prev"
+OLD_DB=$(urldb "${OLD:?}/etc/api-srv.env"); echo "OLD_DB=$OLD_DB"
+sudo -u postgres psql -X -v ON_ERROR_STOP=1 -c "ALTER DATABASE \"${OLD_DB:?}\" RENAME TO \"${OLD_DB:?}_presales\""
 ```
 
 ### A2. The service user
@@ -272,10 +274,10 @@ asked to trust github.com's host key):
 
 ```bash
 : "${REPO:?}" "${REPO_URL:?}"
-mkdir -p "$REPO" && chown shrmpl-hook:shrmpl-hook "$REPO"
-sudo -u shrmpl-hook -H git clone "$REPO_URL" "$REPO"
-sudo -u shrmpl-hook -H git -C "$REPO" log --oneline -1
-ls "$REPO"/infra/*/shrmpl-etc/nack-monitors/uat-proto-* "$I"/shrmpl-etc/hooks/build-proto_*
+mkdir -p "${REPO:?}" && chown shrmpl-hook:shrmpl-hook "${REPO:?}"
+sudo -u shrmpl-hook -H git clone "${REPO_URL:?}" "${REPO:?}"
+sudo -u shrmpl-hook -H git -C "${REPO:?}" log --oneline -1
+ls "${REPO:?}"/infra/*/shrmpl-etc/nack-monitors/uat-proto-* "${I:?}"/shrmpl-etc/hooks/build-proto_*
 ```
 
 Expect 0.2's commit, and both files named with an id, not `NACKID` /
@@ -291,16 +293,16 @@ file only when the host has none yet.
 
 ```bash
 : "${APP_ROOT:?}" "${I:?}"
-mkdir -p "$APP_ROOT"/{bin,etc,libexec,stg,backup,crt,log,web-pub}
-chown root:shrmpl-hook "$APP_ROOT" && chmod 1775 "$APP_ROOT"
-chown -R shrmpl-hook:shrmpl-hook "$APP_ROOT"/{bin,libexec,stg,backup,web-pub}
-chown -R www-data:www-data "$APP_ROOT/log"
-cp "$I"/bin/* "$APP_ROOT/bin/" && chmod 0755 "$APP_ROOT"/bin/* && chown shrmpl-hook:shrmpl-hook "$APP_ROOT"/bin/*
-cp "$I/etc/uat-proto-api.service" "$I/etc/uat-proto-restart.path" "$I/etc/uat-proto-restart.service" "$APP_ROOT/etc/"
-for f in "$I"/etc/uat-proto-*.env; do [ -e "$APP_ROOT/etc/${f##*/}" ] || cp "$f" "$APP_ROOT/etc/"; done
-chown root:svc-proto "$APP_ROOT/etc/uat-proto-api.env" && chmod 0640 "$APP_ROOT/etc/uat-proto-api.env"
-for f in deploy migrate test e2e-api; do chown root:shrmpl-hook "$APP_ROOT/etc/uat-proto-$f.env" && chmod 0640 "$APP_ROOT/etc/uat-proto-$f.env"; done
-stat -c '%U:%G %a' "$APP_ROOT"
+mkdir -p "${APP_ROOT:?}"/{bin,etc,libexec,stg,backup,crt,log,web-pub}
+chown root:shrmpl-hook "${APP_ROOT:?}" && chmod 1775 "${APP_ROOT:?}"
+chown -R shrmpl-hook:shrmpl-hook "${APP_ROOT:?}"/{bin,libexec,stg,backup,web-pub}
+chown -R www-data:www-data "${APP_ROOT:?}/log"
+cp "${I:?}"/bin/* "${APP_ROOT:?}/bin/" && chmod 0755 "${APP_ROOT:?}"/bin/* && chown shrmpl-hook:shrmpl-hook "${APP_ROOT:?}"/bin/*
+cp "${I:?}/etc/uat-proto-api.service" "${I:?}/etc/uat-proto-restart.path" "${I:?}/etc/uat-proto-restart.service" "${APP_ROOT:?}/etc/"
+for f in "${I:?}"/etc/uat-proto-*.env; do [ -e "${APP_ROOT:?}/etc/${f##*/}" ] || cp "$f" "${APP_ROOT:?}/etc/"; done
+chown root:svc-proto "${APP_ROOT:?}/etc/uat-proto-api.env" && chmod 0640 "${APP_ROOT:?}/etc/uat-proto-api.env"
+for f in deploy migrate test e2e-api; do chown root:shrmpl-hook "${APP_ROOT:?}/etc/uat-proto-$f.env" && chmod 0640 "${APP_ROOT:?}/etc/uat-proto-$f.env"; done
+stat -c '%U:%G %a' "${APP_ROOT:?}"
 ```
 
 Expect `root:shrmpl-hook 1775`. Then the generated secrets, straight into
@@ -309,16 +311,16 @@ two files and must match:
 
 ```bash
 : "${APP_ROOT:?}" "${REPO:?}"
-E=$APP_ROOT/etc
-fillpw "$E/uat-proto-api.env" proto_app "$(openssl rand -hex 32)"
-fillpw "$E/uat-proto-migrate.env" proto_ddl "$(openssl rand -hex 32)"
-fill "$E/uat-proto-api.env" JWT_SECRET "$(openssl rand -hex 32)"
-fill "$E/uat-proto-api.env" TOTP_ENCRYPTION_KEY "$(openssl rand -hex 32)"
-fill "$E/uat-proto-test.env" 'export PGPASSWORD' "$(openssl rand -hex 32)"
-fillpw "$E/uat-proto-e2e-api.env" proto_ci "$(getv "$E/uat-proto-test.env" 'export PGPASSWORD')"
-fill "$E/uat-proto-deploy.env" REPO_URL "$(sudo -u shrmpl-hook -H git -C "$REPO" remote get-url origin)"
+E=${APP_ROOT:?}/etc
+fillpw "${E:?}/uat-proto-api.env" proto_app "$(openssl rand -hex 32)"
+fillpw "${E:?}/uat-proto-migrate.env" proto_ddl "$(openssl rand -hex 32)"
+fill "${E:?}/uat-proto-api.env" JWT_SECRET "$(openssl rand -hex 32)"
+fill "${E:?}/uat-proto-api.env" TOTP_ENCRYPTION_KEY "$(openssl rand -hex 32)"
+fill "${E:?}/uat-proto-test.env" 'export PGPASSWORD' "$(openssl rand -hex 32)"
+fillpw "${E:?}/uat-proto-e2e-api.env" proto_ci "$(getv "${E:?}/uat-proto-test.env" 'export PGPASSWORD')"
+fill "${E:?}/uat-proto-deploy.env" REPO_URL "$(sudo -u shrmpl-hook -H git -C "${REPO:?}" remote get-url origin)"
 echo "nackmon id: $(idof nack-monitors uat-proto-renew-web-certs)"
-grep -n '^[^#].*SERVERONLY' "$E"/uat-proto-*.env
+grep -n '^[^#].*SERVERONLY' "${E:?}"/uat-proto-*.env
 ```
 
 The grep lists what is left, all in `uat-proto-deploy.env`: the three
@@ -332,7 +334,7 @@ vi /srv/uat-proto/etc/uat-proto-deploy.env
 
 ```bash
 : "${APP_ROOT:?}"
-grep -n '^[^#].*SERVERONLY' "$APP_ROOT"/etc/uat-proto-*.env || echo "all filled"
+grep -n '^[^#].*SERVERONLY' "${APP_ROOT:?}"/etc/uat-proto-*.env || echo "all filled"
 ```
 
 `all filled` is the only acceptable answer. The JWT and TOTP keys are new
@@ -345,12 +347,12 @@ passwords from the env files on psql's stdin (never `psql -v`, which is
 argv):
 
 ```bash
-: "${ENV:?}" "${APP_ROOT:?}" "${SQL:?}"
-{ printf '\\set db %s\n'     "$(urldb "$APP_ROOT/etc/$ENV-proto-migrate.env")"
-  printf '\\set ddl_pw %s\n' "$(urlpw "$APP_ROOT/etc/$ENV-proto-migrate.env")"
-  printf '\\set app_pw %s\n' "$(urlpw "$APP_ROOT/etc/$ENV-proto-api.env")"
-  printf '\\set ci_pw %s\n'  "$(getv "$APP_ROOT/etc/$ENV-proto-test.env" 'export PGPASSWORD')"
-  cat "$SQL"
+{ : "${ENV:?}" "${APP_ROOT:?}" "${SQL:?}"
+  printf '\\set db %s\n'     "$(urldb "${APP_ROOT:?}/etc/${ENV:?}-proto-migrate.env")"
+  printf '\\set ddl_pw %s\n' "$(urlpw "${APP_ROOT:?}/etc/${ENV:?}-proto-migrate.env")"
+  printf '\\set app_pw %s\n' "$(urlpw "${APP_ROOT:?}/etc/${ENV:?}-proto-api.env")"
+  printf '\\set ci_pw %s\n'  "$(getv "${APP_ROOT:?}/etc/${ENV:?}-proto-test.env" 'export PGPASSWORD')"
+  cat "${SQL:?}"
 } | sudo -u postgres psql -X
 ```
 
@@ -370,10 +372,10 @@ with it, and check the owner:
 
 ```bash
 : "${APP_ROOT:?}" "${DUMP:?}"
-DB=$(urldb "$APP_ROOT/etc/uat-proto-migrate.env")
-sudo -u postgres pg_restore --no-owner --no-privileges --role=proto_ddl --exit-on-error -d "$DB" < "$DUMP"
-sudo -u postgres psql -X -d "$DB" -Atc "SELECT count(*) FROM app_user WHERE pw_hash <> '' OR totp_seed <> '' OR (account_status = 'active' AND delete_ts IS NULL)"
-sudo -u postgres psql -X -d "$DB" -c "SELECT tableowner, count(*) FROM pg_tables WHERE schemaname = 'public' GROUP BY 1"
+DB=$(urldb "${APP_ROOT:?}/etc/uat-proto-migrate.env")
+sudo -u postgres pg_restore --no-owner --no-privileges --role=proto_ddl --exit-on-error -d "${DB:?}" < "${DUMP:?}"
+sudo -u postgres psql -X -d "${DB:?}" -Atc "SELECT count(*) FROM app_user WHERE pw_hash <> '' OR totp_seed <> '' OR (account_status = 'active' AND delete_ts IS NULL)"
+sudo -u postgres psql -X -d "${DB:?}" -c "SELECT tableowner, count(*) FROM pg_tables WHERE schemaname = 'public' GROUP BY 1"
 ```
 
 Expect `0` (0.4's scrub), then one row, `proto_ddl | <n>`. Then the negative checks: the API's
@@ -381,9 +383,9 @@ role reads but cannot create, the CI role cannot connect:
 
 ```bash
 : "${APP_ROOT:?}"
-DB=$(urldb "$APP_ROOT/etc/uat-proto-migrate.env")
-PGPASSWORD=$(urlpw "$APP_ROOT/etc/uat-proto-api.env") psql -X -h 127.0.0.1 -U proto_app -d "$DB" -c 'SELECT count(*) FROM app_user' -c 'CREATE TABLE nope (i int)'
-PGPASSWORD=$(getv "$APP_ROOT/etc/uat-proto-test.env" 'export PGPASSWORD') psql -X -h 127.0.0.1 -U proto_ci -d "$DB" -c 'SELECT 1'
+DB=$(urldb "${APP_ROOT:?}/etc/uat-proto-migrate.env")
+PGPASSWORD=$(urlpw "${APP_ROOT:?}/etc/uat-proto-api.env") psql -X -h 127.0.0.1 -U proto_app -d "${DB:?}" -c 'SELECT count(*) FROM app_user' -c 'CREATE TABLE nope (i int)'
+PGPASSWORD=$(getv "${APP_ROOT:?}/etc/uat-proto-test.env" 'export PGPASSWORD') psql -X -h 127.0.0.1 -U proto_ci -d "${DB:?}" -c 'SELECT 1'
 ```
 
 Expect the user count, `ERROR:  permission denied for schema public`, and
@@ -397,7 +399,7 @@ retries, and can hit its start limit (5 in
 
 ```bash
 : "${APP_ROOT:?}"
-for u in uat-proto-api.service uat-proto-restart.path uat-proto-restart.service; do ln -sf "$APP_ROOT/etc/$u" "/etc/systemd/system/$u"; done
+for u in uat-proto-api.service uat-proto-restart.path uat-proto-restart.service; do ln -sf "${APP_ROOT:?}/etc/$u" "/etc/systemd/system/$u"; done
 systemctl daemon-reload
 systemctl enable --now uat-proto-restart.path
 systemctl enable uat-proto-api
@@ -436,16 +438,16 @@ fails, it goes straight back and the new link comes out:
 
 ```bash
 : "${APP_ROOT:?}" "${I:?}" "${OLD:?}"
-SITE=$(getv "$APP_ROOT/etc/uat-proto-deploy.env" SITE_NAME); echo "SITE=$SITE"
-"$APP_ROOT/bin/uat-proto-renew-web-certs"
-ls -l "$APP_ROOT/crt/$SITE"
-SRC=$(ls "$I"/etc/nginx_* | head -1); REPO_SITE=${SRC##*/nginx_}
-sed "s/${REPO_SITE//./\\.}/$SITE/g" "$SRC" > "$APP_ROOT/etc/nginx_$SITE"
-OLD_SITE=$(for f in /etc/nginx/sites-enabled/*; do [ "$(readlink -f "$f")" = "$APP_ROOT/etc/nginx_$SITE" ] || grep -l "server_name.*$SITE" "$f"; done | head -1); echo "presales site: ${OLD_SITE:-none}"
-[ -z "$OLD_SITE" ] || { echo "$OLD_SITE" > "$OLD/nginx-site.path"; mv "$OLD_SITE" "$OLD/nginx-site"; }
-ln -sf "$APP_ROOT/etc/nginx_$SITE" "/etc/nginx/sites-enabled/$SITE"
-if nginx -t; then systemctl reload nginx && echo "reloaded"; else rm "/etc/nginx/sites-enabled/$SITE"; [ -z "$OLD_SITE" ] || mv "$OLD/nginx-site" "$OLD_SITE"; echo "nginx -t FAILED: presales site restored"; fi
-curl -fsS "https://$SITE/api/health"
+SITE=$(getv "${APP_ROOT:?}/etc/uat-proto-deploy.env" SITE_NAME); echo "SITE=$SITE"
+"${APP_ROOT:?}/bin/uat-proto-renew-web-certs"
+ls -l "${APP_ROOT:?}/crt/${SITE:?}"
+SRC=$(ls "${I:?}"/etc/nginx_* | head -1); REPO_SITE=${SRC##*/nginx_}
+sed "s/${REPO_SITE//./\\.}/${SITE:?}/g" "${SRC:?}" > "${APP_ROOT:?}/etc/nginx_${SITE:?}"
+OLD_SITE=$(for f in /etc/nginx/sites-enabled/*; do [ "$(readlink -f "$f")" = "${APP_ROOT:?}/etc/nginx_${SITE:?}" ] || grep -l "server_name.*${SITE:?}" "$f"; done | head -1); echo "presales site: ${OLD_SITE:-none}"
+[ -z "$OLD_SITE" ] || { echo "$OLD_SITE" > "${OLD:?}/nginx-site.path"; mv "$OLD_SITE" "${OLD:?}/nginx-site"; }
+ln -sf "${APP_ROOT:?}/etc/nginx_${SITE:?}" "/etc/nginx/sites-enabled/${SITE:?}"
+if nginx -t; then systemctl reload nginx && echo "reloaded"; else rm "/etc/nginx/sites-enabled/${SITE:?}"; [ -z "$OLD_SITE" ] || mv "${OLD:?}/nginx-site" "$OLD_SITE"; echo "nginx -t FAILED: presales site restored"; fi
+curl -fsS "https://${SITE:?}/api/health"
 ```
 
 Expect the renewal script's `renewed; nginx reloaded; nackmon checked in`,
@@ -465,9 +467,9 @@ do:
 ```bash
 : "${ENV:?}" "${APP_ROOT:?}"
 LOGIN=the-admin-login-to-invite
-TTL=$(getv "$APP_ROOT/etc/$ENV-proto-api.env" INVITE_TTL_HOURS)
-SITE=$(getv "$APP_ROOT/etc/$ENV-proto-deploy.env" SITE_NAME)
-"$APP_ROOT/libexec/proto-migrate" -config "$APP_ROOT/etc/$ENV-proto-migrate.env" -base-url "https://$SITE" -invite-ttl-hours "$TTL" invite "$LOGIN"
+TTL=$(getv "${APP_ROOT:?}/etc/${ENV:?}-proto-api.env" INVITE_TTL_HOURS)
+SITE=$(getv "${APP_ROOT:?}/etc/${ENV:?}-proto-deploy.env" SITE_NAME)
+"${APP_ROOT:?}/libexec/proto-migrate" -config "${APP_ROOT:?}/etc/${ENV:?}-proto-migrate.env" -base-url "https://${SITE:?}" -invite-ttl-hours "${TTL:?}" invite "${LOGIN:?}"
 ```
 
 Expect `[INFO] invite: <login> (tenant <n>), expires <time>; ...` and the
@@ -498,16 +500,16 @@ last lines):
 : "${I:?}" "${APP_ROOT:?}"
 H=/srv/shrmpl/etc/hooks
 HOOKID=$(idof hooks build-proto); echo "HOOKID=$HOOKID"
-SRC=$I/shrmpl-etc/hooks/build-proto_$HOOKID.env; DST=$H/build-proto_$HOOKID.env
-REF=$(ls "$H"/*.env | grep -v /build-proto_ | head -1); echo "REF=$REF"
-[ -e "$DST" ] || install -o "$(stat -c %U "$REF")" -g "$(stat -c %G "$REF")" -m "$(stat -c %a "$REF")" "$SRC" "$DST"
-fill "$DST" HOOK_SECRET "$(openssl rand -hex 32)"
-fill "$DST" HOOK_SLACK_WEBHOOK "$(getv "$REF" HOOK_SLACK_WEBHOOK)"
-sed -i "s#/hook/HOOKID#/hook/$HOOKID#" "$DST"
-echo "$(grep -c -e '^[^#].*SERVERONLY' -e HOOKID "$DST") placeholders left"
+SRC=${I:?}/shrmpl-etc/hooks/build-proto_${HOOKID:?}.env; DST=${H:?}/build-proto_${HOOKID:?}.env
+REF=$(ls "${H:?}"/*.env | grep -v /build-proto_ | head -1); echo "REF=$REF"
+[ -e "${DST:?}" ] || install -o "$(stat -c %U "${REF:?}")" -g "$(stat -c %G "${REF:?}")" -m "$(stat -c %a "${REF:?}")" "${SRC:?}" "${DST:?}"
+fill "${DST:?}" HOOK_SECRET "$(openssl rand -hex 32)"
+fill "${DST:?}" HOOK_SLACK_WEBHOOK "$(getv "${REF:?}" HOOK_SLACK_WEBHOOK)"
+sed -i "s#/hook/HOOKID#/hook/${HOOKID:?}#" "${DST:?}"
+echo "$(grep -c -e '^[^#].*SERVERONLY' -e HOOKID "${DST:?}") placeholders left"
 systemctl restart shrmpl-hook && systemctl is-active shrmpl-hook
-echo "secret: $(getv "$DST" HOOK_SECRET)"
-grep -h -e '^HOOK_ALLOWED_BRANCHES=' -e '^BRANCH_TO_CHECKOUT=' "$DST" "$APP_ROOT/etc/uat-proto-deploy.env"
+echo "secret: $(getv "${DST:?}" HOOK_SECRET)"
+grep -h -e '^HOOK_ALLOWED_BRANCHES=' -e '^BRANCH_TO_CHECKOUT=' "${DST:?}" "${APP_ROOT:?}/etc/uat-proto-deploy.env"
 ```
 
 GitHub → the repository → Settings → Webhooks → Add: payload URL = the
@@ -526,7 +528,7 @@ Locally:
 
 ```bash
 : "${MON_SSH:?}"
-scp infra/prd/shrmpl-etc/pulsecheck-endpoints/uat-proto-api.env infra/prd/shrmpl-etc/pulsecheck-endpoints/uat-proto-web.env "$MON_SSH:/tmp/"
+scp infra/prd/shrmpl-etc/pulsecheck-endpoints/uat-proto-api.env infra/prd/shrmpl-etc/pulsecheck-endpoints/uat-proto-web.env "${MON_SSH:?}:/tmp/"
 ```
 
 On the monitoring host, as root, with `SITE` set in that shell to UAT's
@@ -536,10 +538,10 @@ files (`REF`'s channel, or the one you want):
 ```bash
 : "${SITE:?}"
 D=/srv/shrmpl/etc/pulsecheck-endpoints
-REF=$(ls "$D"/*.env | head -1); echo "REF=$REF"
-for f in uat-proto-api uat-proto-web; do install -o "$(stat -c %U "$REF")" -g "$(stat -c %G "$REF")" -m "$(stat -c %a "$REF")" "/tmp/$f.env" "$D/$f.env" && rm "/tmp/$f.env"; sed -i "s#^PULSE_URL=https://[^/]*#PULSE_URL=https://$SITE#" "$D/$f.env"; done
-grep -h '^PULSE_URL=' "$D"/uat-proto-*.env
-vi "$D/uat-proto-api.env" "$D/uat-proto-web.env"
+REF=$(ls "${D:?}"/*.env | head -1); echo "REF=$REF"
+for f in uat-proto-api uat-proto-web; do install -o "$(stat -c %U "${REF:?}")" -g "$(stat -c %G "${REF:?}")" -m "$(stat -c %a "${REF:?}")" "/tmp/$f.env" "${D:?}/$f.env" && rm "/tmp/$f.env"; sed -i "s#^PULSE_URL=https://[^/]*#PULSE_URL=https://${SITE:?}#" "${D:?}/$f.env"; done
+grep -h '^PULSE_URL=' "${D:?}"/uat-proto-*.env
+vi "${D:?}/uat-proto-api.env" "${D:?}/uat-proto-web.env"
 ```
 
 ```bash
@@ -586,16 +588,16 @@ no `jail.local` at all takes the repo's whole file instead, with
 ```bash
 : "${I:?}" "${APP_ROOT:?}"
 J=/srv/fail2ban/etc/jail.local
-[ -e /srv/fail2ban/etc/nginx-404.conf ] || cp "$I/fail2ban/etc/nginx-404.conf" /srv/fail2ban/etc/
-if grep -q '^\[uat-proto\]' "$J"; then echo "[uat-proto] already in $J"; else
-  cp -p "$J" "$J.bak-$(date +%Y%m%d%H%M%S)"
-  [ -z "$(tail -c1 "$J")" ] || echo >> "$J"
-  sed -n '/^\[uat-proto\]/,$p' "$I/fail2ban/etc/jail.local" >> "$J"
+[ -e /srv/fail2ban/etc/nginx-404.conf ] || cp "${I:?}/fail2ban/etc/nginx-404.conf" /srv/fail2ban/etc/
+if grep -q '^\[uat-proto\]' "${J:?}"; then echo "[uat-proto] already in $J"; else
+  cp -p "${J:?}" "${J:?}.bak-$(date +%Y%m%d%H%M%S)"
+  [ -z "$(tail -c1 "${J:?}")" ] || echo >> "${J:?}"
+  sed -n '/^\[uat-proto\]/,$p' "${I:?}/fail2ban/etc/jail.local" >> "${J:?}"
 fi
-tail -12 "$J"
-ls -l "$APP_ROOT/log/nginx_access.log"
+tail -12 "${J:?}"
+ls -l "${APP_ROOT:?}/log/nginx_access.log"
 fail2ban-client -t
-fail2ban-regex "$APP_ROOT/log/nginx_access.log" /etc/fail2ban/filter.d/nginx-404.conf '"(GET|POST|HEAD) /api/'
+fail2ban-regex "${APP_ROOT:?}/log/nginx_access.log" /etc/fail2ban/filter.d/nginx-404.conf '"(GET|POST|HEAD) /api/'
 fail2ban-client reload && fail2ban-client status uat-proto
 ```
 
@@ -619,8 +621,8 @@ presales database and the shipped dump. Keep `$OLD` for a week.
 
 ```bash
 : "${OLD:?}"
-OLD_DB=$(urldb "$OLD/etc/api-srv.env"); echo "dropping ${OLD_DB}_presales"
-sudo -u postgres psql -X -v ON_ERROR_STOP=1 -c "DROP DATABASE \"${OLD_DB}_presales\""
+OLD_DB=$(urldb "${OLD:?}/etc/api-srv.env"); echo "dropping ${OLD_DB}_presales"
+sudo -u postgres psql -X -v ON_ERROR_STOP=1 -c "DROP DATABASE \"${OLD_DB:?}_presales\""
 rm -f /tmp/proto-data-*.dump /tmp/proto-data-*.dump.sha256
 ```
 
@@ -648,18 +650,18 @@ post-mortem):
 : "${APP_ROOT:?}" "${OLD:?}"
 systemctl disable --now uat-proto-api uat-proto-restart.path
 rm -f /etc/systemd/system/uat-proto-restart.path /etc/systemd/system/uat-proto-restart.service
-SITE=$(getv "$APP_ROOT/etc/uat-proto-deploy.env" SITE_NAME)
-rm -f "/etc/nginx/sites-enabled/$SITE"
-[ ! -e "$OLD/nginx-site.path" ] || mv "$OLD/nginx-site" "$(cat "$OLD/nginx-site.path")"
-NEW_DB=$(urldb "$APP_ROOT/etc/uat-proto-migrate.env"); OLD_DB=$(urldb "$OLD/etc/api-srv.env")
-sudo -u postgres psql -X -v ON_ERROR_STOP=1 -c "ALTER DATABASE \"$NEW_DB\" RENAME TO \"${NEW_DB}_failed\"" -c "ALTER DATABASE \"${OLD_DB}_presales\" RENAME TO \"$OLD_DB\""
-{ printf '\\set pw %s\n' "$(urlpw "$OLD/etc/api-srv.env")"; echo "ALTER ROLE proto_app PASSWORD :'pw';"; } | sudo -u postgres psql -X -v ON_ERROR_STOP=1
-mkdir -p "$OLD/failed" && mv "$APP_ROOT/etc" "$APP_ROOT/libexec" "$APP_ROOT/web-pub" "$OLD/failed/"
-cp -a "$OLD/etc" "$OLD/libexec" "$OLD/web-pub" "$APP_ROOT/"
-ln -sf "$APP_ROOT/etc/uat-proto-api.service" /etc/systemd/system/uat-proto-api.service
+SITE=$(getv "${APP_ROOT:?}/etc/uat-proto-deploy.env" SITE_NAME)
+rm -f "/etc/nginx/sites-enabled/${SITE:?}"
+[ ! -e "${OLD:?}/nginx-site.path" ] || mv "${OLD:?}/nginx-site" "$(cat "${OLD:?}/nginx-site.path")"
+NEW_DB=$(urldb "${APP_ROOT:?}/etc/uat-proto-migrate.env"); OLD_DB=$(urldb "${OLD:?}/etc/api-srv.env")
+sudo -u postgres psql -X -v ON_ERROR_STOP=1 -c "ALTER DATABASE \"${NEW_DB:?}\" RENAME TO \"${NEW_DB:?}_failed\"" -c "ALTER DATABASE \"${OLD_DB:?}_presales\" RENAME TO \"${OLD_DB:?}\""
+{ : "${OLD:?}"; printf '\\set pw %s\n' "$(urlpw "${OLD:?}/etc/api-srv.env")"; echo "ALTER ROLE proto_app PASSWORD :'pw';"; } | sudo -u postgres psql -X -v ON_ERROR_STOP=1
+mkdir -p "${OLD:?}/failed" && mv "${APP_ROOT:?}/etc" "${APP_ROOT:?}/libexec" "${APP_ROOT:?}/web-pub" "${OLD:?}/failed/"
+cp -a "${OLD:?}/etc" "${OLD:?}/libexec" "${OLD:?}/web-pub" "${APP_ROOT:?}/"
+ln -sf "${APP_ROOT:?}/etc/uat-proto-api.service" /etc/systemd/system/uat-proto-api.service
 systemctl daemon-reload && systemctl enable --now uat-proto-api
 nginx -t && systemctl reload nginx
-curl -fsS "http://127.0.0.1:$(getv "$APP_ROOT/etc/api-srv.env" SERVER_PORT)/health"
+curl -fsS "http://127.0.0.1:$(getv "${APP_ROOT:?}/etc/api-srv.env" SERVER_PORT)/health"
 ```
 
 The presales `proto_app` password goes back through psql's stdin like the
@@ -693,8 +695,15 @@ What the first runs taught, carried here as steps above. Add yours.
 - A `<placeholder>` in a bash paste block is a syntax error: `<` and `>`
   are redirections, so `curl -s http://127.0.0.1:<port>/health` reads
   from a file called `port`. Values are read from files, or set once in
-  the shell and checked with `: "${VAR:?}"`, which also keeps a lost
-  variable from turning `"$APP_ROOT/etc/"` into `/etc/`.
+  the shell.
+- A variable set in an earlier block is written `${VAR:?}` inside every
+  command that uses it, not only checked by a `: "${VAR:?}"` line on top.
+  An interactive shell aborts only the line whose expansion fails; the
+  next pasted line runs with the variable empty, and
+  `chown -R ... "$APP_ROOT"/{bin,...}` becomes `chown -R ... /bin`, or
+  `mv "$APP_ROOT/etc"` moves `/etc`. A `${VAR:?}` inside `$(...)` stops
+  only the substitution, so a `{ ...; } | psql` group opens with its own
+  `:` guard and psql reads nothing.
 - No inline `#` comments in local blocks: zsh runs `#` as a command
   without `interactivecomments`, and an apostrophe in one swallows the
   lines after it.

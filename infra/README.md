@@ -184,7 +184,11 @@ else worth a planned rollback gets a written record: copy this skeleton
 to wherever the app tracks the work (the pull request description, say),
 fill it before starting, and tick it as it runs. Every project will be
 different; the letters are the shape, not a fixed list. Host blocks name
-literal paths, or open with `: "${VAR:?}"` for each variable they use.
+literal paths, or write each variable set in an earlier block as
+`${VAR:?}` inside every command that uses it. A `: "${VAR:?}"` line on
+top is not enough: an interactive shell aborts only the line that fails,
+and the next pasted line runs with the variable empty
+(`"$APP_ROOT/etc"` becomes `/etc`).
 
 **P. Pre-flight**
 
@@ -243,20 +247,20 @@ it is the same path under `/srv/prd-proto/`. Locally:
 : "${PRD_SSH:?}" "${F:?}"
 N=${F##*/}
 git fetch origin
-git show "origin/main:infra/prd/$F" > "/tmp/$N"
-shasum -a 256 "/tmp/$N"
-scp "/tmp/$N" "$PRD_SSH:/tmp/" && rm "/tmp/$N"
+git show "origin/main:infra/prd/${F:?}" > "/tmp/${N:?}"
+shasum -a 256 "/tmp/${N:?}"
+scp "/tmp/${N:?}" "${PRD_SSH:?}:/tmp/" && rm "/tmp/${N:?}"
 ```
 
 On prod as root, with `F` set again:
 
 ```bash
 : "${F:?}"
-N=${F##*/}; T=/srv/prd-proto/$F
-sha256sum "/tmp/$N"
-diff "$T" "/tmp/$N"
-cp -p "$T" "/root/$N.before"
-cp "/tmp/$N" "$T" && rm "/tmp/$N"
+N=${F##*/}; T=/srv/prd-proto/${F:?}
+sha256sum "/tmp/${N:?}"
+diff "${T:?}" "/tmp/${N:?}"
+cp -p "${T:?}" "/root/${N:?}.before"
+cp "/tmp/${N:?}" "${T:?}" && rm "/tmp/${N:?}"
 ```
 
 The hash matches the local one and `diff` shows only the intended change.

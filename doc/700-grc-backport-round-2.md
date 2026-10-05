@@ -131,6 +131,11 @@ reproduced in `bash -i` and `zsh -i`. Where it would damage a host:
   2. Correct the two rule statements and say why.
 - **Size:** M
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
+  Recommend: a guard inside `$(...)` stops only the substitution, so the
+  `{ ...; } | psql` groups (doc/330 A5 and rollback, doc/331, doc/340)
+  open with their own `:` guard, and the 0.2 uuid fetches are assigned
+  first and used as `${NACK_ID:?}` etc. in `git mv`.
 
 ### C002 — MFA onboarding drops `/mfaVerify`'s CSRF token
 
