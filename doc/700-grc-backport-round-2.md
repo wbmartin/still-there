@@ -247,6 +247,10 @@ no Settled list and no rule for fix rounds.
   in the commit that settles items.
 - **Size:** M
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; "staff"
+  for the human who triages and checks (not Brandon); the Report section
+  now numbers findings and gives an area × severity table, and
+  `tasks/todo.md` points at the review file instead of holding findings.
 
 ### C018 — Review skill: checklist lines from GRC's run
 
