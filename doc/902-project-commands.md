@@ -111,11 +111,11 @@ The one command, on a laptop or a build host:
   `TEST_DATABASE_URL` for the Go repository suite, `E2E_API_ENV`
   for the API instance the e2e/py suites start, `TEST_LOG_DIR`.
 - `docs`: `scripts/check-doc-paths.sh` reads every backticked token in
-  `CLAUDE.md`, `DERIVING.md`, the READMEs and `doc/*.md` (not doc/700,
-  which quotes GRC paths), keeps the ones that look like repo paths, and
-  resolves each by prefix (`bin/215`), against a package root
-  (`internal/...`, `bin/uat-proto-build` under `infra/uat/`) or by
-  basename. A miss prints `MISS <doc>:<line> <token>` and fails the run;
+  `CLAUDE.md`, `DERIVING.md`, the READMEs and `doc/*.md`, keeps the
+  ones that look like repo paths, and resolves each by prefix
+  (`bin/215`), against a package root (`internal/...`,
+  `bin/uat-proto-build` under `infra/uat/`) or by basename.
+  A miss prints `MISS <doc>:<line> <token>` and fails the run;
   so does an entry in `scripts/doc-paths-allow.txt` its document no longer
   names. Skips URLs, absolute paths, `<placeholder>`s and gitignored
   runtime dirs. The `docs=` count is path tokens checked.

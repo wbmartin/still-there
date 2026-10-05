@@ -16,9 +16,9 @@ Each control is marked:
   which);
 - **open** — not done; the row says what would close it.
 
-Open findings are tracked in `doc/700-grc-backport-feedback.md` (an item
-number, or "Appendix: open in both repos"). A change to a control changes
-its row here in the same commit.
+Open findings are the rows marked open or partial below; each says what
+would close it. A change to a control changes its row here in the same
+commit.
 
 ## Shape of a deployment
 
@@ -124,14 +124,14 @@ test that shows it; the mechanics are in doc/105.
 | 1.3 | Password guessing, credential stuffing | Argon2id; unknown names run a dummy hash and get the same counted 401; lockout per address and per name (`FAILED_LOGIN_*`), checked before the password, failing closed on a counter error (`auth_handler_test.go`) | met |
 | 1.4 | Username enumeration | Same 401 and timing for unknown, wrong and non-`active` logins. Exception: public `/userSelfCreate` answers 409 for a taken name | partial |
 | 1.5 | Second factor bypassed or replayed | TOTP for every login not `mfa_exempt`: `/auth` gives a 10-minute single-use temp token and no grants; `/mfaVerify` takes a code once (last-step key, `SetIfGreater`); an enrolled user's secret is never shown again (409) | met |
-| 1.6 | MFA turned off for a person | `mfa_exempt` is one column, set by `POST`/`PUT /user` and `/userInvite` (`ADD_USER`, `CHG_USER`). **Policy: `mfa_exempt` is for test and service logins only, never a human account in production.** Enforced by config (doc/700 B097): unless `ALLOW_MFA_EXEMPT_VIA_API=true`, which only the test harness files set (pinned by `TestLoadConfig_RepoEnvFiles`), the API answers 403 to turning it on (`TestUserHandler_MFAExemptNeedsTheConfigKey`, `TestCreateInvitedUser_MFAExemptNeedsTheConfigKey`). A login already exempt stays so until cleared; the post-sales export clears every one (`src/api-srv/sql/export-scrub.sql`, pinned by `src/api-srv/sql/export_scrub_test.go`), so a post-sales host starts with none. A presales UAT host restored from the laptop dump keeps the seeded exempt logins (row 3.5) | met |
+| 1.6 | MFA turned off for a person | `mfa_exempt` is one column, set by `POST`/`PUT /user` and `/userInvite` (`ADD_USER`, `CHG_USER`). **Policy: `mfa_exempt` is for test and service logins only, never a human account in production.** Enforced by config (GRC backport B097): unless `ALLOW_MFA_EXEMPT_VIA_API=true`, which only the test harness files set (pinned by `TestLoadConfig_RepoEnvFiles`), the API answers 403 to turning it on (`TestUserHandler_MFAExemptNeedsTheConfigKey`, `TestCreateInvitedUser_MFAExemptNeedsTheConfigKey`). A login already exempt stays so until cleared; the post-sales export clears every one (`src/api-srv/sql/export-scrub.sql`, pinned by `src/api-srv/sql/export_scrub_test.go`), so a post-sales host starts with none. A presales UAT host restored from the laptop dump keeps the seeded exempt logins (row 3.5) | met |
 | 1.7 | Cross-site request forgery | The defence is the cookie: `SameSite=Strict` stops a cross-site request carrying it and `HttpOnly` keeps script from reading it; CORS answers only `CORS_ALLOWED_ORIGINS`. `X-CSRF-Token` must equal the session id's last 3 hex characters (12 bits) on every unsafe method: a second check, not a secret of real strength. A mismatch is logged without either value (`csrf_test.go`) | met (by SameSite) |
 | 1.8 | Missing or misordered check on a route | Every handler calls JWT, rate limit + block, CSRF, grant and `CheckAllChecksComplete` itself, no middleware; an unrun check is 500 and `WriteJSON` re-runs the gate. `src/api-srv/internal/handler/route_check_contract_test.go` lists every route in `cmd/server/main.go`, requires a reason for each skip and proves each check refuses before any repository call | met |
-| 1.9 | Blocked user keeps acting | Block sets `account_status`, revokes every session and sets `BLOCKED*<name>`, which the server reloads at start; `CheckRateLimitAndUserBlock` answers 403 on every session route, including the session path of `/mfaSetup` and `/mfaVerify` (doc/700 B094), so a pre-block token is refused after a restart that lost its revocation (`TestMFAHandlers_SessionPathReadsTheBlockFlag`). Open: the `admin` subject skips the flag (row 1.10) | partial |
-| 1.10 | Request flooding | Fixed per-minute buckets: `RPM*<user>*<minute>` signed in, `RPM*ip:<address>*<minute>` anonymous (the `ip:` prefix keeps the two apart); body caps per route, nginx `client_max_body_size 20M`. Open (doc/700 appendix): the `admin` subject skips the rate limit and block flag; `http.Server` sets no timeouts; calendar-minute buckets allow a 2x burst across a boundary | partial |
+| 1.9 | Blocked user keeps acting | Block sets `account_status`, revokes every session and sets `BLOCKED*<name>`, which the server reloads at start; `CheckRateLimitAndUserBlock` answers 403 on every session route, including the session path of `/mfaSetup` and `/mfaVerify` (GRC backport B094), so a pre-block token is refused after a restart that lost its revocation (`TestMFAHandlers_SessionPathReadsTheBlockFlag`). Open: the `admin` subject skips the flag (row 1.10) | partial |
+| 1.10 | Request flooding | Fixed per-minute buckets: `RPM*<user>*<minute>` signed in, `RPM*ip:<address>*<minute>` anonymous (the `ip:` prefix keeps the two apart); body caps per route, nginx `client_max_body_size 20M`. Open: the `admin` subject skips the rate limit and block flag; `http.Server` sets no timeouts; calendar-minute buckets allow a 2x burst across a boundary | partial |
 | 1.11 | Spoofed client address defeats lockout and rate keys | `ClientIP` takes the address `TRUSTED_PROXY_COUNT` hops from the right of `X-Forwarded-For` (1 behind nginx, 0 in dev). Sound only because the API cannot be reached around nginx: `SERVER_BIND_ADDRESS` is required (startup fails without it) and every server env file sets `127.0.0.1` | met |
 | 1.12 | Invite link stolen or guessed | 32 random bytes; only the SHA-256 is stored; the token travels in the URL fragment; `INVITE_TTL_HOURS`; single redeem under `FOR UPDATE`; per-address and per-token lockout; every dead link one counted 404; the redeeming address is recorded | met |
-| 1.13 | API response rendered as a page | CSP `default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`, `X-Frame-Options: DENY`, nosniff on every API response, `no-store` on every GET but `/health`; nginx sets its own headers on web locations only. HSTS is sent with `preload` even when `ENABLE_TLS=false` (doc/700 appendix) | met |
+| 1.13 | API response rendered as a page | CSP `default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`, `X-Frame-Options: DENY`, nosniff on every API response, `no-store` on every GET but `/health`; nginx sets its own headers on web locations only. HSTS is sent with `preload` even when `ENABLE_TLS=false` | met |
 | 1.14 | Public self-registration | `/userSelfCreate` makes a tenant-1 login in group 3 behind the per-address rate limit only. Kept in the template beside invite links; a derived app removes it or keeps it knowingly | open (by design) |
 
 ### B2: API to Postgres
@@ -140,7 +140,7 @@ test that shows it; the mechanics are in doc/105.
 |---|---|---|---|
 | 2.1 | Missing tenant predicate | See Tenant isolation: app-layer only, `scoped_query.go`, write predicates, test tenant lock, per-table tests (`example_repository_test.go`) | met |
 | 2.2 | API used to change the schema | `proto_app` is `db_reader` + `db_writer`, owns nothing; migrations run as `proto_ddl` (`src/api-srv/cmd/migrate`), the only path for DDL | met |
-| 2.3 | Credentials read from a dump or a response | Passwords Argon2id; TOTP seeds AES-GCM under `TOTP_ENCRYPTION_KEY`; invite tokens SHA-256 only; `PwHash` and `TOTPSeed` are `json:"-"`. `RetrieveUserList` still selects `totp_seed` it never sends (doc/700 appendix) | met |
+| 2.3 | Credentials read from a dump or a response | Passwords Argon2id; TOTP seeds AES-GCM under `TOTP_ENCRYPTION_KEY`; invite tokens SHA-256 only; `PwHash` and `TOTPSeed` are `json:"-"`. `RetrieveUserList` still selects `totp_seed` it never sends | met |
 | 2.4 | Database reached off the host | `DATABASE_URL` names `127.0.0.1:5432` in every server env file | met |
 | 2.5 | Repo password on a database role | `src/api-srv/sql/roles.sql` creates `proto_app` with the local dev password; presales `bin/610-deploy-uat` then sets it from the host env file on every run, post-sales `infra/sql/proto-host-db.sql` takes it from psql variables | met |
 
@@ -175,7 +175,7 @@ Testable statements, each with what proves it today.
    closed; TOTP for every login that is not exempt; `mfa_exempt` never on
    a human account in production. All three are met: the API turns the
    flag on only where `ALLOW_MFA_EXEMPT_VIA_API=true`, which only the test
-   harness files set (doc/700 B097). No breached-password check; the password floor is 8 characters.
+   harness files set (GRC backport B097). No breached-password check; the password floor is 8 characters.
 5. **Rate limits per boundary.** Per user, per address, per login name and
    per invite token. The `admin` exemption is open.
 6. **Backups pulled, encrypted, restored on a schedule.** Open: push today,
@@ -186,6 +186,6 @@ Testable statements, each with what proves it today.
    and answers every miss 404 (doc/105, Serving user files). No file route
    exists today.
 
-Not carried: an audit log (doc/700 B067, skipped: no audit log in the
+Not carried: an audit log (GRC backport B067, skipped: no audit log in the
 template) and host-access logging (3.8, an operator practice before it is
 code).

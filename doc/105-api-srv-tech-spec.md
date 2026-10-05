@@ -447,8 +447,8 @@ the only one when the API is reached without nginx (local dev).
 `CheckRateLimitAndUserBlock` return early for a JWT whose subject is the
 literal `admin` (the fixture login). That login has no rate limit and its
 `BLOCKED*` flag is never read; blocking it still stops it signing in
-(`account_status`). Stated as it is; flagged for a security look in
-`doc/700-grc-backport-feedback.md` (Appendix: open in both repos).
+(`account_status`). Stated as it is; an open finding (doc/110 rows 1.9
+and 1.10).
 
 **Each handler runs these itself, explicitly, in this order, in its own
 body** (`internal/security/app_helper.go`). There is no middleware and no
@@ -492,9 +492,9 @@ anything not here runs all five.
 | `AuthHandler` (`/auth`) | all five | No session yet. Brute force is answered by the per-address + per-name lockout (`FAILED_LOGIN_ATTEMPT_THRESHOLD` failures in `FAILED_LOGIN_ATTEMPT_WINDOW_DURATION`, locked for `FAILED_LOGIN_LOCKOUT_DURATION`; 7 / 5min / 5min locally), checked before the password and counting unknown names. The 4 KiB body is read first |
 | `RefreshHandler` (`/refresh`) | CSRF, grant | A GET; any live session refreshes |
 | `LogoffHandler` (`/logoff`) | CSRF, grant | Ending one's own session needs neither |
-| `ChangeSecurityContextHandler` (`/changeSecurityContext`) | CSRF, grant | Kept by decision (doc/700 B005, skipped): the switch writes no table row; it ends the old session and mints a new one. The grant is replaced by a check after the gate that the login holds a group in the target tenant (403 "Security context not available"). The 4 KiB body is decoded before `CheckJWT` |
-| `UserSelfCreateHandler` (`/userSelfCreate`) | JWT, block, CSRF, grant | Public self-registration, per-address rate limit only. It creates a tenant-1 login in group 3 and answers 409 "Username already taken" for a name in use (a name probe). Kept beside invite links (doc/700 B002 skipped, B035); a derived app keeps or removes it |
-| `MFASetupHandler`, `MFAVerifyHandler` (`/mfaSetup`, `/mfaVerify`) | CSRF, grant; on the temp-token path also JWT and block | Temp token from the password step, or a session. The 4 KiB body is read before every check because it picks the path. Temp token: `SkipJWT`, `CheckRateLimit` (per address), `SkipUserBlock` (the token comes from `/auth`, which refuses a blocked login). Session: `CheckJWT`, then `CheckRateLimitAndUserBlock` (per user, `BLOCKED*` read, so a pre-block token is refused after a restart that lost its revocation; doc/700 B094) |
+| `ChangeSecurityContextHandler` (`/changeSecurityContext`) | CSRF, grant | Kept by decision (GRC backport B005, skipped): the switch writes no table row; it ends the old session and mints a new one. The grant is replaced by a check after the gate that the login holds a group in the target tenant (403 "Security context not available"). The 4 KiB body is decoded before `CheckJWT` |
+| `UserSelfCreateHandler` (`/userSelfCreate`) | JWT, block, CSRF, grant | Public self-registration, per-address rate limit only. It creates a tenant-1 login in group 3 and answers 409 "Username already taken" for a name in use (a name probe). Kept beside invite links (GRC backport B002 skipped; invites are B035); a derived app keeps or removes it |
+| `MFASetupHandler`, `MFAVerifyHandler` (`/mfaSetup`, `/mfaVerify`) | CSRF, grant; on the temp-token path also JWT and block | Temp token from the password step, or a session. The 4 KiB body is read before every check because it picks the path. Temp token: `SkipJWT`, `CheckRateLimit` (per address), `SkipUserBlock` (the token comes from `/auth`, which refuses a blocked login). Session: `CheckJWT`, then `CheckRateLimitAndUserBlock` (per user, `BLOCKED*` read, so a pre-block token is refused after a restart that lost its revocation; GRC backport B094) |
 | `UserInviteHandler.CheckInvite`, `.RedeemInvite` (`/inviteCheck`, `/inviteRedeem`) | JWT, block, CSRF, grant | Public; the token is the credential. Per-address rate limit, then the `/auth` lockout per address plus per token (see Invite Links) |
 
 #### What proves it

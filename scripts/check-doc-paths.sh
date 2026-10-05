@@ -19,8 +19,7 @@
 # Skipped: URLs, absolute or ~ paths (a host's /srv/... or the reader's
 # checkout), placeholders (`<entity>`, `NNNN`, `5xx`, `*`, `{a,b}`, `...`),
 # anything with `=` or `$` or a space, and the gitignored runtime
-# directories (RUNTIME_PATTERN). doc/700 is not checked: it quotes the
-# GRC repository's paths on purpose.
+# directories (RUNTIME_PATTERN).
 #
 # A document that names a deleted file says so in prose, without
 # backticks: the rule is literally "every backticked repo path exists".
@@ -39,7 +38,6 @@ DOC_LIST=()
 for doc in CLAUDE.md DERIVING.md README.md doc/*.md infra/README.md \
         src/*/README.md src/*/*/README.md tests/README.md; do
     [ -f "$doc" ] || continue
-    case "$doc" in doc/700-*) continue ;; esac
     DOC_LIST+=("$doc")
 done
 BASE_LIST=(. src src/api-srv src/api-srv/internal src/api-srv/sql
