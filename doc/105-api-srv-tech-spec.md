@@ -100,7 +100,7 @@ is the login lockout instead. **CSRF** `CheckCSRF` (never on GET).
 | GET | /refresh | Yes | user+block | (GET) | - | New JWT for a live session, same session id |
 | POST | /changeSecurityContext | Yes | user+block | - | - | Switch tenant; the login must hold a group there |
 | POST | /changeOwnPassword | Yes | user+block | Yes | CHG_OWN_PW (8001) | Change own password; other sessions revoked |
-| GET | /me | Yes | user+block | (GET) | LOGON (1) | The caller's own row (profile + preferences; preferences appear only here, not on `/userList`) |
+| GET | /me | Yes | user+block | (GET) | LOGON (1) | The caller's own row (profile + preferences; preferences appear only here, not on `/userList`), plus `allowMfaExemptViaApi` |
 | PUT | /me | Yes | user+block | Yes | LOGON (1) | Own firstName/lastName/email/preferenceJsonb, optimistic lock |
 | POST | /logoff | Yes | user+block | - | - | End the session and expire the cookie |
 | GET | /example | Yes | user+block | (GET) | READ_EXAMPLE (1001) | One example |
@@ -198,6 +198,9 @@ grant; the server's policy refuses the action. `false` is always
 accepted, and a `PUT` that keeps a stored `true` (the seeded dev logins)
 is not refused, so clearing or editing an exempt login still works. Each
 handler makes the check itself, after the body is decoded.
+GET and PUT `/me` answer the setting as `allowMfaExemptViaApi` beside the
+caller's row, so the web user edit page hides the MFA-exempt checkbox when
+it is `false` (and keeps it on an already-exempt login, only to clear it).
 
 ### Authentication Flow
 

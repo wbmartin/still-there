@@ -11,8 +11,6 @@ recommendation. Done items sit under `# Completed` at the end of that file.
 - **Dev DB:** run `bin/205-migrate-db` to apply 0004/0005 (B034, B035)
   before the next `bin/215-run-api-srv` or `bin/600-bundle-uat`; the API
   exits at start otherwise.
-- **`etc/uat-deploy.env`:** set `UAT_DOMAIN` (B072). Until set, presales
-  deploys install no nginx site.
 - **Before a real export (B071):** the export scrub refuses a live login
   named `admin`: rename or delete the seeded dev admin first. (The A9
   first-login link is now `proto-migrate invite`, B099.)
@@ -20,16 +18,19 @@ recommendation. Done items sit under `# Completed` at the end of that file.
   "Not yet run").
 - **Attribution note:** commits 8dd505f..388c0ae (B085-B090) say "Claude
   Opus 5.5" but were written by Sonnet; not rewritten (pushed).
-- **Existing UAT host `api-srv.env` needs hand edits before the next
-  deploy** (deploys never overwrite that file): add `LOG_LEVEL=info`
-  (B031: required, the API will not start without it); add
-  `SERVER_BIND_ADDRESS=127.0.0.1` (B016; required since B061, the API and
-  `bin/610-deploy-uat` refuse a file without it); add
-  `INVITE_TTL_HOURS=72` (B035, required key); add
-  `ALLOW_MFA_EXEMPT_VIA_API=false` (B097: required, the API and
-  `bin/610-deploy-uat` refuse a file without it); set
-  `JWT_SESSION_EXPIRE_HOURS=12` (B016); rotate the DB password off the repo
-  literal (B027, step in `doc/320-presales-uat-deploy.md`).
+- **No UAT deploys planned for ProtoStack (template only); apply these
+  only if a UAT deploy is ever done:**
+  - Existing UAT host `api-srv.env` hand edits (deploys never overwrite
+    that file): add `LOG_LEVEL=info` (B031: required, the API will not
+    start without it); add `SERVER_BIND_ADDRESS=127.0.0.1` (B016; required
+    since B061, the API and `bin/610-deploy-uat` refuse a file without
+    it); add `INVITE_TTL_HOURS=72` (B035, required key); add
+    `ALLOW_MFA_EXEMPT_VIA_API=false` (B097: required, the API and
+    `bin/610-deploy-uat` refuse a file without it); set
+    `JWT_SESSION_EXPIRE_HOURS=12` (B016); rotate the DB password off the
+    repo literal (B027, step in `doc/320-presales-uat-deploy.md`).
+  - `etc/uat-deploy.env`: set `UAT_DOMAIN` (B072). Until set, presales
+    deploys install no nginx site.
 - **Grant 9020 (reset another user's MFA) by hand** on every real tenant's
   admin group (B010). No migration seeds groups, so a deployed admin loses
   MFA reset until it is added.
@@ -37,11 +38,6 @@ recommendation. Done items sit under `# Completed` at the end of that file.
   and B058 no-override confirmed; B054 one-way, B062 15 default, B066
   DENIED, B069 no zod bump kept; B063 StickyFilters removed; B093-B099
   done.
-- **Confirm B097 deviation:** `PUT /user` refuses only turning mfaExempt
-  on; keeping an already-exempt login exempt or clearing it still works
-  (seeded admin/basic stay editable).
-- **Optional, B097 follow-up:** the user edit page still shows the
-  MFA-exempt checkbox; on a `false` server ticking it shows the 403.
 - **Post-sales host steps, when hosts exist:** recopy infra `bin/` and
   `*-proto-api.service`, `daemon-reload` (B045/B046); `HOOK_TIMEOUT=3600`
   and postgresql-client on the UAT build host (B047); recopy the nginx

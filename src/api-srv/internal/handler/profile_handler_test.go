@@ -334,3 +334,53 @@ func TestUpdateOwnProfile_LengthCountsRunes(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	repo.AssertExpectations(t)
 }
+
+// TestOwnProfile_CarriesAllowMFAExemptViaAPI: GET and PUT /me answer the
+// server's ALLOW_MFA_EXEMPT_VIA_API (B097), which the user edit page reads
+// to hide the MFA-exempt checkbox when the API would refuse it.
+func TestOwnProfile_CarriesAllowMFAExemptViaAPI(t *testing.T) {
+	row := func(updateTS float64) *model.AppUserModel {
+		return &model.AppUserModel{AppUserID: 42, UserName: "alice",
+			FirstName: "Alice", SecurityContext: 1, UpdateTS: updateTS}
+	}
+	for _, allowed := range []bool{false, true} {
+		expected := `"allowMfaExemptViaApi":false`
+		if allowed {
+			expected = `"allowMfaExemptViaApi":true`
+		}
+
+		t.Run("GET "+expected, func(t *testing.T) {
+			s := testServices(t)
+			s.Config.AllowMFAExemptViaAPI = allowed
+			repo := new(MockProfileRepository)
+			repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+				Return(row(1.5), nil)
+			w := httptest.NewRecorder()
+			NewProfileHandler(s, repo).RetrieveOwnProfile(w,
+				meRequest(t, s, http.MethodGet, []int{model.GrantLogon}, ""))
+			assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), expected)
+			assert.Contains(t, w.Body.String(), `"userName":"alice"`)
+		})
+
+		t.Run("PUT "+expected, func(t *testing.T) {
+			s := testServices(t)
+			s.Config.AllowMFAExemptViaAPI = allowed
+			repo := new(MockProfileRepository)
+			repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+				Return(row(1.5), nil).Once()
+			repo.On("UpdateOwnProfile", mock.Anything, 42, 1, "Alice",
+				"Smith", "alice@example.com", mock.Anything, 1.5).
+				Return(2.5, nil)
+			repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+				Return(row(2.5), nil).Once()
+			w := httptest.NewRecorder()
+			NewProfileHandler(s, repo).UpdateOwnProfile(w,
+				meRequest(t, s, http.MethodPut, []int{model.GrantLogon},
+					validProfileBody))
+			assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), expected)
+			assert.Contains(t, w.Body.String(), `"updateTs":2.5`)
+		})
+	}
+}

@@ -24,6 +24,16 @@ type ProfileUpdateRequest struct {
 	UpdateTS        float64         `json:"updateTs"`
 }
 
+// ownProfileResponse is what GET and PUT /me return: the caller's own row
+// plus server settings the web app shapes its pages by.
+// AllowMFAExemptViaAPI mirrors the config key of that name (B097): when
+// false, POST /user and /userInvite refuse mfaExempt true and PUT /user
+// refuses turning it on, so the user edit page hides the checkbox.
+type ownProfileResponse struct {
+	model.AppUserOwnProfileModel
+	AllowMFAExemptViaAPI bool `json:"allowMfaExemptViaApi"`
+}
+
 // Bound on the preferences document; it is a handful of UI settings.
 const maxPreferenceBytes = 8 << 10
 
@@ -73,7 +83,7 @@ func (h *ProfileHandler) RetrieveOwnProfile(
 	}
 
 	appHelper.WriteJSON(
-		w, http.StatusOK, model.DataWrapper{Data: user.OwnProfile()},
+		w, http.StatusOK, model.DataWrapper{Data: h.ownProfileOf(user)},
 	)
 	appHelper.Info("ME_RD_DONE", "RetrieveOwnProfile completed")
 }
@@ -161,9 +171,19 @@ func (h *ProfileHandler) UpdateOwnProfile(
 		return
 	}
 	appHelper.WriteJSON(
-		w, http.StatusOK, model.DataWrapper{Data: user.OwnProfile()},
+		w, http.StatusOK, model.DataWrapper{Data: h.ownProfileOf(user)},
 	)
 	appHelper.Info("ME_UP_DONE", "UpdateOwnProfile completed")
+}
+
+// ownProfileOf is the /me answer for the caller's row.
+func (h *ProfileHandler) ownProfileOf(
+	user *model.AppUserModel,
+) ownProfileResponse {
+	return ownProfileResponse{
+		AppUserOwnProfileModel: user.OwnProfile(),
+		AllowMFAExemptViaAPI:   h.appsrv.Config.AllowMFAExemptViaAPI,
+	}
 }
 
 // retrieveOwnRow reads the caller's row by the JWT's subject. user_name is

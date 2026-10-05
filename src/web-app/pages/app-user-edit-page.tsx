@@ -7,7 +7,6 @@ import {
   Button,
   Title,
   Group,
-  Checkbox,
   MultiSelect,
   Text,
   Container,
@@ -22,6 +21,7 @@ import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { useAuthStore } from "../stores/auth-store";
+import { useProfileStore } from "../stores/profile-store";
 import { confirmDelete } from "../utils/confirm-delete";
 import { ChangePasswordModal } from "../components/change-password-modal";
 import { InviteLinkModal } from "../components/invite-link-modal";
@@ -33,6 +33,7 @@ import {
 } from "../types/user-type";
 import { grants } from "../constants/grants";
 import { PasswordGenerator } from "../components/password-generator";
+import { MfaExemptField } from "../components/mfa-exempt-field";
 import { reportError } from "../utils/report-error";
 
 
@@ -74,6 +75,11 @@ function UserEditPage() {
   const authState = useAuthGuard([requiredGrant, grants.READ_USER]);
   const grantList = useAuthStore((state) => state.grantList);
   const ownUserName = useAuthStore((state) => state.userName);
+  // Whether the server lets the API set mfaExempt (B097); the profile is
+  // loaded app-wide (app.tsx), and until it is the checkbox stays hidden.
+  const allowMfaExemptViaApi = useProfileStore(
+    (state) => state.profile?.allowMfaExemptViaApi === true,
+  );
   // The route id the form was last loaded for, and what that load found;
   // a new ?appUserId= on the same page reloads the form.
   const requestedId = useRef<string | null>(null);
@@ -90,6 +96,8 @@ function UserEditPage() {
   const [accountStatus, setAccountStatus] =
     useState<AccountStatus>("active");
   const [blockLoading, setBlockLoading] = useState(false);
+  // The loaded login's mfaExempt as stored, not as edited.
+  const [storedMfaExempt, setStoredMfaExempt] = useState(false);
   // A new user is onboarded by an invite link (they choose their own
   // password) or with a password the admin sets (B035).
   const [onboarding, setOnboarding] = useState<"invite" | "password">(
@@ -123,6 +131,7 @@ function UserEditPage() {
             updateTs: user.updateTs.toString(),
           });
           setAccountStatus(user.accountStatus);
+          setStoredMfaExempt(user.mfaExempt);
         }
         setLoadResult({ id, found: user !== null });
       })
@@ -468,10 +477,11 @@ function UserEditPage() {
           disabled={groupsLoading}
           mb="md"
         />
-        <Checkbox
-          label="MFA Exempt"
-          {...form.getInputProps('mfaExempt')}
-          mb="md"
+        <MfaExemptField
+          allowSetting={allowMfaExemptViaApi}
+          storedExempt={!isNew && storedMfaExempt}
+          checked={form.values.mfaExempt}
+          onChange={(checked) => form.setFieldValue('mfaExempt', checked)}
         />
         <Group>
           <Button type="submit">

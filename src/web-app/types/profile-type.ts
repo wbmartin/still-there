@@ -62,6 +62,9 @@ export interface Profile {
   // As stored; read it through resolvePreference.
   preferenceJsonb?: unknown;
   updateTs: number;
+  // The server's ALLOW_MFA_EXEMPT_VIA_API (B097): false means the API
+  // refuses setting mfaExempt, so the user edit page hides the checkbox.
+  allowMfaExemptViaApi: boolean;
 }
 
 // PUT /me body: what a user may change about themselves.
