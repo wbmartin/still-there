@@ -73,9 +73,9 @@ old head, the only link back to the old history.
 ```bash
 git fetch origin
 OLD=$(git rev-parse origin/main); echo "OLD=$OLD"
-git checkout --orphan fresh "$OLD"
-git commit -m "Fresh root at $OLD"
-[ "$(git rev-parse "fresh^{tree}")" = "$(git rev-parse "$OLD^{tree}")" ] && echo "same tree"
+git checkout --orphan fresh "${OLD:?}"
+git commit -m "Fresh root at ${OLD:?}"
+[ "$(git rev-parse "fresh^{tree}")" = "$(git rev-parse "${OLD:?}^{tree}")" ] && echo "same tree"
 git rev-list --count fresh
 ```
 
@@ -112,7 +112,7 @@ sed -n 's/^HOOK_SECRET=//p' /srv/shrmpl/etc/hooks/build-proto_*.env
 ```bash
 REPO_URL=$(sed -n 's/^REPO_URL=//p' /srv/uat-proto/etc/uat-proto-deploy.env)
 : "${REPO_URL:?}"
-sudo -u shrmpl-hook -H git ls-remote "$REPO_URL"; echo "exit $?"
+sudo -u shrmpl-hook -H git ls-remote "${REPO_URL:?}"; echo "exit $?"
 ```
 
 ## 3. Push the root commit
@@ -139,7 +139,7 @@ sha `git rev-parse fresh` printed:
 
 ```bash
 : "${ROOT_SHA:?}"
-sudo -u shrmpl-hook -H /srv/prd-proto/bin/prd-proto-promote-uat-and-deploy "$ROOT_SHA"
+sudo -u shrmpl-hook -H /srv/prd-proto/bin/prd-proto-promote-uat-and-deploy "${ROOT_SHA:?}"
 ```
 
 If the prod webhook is on `main` too, the push above fired it while UAT
@@ -155,12 +155,12 @@ out, because until then it is the only copy on the host:
 
 ```bash
 E=/srv/uat-proto/etc/uat-proto-deploy.env
-BUILD_STG=$(sed -n 's/^BUILD_STG=//p' "$E"); REPO_URL=$(sed -n 's/^REPO_URL=//p' "$E")
+BUILD_STG=$(sed -n 's/^BUILD_STG=//p' "${E:?}"); REPO_URL=$(sed -n 's/^REPO_URL=//p' "${E:?}")
 : "${BUILD_STG:?}" "${REPO_URL:?}"
-mv "$BUILD_STG" "$BUILD_STG.old"
-mkdir -p "$BUILD_STG" && chown shrmpl-hook:shrmpl-hook "$BUILD_STG"
-sudo -u shrmpl-hook -H git clone "$REPO_URL" "$BUILD_STG"
-sudo -u shrmpl-hook -H git -C "$BUILD_STG" rev-list --all --count
+mv "${BUILD_STG:?}" "${BUILD_STG:?}.old"
+mkdir -p "${BUILD_STG:?}" && chown shrmpl-hook:shrmpl-hook "${BUILD_STG:?}"
+sudo -u shrmpl-hook -H git clone "${REPO_URL:?}" "${BUILD_STG:?}"
+sudo -u shrmpl-hook -H git -C "${BUILD_STG:?}" rev-list --all --count
 ```
 
 Expect `1`, then `rm -rf "$BUILD_STG.old"`.

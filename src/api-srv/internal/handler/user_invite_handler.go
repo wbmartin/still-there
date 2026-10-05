@@ -144,13 +144,18 @@ func (h *UserInviteHandler) CreateInvitedUser(
 		r.Context(), h.appUserGroupRepo,
 		req.AppUserGroupMembershipList, jwtClaims.SecurityContext,
 	)
-	if !valid || err != nil {
+	if err != nil {
+		appHelper.WriteError(w, http.StatusInternalServerError,
+			"Failed to check the security context", "SEC_CTX_CHECK", err)
+		return
+	}
+	if !valid {
 		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
 			"Access denied: all groups must be in the same security context as the user",
 			"SEC_CTX_VIOLATION",
-			err,
+			nil,
 		)
 		return
 	}

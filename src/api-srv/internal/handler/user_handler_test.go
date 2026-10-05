@@ -257,7 +257,7 @@ func TestValidateGroupsSecurityContext(t *testing.T) {
 			},
 			mockError:     nil,
 			expectedValid: false,
-			expectedError: true,
+			expectedError: false, // a mismatch is a 403, not an error
 		},
 		{
 			name:                    "some groups not found",
@@ -269,7 +269,7 @@ func TestValidateGroupsSecurityContext(t *testing.T) {
 			},
 			mockError:     nil,
 			expectedValid: false,
-			expectedError: true,
+			expectedError: false, // a mismatch is a 403, not an error
 		},
 		{
 			name:                    "repository error",
@@ -352,7 +352,7 @@ func TestValidateUsersSecurityContext(t *testing.T) {
 			},
 			mockError:     nil,
 			expectedValid: false,
-			expectedError: true,
+			expectedError: false, // a mismatch is a 403, not an error
 		},
 		{
 			name:                    "some users not found",
@@ -364,7 +364,7 @@ func TestValidateUsersSecurityContext(t *testing.T) {
 			},
 			mockError:     nil,
 			expectedValid: false,
-			expectedError: true,
+			expectedError: false, // a mismatch is a 403, not an error
 		},
 		{
 			name:                    "repository error",
@@ -505,6 +505,53 @@ func TestCreateUser(t *testing.T) {
 			assert.Equal(t, http.StatusInternalServerError, w.Code)
 			assert.NotContains(t, w.Body.String(), "conn reset")
 		})
+}
+
+// A group the tenant does not hold is 403 SEC_CTX_VIOLATION; a failed group
+// lookup is 500 SEC_CTX_CHECK, never a 403 that hides the outage (C005).
+func TestCreateUser_SecurityContextCheck(t *testing.T) {
+	const body = `{"userName":"bob","password":"long-enough-1",` +
+		`"firstName":"Bob","lastName":"B","email":"b@example.com",` +
+		`"appUserGroupMembershipList":[4,5]}`
+	createUser := func(
+		t *testing.T, groupRepository *MockAppUserGroupRepository,
+	) *httptest.ResponseRecorder {
+		t.Helper()
+		s := testServices(t)
+		userRepository := new(MockUserRepository)
+		handler := NewUserHandler(s, userRepository, groupRepository)
+		w := httptest.NewRecorder()
+		handler.CreateUser(w, userAdminRequest(t, s, http.MethodPost,
+			"/user", body, model.GrantUserCreate))
+		userRepository.AssertExpectations(t)
+		groupRepository.AssertExpectations(t)
+		return w
+	}
+
+	t.Run("a group outside the tenant → 403", func(t *testing.T) {
+		groupRepository := new(MockAppUserGroupRepository)
+		groupRepository.On("RetrieveAppUserGroupListByIDList",
+			mock.Anything, []int{4, 5}, userAdminTenant).
+			Return([]*model.AppUserGroupModel{{AppUserGroupID: 4,
+				SecurityContext: userAdminTenant}}, nil)
+		w := createUser(t, groupRepository)
+		assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), "same security context")
+	})
+
+	t.Run("lookup error → 500 without its text", func(t *testing.T) {
+		groupRepository := new(MockAppUserGroupRepository)
+		groupRepository.On("RetrieveAppUserGroupListByIDList",
+			mock.Anything, []int{4, 5}, userAdminTenant).
+			Return([]*model.AppUserGroupModel(nil),
+				errors.New("conn reset"))
+		w := createUser(t, groupRepository)
+		assert.Equal(t, http.StatusInternalServerError, w.Code,
+			w.Body.String())
+		assert.Contains(t, w.Body.String(),
+			"Failed to check the security context")
+		assert.NotContains(t, w.Body.String(), "conn reset")
+	})
 }
 
 func TestUpdateUser(t *testing.T) {
@@ -709,6 +756,15 @@ func TestDeleteUser(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 		})
 	}
+
+	t.Run("own login (alice, 7) → 400, repository untouched",
+		func(t *testing.T) {
+			repo := new(MockUserRepository)
+			w := deleteUser(t, repo, "/user?appUserId=7&updateTs=12.5")
+			assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), "your own login")
+			assert.Empty(t, repo.Calls, "no repository call, no delete")
+		})
 }
 
 func TestRetrieveUserList(t *testing.T) {

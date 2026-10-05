@@ -93,6 +93,9 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
   `src/api-srv/go.mod`, unless that bump is the point of the change.
 - Config is a flat `KEY=VALUE` file passed to the binary; no environment-
   variable lookups.
+- A change that needs a hand step on a host adds an entry to
+  `tasks/todo.md` Host work (host, command, check, rollback). Agents never
+  run or tick it; only Brandon's report ticks one.
 - Customer data never in git: source exports and anything derived from
   them live outside the repo; fixtures and mock data are synthetic
   (`DERIVING.md` section 2). A leak costs a new repository.

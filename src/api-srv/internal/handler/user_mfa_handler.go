@@ -158,67 +158,59 @@ func UserSelfCreateHandler(
 	}
 }
 
-// MFASetupHandler handles MFA setup for authenticated users
+// MFASetupHandler enrols a login mid-sign-in: the temp token /auth issued
+// is its only credential. There is no session yet, so the JWT, CSRF and
+// grant checks are skipped (see the comment at the checks below).
 func MFASetupHandler(
 	appServices *app.Services,
 	userRepo UserRepositoryInterface,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Security checks
+		// Security checks. A temp token is the only way in (GRC backport
+		// C004): it stands in for the session, so there is no JWT to
+		// validate, no session id to derive a CSRF token from, and holding
+		// it is the authorization. These two routes once also took a
+		// session cookie -- a path nothing called, which skipped CSRF on a
+		// signed-in write; that path is gone. The rate limit is per address
+		// and there is no block flag to read: the temp token comes from
+		// /auth, which refuses a blocked login.
 		appHelper := security.NewAppHelper(w, r, appServices, "MFASetupHandler")
+		appHelper.SkipJWT()
+		appHelper.CheckRateLimit()
+		appHelper.SkipUserBlock()
 		appHelper.SkipCSRF()
-		appHelper.SkipAuthorization() // MFA setup is user-specific
+		appHelper.SkipAuthorization()
+		if !appHelper.CheckAllChecksComplete() {
+			return
+		}
 
-		var userName string
-		// Check for temp token in request body first
+		// Any body without a usable temp token -- none, empty, not JSON --
+		// is a request with no credential: 401, not 400.
 		var tempReq struct {
 			TempToken string `json:"tempToken"`
 		}
-		// The body has to be read here because it decides which auth path runs
-		// below -- temp token or JWT -- so the read precedes every check.
-		// That makes bounding it the only protection available: any caller
-		// reaches this line, rate-limited or not.
 		bodyBytes, ok := readBody(appHelper, w, r, maxAuthBodyBytes)
 		if !ok {
 			return
 		}
-		if err := json.Unmarshal(bodyBytes, &tempReq); err == nil &&
-			tempReq.TempToken != "" {
-			// Temp token path: no session yet, so the rate limit is per
-			// address. The temp token comes from /auth, which refuses a
-			// blocked login, so there is no block flag to read here.
-			appHelper.SkipJWT()
-			appHelper.CheckRateLimit()
-			appHelper.SkipUserBlock()
-			if !appHelper.CheckAllChecksComplete() {
-				return
-			}
-			tempToken := tempReq.TempToken
-			// Get username from temp token
-			userNameBytes, err := appServices.KV.Get(
-				"TEMP_AUTH_SUCCESS_" + tempToken,
+		if err := json.Unmarshal(bodyBytes, &tempReq); err != nil ||
+			tempReq.TempToken == "" {
+			appHelper.WriteError(w, http.StatusUnauthorized,
+				"tempToken is required", "ITTK", nil)
+			return
+		}
+		userName, err := appServices.KV.Get(
+			"TEMP_AUTH_SUCCESS_" + tempReq.TempToken,
+		)
+		if err != nil || userName == "" {
+			appHelper.WriteError(
+				w,
+				http.StatusUnauthorized,
+				"Invalid temp token",
+				"ITTK",
+				nil,
 			)
-			if err != nil || userNameBytes == "" {
-				appHelper.WriteError(
-					w,
-					http.StatusUnauthorized,
-					"Invalid temp token",
-					"ITTK",
-					nil,
-				)
-				return
-			}
-			userName = userNameBytes
-		} else {
-			// Session path: the JWT first, so the rate limit is per user
-			// and the block flag is read (B094).
-			appHelper.CheckJWT()
-			appHelper.CheckRateLimitAndUserBlock()
-			if !appHelper.CheckAllChecksComplete() {
-				return
-			}
-			jwtClaims := appHelper.GetClaims()
-			userName = jwtClaims.Subject
+			return
 		}
 
 		appHelper.Info(
@@ -366,63 +358,56 @@ func MFASetupHandler(
 	}
 }
 
-// MFAVerifyHandler handles MFA verification
+// MFAVerifyHandler checks a TOTP code mid-sign-in and completes the login:
+// the temp token /auth issued is its only credential, as in
+// MFASetupHandler.
 func MFAVerifyHandler(
 	appServices *app.Services,
 	userRepo UserRepositoryInterface,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Security checks
+		// Security checks: as in MFASetupHandler, the temp token is the only
+		// way in (GRC backport C004) and stands in for the session, so JWT,
+		// CSRF and authorization are skipped; the rate limit is per address
+		// and /auth already refused a blocked login. The lockout below
+		// still counts every wrong code.
 		appHelper := security.NewAppHelper(
 			w, r, appServices, "MFAVerifyHandler",
 		)
+		appHelper.SkipJWT()
+		appHelper.CheckRateLimit()
+		appHelper.SkipUserBlock()
 		appHelper.SkipCSRF()
 		appHelper.SkipAuthorization()
+		if !appHelper.CheckAllChecksComplete() {
+			return
+		}
 
 		// Parse request
 		var req struct {
 			TempToken string `json:"tempToken"`
 			TOTPCode  string `json:"totpCode"`
 		}
-		// Same reasoning as MFASetupHandler: read before every check, so
-		// bound it.
 		if !decodeJSONBody(appHelper, w, r, maxAuthBodyBytes, &req) {
 			return
 		}
-
-		var userName string
-		if req.TempToken != "" {
-			// Temp token path: as in MFASetupHandler, per-address rate
-			// limit and no block flag (/auth refused a blocked login).
-			appHelper.SkipJWT()
-			appHelper.CheckRateLimit()
-			appHelper.SkipUserBlock()
-			if !appHelper.CheckAllChecksComplete() {
-				return
-			}
-			userNameBytes, err := appServices.KV.Get(
-				"TEMP_AUTH_SUCCESS_" + req.TempToken,
+		if req.TempToken == "" {
+			appHelper.WriteError(w, http.StatusUnauthorized,
+				"tempToken is required", "ITTK", nil)
+			return
+		}
+		userName, err := appServices.KV.Get(
+			"TEMP_AUTH_SUCCESS_" + req.TempToken,
+		)
+		if err != nil || userName == "" {
+			appHelper.WriteError(
+				w,
+				http.StatusUnauthorized,
+				"Invalid temp token",
+				"ITTK",
+				nil,
 			)
-			if err != nil || userNameBytes == "" {
-				appHelper.WriteError(
-					w,
-					http.StatusUnauthorized,
-					"Invalid temp token",
-					"ITTK",
-					nil,
-				)
-				return
-			}
-			userName = userNameBytes
-		} else {
-			// Session path: JWT, then per-user rate limit and block flag.
-			appHelper.CheckJWT()
-			appHelper.CheckRateLimitAndUserBlock()
-			if !appHelper.CheckAllChecksComplete() {
-				return
-			}
-			jwtClaims := appHelper.GetClaims()
-			userName = jwtClaims.Subject
+			return
 		}
 
 		appHelper.Info(
@@ -434,18 +419,6 @@ func MFAVerifyHandler(
 		user, err := userRepo.RetrieveUserByUserName(r.Context(), userName)
 		if err != nil {
 			mapRepoError(appHelper, w, err, "Failed to retrieve user", "USF0")
-			return
-		}
-
-		// Only check MFA setup for logged-in users (JWT path), not during initial setup (temp token path)
-		if !user.MFASetup && req.TempToken == "" {
-			appHelper.WriteError(
-				w,
-				http.StatusBadRequest,
-				"MFA not set up. Please complete MFA setup first.",
-				"MFNS",
-				nil,
-			)
 			return
 		}
 
@@ -576,100 +549,91 @@ func MFAVerifyHandler(
 			}
 		}
 
-		if req.TempToken != "" {
-			// Complete authentication for onboarding
-			// Get grants
-			grantsMap, err := userRepo.GetGrantsForGroups(
-				r.Context(),
-				user.AppUserGroupMembershipList,
+		// Complete authentication for onboarding
+		// Get grants
+		grantsMap, err := userRepo.GetGrantsForGroups(
+			r.Context(),
+			user.AppUserGroupMembershipList,
+		)
+		if err != nil {
+			appHelper.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to get grants",
+				"GRFL",
+				err,
 			)
-			if err != nil {
-				appHelper.WriteError(
-					w,
-					http.StatusInternalServerError,
-					"Failed to get grants",
-					"GRFL",
-					err,
-				)
-				return
-			}
+			return
+		}
 
-			// Issue JWT
-			jwt, sessionID, err := createJWTForUser(
-				user,
-				grantsMap[user.SecurityContext],
-				appServices,
+		// Issue JWT
+		jwt, sessionID, err := createJWTForUser(
+			user,
+			grantsMap[user.SecurityContext],
+			appServices,
+		)
+		if err != nil {
+			appHelper.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"Failed to create JWT",
+				"JWFL",
+				err,
 			)
-			if err != nil {
-				appHelper.WriteError(
-					w,
-					http.StatusInternalServerError,
-					"Failed to create JWT",
-					"JWFL",
-					err,
-				)
-				return
-			}
+			return
+		}
 
-			// Set JWT cookie
-			setAuthCookie(w, jwt, authCookieSessionMaxAge)
-			// The login completes here (password step, then this code)
-			resetFailedAttemptsOrLog(appServices, userName)
+		// Set JWT cookie
+		setAuthCookie(w, jwt, authCookieSessionMaxAge)
+		// The login completes here (password step, then this code)
+		resetFailedAttemptsOrLog(appServices, userName)
 
-			// CSRF token
-			csrfToken := sessionID[len(sessionID)-3:]
+		// CSRF token
+		csrfToken := sessionID[len(sessionID)-3:]
 
-			// The temp token is single-use: delete it. (Set with ttl "0" was
-			// an invalid expiration whose error went unread, so the token
-			// stayed replayable for its whole 10 minutes.)
-			if err := appServices.KV.Del(
-				"TEMP_AUTH_SUCCESS_" + req.TempToken,
-			); err != nil {
-				appHelper.Logger().Error(
-					"MFA_TT_DEL_FAIL",
-					"Failed to delete temp token: "+err.Error(),
-				)
-			}
-
-			// Return full user data
-			response := model.Auth2ResponseModel{
-				AppUserID:       user.AppUserID,
-				UserName:        user.UserName,
-				FirstName:       user.FirstName,
-				LastName:        user.LastName,
-				SecurityContext: user.SecurityContext,
-				GrantList:       grantsMap[user.SecurityContext],
-				AvailableSecurityContextList: make(
-					[]int,
-					0,
-					len(grantsMap),
-				),
-				MFARequired: false, // Now verified
-			}
-			for ctx := range grantsMap {
-				response.AvailableSecurityContextList = append(
-					response.AvailableSecurityContextList,
-					ctx,
-				)
-			}
-
-			wrapper := model.Auth2ResponseWrapper{
-				User:      response,
-				CsrfToken: csrfToken,
-			}
-			appHelper.WriteJSON(w, http.StatusOK, wrapper)
-			appHelper.Info(
-				"MFA_ONB_CMP",
-				"MFA onboarding completed for user: "+userName,
-			)
-		} else {
-			// For logged in users, just confirm
-			wrapper := model.DataWrapper{Data: map[string]string{"message": "MFA verified successfully"}}
-			appHelper.WriteJSON(w, http.StatusOK, wrapper)
-			appHelper.Info(
-				"MFA_VFY_OK", "MFA verification successful for user: "+userName,
+		// The temp token is single-use: delete it. (Set with ttl "0" was
+		// an invalid expiration whose error went unread, so the token
+		// stayed replayable for its whole 10 minutes.)
+		if err := appServices.KV.Del(
+			"TEMP_AUTH_SUCCESS_" + req.TempToken,
+		); err != nil {
+			appHelper.Logger().Error(
+				"MFA_TT_DEL_FAIL",
+				"Failed to delete temp token: "+err.Error(),
 			)
 		}
+
+		// Return full user data
+		response := model.Auth2ResponseModel{
+			AppUserID:       user.AppUserID,
+			UserName:        user.UserName,
+			FirstName:       user.FirstName,
+			LastName:        user.LastName,
+			SecurityContext: user.SecurityContext,
+			GrantList:       grantsMap[user.SecurityContext],
+			AvailableSecurityContextList: make(
+				[]int,
+				0,
+				len(grantsMap),
+			),
+			MFARequired: false, // Now verified
+		}
+		for ctx := range grantsMap {
+			response.AvailableSecurityContextList = append(
+				response.AvailableSecurityContextList,
+				ctx,
+			)
+		}
+
+		wrapper := model.Auth2ResponseWrapper{
+			User:      response,
+			CsrfToken: csrfToken,
+		}
+		appHelper.WriteJSON(w, http.StatusOK, wrapper)
+		appHelper.Info(
+			"MFA_ONB_CMP",
+			"MFA onboarding completed for user: "+userName,
+		)
 	}
 }
 

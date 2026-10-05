@@ -15,7 +15,12 @@ import {
 } from "@mantine/core";
 import { IconCopy, IconCheck } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { apiJson, isApiStatus, jsonBody } from "../utils/api";
+import {
+  apiJson,
+  isApiStatus,
+  jsonBody,
+  setCsrfToken,
+} from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { useAuthStore } from "../stores/auth-store";
 import { ROUTES } from "../constants/routes";
@@ -85,7 +90,10 @@ function MFAOnboardingPage() {
         { anonymous: true },
       );
       if (data.user) {
-        // Update auth store with user data
+        // The session /mfaVerify just minted comes with its CSRF token, as
+        // /auth's does (auth-store). Without it the first write is refused
+        // 403 and only api.ts's /refresh retry hides it.
+        setCsrfToken(data.csrfToken);
         useAuthStore.setState({
           authState: "YES",
           grantList: data.user.grantList || [],

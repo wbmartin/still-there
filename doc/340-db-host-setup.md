@@ -45,15 +45,15 @@ block does; on prod the test env file is absent, so the CI password is
 empty and no CI role is made.
 
 ```bash
-: "${ENV:?}" "${APP_ROOT:?}" "${SQL:?}"
 getv()  { sed -n "s/^$2=//p" "$1" 2>/dev/null | head -1; }
 urlpw() { sed -n 's#^DATABASE_URL=postgres://[^:]*:\([^@]*\)@.*#\1#p' "$1" | head -1; }
 urldb() { sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$1" | head -1; }
-{ printf '\\set db %s\n'     "$(urldb "$APP_ROOT/etc/$ENV-proto-migrate.env")"
-  printf '\\set ddl_pw %s\n' "$(urlpw "$APP_ROOT/etc/$ENV-proto-migrate.env")"
-  printf '\\set app_pw %s\n' "$(urlpw "$APP_ROOT/etc/$ENV-proto-api.env")"
-  printf '\\set ci_pw %s\n'  "$(getv "$APP_ROOT/etc/$ENV-proto-test.env" 'export PGPASSWORD')"
-  cat "$SQL"
+{ : "${ENV:?}" "${APP_ROOT:?}" "${SQL:?}"
+  printf '\\set db %s\n'     "$(urldb "${APP_ROOT:?}/etc/${ENV:?}-proto-migrate.env")"
+  printf '\\set ddl_pw %s\n' "$(urlpw "${APP_ROOT:?}/etc/${ENV:?}-proto-migrate.env")"
+  printf '\\set app_pw %s\n' "$(urlpw "${APP_ROOT:?}/etc/${ENV:?}-proto-api.env")"
+  printf '\\set ci_pw %s\n'  "$(getv "${APP_ROOT:?}/etc/${ENV:?}-proto-test.env" 'export PGPASSWORD')"
+  cat "${SQL:?}"
 } | sudo -u postgres psql -X
 ```
 
@@ -79,8 +79,8 @@ password is needed and none is on a command line:
 
 ```bash
 : "${ENV:?}" "${APP_ROOT:?}" "${DUMP:?}"
-DB=$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$APP_ROOT/etc/$ENV-proto-migrate.env")
-sudo -u postgres pg_restore --no-owner --no-privileges --role=proto_ddl --exit-on-error -d "$DB" < "$DUMP"
+DB=$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "${APP_ROOT:?}/etc/${ENV:?}-proto-migrate.env")
+sudo -u postgres pg_restore --no-owner --no-privileges --role=proto_ddl --exit-on-error -d "${DB:?}" < "${DUMP:?}"
 ```
 
 `pg_restore` must be the same Postgres major version as the `pg_dump` that
@@ -95,8 +95,8 @@ recorded, not re-run, as the hook user:
 
 ```bash
 : "${ENV:?}" "${APP_ROOT:?}"
-sudo -u shrmpl-hook "$APP_ROOT/libexec/proto-migrate" -config "$APP_ROOT/etc/$ENV-proto-migrate.env" stamp 1
-sudo -u shrmpl-hook "$APP_ROOT/libexec/proto-migrate" -config "$APP_ROOT/etc/$ENV-proto-migrate.env" status
+sudo -u shrmpl-hook "${APP_ROOT:?}/libexec/proto-migrate" -config "${APP_ROOT:?}/etc/${ENV:?}-proto-migrate.env" stamp 1
+sudo -u shrmpl-hook "${APP_ROOT:?}/libexec/proto-migrate" -config "${APP_ROOT:?}/etc/${ENV:?}-proto-migrate.env" status
 ```
 
 New migrations start with `go run ./cmd/migrate new <name>` in
@@ -110,9 +110,9 @@ psql in `PGPASSWORD`, the environment, not on its command line:
 ```bash
 : "${ENV:?}" "${APP_ROOT:?}"
 urlpw() { sed -n 's#^DATABASE_URL=postgres://[^:]*:\([^@]*\)@.*#\1#p' "$1" | head -1; }
-DB=$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$APP_ROOT/etc/$ENV-proto-migrate.env")
-sudo -u postgres psql -X -d "$DB" -c "SELECT tableowner, count(*) FROM pg_tables WHERE schemaname = 'public' GROUP BY 1"
-PGPASSWORD=$(urlpw "$APP_ROOT/etc/$ENV-proto-api.env") psql -X -h 127.0.0.1 -U proto_app -d "$DB" -c 'SELECT count(*) FROM app_user' -c 'CREATE TABLE nope (i int)'
+DB=$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "${APP_ROOT:?}/etc/${ENV:?}-proto-migrate.env")
+sudo -u postgres psql -X -d "${DB:?}" -c "SELECT tableowner, count(*) FROM pg_tables WHERE schemaname = 'public' GROUP BY 1"
+PGPASSWORD=$(urlpw "${APP_ROOT:?}/etc/${ENV:?}-proto-api.env") psql -X -h 127.0.0.1 -U proto_app -d "${DB:?}" -c 'SELECT count(*) FROM app_user' -c 'CREATE TABLE nope (i int)'
 ```
 
 Expect one owner row, `proto_ddl | <table count>`; then the user count;
@@ -121,8 +121,8 @@ create (or alter, or drop) anything. On UAT, also the CI role:
 
 ```bash
 : "${APP_ROOT:?}"
-DB=$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$APP_ROOT/etc/uat-proto-migrate.env")
-PGPASSWORD=$(sed -n 's/^export PGPASSWORD=//p' "$APP_ROOT/etc/uat-proto-test.env") psql -X -h 127.0.0.1 -U proto_ci -d "$DB" -c 'SELECT 1'
+DB=$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "${APP_ROOT:?}/etc/uat-proto-migrate.env")
+PGPASSWORD=$(sed -n 's/^export PGPASSWORD=//p' "${APP_ROOT:?}/etc/uat-proto-test.env") psql -X -h 127.0.0.1 -U proto_ci -d "${DB:?}" -c 'SELECT 1'
 ```
 
 Expect `FATAL:  permission denied for database`. After the first deploy,

@@ -9,7 +9,7 @@ Two scripts do the work; this skill is the procedure around them.
 
 | | |
 |---|---|
-| `bin/600-bundle-uat` | local: build `api-srv` (static linux/amd64) + `proto-migrate` (if `src/api-srv/cmd/migrate` exists) + `web-pub.tar.gz` + `db.sql` (pg_dump run *inside* the `$PG_CONTAINER` container) + `deploy.env` + `api-srv.env.template` (names filled, no secrets) → `dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz` → scp to `$UAT_HOST:/tmp/` |
+| `bin/600-bundle-uat` | local: build `api-srv` (static linux/amd64) + `proto-migrate` (if `src/api-srv/cmd/migrate` exists) + `web-pub.tar.gz` + `db.sql` (pg_dump run *inside* the `$PG_CONTAINER` container) + `deploy.env` + `api-srv.env.template` (names filled, no secrets) → `dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz` → scp to `$UAT_HOST:/tmp/` → delete the local tarball (kept if the scp fails) |
 | `bin/610-deploy-uat` | server, shipped in the bundle as `deploy.sh`: refuse a post-sales host → first run only, write `etc/api-srv.env` with secrets generated on the host, the systemd unit, and the nginx site for `UAT_DOMAIN` (`nginx -t` + reload; prints the `certbot --nginx` line) → stop `$SERVICE` → drop/recreate the UAT DB from `db.sql` → set the role password from `api-srv.env` → replace `$APP_ROOT/libexec/api-srv` (+ `proto-migrate`) → replace `$APP_ROOT/web-pub` → start → poll `/health` |
 
 **All settings come from `etc/uat-deploy.env`** (committed, no secrets), with the
@@ -40,7 +40,9 @@ ssh -o BatchMode=yes "$UAT_HOST" 'cd /tmp && f=$(ls -t '"$APP_NAME"'_bundle_*.ta
 The script prints `app=… branch=… commit=…` first — confirm it says `main`. Untracked
 files do not affect the build.
 
-Flags: `--no-scp` (build only), `--no-db` (skip the dump).
+Flags: `--no-scp` (build only; the tarball stays in `dist/`), `--no-db` (skip
+the dump). If the output ends with `[WARN] earlier bundles in dist/`, pass the
+printed `rm` lines to the operator: each bundle may hold a full DB dump.
 
 ## 2. Hand-off (one line, nothing else needed)
 

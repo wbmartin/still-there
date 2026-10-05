@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"os"
@@ -77,6 +78,14 @@ func unquote(v string) string {
 	}
 	return v
 }
+
+// minJWTSecretLength is the shortest JWT_SECRET LoadConfig accepts; every
+// host gets 64 hex characters (bin/610, doc/330, doc/331).
+const minJWTSecretLength = 32
+
+// totpKeyByteLength is the AES-256 key size TOTP_ENCRYPTION_KEY decodes to
+// (auth.EncryptTOTPSeed hex-decodes it for aes.NewCipher).
+const totpKeyByteLength = 32
 
 // LoadConfig loads configuration from a .env file
 func LoadConfig(configFilePath string) (*Config, error) {
@@ -225,6 +234,12 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	if config.JWTSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
+	if len(config.JWTSecret) < minJWTSecretLength {
+		return nil, fmt.Errorf(
+			"JWT_SECRET must be at least %d characters "+
+				"(openssl rand -hex 32)", minJWTSecretLength,
+		)
+	}
 	if config.ServerName == "" {
 		return nil, fmt.Errorf("SERVER_NAME is required")
 	}
@@ -245,6 +260,16 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	}
 	if config.TOTPEncryptionKey == "" {
 		return nil, fmt.Errorf("TOTP_ENCRYPTION_KEY is required")
+	}
+	// A key that is not AES-256 hex used to load and then answer 500 at
+	// the first MFA enrolment or login.
+	totpKey, err := hex.DecodeString(config.TOTPEncryptionKey)
+	if err != nil || len(totpKey) != totpKeyByteLength {
+		return nil, fmt.Errorf(
+			"TOTP_ENCRYPTION_KEY must be %d hex characters "+
+				"(%d bytes, openssl rand -hex 32)",
+			2*totpKeyByteLength, totpKeyByteLength,
+		)
 	}
 
 	return &config, nil

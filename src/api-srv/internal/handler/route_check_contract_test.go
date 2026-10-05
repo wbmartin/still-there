@@ -169,15 +169,15 @@ var routeContractList = []routeContract{
 		skip: "public invite half: rate limit, then the per-address " +
 			"and per-token lockout"},
 	{route: "POST /mfaSetup", handler: withUserRepo(MFASetupHandler),
-		session: true, rate: true, block: true,
-		skip: "temp token or session; no CSRF or grant on either. " +
-			"Temp token: per-address rate limit, no block flag (/auth " +
-			"refused a blocked login); session: all three (B094)"},
+		rate: true,
+		skip: "temp token only (C004): it stands in for the session, so " +
+			"no JWT, CSRF or grant; per-address rate limit, no block " +
+			"flag (/auth refused a blocked login)"},
 	{route: "POST /mfaVerify", handler: withUserRepo(MFAVerifyHandler),
-		session: true, rate: true, block: true,
-		skip: "temp token or session; no CSRF or grant on either. " +
-			"Temp token: per-address rate limit, no block flag (/auth " +
-			"refused a blocked login); session: all three (B094)"},
+		rate: true,
+		skip: "temp token only (C004): it stands in for the session, so " +
+			"no JWT, CSRF or grant; per-address rate limit, no block " +
+			"flag (/auth refused a blocked login)"},
 
 	fullChecks("GET /userList", model.GrantUserRead,
 		func(s *app.Services) http.HandlerFunc {

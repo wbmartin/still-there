@@ -114,12 +114,12 @@ is the login lockout instead. **CSRF** `CheckCSRF` (never on GET).
 | POST | /userSelfCreate | - | address | - | - | Public self-registration (see Exceptions) |
 | POST | /inviteCheck | - | address, then lockout | - | - | Who a live invite link is for (public) |
 | POST | /inviteRedeem | - | address, then lockout | - | - | Set the password from a live link (public) |
-| POST | /mfaSetup | temp token or Yes | temp token: address; session: user+block | - | - | Enrol: TOTP secret and QR code |
-| POST | /mfaVerify | temp token or Yes | temp token: address; session: user+block; lockout | - | - | Check a TOTP code; completes an MFA login |
+| POST | /mfaSetup | temp token | address | - | - | Enrol: TOTP secret and QR code |
+| POST | /mfaVerify | temp token | address; lockout | - | - | Check a TOTP code and complete the MFA login |
 | GET | /userList | Yes | user+block | (GET) | READ_USER (9002) | Logins of the caller's tenant |
 | POST | /user | Yes | user+block | Yes | CREATE_USER (9001) | Create a login with a password |
 | PUT | /user | Yes | user+block | Yes | UPDATE_USER (9003) | Update a login |
-| DELETE | /user | Yes | user+block | Yes | DELETE_USER (9004) | Soft delete a login |
+| DELETE | /user | Yes | user+block | Yes | DELETE_USER (9004) | Soft delete a login (400 for the caller's own) |
 | POST | /changeOtherUserPassword | Yes | user+block | Yes | CHANGE_USER_PW (9009) | Set another login's password |
 | POST | /addUserListToGroup | Yes | user+block | Yes | UPDATE_USER_GROUP (9012) | Add logins to a group |
 | POST | /removeUserListFromGroup | Yes | user+block | Yes | UPDATE_USER_GROUP (9012) | Remove logins from a group |
@@ -167,8 +167,8 @@ refused 400 by the field's own validation, not by the decoder:
 | Route | Body |
 |---|---|
 | `/auth` | `{userName, password}` |
-| `/mfaSetup` | `{tempToken}`, or no token and a session cookie |
-| `/mfaVerify` | `{tempToken, totpCode}`, or `{totpCode}` and a session cookie |
+| `/mfaSetup` | `{tempToken}` |
+| `/mfaVerify` | `{tempToken, totpCode}` |
 | `/changeSecurityContext` | `{securityContext}` |
 | `/changeOwnPassword` | `{oldPassword, newPassword}` |
 | `PUT /me` | `{firstName, lastName, email, preferenceJsonb, updateTs}` |
@@ -227,8 +227,11 @@ it is `false` (and keeps it on an already-exempt login, only to clear it).
      verified (`mfa_setup`), so the web app sends the user to verify a code
      (`/mfa-verify`), not to enrol (`/mfa-setup`)
 
-2. **MFA enrolment** (`/mfaSetup`, temp token or session):
-   - Input: `{tempToken: string}` (or a session cookie)
+2. **MFA enrolment** (`/mfaSetup`, temp token only):
+   - Input: `{tempToken: string}`. A request without one, session cookie
+     or not, is 401 `tempToken is required` (`/mfaVerify` too): the
+     session path these two routes had was used by nothing and skipped
+     CSRF on a signed-in write (GRC backport C004)
    - Generates a TOTP secret if the user has none, stores it AES-GCM
      encrypted under `TOTP_ENCRYPTION_KEY`, and returns `secret` and
      `qrCodeImage`. A seed stored but not yet verified is shown again
@@ -494,7 +497,7 @@ anything not here runs all five.
 | `LogoffHandler` (`/logoff`) | CSRF, grant | Ending one's own session needs neither |
 | `ChangeSecurityContextHandler` (`/changeSecurityContext`) | CSRF, grant | Kept by decision (GRC backport B005, skipped): the switch writes no table row; it ends the old session and mints a new one. The grant is replaced by a check after the gate that the login holds a group in the target tenant (403 "Security context not available"). The 4 KiB body is decoded before `CheckJWT` |
 | `UserSelfCreateHandler` (`/userSelfCreate`) | JWT, block, CSRF, grant | Public self-registration, per-address rate limit only. It creates a tenant-1 login in group 3 and answers 409 "Username already taken" for a name in use (a name probe). Kept beside invite links (GRC backport B002 skipped; invites are B035); a derived app keeps or removes it |
-| `MFASetupHandler`, `MFAVerifyHandler` (`/mfaSetup`, `/mfaVerify`) | CSRF, grant; on the temp-token path also JWT and block | Temp token from the password step, or a session. The 4 KiB body is read before every check because it picks the path. Temp token: `SkipJWT`, `CheckRateLimit` (per address), `SkipUserBlock` (the token comes from `/auth`, which refuses a blocked login). Session: `CheckJWT`, then `CheckRateLimitAndUserBlock` (per user, `BLOCKED*` read, so a pre-block token is refused after a restart that lost its revocation; GRC backport B094) |
+| `MFASetupHandler`, `MFAVerifyHandler` (`/mfaSetup`, `/mfaVerify`) | JWT, block, CSRF, grant | The temp token from the password step is the only credential: it stands in for the session, so there is no JWT to check and no session id to derive a CSRF token from, and holding it is the grant. `CheckRateLimit` (per address) runs; `SkipUserBlock`, since the token comes from `/auth`, which refuses a blocked login. The 4 KiB body is read after the gate; no temp token is 401 `tempToken is required`, a session cookie or not. The session path both handlers had (`CheckJWT` + `CheckRateLimitAndUserBlock`, GRC backport B094) was used by nothing and skipped CSRF on a signed-in write, so it was removed (GRC backport C004) |
 | `UserInviteHandler.CheckInvite`, `.RedeemInvite` (`/inviteCheck`, `/inviteRedeem`) | JWT, block, CSRF, grant | Public; the token is the credential. Per-address rate limit, then the `/auth` lockout per address plus per token (see Invite Links) |
 
 #### What proves it

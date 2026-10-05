@@ -10,6 +10,9 @@
 #   7. etc/uat-nginx-site.conf.template         -> nginx-site.conf.template
 #      (610 fills and installs it once, for UAT_DOMAIN)
 # Output: dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz, scp'd to $UAT_HOST:/tmp/
+# The bundle holds a full pg_dump, so it does not stay in dist/: a successful
+# scp deletes it, a failed scp keeps it (and prints the retry), --no-scp keeps
+# it. Every run names any earlier bundle left in dist/ and prints the rm.
 #
 # This is the presales (pre-agreement) quick-deploy path: local build + local DB dump
 # replace UAT wholesale. The full-fat webhook/registry + migrator path is the
@@ -78,6 +81,8 @@ NAME="${APP_NAME}_bundle_${STAMP}"
 STAGE="$PROJECT_ROOT/dist/$NAME"
 TARBALL="$PROJECT_ROOT/dist/$NAME.tar.gz"
 rm -rf "$STAGE"; mkdir -p "$STAGE"
+# a failed build must not leave the staged db.sql in dist/
+trap 'rm -rf "$STAGE"' EXIT
 
 # --- 1. API server (static linux/amd64) -------------------------------------
 echo "[1/5] go build api-srv (linux/amd64)"
@@ -155,11 +160,37 @@ echo "      $TARBALL ($(du -h "$TARBALL" | cut -f1))"
 # --- ship ------------------------------------------------------------------
 if [ "$DO_SCP" = 1 ]; then
   echo "scp -> $UAT_HOST:/tmp/$NAME.tar.gz"
-  scp -q "$TARBALL" "$UAT_HOST:/tmp/$NAME.tar.gz"
+  if ! scp -q "$TARBALL" "$UAT_HOST:/tmp/$NAME.tar.gz"; then
+    echo "[ERROR] scp failed; the bundle stays in dist/. Retry with:"
+    echo "  scp $TARBALL $UAT_HOST:/tmp/$NAME.tar.gz"
+    echo "  rm -f $TARBALL   # once it is on the host"
+    exit 1
+  fi
+  # the host has its copy; the local one is a full DB dump with no further use
+  rm -f "$TARBALL"
+  echo "      removed $TARBALL (the host copy is /tmp/$NAME.tar.gz)"
   echo
   echo "Next, on the server:"
   echo "  ssh $UAT_HOST"
   echo "  cd /tmp && tar xzf $NAME.tar.gz && sudo ./$NAME/deploy.sh   # add --no-db to keep the server DB"
 else
-  echo "scp skipped (--no-scp)"
+  echo "scp skipped (--no-scp); $TARBALL stays: delete it once copied"
+fi
+
+# --- earlier bundles ---------------------------------------------------------
+# Never deleted automatically: name them and print the rm. A directory is the
+# staging dir of a run that died before this script cleaned up after itself.
+EARLIER_LIST=()
+for path in "$PROJECT_ROOT/dist/${APP_NAME}_bundle_"*; do
+  [ -e "$path" ] || continue
+  [ "$path" = "$TARBALL" ] && continue
+  EARLIER_LIST+=("$path")
+done
+if [ "${#EARLIER_LIST[@]}" -gt 0 ]; then
+  echo
+  echo "[WARN] earlier bundles in dist/, each may hold a full DB dump."
+  echo "  Remove them with:"
+  for path in "${EARLIER_LIST[@]}"; do
+    if [ -d "$path" ]; then echo "  rm -rf $path"; else echo "  rm -f $path"; fi
+  done
 fi

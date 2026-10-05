@@ -46,9 +46,10 @@ BASE_LIST=(. src src/api-srv src/api-srv/internal src/api-srv/sql
 TOPLEVEL_PATTERN='^(doc|src|bin|tests|etc|infra|scripts|tasks)/'
 # Written at run time and gitignored: present on a machine that has run the
 # gate, absent on a fresh clone, so their absence is not a doc bug.
+# etc/crt/ is the local TLS pair bin/400 writes.
 RUNTIME_PATTERN='^(tmp/|dist/|tests/\.venv|src/web-app/node_modules'
 RUNTIME_PATTERN+='|src/web-app/dist|src/web-app/coverage'
-RUNTIME_PATTERN+='|(src/web-app/)?tests/e2e/\.auth)'
+RUNTIME_PATTERN+='|(src/web-app/)?tests/e2e/\.auth|etc/crt/)'
 ELLIPSIS=$'\xe2\x80\xa6'
 
 miss_count=0
