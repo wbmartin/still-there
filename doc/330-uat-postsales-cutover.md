@@ -16,6 +16,10 @@ takes an outage from A1 to A8: one straight sequence beats staging a live
 swap. The presales database is **renamed aside**, not dropped or re-owned:
 it is the rollback, and the rollback is one statement.
 
+Once prod is post-sales too, section D removes the presales path from
+the derived app's repo: the files, the keys other scripts still read,
+and the docs that name it.
+
 This shape ran on real hosts in a derived app on 2026-10-01; this generic
 form has not run as written yet. Tick each step off as it runs and add
 what surprised you to **Lessons** at the bottom.
@@ -629,6 +633,119 @@ rm -f /tmp/proto-data-*.dump /tmp/proto-data-*.dump.sha256
 Locally, keep the export in `EXPORT_DIR` (`.dump`, `.sha256`,
 `.manifest`) until `doc/331` has loaded it on prod: it is the same file.
 Then delete it — it is the customer's data.
+
+## D. Retire the presales path in this app's repo
+
+Once **both** hosts are post-sales (UAT through this runbook with C done,
+prod through `doc/331-prd-postsales-install.md`) and no presales deploy
+will ever run again, the derived app deletes the presales path from its
+repo. ProtoStack, the template, keeps it; this section is for a derived
+app. It is repo work on a branch, from the laptop; no host changes except
+the read-only fail2ban check in D2. The model is what the first derived
+app removed (GRC commits 4231421 and 9400622).
+
+Deleting by hand has traps: two surviving scripts source the presales
+settings file, a Go test counts the env template, and the docs gate fails
+on every backticked path and allow-list line that names a deleted file.
+Do D1 to D5 in order, as one commit.
+
+### D1. Move what other scripts read out of `etc/uat-deploy.env`
+
+Only `bin/600-bundle-uat` and `bin/610-deploy-uat` need most of that
+file. Two scripts that stay also source it:
+
+| Script | Keys it reads | Where they go |
+|---|---|---|
+| `bin/620-export-tenant-data` | `PG_CONTAINER`, `LOCAL_ENV_FILE` (the default for its `[api-env-file]` argument) | a two-line laptop file, e.g. etc/loc-export.env with `PG_CONTAINER=loc-postgres` and `LOCAL_ENV_FILE=etc/loc-api-srv.env`, sourced after `etc/app.env` in place of the presales file. Reword the script's header and the comment above its `source`. GRC wrote the two values inline; the no-inline-defaults rule here says a file. |
+| `bin/605-survey-host` | `SVC_USER`, `DB_NAME` (the presales `www-data` and `uat_<slug>_db`) | nowhere. Post-sales names derive from `APP_SLUG`, and the probe already looks for `svc-<slug>`, `uat_<slug>_db`, `prd_<slug>_db` and `uat_<slug>_db_presales`. Drop the `source`, the two names from the `for var` check and the `NAMES` line, and `"$DB_NAME"` / `"${DB_NAME}_presales"` from the database loop; write `www-data` as a literal in the user loop (nginx still runs as it). Its header then says names come from `etc/app.env` only. |
+
+The other keys (`APP_NAME`, `UAT_HOST`, `APP_ROOT`, `SERVICE`,
+`DB_APP_ROLE`, `UAT_DOMAIN`) are read only by `bin/600-bundle-uat` and
+`bin/610-deploy-uat` and go with them.
+
+### D2. Delete
+
+```bash
+git rm bin/600-bundle-uat bin/610-deploy-uat etc/uat-deploy.env
+git rm etc/uat-api-srv.env.template etc/uat-nginx-site.conf.template
+git rm doc/320-presales-uat-deploy.md
+git rm -r .claude/skills/presales-deploy
+```
+
+Also dead once the hosts build their own web bundle
+(`uat-proto-publish-web-client`): `bin/110-build-web-app`, which only
+packs a tarball for a hand deploy and is called by no script (GRC removed
+its copy). Delete it with its rows in `README.md` and
+`doc/902-project-commands.md`, or keep it if anyone still hand-deploys.
+
+The one-time fail2ban move, `infra/uat/fail2ban/bin/migrate-to-srv-config`
+and `infra/prd/fail2ban/bin/migrate-to-srv-config`, goes only once
+**every** host has run it. As root on each host, read-only:
+
+```bash
+hostname
+readlink /etc/fail2ban/fail2ban.local /etc/fail2ban/jail.local /etc/fail2ban/filter.d/nginx-404.conf
+```
+
+Each existing file must print its `/srv/fail2ban/etc/` target. When every
+host does, `git rm` both copies and reword the lines that tell a reader
+to run it: the `fail2ban/` bullet and step 8 in `infra/README.md`, B4
+above, and the B4 cross-reference for the prod jail in `doc/331`.
+
+Untracked, on each laptop: a presales bundle in `dist/` (and its staging
+directory) holds a full, unscrubbed database dump. Delete them.
+
+### D3. The Go test that counts the env template
+
+`TestLoadConfig_RepoEnvFiles` in
+`src/api-srv/internal/config/config_test.go` wants at least 6 API env
+files; the template was the sixth, so after D2 the Go gate fails with
+"found 5". Drop the `etc/*-api-srv.env.template` glob,
+`templateTokenPattern` and the `isTemplate` branch of
+`standInPlaceholders`, set the count to 5, and reword the comments that
+name `bin/610` and the UAT template. In
+`src/api-srv/internal/config/config.go`, the `minJWTSecretLength`
+comment names `bin/610` too.
+
+### D4. Reword what names the presales path
+
+| File | What changes |
+|---|---|
+| `CLAUDE.md` | Layout: the `etc/` sentence on `uat-deploy.env` and the 600/610 pair; "Placeholder until post-sales" on `infra/<host>/`; doc/320 out of the `doc/` runbook list |
+| `DERIVING.md` | §2: the template row (keep the `infra/*/etc/*-api.env` half, post-sales only); §3: the Presales bullet, so Post-sales stands alone |
+| `README.md` | the doc/320 row; the doc/330 row reads as history |
+| `infra/README.md` | the PLACEHOLDER banner (this is now the deploy path); "Which path am I on?" and its table, deleted or kept as history without the presales column's paths; the fail2ban lines in D2 |
+| `doc/110-security-architecture.md` | "Shape of a deployment" ("the presales host differs"); rows 2.5 (610 sets the password), 3.1 (the lighter presales unit) and 3.5 (600 ships the dump unscrubbed). Re-judge 3.1's and 3.5's status once the presales half is gone |
+| `doc/050-dev-env-init.md` | "Files and the web app": nginx on a host is the site in `infra/<host>/etc/`, not the presales template |
+| `doc/905-config-guidance.md` | the "a deploy never rewrites a host's env file" bullet cites doc/320; cite `tasks/todo.md` Host work instead |
+| `doc/902-project-commands.md` | the 600 and 610 rows; the "Presales UAT Deploy" section; in "Post-sales Host Survey and Data Export", where 605 and 620 take their names (D1) |
+| `doc/340-db-host-setup.md` | `roles.sql` is for local dev only; drop "610 runs it as 000-roles.sql" and that name's allow line |
+| this doc | the opening records the retirement and its date (GRC's did); the deleted paths in the opening, "Which path am I on?", "Names that differ" and B5 lose their backticks (prose names a deleted file); this section becomes that one dated line |
+| `scripts/doc-paths-allow.txt` | the seven lines for doc/320 and their group comment; any doc/330, doc/340 or infra/README.md line whose token the rewording removed (the docs gate reports it STALE) |
+| `scripts/check-doc-paths.sh` | the header comment's example, "a file inside the presales bundle" |
+| `etc/app.env`, `etc/loc-api-srv.env` | comments naming the presales service and the template |
+| `.claude/skills/handoff/SKILL.md` | "Is anything waiting on Brandon?": a UAT deploy is a merge to the hook's `BRANCH_TO_CHECKOUT`, not 600/610 |
+| `tasks/todo.md` | "Waiting on Brandon" (the dev DB line names 600); Host work: the intro, the "Presales UAT" heading and H1-H4 (presales hosts only, none left: delete them); H5 applies to every deployed host, so move it under post-sales if still open |
+
+`infra/sql/proto-host-db.sql` and doc/340's other lines describe how a
+presales database is renamed aside; they stay true as history.
+
+### D5. Check
+
+The first must print nothing (this runbook keeps the history in prose,
+and old tickets are history):
+
+```bash
+git grep -n -E '600-bundle-uat|610-deploy-uat|bin/6[01]0|uat-deploy\.env|uat-api-srv\.env\.template|uat-nginx-site|320-presales|doc/320|presales-deploy|migrate-to-srv-config' -- ':!doc/330-uat-postsales-cutover.md' ':!tickets'
+git grep -n -i presales -- ':!tickets'
+```
+
+The second lists what is left to read: expect this runbook, doc/340,
+`infra/sql/proto-host-db.sql`, the `_presales` probe in
+`bin/605-survey-host` and `infra/README.md` pointing here "from a
+presales host". Any other hit is a stale mention. Then
+`bin/300-run-tests` (all) passes: docs, infra and go are the gates D
+touches.
 
 ## Rollback (any time before C)
 

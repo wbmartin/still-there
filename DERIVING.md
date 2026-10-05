@@ -67,6 +67,9 @@ commit of real data.
   onto this path is `doc/330-uat-postsales-cutover.md`; a fresh prod host
   is `doc/331-prd-postsales-install.md`. Both say `infra/uat` /
   `infra/prd`: use the renamed directories.
+- **Retiring presales**, once both hosts are post-sales:
+  `doc/330-uat-postsales-cutover.md` section D (what to delete, move and
+  reword).
 
 ## 4. The example entity
 

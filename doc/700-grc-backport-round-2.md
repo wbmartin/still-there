@@ -318,6 +318,10 @@ drops the presales DB. Deleting by hand has traps:
   Point to it from `DERIVING.md` §3.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Also
+  lists two traps found in the tree: the Go env-file test counts the
+  template (fails at 5), and `bin/110-build-web-app` becomes optional dead
+  weight.
 
 ### C009 — `bin/600` leaves full DB-dump bundles in `dist/`
 
