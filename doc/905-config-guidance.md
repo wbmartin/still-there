@@ -22,8 +22,11 @@
   also checks shape at load, not at first use: the port, hours, limits and
   threshold are whole numbers above 0, the two `FAILED_LOGIN_*_DURATION`
   keys are KV durations above 0 (`30s`, `5min`, `1h`), `LOG_LEVEL` is
-  `debug`, `info`, `warn` or `error`, and `ALLOW_MFA_EXEMPT_VIA_API` is
-  exactly `true` or `false` (`true` only in the test harness file). The optional keys
+  `debug`, `info`, `warn` or `error`, `ALLOW_MFA_EXEMPT_VIA_API` is
+  exactly `true` or `false` (`true` only in the test harness file),
+  `JWT_SECRET` is at least 32 characters, and `TOTP_ENCRYPTION_KEY` is
+  exactly 64 hex characters (32 bytes, the AES-256 key the MFA seeds are
+  encrypted under; `openssl rand -hex 32` makes either). The optional keys
   (`TRUSTED_PROXY_COUNT`, `CORS_ALLOWED_ORIGINS`) and the whole list are in `src/api-srv/README.md`
 - a deploy never rewrites a host's env file, so a key that became required
   after the file was written must be added by hand before the new binary

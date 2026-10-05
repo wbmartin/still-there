@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -50,15 +51,23 @@ SPACED   =   padded
 	}
 }
 
+// validJWTSecret and validTOTPKey have the shape LoadConfig requires: a
+// secret of at least 32 characters, a key of 32 bytes as 64 hex.
+const (
+	validJWTSecret = "test-only-jwt-secret-of-at-least-32-chars"
+	validTOTPKey   = "000102030405060708090a0b0c0d0e0f" +
+		"101112131415161718191a1b1c1d1e1f"
+)
+
 // validBase is every required key; tests drop or append lines.
 const validBase = `DATABASE_URL=postgres://u:p@h/db
-JWT_SECRET=s
+JWT_SECRET=` + validJWTSecret + `
 SERVER_NAME=n
 APP_NAME=a
 SERVER_PORT=8080
 SERVER_BIND_ADDRESS=127.0.0.1
 ENABLE_TLS=false
-TOTP_ENCRYPTION_KEY=k
+TOTP_ENCRYPTION_KEY=` + validTOTPKey + `
 JWT_SESSION_EXPIRE_HOURS=12
 MAX_USER_REQ_PER_MIN=200
 MAX_UNAUTH_REQ_PER_MIN=20
@@ -344,9 +353,95 @@ func TestLoadConfig_DurationKeys(t *testing.T) {
 	}
 }
 
-// Every API env file the repo ships loads through the real loader. Infra
-// copies hold SERVERONLY and the UAT template __PLACEHOLDERS__; LoadConfig
-// checks presence and shape, not secret content, so they load as-is.
+// JWT_SECRET must be at least 32 characters and TOTP_ENCRYPTION_KEY 32
+// bytes as hex (AES-256): a bad TOTP key used to load and then answer 500
+// at the first MFA enrolment or login.
+func TestLoadConfig_SecretShape(t *testing.T) {
+	jwtErr := "JWT_SECRET must be at least 32 characters"
+	totpErr := "TOTP_ENCRYPTION_KEY must be 64 hex characters"
+	testCaseList := []struct {
+		name    string
+		key     string
+		value   *string
+		wantErr string
+	}{
+		{"jwt absent", "JWT_SECRET", nil, "JWT_SECRET is required"},
+		{"jwt empty", "JWT_SECRET", ptr(""), "JWT_SECRET is required"},
+		{"jwt short", "JWT_SECRET", ptr("short"), jwtErr},
+		{"jwt 31", "JWT_SECRET", ptr(strings.Repeat("s", 31)), jwtErr},
+		{"jwt quotes not counted", "JWT_SECRET",
+			ptr(`"` + strings.Repeat("s", 30) + `"`), jwtErr},
+		{"jwt 32", "JWT_SECRET", ptr(strings.Repeat("s", 32)), ""},
+		{"jwt 64 hex", "JWT_SECRET", ptr(strings.Repeat("ab", 32)), ""},
+		{"totp absent", "TOTP_ENCRYPTION_KEY", nil,
+			"TOTP_ENCRYPTION_KEY is required"},
+		{"totp empty", "TOTP_ENCRYPTION_KEY", ptr(""),
+			"TOTP_ENCRYPTION_KEY is required"},
+		{"totp words", "TOTP_ENCRYPTION_KEY",
+			ptr("e2e-only-totp-key-not-for-deployment"), totpErr},
+		{"totp short hex", "TOTP_ENCRYPTION_KEY", ptr("0e4db5c2"), totpErr},
+		{"totp 16 bytes", "TOTP_ENCRYPTION_KEY",
+			ptr(strings.Repeat("ab", 16)), totpErr},
+		{"totp 33 bytes", "TOTP_ENCRYPTION_KEY",
+			ptr(strings.Repeat("ab", 33)), totpErr},
+		{"totp odd length", "TOTP_ENCRYPTION_KEY",
+			ptr(strings.Repeat("a", 63)), totpErr},
+		{"totp 64 not hex", "TOTP_ENCRYPTION_KEY",
+			ptr(strings.Repeat("zz", 32)), totpErr},
+		{"totp placeholder", "TOTP_ENCRYPTION_KEY", ptr("SERVERONLY"),
+			totpErr},
+		{"totp lower hex", "TOTP_ENCRYPTION_KEY",
+			ptr(strings.Repeat("ab", 32)), ""},
+		{"totp upper hex", "TOTP_ENCRYPTION_KEY",
+			ptr(strings.Repeat("AB", 32)), ""},
+	}
+	for _, testCase := range testCaseList {
+		t.Run(testCase.name, func(t *testing.T) {
+			content := withoutKey(testCase.key)
+			if testCase.value != nil {
+				content += testCase.key + "=" + *testCase.value + "\n"
+			}
+			config, err := LoadConfig(writeEnv(t, content))
+			if testCase.wantErr != "" {
+				if err == nil ||
+					!strings.Contains(err.Error(), testCase.wantErr) {
+					t.Fatalf("err = %v, want %q", err, testCase.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := config.JWTSecret
+			if testCase.key == "TOTP_ENCRYPTION_KEY" {
+				got = config.TOTPEncryptionKey
+			}
+			if got != *testCase.value {
+				t.Errorf("%s = %q, want %q",
+					testCase.key, got, *testCase.value)
+			}
+		})
+	}
+}
+
+// secretStandInMap gives each secret key a well-formed stand-in for the
+// placeholder a repo copy holds where the host has the real value.
+var secretStandInMap = map[string]string{
+	"JWT_SECRET":          validJWTSecret,
+	"TOTP_ENCRYPTION_KEY": validTOTPKey,
+}
+
+// templateTokenPattern is a bin/610 fill-in token such as __TOTP_KEY__.
+var templateTokenPattern = regexp.MustCompile(`^__[A-Z_]+__$`)
+
+// Every API env file the repo ships loads through the real loader. Two
+// kinds hold placeholders for the secrets instead of values: the infra
+// copies of host files (redacted SERVERONLY) and the UAT template
+// (__TOKENS__ bin/610 fills). Those must hold the placeholder -- a real
+// value there is a leak -- and the test swaps in a well-formed stand-in
+// (a repeated key takes the last value) so the rest of the file still
+// goes through LoadConfig. Every other file, the test harnesses included,
+// loads its secrets as written.
 func TestLoadConfig_RepoEnvFiles(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..", "..")
 	var pathList []string
@@ -366,19 +461,72 @@ func TestLoadConfig_RepoEnvFiles(t *testing.T) {
 			len(pathList), pathList)
 	}
 	for _, path := range pathList {
-		config, err := LoadConfig(path)
+		relPath, err := filepath.Rel(repoRoot, path)
 		if err != nil {
-			t.Errorf("%s: %v", path, err)
-			continue
+			t.Fatal(err)
 		}
+		relPath = filepath.ToSlash(relPath)
 		// Only the test harness (an e2e file) may turn mfa_exempt on
 		// through the API; dev, the UAT template and every server refuse.
+		// Its throwaway secrets are real values, so MFA works there.
 		isHarness := strings.Contains(filepath.Base(path), "e2e")
+		isTemplate := strings.HasSuffix(path, ".template")
+		isHostCopy := strings.HasPrefix(relPath, "infra/") && !isHarness
+
+		loadPath, ok := standInPlaceholders(
+			t, path, relPath, isTemplate, isHostCopy,
+		)
+		if !ok {
+			continue
+		}
+		config, err := LoadConfig(loadPath)
+		if err != nil {
+			t.Errorf("%s: %v", relPath, err)
+			continue
+		}
 		if config.AllowMFAExemptViaAPI != isHarness {
 			t.Errorf("%s: ALLOW_MFA_EXEMPT_VIA_API=%v, want %v",
-				path, config.AllowMFAExemptViaAPI, isHarness)
+				relPath, config.AllowMFAExemptViaAPI, isHarness)
 		}
 	}
+}
+
+// standInPlaceholders checks the secrets of a template or host copy are
+// placeholders and returns a temp copy with stand-ins appended; any other
+// file is returned unchanged. ok is false when a check failed.
+func standInPlaceholders(
+	t *testing.T, path, relPath string, isTemplate, isHostCopy bool,
+) (string, bool) {
+	t.Helper()
+	if !isTemplate && !isHostCopy {
+		return path, true
+	}
+	env, err := ReadEnvFile(path)
+	if err != nil {
+		t.Errorf("%s: %v", relPath, err)
+		return "", false
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	standInText := "\n"
+	for _, key := range []string{"JWT_SECRET", "TOTP_ENCRYPTION_KEY"} {
+		value := env[key]
+		isPlaceholder := value == "SERVERONLY"
+		wantText := "SERVERONLY (a redacted host copy)"
+		if isTemplate {
+			isPlaceholder = templateTokenPattern.MatchString(value)
+			wantText = "a __TOKEN__ bin/610 fills"
+		}
+		if !isPlaceholder {
+			t.Errorf("%s: %s=%q, want %s",
+				relPath, key, value, wantText)
+			return "", false
+		}
+		standInText += key + "=" + secretStandInMap[key] + "\n"
+	}
+	return writeEnv(t, string(content)+standInText), true
 }
 
 func ptr(s string) *string { return &s }

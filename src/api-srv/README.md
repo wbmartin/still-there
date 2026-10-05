@@ -29,13 +29,15 @@ grammar (quoting, comments, no `$VAR`) is in `doc/905-config-guidance.md`.
 
 Required:
 
-- `DATABASE_URL`, `JWT_SECRET`, `SERVER_NAME`, `APP_NAME`
+- `DATABASE_URL`, `SERVER_NAME`, `APP_NAME`
+- `JWT_SECRET` — at least 32 characters (`openssl rand -hex 32`)
 - `SERVER_PORT` — positive integer
 - `SERVER_BIND_ADDRESS` — the interface to listen on: `127.0.0.1` behind
   nginx, in dev and in the test harness; `0.0.0.0` for every interface
 - `ENABLE_TLS` — boolean; when true, `TLS_CERT_PATH` and `TLS_KEY_PATH` are
   required
-- `TOTP_ENCRYPTION_KEY` — 32 bytes as hex (AES-256)
+- `TOTP_ENCRYPTION_KEY` — exactly 64 hex characters: 32 bytes, the
+  AES-256 key MFA seeds are encrypted under (`openssl rand -hex 32`)
 - `JWT_SESSION_EXPIRE_HOURS`, `MAX_USER_REQ_PER_MIN`,
   `MAX_UNAUTH_REQ_PER_MIN`, `FAILED_LOGIN_ATTEMPT_THRESHOLD`,
   `INVITE_TTL_HOURS` (how long an invite link works) — positive integers

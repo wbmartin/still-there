@@ -176,6 +176,9 @@ MFA on the post-sales UAT e2e harness would fail.
    assert them separately.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
+  repo-file test asserts the redacted copies and the template hold
+  placeholders, then appends stand-ins; harness files load as written.
 
 ### C004 — `/mfaSetup` and `/mfaVerify` accept a temp token only
 
