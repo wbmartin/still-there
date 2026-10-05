@@ -39,29 +39,16 @@ an hour, M is a half day.
 
 ## Start here
 
-C001-C010 are done (PR #6, merged 2026-10-05) and sit under
-**Settled** at the bottom, numbers unchanged. Review picks up at C011.
+Every marked item is done and sits under **Settled** at the bottom,
+numbers unchanged: C001-C010 (PR #6) and C011-C023, C025 (PR #8). Open:
+C014 and C024 (unmarked), then C026-C035; review picks up at C026.
 
 ## Decision table
 
-
 | Item                                                    | Area   | Rec   | Size |
 | ------------------------------------------------------- | ------ | ----- | ---- |
-| C011 Dev env-file comments and dead keys                | infra  | pull  | S    |
-| C012 `bin/216` stops vite by port; `bin/330` pins URL   | infra  | adapt | S    |
-| C013 `.gitignore` and tracker-secret rule               | infra  | pull  | S    |
 | C014 Retire `doc/310` (host key copied to laptop)       | infra  | adapt | S    |
-| C015 `http.Server` timeouts                             | go     | pull  | S    |
-| C016 Sliding-window rate limit                          | go     | pull  | S    |
-| C017 Review skill: stable ids, Settled list, rounds     | docs   | adapt | M    |
-| C018 Review skill: new checklist lines                  | docs   | adapt | S    |
-| C019 Handoff skill corrections                          | docs   | adapt | S    |
-| C020 Customer's people by id, never by name             | docs   | adapt | S    |
-| C021 `doc/905` lists every env var read                 | docs   | adapt | S    |
-| C022 `doc/904` matches the Python in the tree           | docs   | adapt | S    |
-| C023 README tree and doc index gaps                     | docs   | pull  | S    |
 | C024 Tag `template-2026-10-05` after this round         | docs   | adapt | S    |
-| C025 Config struct: drop json tags                      | go     | pull  | S    |
 | C026 User list query stops reading `totp_seed`          | go     | pull  | S    |
 | C027 One password policy                                | go     | adapt | S    |
 | C028 E-mail the invite link when mail is configured     | go+web | adapt | M    |
@@ -73,89 +60,10 @@ C001-C010 are done (PR #6, merged 2026-10-05) and sit under
 | C034 App DB role narrowed to S/I/U (was B050)           | infra  | skip  | M    |
 | C035 DB passwords off argv (was B050)                   | infra  | skip  | S    |
 
-
 C034 and C035 were skipped in round 1. GRC has fixed both since, so they are
 listed in case staff want to reopen them.
 
 # P2: infra and operations
-
-### C011 — Dev env-file comments and dead keys
-
-- **GRC source:** 4231421, 350bb3a; RG0043 #74, #89, #93.
-- **GRC did:**
-  - Removed every comment naming the dev API as the test target.
-  - Rewrote `.env.development` to point at the dev API's `SERVER_PORT`.
-  - Made `.env.production` say production sets nothing (nginx proxies
-  `/api` on the same origin).
-  - Dropped `localhost:3000` from CORS.
-- **PROTO differs:**
-  - `etc/loc-api-srv.env` carries `TEST_BASE_URL=http://localhost:8080`
-  with "bin/330-test-load reads this". That is false: `bin/330-test-load`
-  reads it from `etc/e2e-api-srv.env`, and nothing reads the dev copy.
-  - `src/web-app/.env.development` points at that dead key.
-  - `src/web-app/.env.production` still has the `api.yourdomain.com`
-  placeholder, although B093 made `vite.config.ts` need it only for
-  `vite serve`.
-  - CORS allows port 3000, which nothing serves.
-- **Recommend:** pull. Drop the dead key and the port 3000 origin, rewrite
-both `.env.*` comments, and re-run `TestLoadConfig_RepoEnvFiles`.
-- **Size:** S
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; also
-  `src/web-app/README.md` (API Proxy), which named a default and
-  `.env.production` for `VITE_API_PROXY_URL`.
-
-### C012 — Stopping dev leaves a test run alone; the load test cannot be re-aimed
-
-- **GRC source:** 4231421 (RG0043 #94); 1803424 (#109).
-- **GRC did:** The stop script finds the web app by its port
-(`lsof -ti tcp:5173 -sTCP:LISTEN`), so a running test stack survives.
-The load-test script refuses a `--base-url` on its command line.
-- **PROTO differs:**
-  - `bin/216-stop-local-stack` scopes the API correctly but kills every
-  vite under the checkout. Its own comment says Playwright's vite on 5182
-  matches too, so stopping dev kills a running e2e web server.
-  - `bin/330-test-load` appends `"$@"` after its own `--base-url`, and
-  Go's flag package takes the last value, so the load can be re-aimed at
-  the dev API.
-- **Recommend:** adapt. Kill vite by port 5173 in bin/216. Refuse
-`--base-url`, `-base-url` and `--env` in bin/330.
-- **Size:** S
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Adapted:
-bin/216 kills a pid on 5173 only if its argv is also this checkout's vite,
-so another checkout's dev vite on 5173 survives (GRC kills any listener);
-bin/330 also refuses `--env`/`-env` and runs the check before the DB rebuild.
-
-### C013 — `.gitignore` and the tracker-secret rule
-
-- **GRC source:** 461c5b9, d364daa, d202ac6, 4231421 (RG0043 #99); GRC
-CLAUDE.md "the repo carries no tracker URL, project id, token or API
-call".
-- **GRC did:**
-  - Ignored .claude/settings.local.json (per-machine Claude Code
-  permissions) and the tracker's root credential files, by exact name.
-  - Removed ignore lines that matched nothing.
-  - Wrote a rule: tracker coordinates live in a user-level skill or a
-  gitignored root env file, never in the repo.
-- **PROTO differs:**
-  - `git check-ignore .claude/settings.local.json` matches nothing, so the
-  file could be committed.
-  - `.gitignore` line 2 (`examples`) matches nothing.
-  - `tasks/todo.md` carries an unexplained untracked
-  `radley-uat-builder-token` that "appeared and vanished". Its name
-  matches GRC's tracker builder-agent token file, so it was most likely
-  written by the same tooling.
-- **Recommend:** pull.
-  1. Add `/.claude/settings.local.json` and drop `examples`.
-  2. Add the tracker-secret line to `DERIVING.md` §5.
-  3. Close the todo item with that explanation, and ignore the name or a
-  narrow `/*-token` pattern.
-- **Size:** S
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Ignores
-  root-only `/*-token`, not the exact name: the name is a derived app's,
-  and no tracked file matches.
 
 ### C014 — Retire `doc/310`: it copies a host's TLS private key to a laptop
 
@@ -174,233 +82,7 @@ is not a practice to hand the next app.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
 
-### C015 — `http.Server` timeouts
-
-- **GRC source:** 8f36989; RG0043 #47.
-- **GRC did:** Set `ReadHeaderTimeout` 10 s, `ReadTimeout` 2 min,
-`WriteTimeout` 5 min (matching nginx `proxy_read_timeout`) and
-`IdleTimeout` 2 min.
-- **PROTO differs:** `src/api-srv/cmd/server/main.go` builds the server
-with `Addr` and `Handler` only, so a client trickling headers holds a
-connection forever. Round 1 listed this as "open in both".
-- **Recommend:** pull the four fields and the comment. The values already
-match PROTO's nginx. This matters most where a derived app runs without
-nginx.
-- **Size:** S
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Fields
-set in a new `newHTTPServer` so a test checks them and that
-`WriteTimeout` equals nginx's `proxy_read_timeout`.
-
-### C016 — Sliding-window rate limit
-
-- **GRC source:** 3d44381; RG0043 #59.
-- **GRC did:** Added `rateWindow`: this minute's bucket plus the previous
-minute's, weighted by overlap. Buckets are keyed by absolute minute
-(`Unix()/60`) with a 2-minute TTL, and an unreadable bucket fails
-closed. It has a boundary-burst test.
-- **PROTO differs:** `src/api-srv/internal/security/app_helper.go` keys on
-`time.Now().Minute()` (minute of the hour) with a 1-minute TTL, so a
-client gets twice the limit across a minute boundary. Round 1 listed
-this as "open in both".
-- **Recommend:** pull `rateWindow` and its test into both checks, keeping
-PROTO's `ip:` anonymous key (B059). Low risk, since the lockout is the
-real brake on guessing; the change makes the key mean what it says.
-- **Size:** S
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. PROTO's
-KV has no batch, so both checks share `rateWindow.incrementAndCount`
-(INCR then GET); PROTO's `Get` answers "" for an absent key.
-
 # P2: docs and process
-
-### C017 — Review skill: stable ids, a Settled list, rounds with one gate
-
-- **GRC source:** RG0043 header and section 11 preamble; abc1d8e, d951ec0,
-9120ee0, db21a8e, 150274d, 0b4d056.
-- **GRC did:** Ran its 124-finding review as six fix rounds. Each round
-was a PR, then the gate, then the staff UAT check, then the items moved
-to Settled with a Status line (disposition, who ruled, date, commit).
-The bookkeeping is where it broke:
-  - the sections were renumbered after every round, so "(r2)" means two
-  different rounds;
-  - 58 code comments cite `RG0043 X.Y` numbers that no longer resolve;
-  - round 6 was settled before its UAT check, unlike rounds 3-5;
-  - one item bundled 12 sub-findings, and one of them could not be found
-  again;
-  - the counts table went stale inside the ticket;
-  - squash-merging each round forced a merge-back commit every time.
-- **PROTO differs:** `.claude/skills/stale-and-insecure-review/SKILL.md`
-covers the review only. The report goes in the reply, and "outstanding
-findings go in `tasks/todo.md`". The skill has no ids, no Status format,
-no Settled list and no rule for fix rounds.
-- **Recommend:** adapt. Add a "Triage and settling" section:
-  1. Each finding gets an id once (F001…) that is never renumbered;
-  commits and comments cite it.
-  2. After triage, write the findings to one committed file. Each gets a
-  Status line, and settled items move to `## Settled` in id order.
-  3. One defect per item; a sweep becomes F041a, F041b.
-  4. One settle gate for every round: merged, gate green, staff check.
-  5. A long-lived review branch takes merge commits, or each round gets a
-  fresh branch.
-  6. Keep a frozen at-review severity table and a live open count, updated
-  in the commit that settles items.
-- **Size:** M
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; "staff"
-  for the human who triages and checks; the Report section
-  now numbers findings and gives an area × severity table, and
-  `tasks/todo.md` points at the review file instead of holding findings.
-
-### C018 — Review skill: checklist lines from GRC's run
-
-- **GRC source:** RG0043 section 7 (Checked and clean), 8 (Not covered),
-
-#105, #106, #111-#124.
-
-- **GRC did:** Recorded counted assertions PROTO's checklist does not ask
-for, and found a class of docs and process defects in round 6.
-- **PROTO differs:** The checklist in the skill covers check order, tenant
-predicate, migrations, getenv, innerHTML, grants mirror, storage,
-pipefail, SERVERONLY, synthetic data and doc paths. It has none of the
-lines below.
-- **Recommend:** adapt. Add:
-  - **Go:**
-    - crypto and session: argon2id params, constant-time compare,
-    `crypto/rand` for every token, invite tokens stored hashed, JWT
-    method checked, cookie flags, CORS an exact allow-list;
-    - 0 SQL built by concatenating input;
-    - 0 hard `DELETE` in app code;
-    - every public or login-layer write caps its body.
-  - **Infra:**
-    - env keys in `etc/*.env` equal the keys `config.go` reads, plus
-    `TEST_*`;
-    - 0 passwords in argv;
-    - every root paste block guards each variable inside the command
-    (C001);
-    - no `curl | sh`.
-  - **Docs:**
-    - every `bin/` script has a doc/902 row (cheap to add to
-    `bin/300-run-tests docs`);
-    - every doc is linked from the README index;
-    - no undated counts in prose;
-    - every paste block runs from where it says;
-    - a historical doc says so in its header.
-  - **Tasks:**
-    - finished §0 items are checked off with a reason;
-    - nothing carried as "unverified" across sessions;
-    - a plan doc's status matches the code and cites no branch missing
-    from origin;
-    - people by id (C020).
-  - **Data:** no export or bundle left in `dist/` or `tmp/`.
-  - **Not covered:** add a prompt for generated files and docs that are
-  historical by label.
-- **Size:** S
-- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; Tasks
-  is its own checklist group, the dist/tmp line sits under Data and
-  docs; the doc/902 row check is not yet in `bin/300-run-tests docs`.
-
-### C019 — Handoff skill corrections
-
-- **GRC source:** f2ebccf, 5b6c300 (handoff diff); RG0043 #116.
-- **GRC did:**
-  - Widened the re-verify pathspec.
-  - Made "waiting on Brandon" name the act (PR, UAT check, release, host
-  step, decision).
-  - Put deploy state on the State line.
-  - Cleaned stale todo entries by checking each one off with a reason.
-- **PROTO differs:**
-  - `.claude/skills/handoff/SKILL.md` re-verifies with
-  `-- src/ sql/ tests/`, but PROTO has no top-level `sql/`, and `bin/`,
-  `scripts/` and `infra/` are not watched.
-  - The waiting list names only merge, presales deploy and decision.
-  - Nothing says to prune §0.
-- **Recommend:** adapt.
-  - Use the pathspec `src/ bin/ scripts/ infra/ tests/`.
-  - Add "a host step (Host work, C007)" to the waiting list.
-  - Add "deployed to UAT: sha or no" to the State line.
-  - In step 2: re-read §0, check off what is now true with reason and
-  date, and verify or strike anything marked unverified.
-  - Make sure all references to brandon are updated to "staff" so other people can use this
-
-  Leave out GRC's uat → main flow (B057).
-- **Size:** S
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. "Host
-  work" is the `tasks/todo.md` section name. Other skills have no
-  "Brandon"; CLAUDE.md, `tasks/todo.md`, doc/330 and an app_helper.go
-  comment did, and say "staff" too since (staff ruling: throughout).
-
-### C020 — The customer's people by id, never by name
-
-- **GRC source:** RG0043 #116, #124: `tasks/todo.md` named four customer
-employees. They were replaced by person ids; only a repository reset
-clears the history.
-- **PROTO differs:** The CLAUDE.md "Customer data never in git" bullet
-covers exports and fixtures, but not names in notes, tasks, docs or
-commit messages, which is where GRC leaked them.
-- **Recommend:** adapt. Extend that bullet: "that includes the customer's
-people: `tasks/`, docs and commit messages refer to them by person id".
-Add the line to the review checklist (C018).
-- **Size:** S
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; "by
-  person id or role", matching clause in `DERIVING.md` §2; review
-  checklist line aligned. No customer names found in `tasks/`, `doc/`
-  or the last 200 commit messages.
-
-### C021 — `doc/905` lists every environment variable anything reads
-
-- **GRC source:** 1803424; RG0043 #122.
-- **GRC did:** Replaced "the only env var is X" with every variable read,
-each with its reader, and stated that no shipped binary reads one.
-- **PROTO differs:** `doc/905-config-guidance.md` says the only variable
-the Go code reads is `TEST_DATABASE_URL`. That is true for Go, but the
-harnesses also read `TEST_API_ENV`, `TEST_BASE_URL` (`tests/conftest.py`),
-`E2E_API_ENV`, `E2E_USER_NAME`, `E2E_PASSWORD`, `CI`
-(`src/web-app/playwright.config.ts`), `E2E_DB_SEEDED`, and
-`<SERVICE>_LIVE` (`bin/300-run-tests`).
-- **Recommend:** adapt. Write one bullet: no shipped binary reads an
-environment variable. Then list the test-only ones with their reader and
-setter.
-- **Size:** S
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. List
-built from the tree; also covers `TEST_ENV` and the other `bin/` overrides,
-`VITE_API_PROXY_URL`, and the libpq variables pgx falls back to.
-
-### C022 — `doc/904` says what Python the tree actually uses
-
-- **GRC source:** 1803424; RG0043 #122.
-- **GRC did:** Added a first line: what the tree's Python uses today, and
-that the polars notes apply only when a script needs dataframes.
-- **PROTO differs:** `doc/904-python-guidance.md` prescribes polars and
-psycopg. PROTO's only Python is the pytest suite (`tests/requirements.txt`:
-pytest, requests, pytest-html, pyotp). The README index says "Polars,
-PEP8, psycopg".
-- **Recommend:** adapt. Add the same kind of first line and fix the README
-description, so an agent in a derived app does not pull in polars for a
-ten-line script.
-- **Size:** S
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. CLAUDE.md's
-"(pytest and scripts)" still fits; left as is.
-
-### C023 — README tree and doc index gaps
-
-- **GRC source:** 1803424, 49224e7; RG0043 #111, #122 (GRC's README tree
-omitted `infra/`, the runbooks and 6xx).
-- **PROTO differs:** It is clean of counts, personal paths and misordered
-paste blocks (B051, B075, B086, B090). The remaining gaps:
-  - the README tree omits `scripts/`, `tasks/` and `src/load-test/`;
-  - the doc index omits `doc/003-schema-reference.sql`.
-- **Recommend:** pull. Three tree lines and one index row.
-- **Size:** S
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Also
-indexed `doc/700-grc-backport-round-2.md` itself (temporary), the only
-other `doc/` file missing from the index.
 
 ### C024 — Tag a template sync point after this round
 
@@ -418,22 +100,6 @@ lineage block with `DERIVING.md` §8's.
 - **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
 
 # P3: Go API template quality
-
-### C025 — Config struct: drop the json tags
-
-- **GRC source:** b8d9b30; RG0043 #56.
-- **GRC did:** Removed every `json:"..."` tag from `config.Config`. Nothing
-marshals it, so the tags only made an accidental `json.Marshal(config)`
-print `jwt_secret` under a tidy name.
-- **PROTO differs:** `src/api-srv/internal/config/config.go` tags every
-field, secrets included.
-- **Recommend:** pull. Delete the tags, or tag the secrets `json:"-"` if a
-guard is preferred.
-- **Size:** S
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; tags
-  deleted (no `json:"-"`); a comment above the struct says it is never
-  serialized.
 
 ### C026 — The user list query stops reading `totp_seed`
 
@@ -627,12 +293,13 @@ both install scripts, keeping them byte-identical (`bin/300-run-tests infra` che
 since `PGPASSWORD` is already exported.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Status:** open until the next round (staff, 2026-10-05). C018's
+  review checklist now flags it: "0 passwords in argv" is false today.
 
 # Checked: already in PROTO
 
 GRC fixed these in this range, but PROTO already has the same or better.
 Nothing to bring.
-
 
 | GRC change                                                                 | PROTO already has it   |
 | -------------------------------------------------------------------------- | ---------------------- |
@@ -650,7 +317,6 @@ Nothing to bring.
 | web: schemas README, test docs, api.ts mirror, POC comments (#64, #66-#68) | PS0013, B037, B044     |
 | web: tenant-switch identity refresh, error stack hidden (#78, #81)         | already                |
 | ticket skills and linter removed (#90, 5b6c300)                            | B091                   |
-
 
 # Excluded as GRC-specific
 
@@ -694,24 +360,35 @@ doc/902 rows, the GRC CLAUDE.md example names, and the R2 and Entra text.
 
 # Settled
 
-Done items, moved here in their original order with their original
-numbers. All ten merged to `main` in PR #6 (merge 854e31f). Each keeps its
-Status line.
+Done items, moved here in id order with their original numbers. C001-C010
+merged in PR #6 (854e31f); C011-C023 and C025 in PR #8 (842ba7a). Each keeps
+its Status line; a second commit in the table is a follow-up fix.
 
-
-| Item                                                             | Decision | Commit  |
-| ---------------------------------------------------------------- | -------- | ------- |
-| C001 Runbook paste blocks guard each variable inside the command | done     | 4ba97d9 |
-| C002 MFA onboarding drops `/mfaVerify`'s CSRF token              | done     | b21bec6 |
-| C003 Config refuses a bad JWT secret or TOTP key at load         | done     | a84ba5c |
-| C004 `/mfaSetup` and `/mfaVerify` accept a temp token only       | done     | a0be2e4 |
-| C005 A failed tenant-check lookup answers 500, not 403           | done     | 4016c17 |
-| C006 An admin cannot delete their own login                      | done     | b634ffd |
-| C007 One list of pending host work; a guarded host-change block  | done     | ab16fe5 |
-| C008 How a derived app retires the presales path                 | done     | dfea118 |
-| C009 `bin/600` leaves full DB-dump bundles in `dist/`            | done     | 068fc16 |
-| C010 Release branches advance by merge commit, checked first     | done     | 3e5bf31 |
-
+| Item | Decision | Commit |
+|---|---|---|
+| C001 Runbook paste blocks guard each variable inside the command | done | 4ba97d9, 9ded0dc |
+| C002 MFA onboarding drops `/mfaVerify`'s CSRF token | done | b21bec6 |
+| C003 Config refuses a bad JWT secret or TOTP key at load | done | a84ba5c |
+| C004 `/mfaSetup` and `/mfaVerify` accept a temp token only | done | a0be2e4 |
+| C005 A failed tenant-check lookup answers 500, not 403 | done | 4016c17 |
+| C006 An admin cannot delete their own login | done | b634ffd |
+| C007 One list of pending host work; a guarded host-change block | done | ab16fe5 |
+| C008 How a derived app retires the presales path | done | dfea118 |
+| C009 `bin/600` leaves full DB-dump bundles in `dist/` | done | 068fc16 |
+| C010 Release branches advance by merge commit, checked first | done | 3e5bf31 |
+| C011 Dev env-file comments and dead keys | done | 2b4bae2 |
+| C012 Stopping dev leaves a test run alone; the load test cannot be re-aimed | done | 5746053 |
+| C013 `.gitignore` and the tracker-secret rule | done | 95c1a18 |
+| C015 `http.Server` timeouts | done | c535d87, 913675d |
+| C016 Sliding-window rate limit | done | 5ad839b |
+| C017 Review skill: stable ids, a Settled list, rounds with one gate | done | 1477010 |
+| C018 Review skill: checklist lines from GRC's run | done | 0b44be8 |
+| C019 Handoff skill corrections | done | 3de1a10, b877714 |
+| C020 The customer's people by id, never by name | done | 8d3161e |
+| C021 `doc/905` lists every environment variable anything reads | done | d2ec706 |
+| C022 `doc/904` says what Python the tree actually uses | done | 57c76e3 |
+| C023 README tree and doc index gaps | done | b1c7d0d |
+| C025 Config struct: drop the json tags | done | 1fd21b4, cdf4773 |
 
 ### C001 — Runbook paste blocks guard each variable inside the command
 
@@ -973,3 +650,322 @@ build hook's branch and `BRANCH_TO_CHECKOUT` agree.
 branch/hook grep went into `infra/README.md` one-time setup step 7
 (where the hook branch is set), with the prod promote-hook variant.
 
+### C011 — Dev env-file comments and dead keys
+
+- **GRC source:** 4231421, 350bb3a; RG0043 #74, #89, #93.
+- **GRC did:**
+  - Removed every comment naming the dev API as the test target.
+  - Rewrote `.env.development` to point at the dev API's `SERVER_PORT`.
+  - Made `.env.production` say production sets nothing (nginx proxies
+  `/api` on the same origin).
+  - Dropped `localhost:3000` from CORS.
+- **PROTO differs:**
+  - `etc/loc-api-srv.env` carries `TEST_BASE_URL=http://localhost:8080`
+  with "bin/330-test-load reads this". That is false: `bin/330-test-load`
+  reads it from `etc/e2e-api-srv.env`, and nothing reads the dev copy.
+  - `src/web-app/.env.development` points at that dead key.
+  - `src/web-app/.env.production` still has the `api.yourdomain.com`
+  placeholder, although B093 made `vite.config.ts` need it only for
+  `vite serve`.
+  - CORS allows port 3000, which nothing serves.
+- **Recommend:** pull. Drop the dead key and the port 3000 origin, rewrite
+both `.env.*` comments, and re-run `TestLoadConfig_RepoEnvFiles`.
+- **Size:** S
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; also
+  `src/web-app/README.md` (API Proxy), which named a default and
+  `.env.production` for `VITE_API_PROXY_URL`.
+
+### C012 — Stopping dev leaves a test run alone; the load test cannot be re-aimed
+
+- **GRC source:** 4231421 (RG0043 #94); 1803424 (#109).
+- **GRC did:** The stop script finds the web app by its port
+(`lsof -ti tcp:5173 -sTCP:LISTEN`), so a running test stack survives.
+The load-test script refuses a `--base-url` on its command line.
+- **PROTO differs:**
+  - `bin/216-stop-local-stack` scopes the API correctly but kills every
+  vite under the checkout. Its own comment says Playwright's vite on 5182
+  matches too, so stopping dev kills a running e2e web server.
+  - `bin/330-test-load` appends `"$@"` after its own `--base-url`, and
+  Go's flag package takes the last value, so the load can be re-aimed at
+  the dev API.
+- **Recommend:** adapt. Kill vite by port 5173 in bin/216. Refuse
+`--base-url`, `-base-url` and `--env` in bin/330.
+- **Size:** S
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Adapted:
+bin/216 kills a pid on 5173 only if its argv is also this checkout's vite,
+so another checkout's dev vite on 5173 survives (GRC kills any listener);
+bin/330 also refuses `--env`/`-env` and runs the check before the DB rebuild.
+
+### C013 — `.gitignore` and the tracker-secret rule
+
+- **GRC source:** 461c5b9, d364daa, d202ac6, 4231421 (RG0043 #99); GRC
+CLAUDE.md "the repo carries no tracker URL, project id, token or API
+call".
+- **GRC did:**
+  - Ignored .claude/settings.local.json (per-machine Claude Code
+  permissions) and the tracker's root credential files, by exact name.
+  - Removed ignore lines that matched nothing.
+  - Wrote a rule: tracker coordinates live in a user-level skill or a
+  gitignored root env file, never in the repo.
+- **PROTO differs:**
+  - `git check-ignore .claude/settings.local.json` matches nothing, so the
+  file could be committed.
+  - `.gitignore` line 2 (`examples`) matches nothing.
+  - `tasks/todo.md` carries an unexplained untracked
+  `radley-uat-builder-token` that "appeared and vanished". Its name
+  matches GRC's tracker builder-agent token file, so it was most likely
+  written by the same tooling.
+- **Recommend:** pull.
+  1. Add `/.claude/settings.local.json` and drop `examples`.
+  2. Add the tracker-secret line to `DERIVING.md` §5.
+  3. Close the todo item with that explanation, and ignore the name or a
+  narrow `/*-token` pattern.
+- **Size:** S
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Ignores
+  root-only `/*-token`, not the exact name: the name is a derived app's,
+  and no tracked file matches.
+
+### C015 — `http.Server` timeouts
+
+- **GRC source:** 8f36989; RG0043 #47.
+- **GRC did:** Set `ReadHeaderTimeout` 10 s, `ReadTimeout` 2 min,
+`WriteTimeout` 5 min (matching nginx `proxy_read_timeout`) and
+`IdleTimeout` 2 min.
+- **PROTO differs:** `src/api-srv/cmd/server/main.go` builds the server
+with `Addr` and `Handler` only, so a client trickling headers holds a
+connection forever. Round 1 listed this as "open in both".
+- **Recommend:** pull the four fields and the comment. The values already
+match PROTO's nginx. This matters most where a derived app runs without
+nginx.
+- **Size:** S
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Fields
+set in a new `newHTTPServer` so a test checks them and that
+`WriteTimeout` equals nginx's `proxy_read_timeout`.
+
+### C016 — Sliding-window rate limit
+
+- **GRC source:** 3d44381; RG0043 #59.
+- **GRC did:** Added `rateWindow`: this minute's bucket plus the previous
+minute's, weighted by overlap. Buckets are keyed by absolute minute
+(`Unix()/60`) with a 2-minute TTL, and an unreadable bucket fails
+closed. It has a boundary-burst test.
+- **PROTO differs:** `src/api-srv/internal/security/app_helper.go` keys on
+`time.Now().Minute()` (minute of the hour) with a 1-minute TTL, so a
+client gets twice the limit across a minute boundary. Round 1 listed
+this as "open in both".
+- **Recommend:** pull `rateWindow` and its test into both checks, keeping
+PROTO's `ip:` anonymous key (B059). Low risk, since the lockout is the
+real brake on guessing; the change makes the key mean what it says.
+- **Size:** S
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. PROTO's
+KV has no batch, so both checks share `rateWindow.incrementAndCount`
+(INCR then GET); PROTO's `Get` answers "" for an absent key.
+
+### C017 — Review skill: stable ids, a Settled list, rounds with one gate
+
+- **GRC source:** RG0043 header and section 11 preamble; abc1d8e, d951ec0,
+9120ee0, db21a8e, 150274d, 0b4d056.
+- **GRC did:** Ran its 124-finding review as six fix rounds. Each round
+was a PR, then the gate, then the staff UAT check, then the items moved
+to Settled with a Status line (disposition, who ruled, date, commit).
+The bookkeeping is where it broke:
+  - the sections were renumbered after every round, so "(r2)" means two
+  different rounds;
+  - 58 code comments cite `RG0043 X.Y` numbers that no longer resolve;
+  - round 6 was settled before its UAT check, unlike rounds 3-5;
+  - one item bundled 12 sub-findings, and one of them could not be found
+  again;
+  - the counts table went stale inside the ticket;
+  - squash-merging each round forced a merge-back commit every time.
+- **PROTO differs:** `.claude/skills/stale-and-insecure-review/SKILL.md`
+covers the review only. The report goes in the reply, and "outstanding
+findings go in `tasks/todo.md`". The skill has no ids, no Status format,
+no Settled list and no rule for fix rounds.
+- **Recommend:** adapt. Add a "Triage and settling" section:
+  1. Each finding gets an id once (F001…) that is never renumbered;
+  commits and comments cite it.
+  2. After triage, write the findings to one committed file. Each gets a
+  Status line, and settled items move to `## Settled` in id order.
+  3. One defect per item; a sweep becomes F041a, F041b.
+  4. One settle gate for every round: merged, gate green, staff check.
+  5. A long-lived review branch takes merge commits, or each round gets a
+  fresh branch.
+  6. Keep a frozen at-review severity table and a live open count, updated
+  in the commit that settles items.
+- **Size:** M
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; "staff"
+  for the human who triages and checks; the Report section
+  now numbers findings and gives an area × severity table, and
+  `tasks/todo.md` points at the review file instead of holding findings.
+
+### C018 — Review skill: checklist lines from GRC's run
+
+- **GRC source:** RG0043 section 7 (Checked and clean), 8 (Not covered),
+
+#105, #106, #111-#124.
+
+- **GRC did:** Recorded counted assertions PROTO's checklist does not ask
+for, and found a class of docs and process defects in round 6.
+- **PROTO differs:** The checklist in the skill covers check order, tenant
+predicate, migrations, getenv, innerHTML, grants mirror, storage,
+pipefail, SERVERONLY, synthetic data and doc paths. It has none of the
+lines below.
+- **Recommend:** adapt. Add:
+  - **Go:**
+    - crypto and session: argon2id params, constant-time compare,
+    `crypto/rand` for every token, invite tokens stored hashed, JWT
+    method checked, cookie flags, CORS an exact allow-list;
+    - 0 SQL built by concatenating input;
+    - 0 hard `DELETE` in app code;
+    - every public or login-layer write caps its body.
+  - **Infra:**
+    - env keys in `etc/*.env` equal the keys `config.go` reads, plus
+    `TEST_*`;
+    - 0 passwords in argv;
+    - every root paste block guards each variable inside the command
+    (C001);
+    - no `curl | sh`.
+  - **Docs:**
+    - every `bin/` script has a doc/902 row (cheap to add to
+    `bin/300-run-tests docs`);
+    - every doc is linked from the README index;
+    - no undated counts in prose;
+    - every paste block runs from where it says;
+    - a historical doc says so in its header.
+  - **Tasks:**
+    - finished §0 items are checked off with a reason;
+    - nothing carried as "unverified" across sessions;
+    - a plan doc's status matches the code and cites no branch missing
+    from origin;
+    - people by id (C020).
+  - **Data:** no export or bundle left in `dist/` or `tmp/`.
+  - **Not covered:** add a prompt for generated files and docs that are
+  historical by label.
+- **Size:** S
+- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; Tasks
+  is its own checklist group, the dist/tmp line sits under Data and
+  docs; the doc/902 row check is not yet in `bin/300-run-tests docs`.
+
+### C019 — Handoff skill corrections
+
+- **GRC source:** f2ebccf, 5b6c300 (handoff diff); RG0043 #116.
+- **GRC did:**
+  - Widened the re-verify pathspec.
+  - Made "waiting on Brandon" name the act (PR, UAT check, release, host
+  step, decision).
+  - Put deploy state on the State line.
+  - Cleaned stale todo entries by checking each one off with a reason.
+- **PROTO differs:**
+  - `.claude/skills/handoff/SKILL.md` re-verifies with
+  `-- src/ sql/ tests/`, but PROTO has no top-level `sql/`, and `bin/`,
+  `scripts/` and `infra/` are not watched.
+  - The waiting list names only merge, presales deploy and decision.
+  - Nothing says to prune §0.
+- **Recommend:** adapt.
+  - Use the pathspec `src/ bin/ scripts/ infra/ tests/`.
+  - Add "a host step (Host work, C007)" to the waiting list.
+  - Add "deployed to UAT: sha or no" to the State line.
+  - In step 2: re-read §0, check off what is now true with reason and
+  date, and verify or strike anything marked unverified.
+  - Make sure all references to brandon are updated to "staff" so other people can use this
+
+  Leave out GRC's uat → main flow (B057).
+- **Size:** S
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. "Host
+  work" is the `tasks/todo.md` section name. Other skills have no
+  "Brandon"; CLAUDE.md, `tasks/todo.md`, doc/330 and an app_helper.go
+  comment did, and say "staff" too since (staff ruling: throughout).
+
+### C020 — The customer's people by id, never by name
+
+- **GRC source:** RG0043 #116, #124: `tasks/todo.md` named four customer
+employees. They were replaced by person ids; only a repository reset
+clears the history.
+- **PROTO differs:** The CLAUDE.md "Customer data never in git" bullet
+covers exports and fixtures, but not names in notes, tasks, docs or
+commit messages, which is where GRC leaked them.
+- **Recommend:** adapt. Extend that bullet: "that includes the customer's
+people: `tasks/`, docs and commit messages refer to them by person id".
+Add the line to the review checklist (C018).
+- **Size:** S
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; "by
+  person id or role", matching clause in `DERIVING.md` §2; review
+  checklist line aligned. No customer names found in `tasks/`, `doc/`
+  or the last 200 commit messages.
+
+### C021 — `doc/905` lists every environment variable anything reads
+
+- **GRC source:** 1803424; RG0043 #122.
+- **GRC did:** Replaced "the only env var is X" with every variable read,
+each with its reader, and stated that no shipped binary reads one.
+- **PROTO differs:** `doc/905-config-guidance.md` says the only variable
+the Go code reads is `TEST_DATABASE_URL`. That is true for Go, but the
+harnesses also read `TEST_API_ENV`, `TEST_BASE_URL` (`tests/conftest.py`),
+`E2E_API_ENV`, `E2E_USER_NAME`, `E2E_PASSWORD`, `CI`
+(`src/web-app/playwright.config.ts`), `E2E_DB_SEEDED`, and
+`<SERVICE>_LIVE` (`bin/300-run-tests`).
+- **Recommend:** adapt. Write one bullet: no shipped binary reads an
+environment variable. Then list the test-only ones with their reader and
+setter.
+- **Size:** S
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. List
+built from the tree; also covers `TEST_ENV` and the other `bin/` overrides,
+`VITE_API_PROXY_URL`, and the libpq variables pgx falls back to.
+
+### C022 — `doc/904` says what Python the tree actually uses
+
+- **GRC source:** 1803424; RG0043 #122.
+- **GRC did:** Added a first line: what the tree's Python uses today, and
+that the polars notes apply only when a script needs dataframes.
+- **PROTO differs:** `doc/904-python-guidance.md` prescribes polars and
+psycopg. PROTO's only Python is the pytest suite (`tests/requirements.txt`:
+pytest, requests, pytest-html, pyotp). The README index says "Polars,
+PEP8, psycopg".
+- **Recommend:** adapt. Add the same kind of first line and fix the README
+description, so an agent in a derived app does not pull in polars for a
+ten-line script.
+- **Size:** S
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. CLAUDE.md's
+"(pytest and scripts)" still fits; left as is.
+
+### C023 — README tree and doc index gaps
+
+- **GRC source:** 1803424, 49224e7; RG0043 #111, #122 (GRC's README tree
+omitted `infra/`, the runbooks and 6xx).
+- **PROTO differs:** It is clean of counts, personal paths and misordered
+paste blocks (B051, B075, B086, B090). The remaining gaps:
+  - the README tree omits `scripts/`, `tasks/` and `src/load-test/`;
+  - the doc index omits `doc/003-schema-reference.sql`.
+- **Recommend:** pull. Three tree lines and one index row.
+- **Size:** S
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Also
+indexed `doc/700-grc-backport-round-2.md` itself (temporary), the only
+other `doc/` file missing from the index.
+
+### C025 — Config struct: drop the json tags
+
+- **GRC source:** b8d9b30; RG0043 #56.
+- **GRC did:** Removed every `json:"..."` tag from `config.Config`. Nothing
+marshals it, so the tags only made an accidental `json.Marshal(config)`
+print `jwt_secret` under a tidy name.
+- **PROTO differs:** `src/api-srv/internal/config/config.go` tags every
+field, secrets included.
+- **Recommend:** pull. Delete the tags, or tag the secrets `json:"-"` if a
+guard is preferred.
+- **Size:** S
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; tags
+  deleted (no `json:"-"`); a comment above the struct says it is never
+  serialized.
