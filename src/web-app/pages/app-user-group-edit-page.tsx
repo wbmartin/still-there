@@ -60,40 +60,57 @@ function AppUserGroupEditPage() {
 
   const grants = grantConstants.getGrantList();
 
-  const [groupLoading, setGroupLoading] = useState(
-    !isNew && numericId !== null,
-  );
-  const hasFetched = useRef(false);
+  // The route id the form was last loaded for, and what that load found;
+  // a new ?appUserGroupId= on the same page reloads the form.
+  const requestedId = useRef<string | null>(null);
+  const [loadResult, setLoadResult] = useState<{
+    id: string;
+    found: boolean;
+  } | null>(null);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [userModalMode, setUserModalMode] = useState<"add" | "remove">("add");
 
   useEffect(() => {
-    if (!hasFetched.current && authState === "YES") {
-      hasFetched.current = true;
-      if (numericId && !isNew) {
-        // Users are only needed for the add/remove-member modal
-        void readUserList().catch((err) => reportError(err, "user group edit"));
-        void readAppUserGroupById(numericId)
-          .then((existingGroup) => {
-            if (existingGroup) {
-              form.setValues({
-                groupName: existingGroup.groupName,
-                userGrantList: existingGroup.userGrantList,
-                updateTs: existingGroup.updateTs.toString(),
-              });
-            }
-          })
-          .catch((error: unknown) => {
-            reportError(error, "loading user group");
-          })
-          .finally(() => {
-            setGroupLoading(false);
-          });
-      }
+    if (authState !== "YES" || requestedId.current === appUserGroupId) {
+      return;
     }
-    // `form` is a new object every render; hasFetched makes this a one-shot.
+    requestedId.current = appUserGroupId;
+    if (isNew || !numericId) {
+      form.reset();
+      return;
+    }
+    // Users are only needed for the add/remove-member modal
+    void readUserList().catch((err) => reportError(err, "user group edit"));
+    void readAppUserGroupById(numericId)
+      .then((existingGroup) => {
+        // A later id took over.
+        if (requestedId.current !== appUserGroupId) return;
+        if (existingGroup) {
+          form.setValues({
+            groupName: existingGroup.groupName,
+            userGrantList: existingGroup.userGrantList,
+            updateTs: existingGroup.updateTs.toString(),
+          });
+        }
+        setLoadResult({ id: appUserGroupId, found: existingGroup !== null });
+      })
+      .catch((error: unknown) => {
+        if (requestedId.current !== appUserGroupId) return;
+        reportError(error, "loading user group");
+        notifications.show({
+          title: "Error",
+          message: "Failed to load user group",
+          color: "red",
+          autoClose: 5000,
+          withCloseButton: true,
+        });
+        setLoadResult({ id: appUserGroupId, found: false });
+      });
+    // `form` is a new object every render; requestedId makes this run once
+    // per route id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authState, numericId, isNew, readUserList, readAppUserGroupById]);
+  }, [authState, appUserGroupId, isNew, numericId, readUserList,
+    readAppUserGroupById]);
 
   //============================^ HOOK LINE ^====================
 
@@ -104,8 +121,17 @@ function AppUserGroupEditPage() {
     return <Container size={1280} px={32} py={32} mx="auto"><Alert color="red">Authentication required.</Alert></Container>;
   }
 
-  if (groupLoading) {
+  if (!isNew && numericId && loadResult?.id !== appUserGroupId) {
     return <Container size={1280} px={32} py={32} mx="auto" ta="center"><Loader /></Container>;
+  }
+  // Never render the form for a record that was not loaded.
+  if (!isNew && (!numericId || !loadResult?.found)) {
+    return (
+      <Container size={1280} px={32} py={32} mx="auto">
+        <Title order={1} mb="lg">Edit User Group</Title>
+        <Alert color="red">This user group could not be loaded.</Alert>
+      </Container>
+    );
   }
 
   const handleSubmit = async (values: typeof defaultAppUserGroupFormData) => {
@@ -183,16 +209,16 @@ function AppUserGroupEditPage() {
     }
   };
 
-  const handleUserModalConfirm = async (userIds: number[]) => {
+  const handleUserModalConfirm = async (userIdList: number[]) => {
     if (!numericId) return;
-    const updateTsList = userIds.map(
+    const updateTsList = userIdList.map(
       (id) => userList.find((u) => u.appUserId === id)!.updateTs,
     );
     try {
       if (userModalMode === "add") {
-        await addUserListToGroup(userIds, numericId, updateTsList);
+        await addUserListToGroup(userIdList, numericId, updateTsList);
       } else {
-        await removeUserListFromGroup(userIds, numericId, updateTsList);
+        await removeUserListFromGroup(userIdList, numericId, updateTsList);
       }
       notifications.show({
         title: "Success",

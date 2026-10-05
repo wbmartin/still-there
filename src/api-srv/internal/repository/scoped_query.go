@@ -27,9 +27,9 @@ func buildScopedWhere(
 	afterUpdateTs float64,
 	idColumn string,
 	idList []int,
-) (string, []interface{}) {
+) (string, []any) {
 	whereClause := ` WHERE security_context_id = $1 AND delete_user_id IS NULL`
-	argList := []interface{}{securityContext}
+	argList := []any{securityContext}
 
 	if len(idList) > 0 {
 		placeholderList := make([]string, len(idList))
@@ -84,7 +84,7 @@ func buildParentScopedWhere(
 	idList []int,
 	parentColumn string,
 	parentID int,
-) (string, []interface{}) {
+) (string, []any) {
 	whereClause, argList := buildScopedWhere(
 		securityContext, afterUpdateTs, idColumn, idList)
 	if parentID > 0 {

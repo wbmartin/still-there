@@ -21,8 +21,6 @@ ProtoStack-ReactGo/
 ├── etc/                  # Env files (loc-, e2e-, uat-*.example) and local certs
 ├── infra/                # Post-sales host mirrors (placeholder; see infra/README.md)
 ├── tests/                # pytest HTTP suite
-├── tickets/              # All engineering work and customer questions (see CLAUDE.md)
-├── scripts/              # Repo tooling (lint-tickets.py)
 ├── doc/                  # Reference docs (index below)
 ├── .claude/              # Agent skills
 ├── dist/                 # Build output (gitignored)
@@ -43,13 +41,14 @@ See [doc/060-dev-env-start.md](doc/060-dev-env-start.md) for day-to-day startup 
 |---------|---------|
 | `./bin/000-rebrand <slug> "<Name>"` | Rename the app when deriving from this template (see `DERIVING.md`) |
 | `./bin/100-build-api-server` | Build the Go API server |
-| `./bin/510-reset-test-db` | Rebuild the local database |
+| `./bin/205-migrate-db` | Create or migrate your developer database (`loc_<slug>_db`; first time: `doc/050-dev-env-init.md`) |
+| `./bin/510-reset-test-db` | Rebuild a scratch test database (`*_test_db`) |
 | `./bin/215-run-api-srv` | Run the API server (supports `--daemon`/`--interactive`) |
 | `./bin/220-run-web-app` | Run the web app dev server |
 | `./bin/216-stop-local-stack` | Stop the API server and web app dev server |
 | `./bin/110-build-web-app` | Build and package web app for deployment |
 | `./bin/300-run-tests [all\|go\|unit\|e2e\|py\|load]` | The one test gate (go, vitest, Playwright, pytest, load) |
-| `./bin/330-test-load` | Load test a running API (not part of `all`) |
+| `./bin/330-test-load` | Load test a private API it starts on the e2e database (not part of `all`) |
 
 Full command reference: [doc/902-project-commands.md](doc/902-project-commands.md)
 
@@ -80,6 +79,7 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 | File | Description |
 |------|-------------|
 | [doc/105-api-srv-tech-spec.md](doc/105-api-srv-tech-spec.md) | API server tech spec: endpoints, auth flow, security, database design, code conventions |
+| [doc/110-security-architecture.md](doc/110-security-architecture.md) | Security architecture: trust boundaries, tenant isolation, threats and controls marked met / partial / open |
 | [doc/900-database-guidelines.md](doc/900-database-guidelines.md) | Database design rules (naming, timestamps, multi-tenancy, no FKs/triggers) |
 
 ### Development Guides
@@ -98,13 +98,10 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 |------|-------------|
 | [doc/310-api-srv-cert-renewal.md](doc/310-api-srv-cert-renewal.md) | API server TLS certificate renewal steps |
 | [doc/320-presales-uat-deploy.md](doc/320-presales-uat-deploy.md) | Presales UAT deploy (`bin/600`/`610`) |
-| [doc/330-presales-to-postsales-migration.md](doc/330-presales-to-postsales-migration.md) | Moving a host from the presales path to the `infra/` pipeline |
-| [doc/340-db-host-setup.md](doc/340-db-host-setup.md) | The three Postgres roles (app, ddl, ci) and the one-time host SQL |
+| [doc/330-uat-postsales-cutover.md](doc/330-uat-postsales-cutover.md) | UAT cutover: from the presales bundle to the `infra/` pipeline |
+| [doc/331-prd-postsales-install.md](doc/331-prd-postsales-install.md) | Prod install on a fresh host, loaded from the same local dump |
+| [doc/340-db-host-setup.md](doc/340-db-host-setup.md) | The three Postgres roles (app, ddl, ci): `infra/sql/proto-host-db.sql` |
+| [doc/350-repository-reset.md](doc/350-repository-reset.md) | Repository reset: the tree as one root commit in a new repo, webhooks and deploy key re-created |
 | [infra/README.md](infra/README.md) | Post-sales deploy pipeline (placeholder) |
 
-Project history — old reviews, plans, superseded notes — lives in
-`tickets/04-archive/engineering-log/`, dated, not maintained.
-
-### Project Tracking
-| File | Description |
-|------|-------------|
+Project history lives in `git log`.

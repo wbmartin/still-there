@@ -16,18 +16,15 @@ type AuthResponseModel struct {
 	GrantList                    []int  `json:"grantList"`
 	AvailableSecurityContextList []int  `json:"availableSecurityContextList"`
 	TempToken                    string `json:"tempToken,omitempty"` // MFA required
+	// With a temp token: true sends the web app to verify a code, false to
+	// enrol. The client never asks /mfaSetup to find out.
+	MFAEnrolled bool `json:"mfaEnrolled"`
 }
 
 // AuthResponseWrapper wraps the auth response for consistency
 type AuthResponseWrapper struct {
 	User      AuthResponseModel `json:"user"`
 	CsrfToken string            `json:"csrfToken,omitempty"`
-}
-
-// Auth2RequestModel represents the request body for MFA authentication
-type Auth2RequestModel struct {
-	TempToken string `json:"tempToken"`
-	TOTP      string `json:"totp"`
 }
 
 // Auth2ResponseModel represents the response for successful MFA authentication
@@ -75,13 +72,7 @@ type ChangeSecurityContextResponseWrapper struct {
 
 // DataWrapper wraps non-user data responses for consistency
 type DataWrapper struct {
-	Data interface{} `json:"data"`
-}
-
-// ChangeCurrentUserPasswordRequest for changing password
-type ChangeCurrentUserPasswordRequest struct {
-	CurrentPassword string `json:"currentPassword"`
-	NewPassword     string `json:"newPassword"`
+	Data any `json:"data"`
 }
 
 // BlockUserRequest represents the request body for blocking a user
@@ -108,8 +99,9 @@ type AddUserRequest struct {
 
 // CreateUserRequest represents the request body for creating a new user
 type CreateUserRequest struct {
-	UserName                   string `json:"userName"`
-	PwRaw                      string `json:"pwHash"` // Maps to frontend's pwHash field
+	UserName string `json:"userName"`
+	// Password is the raw password; hashed by the handler, never stored.
+	Password                   string `json:"password"`
 	FirstName                  string `json:"firstName"`
 	LastName                   string `json:"lastName"`
 	Email                      string `json:"email"`

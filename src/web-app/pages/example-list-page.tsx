@@ -14,8 +14,10 @@ import { useExamplesStore } from "../stores/examples-store";
 import useAuthGuard from "../hooks/use-auth-guard";
 import { useRowsPerPage } from "../hooks/use-preference";
 import { confirmDelete } from "../utils/confirm-delete";
+import { notifications } from "@mantine/notifications";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
+import { SortTh } from "../components/sort-th";
 import { reportError } from "../utils/report-error";
 
 function ExampleListPage() {
@@ -29,21 +31,32 @@ function ExampleListPage() {
   } = useExamplesStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  // Page lives in the URL so a refresh or a shared link keeps its place.
-  const page = Math.max(1, Number(searchParams.get("page")) || 1);
-  const setPage = (nextPage: number) =>
+  // Page and sort live in the URL so a refresh or a shared link keeps its
+  // place. setListParams merges into the query string, so a parameter a
+  // derived page adds (a filter) survives a sort or a page change; an
+  // empty value removes its key.
+  const setListParams = (update: Record<string, string>) =>
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
-      if (nextPage > 1) next.set("page", String(nextPage));
-      else next.delete("page");
+      for (const [key, value] of Object.entries(update)) {
+        if (value) next.set(key, value);
+        else next.delete(key);
+      }
       return next;
     });
+  // As asked for; clamped to the last page once the list is known.
+  const requestedPage = Math.max(
+    1,
+    Math.floor(Number(searchParams.get("page"))) || 1,
+  );
+  const setPage = (nextPage: number) =>
+    setListParams({ page: nextPage > 1 ? String(nextPage) : "" });
   const itemsPerPage = useRowsPerPage();
   const hasFetched = useRef(false);
 
   // Sort state from URL params
   const sortColumn = searchParams.get("sort") || "exampleId";
-  const sortDirection = (searchParams.get("dir") || "asc") as "asc" | "desc";
+  const sortDirection = searchParams.get("dir") === "desc" ? "desc" : "asc";
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
@@ -99,6 +112,9 @@ function ExampleListPage() {
   }
 
   const totalPageCount = Math.ceil(sortedExampleList.length / itemsPerPage);
+  // A stale link, or deleting the last row of the last page, can ask for a
+  // page past the end: show the last page rather than an empty table.
+  const page = Math.min(requestedPage, Math.max(1, totalPageCount));
   const paginatedExampleList = sortedExampleList.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
@@ -117,11 +133,27 @@ function ExampleListPage() {
     if (example) {
       try {
         await deleteItem(example.exampleId, example.updateTs);
-        // List is updated locally, but refresh to ensure sync
-        await readList({ incremental: true });
+        notifications.show({
+          title: "Success",
+          message: "Example deleted successfully",
+          color: "green",
+          autoClose: 3000,
+          withCloseButton: false,
+        });
+        // The store already dropped the row; this picks up others' changes.
+        // A failure here sets the store's error, which the page shows.
+        void readList({ incremental: true }).catch((err) =>
+          reportError(err, "example list"),
+        );
       } catch (error) {
         reportError(error, "deleting example");
-        // Error is handled in store
+        notifications.show({
+          title: "Error",
+          message: "Failed to delete example",
+          color: "red",
+          autoClose: 5000,
+          withCloseButton: true,
+        });
       }
     }
   };
@@ -129,8 +161,8 @@ function ExampleListPage() {
   const handleSort = (column: string) => {
     const newDirection =
       sortColumn === column && sortDirection === "asc" ? "desc" : "asc";
-    // Dropping "page" resets to the first page
-    setSearchParams({ sort: column, dir: newDirection });
+    // A new order starts from the first page.
+    setListParams({ sort: column, dir: newDirection, page: "" });
   };
 
   return (
@@ -146,38 +178,34 @@ function ExampleListPage() {
       <Table>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("exampleId")}
-            >
-              ID{" "}
-              {sortColumn === "exampleId" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("exampleText")}
-            >
-              Text{" "}
-              {sortColumn === "exampleText" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("exampleInt")}
-            >
-              Int{" "}
-              {sortColumn === "exampleInt" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("exampleFloat")}
-            >
-              Float{" "}
-              {sortColumn === "exampleFloat" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
+            <SortTh
+              label="ID"
+              column="exampleId"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Text"
+              column="exampleText"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Int"
+              column="exampleInt"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Float"
+              column="exampleFloat"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
             <Table.Th>UUID</Table.Th>
             <Table.Th>Actions</Table.Th>
           </Table.Tr>

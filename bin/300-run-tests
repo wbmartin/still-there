@@ -1,19 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # The test gate -- the same one on a laptop and on a build host. The only
-# script that runs tests; none of them writes to the source tree.
+# script that runs tests; none of them writes to the source tree, and the
+# run fails if `git status` at the end differs from the start.
 #
-#   bin/300-run-tests          # all: rebuild both scratch DBs, go vet + test,
+#   bin/300-run-tests          # all: infra script checks, doc paths,
+#                              #      rebuild both scratch DBs, Go checks
+#                              #      + test, govulncheck, eslint,
 #                              #      vitest, playwright, pytest
-#   bin/300-run-tests go       # the Go suites only (seconds; run before every commit)
-#   bin/300-run-tests unit     # vitest (src/web-app/tests), no database
+#   bin/300-run-tests infra    # infra/<host>/bin: bash -n, shared copies
+#                              #   byte-identical across hosts
+#   bin/300-run-tests docs     # scripts/check-doc-paths.sh: every
+#                              #   backticked repo path in the docs exists
+#   bin/300-run-tests go       # gofmt, go vet, staticcheck, schema
+#                              #   reference current (doc/003), go test
+#                              #   + coverage report, no threshold
+#                              #   (seconds; run before every commit)
+#   bin/300-run-tests unit     # eslint, vitest (src/web-app), no database
 #   bin/300-run-tests e2e      # Playwright only (bin/230-run-web-app-e2e)
 #   bin/300-run-tests py       # pytest HTTP suite (tests/) against a private
 #                              #   API instance this script starts and stops
-#   bin/300-run-tests load     # bin/330-test-load against a running API (not in all)
+#   bin/300-run-tests load     # bin/330-test-load: its own private API on
+#                              #   the e2e database, a minute (not in all)
 #
 # Output: tmp/test-logs/ (logs, the private API's env and binary) and
-# tmp/test-reports/ (pytest HTML). Both gitignored.
+# tmp/test-reports/ (pytest HTML, Go coverage). Both gitignored.
+# tmp/test-logs/run-tests.result is the run's one-line outcome, for a
+# caller to post.
 #
 # Everything environment-specific comes from ONE sourced file, so "it passed
 # for me" and "it passed on the host" mean the same thing:
@@ -21,14 +34,16 @@ set -euo pipefail
 #   TEST_ENV   which file; default etc/loc-test.env (a laptop). A build
 #                    host points it at its own copy with a CI role.
 #
-# Passing here is the last gate before anything is bundled or pushed, which
-# is why the Go integration suites are not allowed to skip: on a laptop they
-# skip when Postgres is down, and a green run with the repository tests
-# missing is worse than a red one.
+# Passing here is what lets a build reach prod (on the UAT host, the
+# sha-<commit>-passed tag prd-proto-promote-uat requires), which is why
+# no suite may skip: on a laptop the Go integration suites skip when
+# Postgres is down, and a green run with tests missing is worse than a red
+# one. A skipped test fails its step; only a live test (tests/README.md
+# "Writing tests") may skip, and nothing here sets its <SERVICE>_LIVE=1.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 MODE="${1:-all}"
-case "$MODE" in all|go|unit|e2e|py|load) ;; *) echo "usage: $0 [all|go|unit|e2e|py|load]"; exit 2 ;; esac
+case "$MODE" in all|infra|docs|go|unit|e2e|py|load) ;; *) echo "usage: $0 [all|infra|docs|go|unit|e2e|py|load]"; exit 2 ;; esac
 
 # shellcheck disable=SC1091
 source "$PROJECT_ROOT/etc/app.env"
@@ -39,6 +54,14 @@ source "$TEST_ENV"
 for var in TEST_PG_URL_BASE TEST_DB E2E_DB TEST_DATABASE_URL E2E_API_ENV; do
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $TEST_ENV"; exit 1; }
 done
+# The suites write; they may only ever reach a scratch database. bin/510 and
+# the Go harness (testdb_test.go) check the same names.
+for database in "$TEST_DB" "$E2E_DB" "${TEST_DATABASE_URL##*/}"; do
+    case "${database%%\?*}" in
+        *_test_db|*_e2e_db) ;;
+        *) echo "[ERROR] $database is not a scratch database (*_test_db / *_e2e_db)"; exit 1 ;;
+    esac
+done
 # Paths in the env file are relative to the project root.
 case "$E2E_API_ENV" in /*) ;; *) E2E_API_ENV="$PROJECT_ROOT/$E2E_API_ENV" ;; esac
 export E2E_API_ENV
@@ -47,29 +70,222 @@ LOG_DIR="${TEST_LOG_DIR:-$PROJECT_ROOT/tmp/test-logs}"
 case "$LOG_DIR" in /*) ;; *) LOG_DIR="$PROJECT_ROOT/$LOG_DIR" ;; esac
 REPORT_DIR="$PROJECT_ROOT/tmp/test-reports"
 mkdir -p "$LOG_DIR" "$REPORT_DIR"
+# bin/510 writes the schema reference here instead of doc/003, so no
+# reset this run does (here, in bin/330 or in Playwright's global setup)
+# rewrites the tree; the go step compares it with the committed copy.
+SCHEMA_REFERENCE_DOC="$PROJECT_ROOT/doc/003-schema-reference.sql"
+export SCHEMA_REFERENCE_FILE="$LOG_DIR/schema-reference.sql"
 
 for tool in go npm; do
     command -v "$tool" >/dev/null 2>&1 || { echo "[ERROR] $tool not on PATH"; exit 1; }
 done
 
-GO_COUNT=0; UNIT_COUNT=0; E2E_COUNT=0; PY_COUNT=0
+INFRA_COUNT=0; DOCS_COUNT=0; GO_COUNT=0; UNIT_COUNT=0; E2E_COUNT=0; PY_COUNT=0
 SUMMARY=()
+
+# The run's outcome as one line in LOG_DIR (TEST_LOG_DIR), rewritten on
+# every exit from here on: "passed (<mode>): <counts>", or "FAILED
+# (<mode>) at <step> ..." with the counts so far, up to five failing tests
+# and the step's log. The UAT build posts it to Slack. A run that dies
+# before this point leaves no file, so a caller deletes it first.
+RESULT_FILE="$LOG_DIR/run-tests.result"
+rm -f "$RESULT_FILE"
+STEP="setup"
+STEP_LOG=""
+API_PID=""
+stop_api() {
+    kill -TERM "$API_PID" 2>/dev/null || true
+    wait "$API_PID" 2>/dev/null || true
+}
+failing_test_list() {
+    [ -f "$STEP_LOG" ] || return 0
+    case "$STEP" in
+        "go test") grep -oE -- '--- FAIL: [^ ]+' "$STEP_LOG" \
+            | sed 's/^--- FAIL: //' ;;
+        vitest) grep -E '^ *FAIL ' "$STEP_LOG" | sed 's/^ *FAIL *//' ;;
+        e2e) grep -E '^ +[0-9]+\) ' "$STEP_LOG" \
+            | sed -E 's/^ *[0-9]+\) *//; s/ (─)+$//' ;;
+        py) grep -oE '^FAILED [^ ]+' "$STEP_LOG" | sed 's/^FAILED //' ;;
+    esac | awk '!seen[$0]++' | head -5 | paste -sd ';' - | sed 's/;/; /g'
+}
+write_result() {
+    local exit_code=$?
+    [ -z "$API_PID" ] || stop_api
+    local counts="${SUMMARY[*]:-none}"
+    if [ "$exit_code" -eq 0 ]; then
+        echo "passed ($MODE): $counts" > "$RESULT_FILE" || true
+        return 0
+    fi
+    local line="FAILED ($MODE) at $STEP (exit $exit_code); passed: $counts"
+    local failing
+    failing="$(failing_test_list 2>/dev/null || true)"
+    [ -z "$failing" ] || line+="; failing: $failing"
+    [ -z "$STEP_LOG" ] || line+="; log: $STEP_LOG"
+    echo "$line" > "$RESULT_FILE" || true
+}
+trap write_result EXIT
+
+# The tree as the run found it; compared again at the end. Start against
+# end rather than "must be empty", so the gate also runs on a dirty tree.
+# Not a git checkout (an unpacked bundle): nothing to compare.
+GIT_STATUS_START=""
+IS_GIT_CHECKOUT=0
+if git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    IS_GIT_CHECKOUT=1
+    GIT_STATUS_START="$(git -C "$PROJECT_ROOT" status --porcelain \
+        --untracked-files=all)"
+fi
+
+# Go analysers are pinned and installed once under tmp/ (go install, no
+# go.mod entry), so every machine runs the same version and a later run
+# needs no network. An installed copy of another version is replaced.
+GO_MODULE_DIR_LIST=(src/api-srv src/load-test)
+STATICCHECK_VERSION=v0.8.1
+GOVULNCHECK_VERSION=v1.7.0
+TOOLS_BIN="$PROJECT_ROOT/tmp/tools/bin"
+# install_go_tool <binary> <module> <package> <version>
+install_go_tool() {
+    local binary="$TOOLS_BIN/$1" module="$2" package="$3" version="$4"
+    if go version -m "$binary" 2>/dev/null \
+            | grep -qE "^\s+mod\s+$module\s+$version\s"; then
+        return 0
+    fi
+    echo "[INFO] Installing $1 $version into $TOOLS_BIN"
+    mkdir -p "$TOOLS_BIN"
+    local install_log="$LOG_DIR/$1-install.log"
+    if ! GOBIN="$TOOLS_BIN" go install "$package@$version" \
+            > "$install_log" 2>&1; then
+        echo "[ERROR] cannot install $1 $version" \
+            "(needs proxy.golang.org) -- $install_log:"
+        tail -20 "$install_log"
+        exit 1
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# infra/<host>/bin/<env>-<slug>-<job> ships verbatim to /srv/<env>-<slug>/bin
+# and takes every per-host name from that app root, so a job run on more
+# than one host is one file copied per host dir. A fix typed into one copy
+# and not the other fails here. Offline, no database.
+INFRA_SHARED_JOB_LIST=(install-api publish-web-client renew-web-certs)
+if [ "$MODE" = all ] || [ "$MODE" = infra ]; then
+    STEP="infra"
+    echo "[INFO] infra scripts: bash -n, shared copies identical"
+    for script in "$PROJECT_ROOT"/infra/*/bin/*; do
+        [ -f "$script" ] || continue
+        bash -n "$script" \
+            || { echo "[ERROR] bash -n: ${script#"$PROJECT_ROOT"/}"; exit 1; }
+        INFRA_COUNT=$((INFRA_COUNT + 1))
+    done
+    for job in "${INFRA_SHARED_JOB_LIST[@]}"; do
+        copy_list=("$PROJECT_ROOT"/infra/*/bin/*-"$APP_SLUG"-"$job")
+        if [ "${#copy_list[@]}" -lt 2 ] || [ ! -f "${copy_list[0]}" ]; then
+            echo "[ERROR] infra/<host>/bin/<env>-$APP_SLUG-$job: expected" \
+                "a copy on each host, found ${#copy_list[@]}"
+            exit 1
+        fi
+        for copy in "${copy_list[@]:1}"; do
+            if ! cmp -s "${copy_list[0]}" "$copy"; then
+                echo "[ERROR] shared infra script differs between hosts" \
+                    "(make the copies identical):"
+                diff -u "${copy_list[0]}" "$copy" | head -40
+                exit 1
+            fi
+        done
+    done
+    echo "[INFO] infra: $INFRA_COUNT scripts parse;" \
+        "${#INFRA_SHARED_JOB_LIST[@]} shared jobs identical"
+    SUMMARY+=("infra=$INFRA_COUNT")
+fi
+
+# ------------------------------------------------------------------------------
+# A path a document names in backticks must exist; a rename that leaves a
+# doc behind fails here. Offline, no database. The count is path tokens.
+if [ "$MODE" = all ] || [ "$MODE" = docs ]; then
+    echo "[INFO] docs: backticked repo paths exist"
+    STEP="docs"
+    DOCS_LOG="$LOG_DIR/check-doc-paths.log"
+    STEP_LOG="$DOCS_LOG"
+    if ! "$PROJECT_ROOT/scripts/check-doc-paths.sh" > "$DOCS_LOG" 2>&1; then
+        echo "[ERROR] doc paths missing (fix the doc, or list a real" \
+            "non-repo name in scripts/doc-paths-allow.txt) -- $DOCS_LOG:"
+        head -40 "$DOCS_LOG"
+        exit 1
+    fi
+    DOCS_COUNT=$(grep -oE '^checked [0-9]+' "$DOCS_LOG" | grep -oE '[0-9]+')
+    echo "[INFO] docs: $DOCS_COUNT path tokens resolve"
+    SUMMARY+=("docs=$DOCS_COUNT")
+fi
 
 # ------------------------------------------------------------------------------
 if [ "$MODE" = all ] || [ "$MODE" = go ]; then
+    # Checks only, never rewrites: zero findings is the gate. Fix the code,
+    # or for a staticcheck finding that is wrong here write
+    # //lint:ignore <check> <reason> on the line above. Per module, because
+    # each is its own go.mod and a root ./... would not reach it. gofmt is
+    # the one in the toolchain go.mod selects.
+    STEP="go checks"
+    STEP_LOG=""
+    install_go_tool staticcheck honnef.co/go/tools \
+        honnef.co/go/tools/cmd/staticcheck "$STATICCHECK_VERSION"
+    for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
+        pushd "$PROJECT_ROOT/$module_dir" > /dev/null
+        echo "[INFO] gofmt, go vet, staticcheck $module_dir"
+        UNFORMATTED="$("$(go env GOROOT)/bin/gofmt" -l .)" \
+            || { echo "[ERROR] gofmt could not parse $module_dir"; exit 1; }
+        if [ -n "$UNFORMATTED" ]; then
+            echo "[ERROR] gofmt: not formatted (run gofmt -w on them):"
+            while IFS= read -r file; do
+                echo "    $module_dir/$file"
+            done <<< "$UNFORMATTED"
+            exit 1
+        fi
+        go vet ./... || { echo "[ERROR] go vet: $module_dir"; exit 1; }
+        "$TOOLS_BIN/staticcheck" ./... \
+            || { echo "[ERROR] staticcheck: $module_dir"; exit 1; }
+        popd > /dev/null
+    done
+
+    STEP="go test"
+    STEP_LOG="$LOG_DIR/reset-test-db.log"
     echo "[INFO] Rebuilding $TEST_DB"
     "$SCRIPT_DIR/510-reset-test-db" "$TEST_DB" > "$LOG_DIR/reset-test-db.log" 2>&1 \
         || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-test-db.log:"; tail -20 "$LOG_DIR/reset-test-db.log"; exit 1; }
 
-    pushd "$PROJECT_ROOT/src/api-srv" > /dev/null
-    echo "[INFO] go vet"
-    go vet ./...
-    # -v so a skip is visible in the log; the grep for connectTestDB's exact
-    # message turns it into a failure. (A plain '--- SKIP' would also catch an
-    # upstream subtest that skips on purpose.)
-    echo "[INFO] go test"
+    # A migration lands with its regenerated reference, or the reference
+    # rots like any hand-kept doc.
+    STEP="schema reference"
+    STEP_LOG=""
+    if ! cmp -s "$SCHEMA_REFERENCE_FILE" "$SCHEMA_REFERENCE_DOC"; then
+        echo "[ERROR] ${SCHEMA_REFERENCE_DOC#"$PROJECT_ROOT"/} is not" \
+            "the schema the migrations build. Regenerate and commit it:" \
+            "bin/510-reset-test-db (or cp" \
+            "${SCHEMA_REFERENCE_FILE#"$PROJECT_ROOT"/} over it). Diff:"
+        diff -u "$SCHEMA_REFERENCE_DOC" "$SCHEMA_REFERENCE_FILE" \
+            | head -40 || true
+        exit 1
+    fi
+    echo "[INFO] schema reference current"
+    STEP="go test"
+
+    # -v so a skip is visible in the log, and any skip fails the run: a
+    # green gate means every test ran. The one exception is a live test
+    # (named TestLive..., runs only when its <SERVICE>_LIVE=1 is set by
+    # hand; tests/README.md "Writing tests"). go test ./... runs only this
+    # repository's packages, so no upstream skip reaches the log.
     GO_LOG="$LOG_DIR/go-test.log"
-    TEST_DATABASE_URL="$TEST_DATABASE_URL" go test -v ./... > "$GO_LOG" 2>&1 || true
+    STEP_LOG="$GO_LOG"
+    : > "$GO_LOG"
+    # Coverage rides the same run: a report per module in REPORT_DIR, no
+    # threshold.
+    for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
+        echo "[INFO] go test $module_dir"
+        (cd "$PROJECT_ROOT/$module_dir" \
+            && TEST_DATABASE_URL="$TEST_DATABASE_URL" go test -v \
+                -coverprofile="$REPORT_DIR/go-coverage-${module_dir##*/}.out" \
+                ./...) \
+            >> "$GO_LOG" 2>&1 || true
+    done
     grep -E '^(ok|FAIL|--- FAIL)' "$GO_LOG" || true
     if grep -q 'skipping integration tests' "$GO_LOG"; then
         echo "[ERROR] Go integration suites skipped -- $TEST_DB was not reachable:"
@@ -81,20 +297,94 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
         grep -B2 -A12 -- '--- FAIL' "$GO_LOG" | head -60
         exit 1
     fi
+    GO_SKIP_LIST="$(grep -E -- '^\s*--- SKIP: ' "$GO_LOG" \
+        | grep -vE -- '--- SKIP: ([^ ]*/)?TestLive' || true)"
+    if [ -n "$GO_SKIP_LIST" ]; then
+        echo "[ERROR] go test skipped tests (a gate fails, never skips;" \
+            "make it run or delete it) -- $GO_LOG:"
+        echo "$GO_SKIP_LIST" | head -20
+        exit 1
+    fi
+    for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
+        COVER_PROFILE="$REPORT_DIR/go-coverage-${module_dir##*/}.out"
+        COVER_HTML="${COVER_PROFILE%.out}.html"
+        (cd "$PROJECT_ROOT/$module_dir" \
+            && go tool cover -html="$COVER_PROFILE" -o "$COVER_HTML") \
+            || { echo "[ERROR] go tool cover: $module_dir"; exit 1; }
+        COVER_TOTAL="$(cd "$PROJECT_ROOT/$module_dir" \
+            && go tool cover -func="$COVER_PROFILE" \
+            | awk '/^total:/ {print $NF}')"
+        echo "[INFO] go coverage $module_dir: $COVER_TOTAL of statements" \
+            "(${COVER_HTML#"$PROJECT_ROOT"/})"
+    done
     GO_COUNT=$(grep -c -E '^\s*--- PASS' "$GO_LOG" || true)
     echo "[INFO] go: $GO_COUNT passed"
     SUMMARY+=("go=$GO_COUNT")
-    popd > /dev/null
+fi
+
+# ------------------------------------------------------------------------------
+# Known vulnerabilities in the Go modules and in the standard library of the
+# toolchain go.mod selects. "all" only: it reads vuln.go.dev, so the "go"
+# loop stays offline. Fails on any vulnerability the code calls; an
+# advisory in a package the code never reaches is not a failure.
+if [ "$MODE" = all ]; then
+    STEP="govulncheck"
+    STEP_LOG=""
+    install_go_tool govulncheck golang.org/x/vuln \
+        golang.org/x/vuln/cmd/govulncheck "$GOVULNCHECK_VERSION"
+    for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
+        echo "[INFO] govulncheck $module_dir"
+        VULN_LOG="$LOG_DIR/govulncheck-${module_dir##*/}.log"
+        STEP_LOG="$VULN_LOG"
+        VULN_STATUS=0
+        (cd "$PROJECT_ROOT/$module_dir" && "$TOOLS_BIN/govulncheck" ./...) \
+            > "$VULN_LOG" 2>&1 || VULN_STATUS=$?
+        case "$VULN_STATUS" in
+            0) ;;
+            3)
+                echo "[ERROR] govulncheck: $module_dir calls a known" \
+                    "vulnerability -- full log: $VULN_LOG"
+                grep -E '^Vulnerability #|Found in:|Fixed in:' "$VULN_LOG" | head -60
+                exit 1
+                ;;
+            *)
+                echo "[ERROR] govulncheck could not scan $module_dir" \
+                    "(exit $VULN_STATUS; needs vuln.go.dev) -- $VULN_LOG:"
+                tail -20 "$VULN_LOG"
+                exit 1
+                ;;
+        esac
+    done
+    echo "[INFO] govulncheck: no called vulnerabilities"
 fi
 
 # ------------------------------------------------------------------------------
 if [ "$MODE" = all ] || [ "$MODE" = unit ]; then
     pushd "$PROJECT_ROOT/src/web-app" > /dev/null
+    # Check only, never --fix. Any error or warning fails: the app is at zero,
+    # so there is no backlog to carve out.
+    echo "[INFO] eslint"
+    STEP="eslint"
+    LINT_LOG="$LOG_DIR/eslint.log"
+    STEP_LOG="$LINT_LOG"
+    if ! npx eslint . --max-warnings 0 > "$LINT_LOG" 2>&1; then
+        echo "[ERROR] eslint failed -- full log: $LINT_LOG"
+        head -40 "$LINT_LOG"
+        exit 1
+    fi
     echo "[INFO] vitest"
+    STEP="vitest"
     UNIT_LOG="$LOG_DIR/vitest.log"
+    STEP_LOG="$UNIT_LOG"
     if ! NO_COLOR=1 npx vitest run > "$UNIT_LOG" 2>&1; then
         echo "[ERROR] vitest failed -- full log: $UNIT_LOG"
         grep -E 'FAIL|×|Error' "$UNIT_LOG" | head -30
+        exit 1
+    fi
+    if grep -qE '^ *Tests .*[0-9]+ (skipped|todo)' "$UNIT_LOG"; then
+        echo "[ERROR] vitest skipped tests (make them run or delete" \
+            "them) -- $UNIT_LOG:"
+        grep -E '^ *Tests |↓' "$UNIT_LOG" | head -20
         exit 1
     fi
     UNIT_COUNT=$(grep -oE 'Tests\s+[0-9]+ passed' "$UNIT_LOG" | grep -oE '[0-9]+' | head -1)
@@ -105,6 +395,8 @@ fi
 
 # ------------------------------------------------------------------------------
 if [ "$MODE" = all ] || [ "$MODE" = e2e ]; then
+    STEP="e2e"
+    STEP_LOG="$LOG_DIR/reset-e2e-db.log"
     echo "[INFO] Rebuilding $E2E_DB"
     "$SCRIPT_DIR/510-reset-test-db" "$E2E_DB" > "$LOG_DIR/reset-e2e-db.log" 2>&1 \
         || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-e2e-db.log:"; tail -20 "$LOG_DIR/reset-e2e-db.log"; exit 1; }
@@ -115,10 +407,16 @@ if [ "$MODE" = all ] || [ "$MODE" = e2e ]; then
     echo "[INFO] playwright"
     npx playwright install chromium
     E2E_LOG="$LOG_DIR/playwright.log"
+    STEP_LOG="$E2E_LOG"
     # The database was just rebuilt and seeded; tell global setup not to
     # reseed it a second time (it does when Playwright runs on its own).
     if ! E2E_DB_SEEDED=1 "$SCRIPT_DIR/230-run-web-app-e2e" 2>&1 | tee "$E2E_LOG"; then
         echo "[ERROR] playwright failed -- full log: $E2E_LOG"
+        exit 1
+    fi
+    if grep -qE '^ +[0-9]+ skipped$' "$E2E_LOG"; then
+        echo "[ERROR] playwright skipped tests (make them run or delete" \
+            "them) -- full log: $E2E_LOG"
         exit 1
     fi
     E2E_COUNT=$(grep -oE '[0-9]+ passed' "$E2E_LOG" | tail -1 | grep -oE '[0-9]+' || echo 0)
@@ -133,26 +431,37 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     # on the e2e port from the e2e config -- same database and fixtures
     # Playwright uses, rebuilt first so the suite never sees another run's
     # leftovers -- and stop it again whatever happens.
+    STEP="py"
+    STEP_LOG="$LOG_DIR/reset-e2e-db.log"
     command -v python3 >/dev/null 2>&1 || { echo "[ERROR] python3 not on PATH"; exit 1; }
     echo "[INFO] Rebuilding $E2E_DB"
     "$SCRIPT_DIR/510-reset-test-db" "$E2E_DB" > "$LOG_DIR/reset-e2e-db.log" 2>&1 \
         || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-e2e-db.log:"; tail -20 "$LOG_DIR/reset-e2e-db.log"; exit 1; }
 
     API_LOG="$LOG_DIR/py-api.log"
+    STEP_LOG="$API_LOG"
     # The e2e config lifts the rate limits so Playwright's page-load bursts
     # cannot fail the suite. The pytest suite asserts the opposite --
-    # tests/test_z_error_scenarios.py drives a non-exempt user past the limit
-    # and expects a 429 -- and is written against the developer values in
-    # etc/loc-api-srv.env. So this instance runs on a COPY of the e2e config
-    # with just those two keys taken from the developer file.
+    # tests/test_z_error_scenarios.py drives a non-exempt login past the
+    # limit it reads from TEST_API_ENV and expects a 429 -- which needs a
+    # limit a burst reaches in seconds. So this instance runs on a COPY of
+    # the e2e config with just those two keys taken from the developer
+    # file, and TRUSTED_PROXY_COUNT=1 so pytest plays the proxy: a lockout
+    # case sends its own X-Forwarded-For and never locks the shared loopback
+    # address.
+    # Safe because this instance binds 127.0.0.1 and serves a scratch DB.
     PY_API_ENV="$LOG_DIR/py-api-srv.env"
     DEV_ENV="$PROJECT_ROOT/etc/loc-api-srv.env"
     limit_from_dev() { grep -E "^$1=" "$DEV_ENV" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' '; }
     USER_LIMIT="$(limit_from_dev MAX_USER_REQ_PER_MIN)"; USER_LIMIT="${USER_LIMIT:-200}"
     UNAUTH_LIMIT="$(limit_from_dev MAX_UNAUTH_REQ_PER_MIN)"; UNAUTH_LIMIT="${UNAUTH_LIMIT:-20}"
-    sed -e "s#^MAX_USER_REQ_PER_MIN=.*#MAX_USER_REQ_PER_MIN=$USER_LIMIT#" \
-        -e "s#^MAX_UNAUTH_REQ_PER_MIN=.*#MAX_UNAUTH_REQ_PER_MIN=$UNAUTH_LIMIT#" \
-        "$E2E_API_ENV" > "$PY_API_ENV"
+    {
+        sed -e "s#^MAX_USER_REQ_PER_MIN=.*#MAX_USER_REQ_PER_MIN=$USER_LIMIT#" \
+            -e "s#^MAX_UNAUTH_REQ_PER_MIN=.*#MAX_UNAUTH_REQ_PER_MIN=$UNAUTH_LIMIT#" \
+            -e "/^TRUSTED_PROXY_COUNT=/d" \
+            "$E2E_API_ENV"
+        printf "\nTRUSTED_PROXY_COUNT=1\n"
+    } > "$PY_API_ENV"
     API_BASE_URL="$(grep -E '^TEST_BASE_URL=' "$PY_API_ENV" | head -1 | cut -d= -f2- | tr -d ' ')"
     [ -n "$API_BASE_URL" ] || { echo "[ERROR] TEST_BASE_URL missing from $E2E_API_ENV"; exit 1; }
     if curl -sf "$API_BASE_URL/health" >/dev/null 2>&1; then
@@ -167,12 +476,8 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     (cd "$PROJECT_ROOT/src/api-srv" && go build -o "$API_BIN" ./cmd/server)
     echo "[INFO] Starting the Go API from $PY_API_ENV (limits $USER_LIMIT/$UNAUTH_LIMIT per min)"
     "$API_BIN" "$PY_API_ENV" > "$API_LOG" 2>&1 &
+    # Stopped by write_result (the EXIT trap) if anything below fails.
     API_PID=$!
-    stop_api() {
-        kill -TERM "$API_PID" 2>/dev/null || true
-        wait "$API_PID" 2>/dev/null || true
-    }
-    trap stop_api EXIT
 
     for _ in $(seq 1 90); do
         curl -sf "$API_BASE_URL/health" >/dev/null 2>&1 && break
@@ -184,37 +489,75 @@ if [ "$MODE" = all ] || [ "$MODE" = py ]; then
     # The venv's binaries are called by path rather than through `activate`:
     # activate bakes in the absolute path the venv was created at, so a moved
     # checkout would silently fall through to the system python. A venv whose
-    # python no longer runs is rebuilt.
+    # python no longer runs, or that was built from a different
+    # requirements.txt, is rebuilt so no stale package outlives a bump.
     VENV_DIR="$PROJECT_ROOT/tests/.venv"
     VENV_PY="$VENV_DIR/bin/python3"
-    if [ ! -x "$VENV_PY" ] || ! "$VENV_PY" -c 'import sys' >/dev/null 2>&1; then
+    REQUIREMENTS="$PROJECT_ROOT/tests/requirements.txt"
+    VENV_STAMP="$VENV_DIR/installed-requirements.txt"
+    if [ ! -x "$VENV_PY" ] || ! "$VENV_PY" -c 'import sys' >/dev/null 2>&1 \
+            || ! cmp -s "$REQUIREMENTS" "$VENV_STAMP"; then
         echo "[INFO] Creating $VENV_DIR"
         rm -rf "$VENV_DIR"
         python3 -m venv "$VENV_DIR"
+        "$VENV_PY" -m pip install -q --disable-pip-version-check \
+            -r "$REQUIREMENTS"
+        cp "$REQUIREMENTS" "$VENV_STAMP"
     fi
-    "$VENV_PY" -m pip install -q -r "$PROJECT_ROOT/tests/requirements.txt"
 
     PY_LOG="$LOG_DIR/pytest.log"
     PY_REPORT="$REPORT_DIR/pytest_$(date +%Y%m%d_%H%M%S).html"
+    STEP_LOG="$PY_LOG"
     echo "[INFO] pytest against $API_BASE_URL (report: $PY_REPORT)"
-    if ! (cd "$PROJECT_ROOT" && TEST_BASE_URL="$API_BASE_URL" "$VENV_PY" -m pytest tests \
+    # conftest.py refuses to start unless TEST_BASE_URL is the URL in
+    # TEST_API_ENV and that file serves a scratch database.
+    if ! (cd "$PROJECT_ROOT" && TEST_API_ENV="$PY_API_ENV" \
+            TEST_BASE_URL="$API_BASE_URL" "$VENV_PY" -m pytest tests \
             --maxfail=1 -v --tb=short --html="$PY_REPORT" --self-contained-html) 2>&1 | tee "$PY_LOG"; then
         echo "[ERROR] pytest failed -- full log: $PY_LOG, API log: $API_LOG"
+        exit 1
+    fi
+    PY_SKIP_LIST="$(grep -E '^tests/[^ ]+ SKIPPED' "$PY_LOG" \
+        | grep -vE '::test_live_[^ ]* SKIPPED' || true)"
+    if [ -n "$PY_SKIP_LIST" ]; then
+        echo "[ERROR] pytest skipped tests (a gate fails, never skips;" \
+            "make it run or delete it) -- $PY_LOG:"
+        echo "$PY_SKIP_LIST" | head -20
         exit 1
     fi
     PY_COUNT=$(grep -oE '[0-9]+ passed' "$PY_LOG" | tail -1 | grep -oE '[0-9]+' || echo 0)
     echo "[INFO] py: $PY_COUNT passed"
     SUMMARY+=("py=$PY_COUNT")
     stop_api
-    trap - EXIT
+    API_PID=""
 fi
 
 # ------------------------------------------------------------------------------
 if [ "$MODE" = load ]; then
-    # Not part of "all": it needs a developer's API already running and takes
-    # a minute by design.
+    # Not part of "all": it takes a minute by design. bin/330 starts and
+    # stops its own private API on the e2e scratch database.
+    STEP="load"
+    STEP_LOG=""
     "$SCRIPT_DIR/330-test-load"
     SUMMARY+=("load=done")
+fi
+
+# ------------------------------------------------------------------------------
+# A test that writes into the tree (an unignored report, a stray binary) or
+# rewrites a tracked file fails the run here, whichever suite did it.
+STEP="git status"
+STEP_LOG=""
+if [ "$IS_GIT_CHECKOUT" = 1 ]; then
+    GIT_STATUS_END="$(git -C "$PROJECT_ROOT" status --porcelain \
+        --untracked-files=all)"
+    if [ "$GIT_STATUS_END" != "$GIT_STATUS_START" ]; then
+        echo "[ERROR] the run changed git status (write under tmp/ or" \
+            "gitignore it). Before:"
+        echo "${GIT_STATUS_START:-    (clean)}"
+        echo "After:"
+        echo "$GIT_STATUS_END"
+        exit 1
+    fi
 fi
 
 echo "[INFO] tests passed ($MODE): ${SUMMARY[*]}"

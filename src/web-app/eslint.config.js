@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'coverage']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -26,6 +26,14 @@ export default defineConfig([
     rules: {
       // Errors go through utils/report-error.ts, never straight to the console.
       'no-console': 'error',
+      // The API is called through apiJson (utils/api.ts), never a bare fetch.
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'fetch',
+          message: 'Call the API through apiJson (utils/api.ts).',
+        },
+      ],
     },
   },
   {
@@ -33,5 +41,10 @@ export default defineConfig([
     // print their own progress.
     files: ['utils/report-error.ts', 'tests/**'],
     rules: { 'no-console': 'off' },
+  },
+  {
+    // The one place app code may fetch; tests stub and call it directly.
+    files: ['utils/api.ts', 'tests/**'],
+    rules: { 'no-restricted-globals': 'off' },
   },
 ])

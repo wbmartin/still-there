@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"log/slog"
 	"testing"
 
 	"github.com/wbmartin/starter-api/internal/logging"
@@ -9,7 +10,7 @@ import (
 )
 
 func newTestRBACManager() *RBACManager {
-	logger := logging.NewLogger("test", &bytes.Buffer{})
+	logger := logging.NewLogger("test", &bytes.Buffer{}, slog.LevelDebug)
 	return NewRBACManager(logger, "testuser")
 }
 

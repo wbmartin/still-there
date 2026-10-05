@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/wbmartin/starter-api/internal/model"
@@ -44,10 +43,8 @@ func (r *ExampleRepository) RetrieveExample(
 		WHERE example_id = $1 AND security_context_id = $2`
 
 	var deleteUserID *int
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, checkQuery,
-			exampleID, securityContext).Scan(&deleteUserID)
-	})
+	err := r.db.QueryRow(ctx, checkQuery,
+		exampleID, securityContext).Scan(&deleteUserID)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -72,15 +69,13 @@ func (r *ExampleRepository) RetrieveExample(
 		WHERE example_id = $1 AND security_context_id = $2 AND delete_user_id IS NULL`
 
 	var example model.ExampleModel
-	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, query, exampleID, securityContext).Scan(
-			&example.ExampleID, &example.ExampleText, &example.ExampleInt, &example.ExampleFloat,
-			&example.ExampleIntArray, &example.ExampleFloatArray, &example.ExampleUUID,
-			&example.ExampleJSONB, &example.SecurityContext,
-			&example.CreateTS, &example.CreateUserID, &example.UpdateTS, &example.UpdateUserID,
-			&example.DeleteTS, &example.DeleteUserID,
-		)
-	})
+	err = r.db.QueryRow(ctx, query, exampleID, securityContext).Scan(
+		&example.ExampleID, &example.ExampleText, &example.ExampleInt, &example.ExampleFloat,
+		&example.ExampleIntArray, &example.ExampleFloatArray, &example.ExampleUUID,
+		&example.ExampleJSONB, &example.SecurityContext,
+		&example.CreateTS, &example.CreateUserID, &example.UpdateTS, &example.UpdateUserID,
+		&example.DeleteTS, &example.DeleteUserID,
+	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get example: %w", err)
@@ -111,15 +106,13 @@ func (r *ExampleRepository) CreateExample(
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING example_id`
 
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, query,
-			example.ExampleText, example.ExampleInt, example.ExampleFloat,
-			example.ExampleIntArray, example.ExampleFloatArray,
-			example.ExampleUUID, jsonbParam(example.ExampleJSONB),
-			example.SecurityContext, example.CreateTS, example.CreateUserID,
-			example.UpdateTS, example.UpdateUserID,
-		).Scan(&example.ExampleID)
-	})
+	err := r.db.QueryRow(ctx, query,
+		example.ExampleText, example.ExampleInt, example.ExampleFloat,
+		example.ExampleIntArray, example.ExampleFloatArray,
+		example.ExampleUUID, jsonbParam(example.ExampleJSONB),
+		example.SecurityContext, example.CreateTS, example.CreateUserID,
+		example.UpdateTS, example.UpdateUserID,
+	).Scan(&example.ExampleID)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create example: %w", err)
@@ -145,15 +138,13 @@ func (r *ExampleRepository) UpdateExample(
 
 	// example_uuid is not in the SET list: it is fixed at create. RETURNING
 	// it fills in the caller's copy so the response carries it.
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, query,
-			example.ExampleText, example.ExampleInt, example.ExampleFloat,
-			example.ExampleIntArray, example.ExampleFloatArray,
-			jsonbParam(example.ExampleJSONB),
-			example.UpdateTS, example.UpdateUserID,
-			example.ExampleID, example.SecurityContext, originalUpdateTS,
-		).Scan(&example.ExampleUUID)
-	})
+	err := r.db.QueryRow(ctx, query,
+		example.ExampleText, example.ExampleInt, example.ExampleFloat,
+		example.ExampleIntArray, example.ExampleFloatArray,
+		jsonbParam(example.ExampleJSONB),
+		example.UpdateTS, example.UpdateUserID,
+		example.ExampleID, example.SecurityContext, originalUpdateTS,
+	).Scan(&example.ExampleUUID)
 
 	if err != nil && err != pgx.ErrNoRows {
 		return fmt.Errorf("failed to update example: %w", err)
@@ -164,10 +155,8 @@ func (r *ExampleRepository) UpdateExample(
 		var deleteUserID *int
 		checkQuery := `SELECT delete_user_id FROM example
 			WHERE example_id = $1 AND security_context_id = $2`
-		err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx, checkQuery,
-				example.ExampleID, example.SecurityContext).Scan(&deleteUserID)
-		})
+		err := r.db.QueryRow(ctx, checkQuery,
+			example.ExampleID, example.SecurityContext).Scan(&deleteUserID)
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				return ErrNotFound
@@ -199,20 +188,15 @@ func (r *ExampleRepository) DeleteExample(
 		WHERE example_id = $3 AND security_context_id = $4 AND update_ts = $5
 		      AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(
-			ctx,
-			query,
-			deleteTS,
-			deleteUserID,
-			exampleID,
-			securityContext,
-			originalUpdateTS,
-		)
-		return execErr
-	})
+	result, err := r.db.Exec(
+		ctx,
+		query,
+		deleteTS,
+		deleteUserID,
+		exampleID,
+		securityContext,
+		originalUpdateTS,
+	)
 
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete example: %w", err)
@@ -222,10 +206,8 @@ func (r *ExampleRepository) DeleteExample(
 		var deleteUserIDCheck *int
 		checkQuery := `SELECT delete_user_id FROM example
 			WHERE example_id = $1 AND security_context_id = $2`
-		err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx, checkQuery,
-				exampleID, securityContext).Scan(&deleteUserIDCheck)
-		})
+		err := r.db.QueryRow(ctx, checkQuery,
+			exampleID, securityContext).Scan(&deleteUserIDCheck)
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				return 0, ErrNotFound
@@ -266,12 +248,7 @@ func (r *ExampleRepository) RetrieveExampleList(
 
 	query := selectClause + whereClause + orderBy //+ " Limit 1000"
 
-	var rowList pgx.Rows
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var queryErr error
-		rowList, queryErr = r.db.Query(ctx, query, argList...)
-		return queryErr
-	})
+	rowList, err := r.db.Query(ctx, query, argList...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query examples: %w", err)
 	}

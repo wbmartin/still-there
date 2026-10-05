@@ -11,15 +11,15 @@ import (
 // HealthHandler handles health check requests
 func HealthHandler(deps *app.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		app := security.NewAppHelper(w, r, deps, "HealthHandler")
-		app.SkipJWT()
-		app.SkipRateLimit()
-		app.SkipUserBlock()
-		app.SkipCSRF()
-		app.SkipAuthorization()
+		appHelper := security.NewAppHelper(w, r, deps, "HealthHandler")
+		appHelper.SkipJWT()
+		appHelper.SkipRateLimit()
+		appHelper.SkipUserBlock()
+		appHelper.SkipCSRF()
+		appHelper.SkipAuthorization()
 
-		if !app.CheckAllChecksComplete() {
-			app.Logger().
+		if !appHelper.CheckAllChecksComplete() {
+			appHelper.Logger().
 				Error("SEC0", "Failed to skip all checks for health handler")
 			http.Error(
 				w,
@@ -30,7 +30,7 @@ func HealthHandler(deps *app.Services) http.HandlerFunc {
 		}
 
 		username := "PreAuth"
-		app.Logger().Info(
+		appHelper.Logger().Debug(
 			"HEALTH_REQUEST",
 			"Health check requested",
 			"username",
@@ -40,9 +40,9 @@ func HealthHandler(deps *app.Services) http.HandlerFunc {
 		// Simple health check - just return OK
 		data := map[string]string{"status": "ok"}
 		wrapper := model.DataWrapper{Data: data}
-		app.WriteJSON(w, http.StatusOK, wrapper)
+		appHelper.WriteJSON(w, http.StatusOK, wrapper)
 
-		app.Logger().Info(
+		appHelper.Logger().Debug(
 			"HEALTH_RESPONSE",
 			"Health check completed",
 			"username",

@@ -1,7 +1,8 @@
 // Every API path the web app calls. Mirrors the routes in
 // src/api-srv/cmd/server/main.go by hand -- the two lists are maintained
 // separately on purpose (no generator, no build-time coupling); when a route
-// is added there, add it here. apiRequest/apiJson take one of these.
+// is added there, add it here. apiJson takes one of these.
+// tests/contract.test.ts fails if a path here is not registered there.
 export const API_ENDPOINTS = {
   // Session
   AUTH: "/auth",
@@ -16,6 +17,10 @@ export const API_ENDPOINTS = {
   MFA_VERIFY: "/mfaVerify",
   ADMIN_RESET_USER_MFA: "/admin/resetUserMFA",
 
+  // Block / unblock a login (handler/user_block_handler.go)
+  ADMIN_BLOCK_USER: "/admin/blockUser",
+  ADMIN_UNBLOCK_USER: "/admin/unblockUser",
+
   // Users
   USER_LIST: "/userList",
   USER: "/user",
@@ -23,6 +28,14 @@ export const API_ENDPOINTS = {
   CHANGE_OTHER_USER_PASSWORD: "/changeOtherUserPassword",
   ADD_USER_LIST_TO_GROUP: "/addUserListToGroup",
   REMOVE_USER_LIST_FROM_GROUP: "/removeUserListFromGroup",
+
+  // Invite links (handler/user_invite_handler.go): admin half, then the
+  // public half the invited person's browser calls with no session
+  USER_INVITE: "/userInvite",
+  USER_INVITE_REISSUE: "/userInviteReissue",
+  USER_INVITE_REVOKE: "/userInviteRevoke",
+  INVITE_CHECK: "/inviteCheck",
+  INVITE_REDEEM: "/inviteRedeem",
 
   // User groups
   APP_USER_GROUP_LIST: "/appUserGroupList",

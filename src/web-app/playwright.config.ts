@@ -37,8 +37,8 @@ export const E2E_BASE_URL = `http://localhost:${E2E_WEB_PORT}`;
 export const E2E_API_ROOT = `http://${apiEnv.SERVER_BIND_ADDRESS || "127.0.0.1"}:${E2E_API_PORT}`;
 
 // One place, so a spec and the seed cannot disagree about who is signing in.
-// The defaults are the fixture user bin/510 seeds from
-// src/api-srv/sql/fixtures/local-seed.sql; a host whose fixtures differ
+// The defaults are the fixture user bin/510 seeds (tenant 2) from
+// src/api-srv/sql/fixtures/test-seed.sql; a host whose fixtures differ
 // overrides them in the environment.
 export const E2E_USER_NAME = process.env.E2E_USER_NAME ?? "admin";
 export const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "admin123!";

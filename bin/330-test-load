@@ -1,29 +1,89 @@
-#!/bin/bash
-# Load test against a RUNNING API (start one with bin/215-run-api-srv).
+#!/usr/bin/env bash
+# Load test against a PRIVATE API this script starts and stops -- never the
+# developer's API on 8080 or its database.
 #   bin/330-test-load [load-test flags...]      # default: 60s, 100 workers
 #   bin/300-run-tests load                      # same thing
+#   bin/330-test-load --iterations 1 --concurrency 1    # smoke run
 #
-# Target and credentials come from etc/loc-api-srv.env (TEST_BASE_URL) and
-# the seeded admin user (sql/fixtures); LOAD_TEST_ENV=<file> to use another
-# API env file. The report lands in tmp/test-reports/ (gitignored).
+# Like bin/300-run-tests py: rebuilds the e2e scratch database, starts the
+# Go API on 127.0.0.1:8082 from etc/e2e-api-srv.env (E2E_API_ENV in
+# etc/loc-test.env, or TEST_ENV=<file>), and refuses to start if something
+# already answers there. Each worker loops login, create, update, get,
+# delete, logout as TEST_PERSONA_USER from that file -- a non-admin,
+# MFA-exempt user in the test tenant (2), so the per-user rate limiter runs
+# on every request (the admin login skips it). The load test reads the
+# password from the file itself (-env), never from argv, and refuses a login
+# outside tenant 2. The report and both binaries land under tmp/
+# (gitignored).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
-ENV_FILE="${LOAD_TEST_ENV:-$PROJECT_ROOT/etc/loc-api-srv.env}"
-[ -r "$ENV_FILE" ] || { echo "[ERROR] $ENV_FILE missing or unreadable"; exit 1; }
-TEST_BASE_URL="$(sed -nE 's/^TEST_BASE_URL=[[:space:]]*//p' "$ENV_FILE" | head -1)"
-[ -n "$TEST_BASE_URL" ] || { echo "[ERROR] TEST_BASE_URL not set in $ENV_FILE"; exit 1; }
-curl -sf -m 3 "$TEST_BASE_URL/health" >/dev/null 2>&1 \
-  || { echo "[ERROR] nothing answering at $TEST_BASE_URL/health -- start the API first (bin/215-run-api-srv)"; exit 1; }
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
+TEST_ENV="${TEST_ENV:-$PROJECT_ROOT/etc/loc-test.env}"
+[ -r "$TEST_ENV" ] || { echo "[ERROR] test env file not readable: $TEST_ENV"; exit 1; }
+# shellcheck disable=SC1090
+source "$TEST_ENV"
+for var in E2E_DB E2E_API_ENV; do
+    [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $TEST_ENV"; exit 1; }
+done
+case "$E2E_DB" in
+    *_e2e_db) ;;
+    *) echo "[ERROR] $E2E_DB is not an e2e scratch database (*_e2e_db)"; exit 1 ;;
+esac
+case "$E2E_API_ENV" in /*) ;; *) E2E_API_ENV="$PROJECT_ROOT/$E2E_API_ENV" ;; esac
+[ -r "$E2E_API_ENV" ] || { echo "[ERROR] e2e API env not readable: $E2E_API_ENV"; exit 1; }
+env_value() { grep -E "^$1=" "$E2E_API_ENV" | head -1 | cut -d= -f2- | tr -d ' '; }
+API_BASE_URL="$(env_value TEST_BASE_URL)"
+LOAD_USER="$(env_value TEST_PERSONA_USER)"
+for var in API_BASE_URL LOAD_USER; do
+    [ -n "${!var}" ] || { echo "[ERROR] $var: key missing from $E2E_API_ENV"; exit 1; }
+done
 
+LOG_DIR="${TEST_LOG_DIR:-$PROJECT_ROOT/tmp/test-logs}"
+case "$LOG_DIR" in /*) ;; *) LOG_DIR="$PROJECT_ROOT/$LOG_DIR" ;; esac
 REPORT_DIR="$PROJECT_ROOT/tmp/test-reports"
-mkdir -p dist "$REPORT_DIR"
-echo "[INFO] go build load-test"
-( cd src/load-test && go build -o "$PROJECT_ROOT/dist/load-test" . )
+mkdir -p "$LOG_DIR" "$REPORT_DIR"
+
+if curl -sf -m 3 "$API_BASE_URL/health" >/dev/null 2>&1; then
+    echo "[ERROR] something is already listening at $API_BASE_URL; stop it first"
+    exit 1
+fi
+
+echo "[INFO] Rebuilding $E2E_DB"
+"$SCRIPT_DIR/510-reset-test-db" "$E2E_DB" > "$LOG_DIR/reset-load-db.log" 2>&1 \
+    || { echo "[ERROR] bin/510 failed -- $LOG_DIR/reset-load-db.log:"; tail -20 "$LOG_DIR/reset-load-db.log"; exit 1; }
+
+# Built rather than `go run`, so the TERM below reaches the listener (see
+# bin/300-run-tests py).
+API_BIN="$LOG_DIR/api-srv-load"
+LOAD_BIN="$LOG_DIR/load-test"
+echo "[INFO] go build api-srv, load-test"
+(cd src/api-srv && go build -o "$API_BIN" ./cmd/server)
+(cd src/load-test && go build -o "$LOAD_BIN" .)
+
+API_LOG="$LOG_DIR/load-api.log"
+echo "[INFO] Starting the Go API from $E2E_API_ENV"
+"$API_BIN" "$E2E_API_ENV" > "$API_LOG" 2>&1 &
+API_PID=$!
+stop_api() {
+    kill -TERM "$API_PID" 2>/dev/null || true
+    wait "$API_PID" 2>/dev/null || true
+}
+trap stop_api EXIT
+
+for _ in $(seq 1 90); do
+    curl -sf "$API_BASE_URL/health" >/dev/null 2>&1 && break
+    kill -0 "$API_PID" 2>/dev/null || { echo "[ERROR] API died. $API_LOG:"; tail -20 "$API_LOG"; exit 1; }
+    sleep 1
+done
+curl -sf "$API_BASE_URL/health" >/dev/null 2>&1 || { echo "[ERROR] API never became healthy. $API_LOG:"; tail -20 "$API_LOG"; exit 1; }
 
 REPORT="$REPORT_DIR/load_test_$(date +%Y%m%d_%H%M%S).html"
-echo "[INFO] load test -> $TEST_BASE_URL (report: $REPORT)"
-"$PROJECT_ROOT/dist/load-test" --base-url "$TEST_BASE_URL" --duration 60s --concurrency 100 --output "$REPORT" "$@"
+echo "[INFO] load test -> $API_BASE_URL as $LOAD_USER (report: $REPORT)"
+"$LOAD_BIN" --base-url "$API_BASE_URL" --user "$LOAD_USER" \
+    --env "$E2E_API_ENV" --duration 60s --concurrency 100 \
+    --output "$REPORT" "$@"

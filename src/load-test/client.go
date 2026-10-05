@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+// testTenant is the only security context the load test may write
+// (CLAUDE.md: tenant 2 is reserved for automated tests).
+const testTenant = 2
+
 type APIClient struct {
 	baseURL   string
 	client    *http.Client
@@ -113,17 +117,26 @@ func (c *APIClient) Login() error {
 		return fmt.Errorf("no JWT token received")
 	}
 
+	// The load test writes; it may only ever write the test tenant.
+	if authResp.User.SecurityContext != testTenant {
+		return fmt.Errorf(
+			"refusing to run as %s: tenant %d, not the test tenant %d",
+			c.userName,
+			authResp.User.SecurityContext,
+			testTenant,
+		)
+	}
+
 	return nil
 }
 
 func (c *APIClient) CreateExample() (int, float64, error) {
-	exampleData := map[string]interface{}{
+	exampleData := map[string]any{
 		"exampleText":       "Load Test Example",
 		"exampleInt":        42,
 		"exampleFloat":      3.14,
 		"exampleIntArray":   []int{1, 2, 3},
 		"exampleFloatArray": []float64{1.1, 2.2, 3.3},
-		"securityContext":   1,
 	}
 
 	// Make the request and capture response
@@ -178,11 +191,16 @@ func (c *APIClient) CreateExample() (int, float64, error) {
 	return response.Data.ExampleID, response.Data.UpdateTS, nil
 }
 
-func (c *APIClient) UpdateExample(exampleID int, updateTs float64) error {
+// UpdateExample returns the row's new update timestamp, which a later
+// delete must send.
+func (c *APIClient) UpdateExample(
+	exampleID int,
+	updateTs float64,
+) (float64, error) {
 	// For the update, we just exercise the update operation
 	// without changing values
 	// This tests the update path and optimistic locking
-	exampleData := map[string]interface{}{
+	exampleData := map[string]any{
 		"exampleId":         exampleID,
 		"exampleText":       "Load Test Example",
 		"exampleInt":        42,
@@ -190,10 +208,15 @@ func (c *APIClient) UpdateExample(exampleID int, updateTs float64) error {
 		"exampleIntArray":   []int{1, 2, 3},
 		"exampleFloatArray": []float64{1.1, 2.2, 3.3},
 		"updateTs":          updateTs,
-		"securityContext":   1,
 	}
 
-	return c.makeRequest("PUT", "/example", exampleData, nil)
+	var response struct {
+		Data struct {
+			UpdateTS float64 `json:"updateTs"`
+		} `json:"data"`
+	}
+	err := c.makeRequest("PUT", "/example", exampleData, &response)
+	return response.Data.UpdateTS, err
 }
 
 func (c *APIClient) GetExample(exampleID int) error {
@@ -221,8 +244,8 @@ func (c *APIClient) Logout() error {
 
 func (c *APIClient) makeRequest(
 	method, endpoint string,
-	data interface{},
-	headers map[string]string,
+	data any,
+	response any,
 ) error {
 	var body io.Reader
 	if data != nil {
@@ -254,11 +277,6 @@ func (c *APIClient) makeRequest(
 		req.Header.Set("X-CSRF-Token", c.csrfToken)
 	}
 
-	// Add any additional headers
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
@@ -275,5 +293,10 @@ func (c *APIClient) makeRequest(
 		)
 	}
 
+	if response != nil {
+		if err := json.NewDecoder(resp.Body).Decode(response); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+	}
 	return nil
 }

@@ -56,6 +56,16 @@ const useAuthGuard = (requiredGrants: number[]) => {
     return "CHECKING";
   }
 
+  // Signed in without the page's grants: never "YES", so the page's data
+  // effects (all gated on "YES") do not ask the API for what it will refuse
+  // while the effect above sends the user to the dashboard.
+  if (
+    authState === "YES" &&
+    !requiredGrants.every((grantId) => grantList.includes(grantId))
+  ) {
+    return "DENIED";
+  }
+
   return authState;
 };
 

@@ -1,4 +1,8 @@
-// Grant ID constants (matching API short codes)
+// Grant ID constants. Mirrors src/api-srv/internal/model/grants.go by hand;
+// when a grant is added there, run bin/305-update-grants-fixture and add it
+// here. tests/contract.test.ts fails while the two disagree. Numbering
+// convention for new ids (never renumber shipped ones): see the header of
+// grants.go and doc/810.
 const grantConstants = {
   LOGON: 1,
   READ_EXAMPLE: 1001,
@@ -16,9 +20,9 @@ const grantConstants = {
   CREATE_USER_GROUP: 9011,
   UPDATE_USER_GROUP: 9012,
   DELETE_USER_GROUP: 9013,
-   ADD_USER_TO_GROUP: 9014,
-   REMOVE_USER_FROM_GROUP: 9015,
-   RESET_MFA_TOKEN: 9020,
+  ADD_USER_TO_GROUP: 9014,
+  REMOVE_USER_FROM_GROUP: 9015,
+  RESET_MFA_TOKEN: 9020,
 } as const;
 
 export const grants = {

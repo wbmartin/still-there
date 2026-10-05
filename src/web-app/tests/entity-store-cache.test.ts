@@ -22,11 +22,13 @@ const buildStore = () =>
     itemEndpoint: "/widget",
   });
 
-const mockJson = (data: unknown, ok = true) =>
-  Promise.resolve({
-    ok,
-    json: () => Promise.resolve({ data }),
-  } as Response);
+const mockJson = (data: unknown, status = 200) =>
+  Promise.resolve(
+    new Response(JSON.stringify({ data }), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
 
 describe("entity store cache management", () => {
   beforeEach(() => {

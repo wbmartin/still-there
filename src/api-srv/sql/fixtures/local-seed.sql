@@ -1,8 +1,7 @@
--- Initial seed data for the ProtoStack starter API server: default user
--- groups for two security contexts, an admin and a basic user, and two
--- example rows.
+-- Seed data for a developer's local database: default user groups for two
+-- security contexts, an admin, a basic and an MFA user, and two example rows.
 --
--- A FIXTURE, not a migration: it is local/test data, so it lives in
+-- A FIXTURE, not a migration: it is local dev data, so it lives in
 -- sql/fixtures/ and is not embedded in cmd/migrate. A deployed environment
 -- seeds its own groups and users.
 --
@@ -21,12 +20,13 @@
 -- the source of truth; the arrays below are its projection into SQL.
 --
 -- TENANTS (security_context_id): 1 is the first real tenant, 2 is the test
--- tenant and is reserved -- see CLAUDE.md and doc/900. Automated tests are
--- being moved into tenant 2 (PS0022); the users below still sit in 1 until
--- that lands.
+-- tenant and is reserved -- see CLAUDE.md and doc/900. This file seeds a
+-- DEVELOPER's database (doc/050), so its users sit in 1. The scratch
+-- databases the tests use take test-seed.sql (tenants 2 and 3) instead and
+-- refuse tenant 1 outright (test-tenant-lock.sql).
 --
 -- Passwords: admin / admin123!, basic / basic123!, mfa / basic123! (Argon2id). Local
--- scratch databases only -- change for any non-dev install.
+-- dev databases only -- change for any non-dev install.
 
 -- User groups for security context 1 (explicit ids: the users below refer
 -- to them by id)
@@ -74,7 +74,7 @@ SELECT
 FROM common_vars,
 (VALUES
     (4, 'Basic2 User', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9010]),
-    (5, 'Admin2', ARRAY[1,1001,1002,1003,1004,8001,9001,9002,9009,9010,9011,9012,9013,9014,9015,9003,9004,9008])
+    (5, 'Admin2', ARRAY[1,1001,1002,1003,1004,8001,9001,9002,9009,9010,9011,9012,9013,9014,9015,9003,9004,9008,9020])
 ) AS data(app_user_group_id, group_name, user_grant_list)
 ON CONFLICT DO NOTHING;
 
@@ -85,13 +85,14 @@ SELECT setval('app_user_group_app_user_group_id_seq',
 -- Users, all in context 1: admin (Admin group) and basic (Basic User group)
 -- are MFA exempt so the test suites can sign in with a password alone; mfa
 -- (Basic User group, password basic123!) is NOT exempt and starts with no
--- seed, so the TOTP enrol → verify path is exercised end to end (PS0020).
+-- seed, so the TOTP enrol → verify path is exercised end to end.
 WITH common_vars AS (
     SELECT EXTRACT(EPOCH FROM NOW()) AS ts, 0 AS system_id
 )
 INSERT INTO app_user (
     user_name, pw_hash, first_name, last_name, email, security_context_id,
     app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
+    account_status,
     create_ts, create_user_id, update_ts, update_user_id
 )
 SELECT
@@ -105,6 +106,7 @@ SELECT
     data.mfa_exempt,
     '',
     FALSE,
+    'active',
     common_vars.ts,
     common_vars.system_id,
     common_vars.ts,

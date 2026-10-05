@@ -3,30 +3,38 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/wbmartin/starter-api/internal/cache"
+	"github.com/wbmartin/starter-api/internal/logging"
 )
 
 // Config holds the application configuration
 type Config struct {
-	DatabaseURL                      string   `json:"database_url"`
-	JWTSecret                        string   `json:"jwt_secret"`
-	JWTSessionExpireHours            int      `json:"jwt_session_expire_hours"`
-	MaxUserReqPerMin                 int      `json:"max_user_req_per_min"`
-	MaxUnauthReqPerMin               int      `json:"max_unauth_req_per_min"`
-	ServerName                       string   `json:"server_name"`
-	AppName                          string   `json:"app_name"`
-	ServerPort                       int      `json:"server_port"`
-	ServerBindAddress                string   `json:"server_bind_address"`
-	EnableTLS                        bool     `json:"enable_tls"`
-	TLSCertPath                      string   `json:"tls_cert_path"`
-	TLSKeyPath                       string   `json:"tls_key_path"`
-	TOTPEncryptionKey                string   `json:"totp_encryption_key"`
-	FailedLoginAttemptThreshold      int      `json:"failed_login_attempt_threshold"`
-	FailedLoginAttemptWindowDuration string   `json:"failed_login_attempt_window_duration"`
-	FailedLoginLockoutDuration       string   `json:"failed_login_lockout_duration"`
-	CorsAllowedOrigins               []string `json:"cors_allowed_origins"`
+	DatabaseURL                      string     `json:"database_url"`
+	JWTSecret                        string     `json:"jwt_secret"`
+	JWTSessionExpireHours            int        `json:"jwt_session_expire_hours"`
+	MaxUserReqPerMin                 int        `json:"max_user_req_per_min"`
+	MaxUnauthReqPerMin               int        `json:"max_unauth_req_per_min"`
+	ServerName                       string     `json:"server_name"`
+	AppName                          string     `json:"app_name"`
+	ServerPort                       int        `json:"server_port"`
+	ServerBindAddress                string     `json:"server_bind_address"`
+	EnableTLS                        bool       `json:"enable_tls"`
+	TLSCertPath                      string     `json:"tls_cert_path"`
+	TLSKeyPath                       string     `json:"tls_key_path"`
+	TOTPEncryptionKey                string     `json:"totp_encryption_key"`
+	FailedLoginAttemptThreshold      int        `json:"failed_login_attempt_threshold"`
+	FailedLoginAttemptWindowDuration string     `json:"failed_login_attempt_window_duration"`
+	FailedLoginLockoutDuration       string     `json:"failed_login_lockout_duration"`
+	CorsAllowedOrigins               []string   `json:"cors_allowed_origins"`
+	TrustedProxyCount                int        `json:"trusted_proxy_count"`
+	LogLevel                         slog.Level `json:"log_level"`
+	InviteTTLHours                   int        `json:"invite_ttl_hours"`
+	AllowMFAExemptViaAPI             bool       `json:"allow_mfa_exempt_via_api"`
 }
 
 // ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,
@@ -83,39 +91,78 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	config.DatabaseURL = env["DATABASE_URL"]
 	config.JWTSecret = env["JWT_SECRET"]
 
-	if jwtHoursStr := env["JWT_SESSION_EXPIRE_HOURS"]; jwtHoursStr != "" {
-		if val, err := strconv.Atoi(jwtHoursStr); err == nil {
-			config.JWTSessionExpireHours = val
-		}
+	// 0 here would mint every JWT already expired or 429 every request.
+	if config.JWTSessionExpireHours, err = requirePositiveInt(
+		env, "JWT_SESSION_EXPIRE_HOURS",
+	); err != nil {
+		return nil, err
+	}
+	if config.MaxUserReqPerMin, err = requirePositiveInt(
+		env, "MAX_USER_REQ_PER_MIN",
+	); err != nil {
+		return nil, err
+	}
+	if config.MaxUnauthReqPerMin, err = requirePositiveInt(
+		env, "MAX_UNAUTH_REQ_PER_MIN",
+	); err != nil {
+		return nil, err
 	}
 
-	if maxUserStr := env["MAX_USER_REQ_PER_MIN"]; maxUserStr != "" {
-		if val, err := strconv.Atoi(maxUserStr); err == nil {
-			config.MaxUserReqPerMin = val
-		}
+	// How long an invite link works (B035); 0 would issue dead links.
+	if config.InviteTTLHours, err = requirePositiveInt(
+		env, "INVITE_TTL_HOURS",
+	); err != nil {
+		return nil, err
 	}
 
-	if maxUnauthStr := env["MAX_UNAUTH_REQ_PER_MIN"]; maxUnauthStr != "" {
-		if val, err := strconv.Atoi(maxUnauthStr); err == nil {
-			config.MaxUnauthReqPerMin = val
-		}
+	// Whether POST/PUT /user and /userInvite may turn mfa_exempt on (B097).
+	// Required and spelled out, so no host allows it by omission: true
+	// only for the test harness, false on every server.
+	switch env["ALLOW_MFA_EXEMPT_VIA_API"] {
+	case "true":
+		config.AllowMFAExemptViaAPI = true
+	case "false":
+		config.AllowMFAExemptViaAPI = false
+	case "":
+		return nil, fmt.Errorf("ALLOW_MFA_EXEMPT_VIA_API is required " +
+			"(true or false; false on every server)")
+	default:
+		return nil, fmt.Errorf(
+			"ALLOW_MFA_EXEMPT_VIA_API must be true or false, got %q",
+			env["ALLOW_MFA_EXEMPT_VIA_API"],
+		)
 	}
+
+	logLevelStr := env["LOG_LEVEL"]
+	if logLevelStr == "" {
+		return nil, fmt.Errorf("LOG_LEVEL is required")
+	}
+	logLevel, ok := logging.ParseLevel(logLevelStr)
+	if !ok {
+		return nil, fmt.Errorf(
+			"LOG_LEVEL must be debug, info, warn or error, got %q",
+			logLevelStr,
+		)
+	}
+	config.LogLevel = logLevel
 
 	config.ServerName = env["SERVER_NAME"]
 	config.AppName = env["APP_NAME"]
-	// Optional. Empty listens on every interface, which is what every config
-	// did before the key existed. 127.0.0.1 is right behind nginx and for the
+	// Required, so a forgotten key fails closed instead of listening on
+	// every interface. 127.0.0.1 is right behind nginx, for dev and for the
 	// test harness, whose instance carries a well-known password.
 	config.ServerBindAddress = env["SERVER_BIND_ADDRESS"]
+	if config.ServerBindAddress == "" {
+		return nil, fmt.Errorf(
+			"SERVER_BIND_ADDRESS is required (the interface to listen " +
+				"on, e.g. 127.0.0.1; 0.0.0.0 for every interface)",
+		)
+	}
 
-	if serverPortStr := env["SERVER_PORT"]; serverPortStr != "" {
-		if val, err := strconv.Atoi(serverPortStr); err == nil {
-			config.ServerPort = val
-		} else {
-			return nil, fmt.Errorf("SERVER_PORT must be a valid integer")
-		}
-	} else {
-		return nil, fmt.Errorf("SERVER_PORT is required")
+	if config.ServerPort, err = requirePositiveInt(
+		env, "SERVER_PORT",
+	); err != nil {
+		return nil, err
 	}
 
 	if enableTLSStr := env["ENABLE_TLS"]; enableTLSStr != "" {
@@ -132,26 +179,33 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	config.TLSKeyPath = env["TLS_KEY_PATH"]
 	config.TOTPEncryptionKey = env["TOTP_ENCRYPTION_KEY"]
 
-	if thresholdStr := env["FAILED_LOGIN_ATTEMPT_THRESHOLD"]; thresholdStr != "" {
-		if val, err := strconv.Atoi(thresholdStr); err == nil {
-			config.FailedLoginAttemptThreshold = val
-		} else {
-			return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_THRESHOLD must be a valid integer")
+	if config.FailedLoginAttemptThreshold, err = requirePositiveInt(
+		env, "FAILED_LOGIN_ATTEMPT_THRESHOLD",
+	); err != nil {
+		return nil, err
+	}
+	// Checked here so a bad value fails start-up, not every failed login.
+	if config.FailedLoginAttemptWindowDuration, err = requireDuration(
+		env, "FAILED_LOGIN_ATTEMPT_WINDOW_DURATION",
+	); err != nil {
+		return nil, err
+	}
+	if config.FailedLoginLockoutDuration, err = requireDuration(
+		env, "FAILED_LOGIN_LOCKOUT_DURATION",
+	); err != nil {
+		return nil, err
+	}
+
+	// Optional, default 0: no proxy, so X-Forwarded-For is ignored. Behind
+	// the host's nginx it is 1 (security.ClientIP).
+	if proxyCountStr := env["TRUSTED_PROXY_COUNT"]; proxyCountStr != "" {
+		val, err := strconv.Atoi(proxyCountStr)
+		if err != nil || val < 0 {
+			return nil, fmt.Errorf(
+				"TRUSTED_PROXY_COUNT must be a non-negative integer",
+			)
 		}
-	} else {
-		return nil, fmt.Errorf("FAILED_LOGIN_ATTEMPT_THRESHOLD is required")
-	}
-
-	config.FailedLoginAttemptWindowDuration = env["FAILED_LOGIN_ATTEMPT_WINDOW_DURATION"]
-	if config.FailedLoginAttemptWindowDuration == "" {
-		return nil, fmt.Errorf(
-			"FAILED_LOGIN_ATTEMPT_WINDOW_DURATION is required",
-		)
-	}
-
-	config.FailedLoginLockoutDuration = env["FAILED_LOGIN_LOCKOUT_DURATION"]
-	if config.FailedLoginLockoutDuration == "" {
-		return nil, fmt.Errorf("FAILED_LOGIN_LOCKOUT_DURATION is required")
+		config.TrustedProxyCount = val
 	}
 
 	if corsOriginsStr := env["CORS_ALLOWED_ORIGINS"]; corsOriginsStr != "" {
@@ -193,25 +247,36 @@ func LoadConfig(configFilePath string) (*Config, error) {
 		return nil, fmt.Errorf("TOTP_ENCRYPTION_KEY is required")
 	}
 
-	if config.FailedLoginAttemptThreshold <= 0 {
-		return nil, fmt.Errorf(
-			"FAILED_LOGIN_ATTEMPT_THRESHOLD must be greater than 0",
-		)
-	}
-
-	if config.ServerPort <= 0 {
-		return nil, fmt.Errorf("SERVER_PORT must be greater than 0")
-	}
-
-	if config.FailedLoginAttemptWindowDuration == "" {
-		return nil, fmt.Errorf(
-			"FAILED_LOGIN_ATTEMPT_WINDOW_DURATION is required",
-		)
-	}
-
-	if config.FailedLoginLockoutDuration == "" {
-		return nil, fmt.Errorf("FAILED_LOGIN_LOCKOUT_DURATION is required")
-	}
-
 	return &config, nil
+}
+
+// requirePositiveInt reads a key that must be a whole number above 0.
+func requirePositiveInt(env map[string]string, key string) (int, error) {
+	raw := env[key]
+	if raw == "" {
+		return 0, fmt.Errorf("%s is required", key)
+	}
+	val, err := strconv.Atoi(raw)
+	if err != nil || val <= 0 {
+		return 0, fmt.Errorf(
+			"%s must be a positive integer, got %q", key, raw,
+		)
+	}
+	return val, nil
+}
+
+// requireDuration reads a key that must be a cache.KV TTL above 0 (30s,
+// 5min, 1h); the string is kept because KV takes it in that form.
+func requireDuration(env map[string]string, key string) (string, error) {
+	raw := env[key]
+	if raw == "" {
+		return "", fmt.Errorf("%s is required", key)
+	}
+	if d, ok := cache.ParseTTL(raw); !ok || d <= 0 {
+		return "", fmt.Errorf(
+			"%s must be a duration such as 30s, 5min or 1h, got %q",
+			key, raw,
+		)
+	}
+	return raw, nil
 }

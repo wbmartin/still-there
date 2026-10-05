@@ -8,7 +8,7 @@ interface AddRemoveUsersFromGroupModalProps {
   onClose: () => void;
   groupId: number | null;
   mode: "add" | "remove";
-  onSubmit: (userIds: number[]) => Promise<void>;
+  onSubmit: (userIdList: number[]) => Promise<void>;
 }
 
 export function AddRemoveUsersFromGroupModal({

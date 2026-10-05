@@ -3,22 +3,16 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
-	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/wbmartin/starter-api/internal/model"
 )
-
-// CurrentTimestamp returns the current timestamp as float64
-func CurrentTimestamp() float64 {
-	return float64(time.Now().Unix()) + float64(time.Now().Nanosecond())/1e9
-}
 
 // UserRepository handles database operations for users
 type UserRepository struct {
@@ -37,29 +31,26 @@ func (r *UserRepository) RetrieveUserByUserName(
 	query := `
 		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
 		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
-		       preference_jsonb,
+		       account_status, preference_jsonb,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
 		WHERE user_name = $1 AND delete_user_id IS NULL`
 
 	var user model.AppUserModel
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		row := r.db.QueryRow(ctx, query, username)
-		return row.Scan(
-			&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName,
-			&user.LastName, &user.Email, &user.SecurityContext,
-			&user.AppUserGroupMembershipList, &user.MFAExempt, &user.TOTPSeed,
-			&user.MFASetup,
-			&user.PreferenceJSONB,
-			&user.CreateTS, &user.CreateUserID, &user.UpdateTS,
-			&user.UpdateUserID, &user.DeleteTS, &user.DeleteUserID,
-		)
-	})
+	err := r.db.QueryRow(ctx, query, username).Scan(
+		&user.AppUserID, &user.UserName, &user.PwHash, &user.FirstName,
+		&user.LastName, &user.Email, &user.SecurityContext,
+		&user.AppUserGroupMembershipList, &user.MFAExempt, &user.TOTPSeed,
+		&user.MFASetup, &user.AccountStatus,
+		&user.PreferenceJSONB,
+		&user.CreateTS, &user.CreateUserID, &user.UpdateTS,
+		&user.UpdateUserID, &user.DeleteTS, &user.DeleteUserID,
+	)
 
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("user not found")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("user not found: %w", ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -82,49 +73,65 @@ func (r *UserRepository) GetGrantsForGroups(
 		FROM app_user_group ug
 		WHERE ug.app_user_group_id = ANY($1) AND ug.delete_user_id IS NULL`
 
-	var grants map[int][]int
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		rowList, err := r.db.Query(ctx, query, groupIDs)
-		if err != nil {
-			return fmt.Errorf("failed to get grants for groups: %w", err)
-		}
-		defer rowList.Close()
-
-		grants = make(map[int][]int)
-		for rowList.Next() {
-			var securityContext int
-			var grantList []int
-			err := rowList.Scan(&securityContext, &grantList)
-			if err != nil {
-				return fmt.Errorf("failed to scan grant list: %w", err)
-			}
-
-			if existing, exists := grants[securityContext]; exists {
-				// Merge grant lists
-				grants[securityContext] = append(existing, grantList...)
-			} else {
-				grants[securityContext] = grantList
-			}
-		}
-
-		// Remove duplicates from grant lists
-		for context, grantList := range grants {
-			grants[context] = removeDuplicates(grantList)
-		}
-
-		return nil
-	})
-
+	rowList, err := r.db.Query(ctx, query, groupIDs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get grants for groups: %w", err)
+	}
+	defer rowList.Close()
+
+	grants := make(map[int][]int)
+	for rowList.Next() {
+		var securityContext int
+		var grantList []int
+		err := rowList.Scan(&securityContext, &grantList)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan grant list: %w", err)
+		}
+
+		if existing, exists := grants[securityContext]; exists {
+			// Merge grant lists
+			grants[securityContext] = append(existing, grantList...)
+		} else {
+			grants[securityContext] = grantList
+		}
+	}
+	if err := rowList.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read grant list: %w", err)
+	}
+
+	// Remove duplicates from grant lists
+	for context, grantList := range grants {
+		grants[context] = removeDuplicates(grantList)
 	}
 
 	return grants, nil
 }
 
-// CreateUser creates a new user within a security context
+// CreateUser creates a new, active user within a security context.
 func (r *UserRepository) CreateUser(
 	ctx context.Context, user *model.AppUserModel, securityContext int,
+) (*model.AppUserModel, error) {
+	// Every login made with a password is active; account_status has no
+	// DEFAULT. An invited one is UserInviteRepository.CreateInvitedUser.
+	user.AccountStatus = model.AccountStatusActive
+	return insertAppUser(ctx, r.db, user, securityContext)
+}
+
+// rowQuerier is what insertAppUser needs: a pool, or a transaction.
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// userNamePattern is the one character set a user_name may use.
+var userNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+// insertAppUser inserts user, whose AccountStatus the caller has set, and
+// fills its AppUserID.
+func insertAppUser(
+	ctx context.Context,
+	db rowQuerier,
+	user *model.AppUserModel,
+	securityContext int,
 ) (*model.AppUserModel, error) {
 	// Validate that the user can only be created in the user's security context
 	if user.SecurityContext != securityContext {
@@ -133,43 +140,43 @@ func (r *UserRepository) CreateUser(
 		)
 	}
 
-	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(user.UserName) {
-		return nil, fmt.Errorf(
-			"username must contain only alphanumeric characters, hyphens, and underscores",
-		)
+	if !userNamePattern.MatchString(user.UserName) {
+		return nil, clientMessage(ErrValidation,
+			"username must contain only alphanumeric characters, "+
+				"hyphens, and underscores")
 	}
 
 	query := `
 		INSERT INTO app_user (user_name, pw_hash, first_name, last_name, email,
 		       security_context_id, app_user_group_membership_list, mfa_exempt,
-		       totp_seed, mfa_setup,
-		                     create_ts, create_user_id, update_ts, update_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		       totp_seed, mfa_setup, account_status,
+		       create_ts, create_user_id, update_ts, update_user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+		        $15)
 		RETURNING app_user_id`
 
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(
-			ctx,
-			query,
-			user.UserName,
-			user.PwHash,
-			user.FirstName,
-			user.LastName,
-			user.Email,
-			user.SecurityContext,
-			user.AppUserGroupMembershipList,
-			user.MFAExempt,
-			// totp_seed/mfa_setup are NOT NULL with no default; a new user has no TOTP yet, so
-			// seed empty + mfa_setup false (populated when the user completes MFA setup). Without
-			// this, CreateUser fails: null value in column "totp_seed" violates not-null constraint.
-			"",
-			false,
-			user.CreateTS,
-			user.CreateUserID,
-			user.UpdateTS,
-			user.UpdateUserID,
-		).Scan(&user.AppUserID)
-	})
+	err := db.QueryRow(
+		ctx,
+		query,
+		user.UserName,
+		user.PwHash,
+		user.FirstName,
+		user.LastName,
+		user.Email,
+		user.SecurityContext,
+		user.AppUserGroupMembershipList,
+		user.MFAExempt,
+		// totp_seed/mfa_setup are NOT NULL with no default; a new user has no TOTP yet, so
+		// seed empty + mfa_setup false (populated when the user completes MFA setup). Without
+		// this, CreateUser fails: null value in column "totp_seed" violates not-null constraint.
+		"",
+		false,
+		user.AccountStatus,
+		user.CreateTS,
+		user.CreateUserID,
+		user.UpdateTS,
+		user.UpdateUserID,
+	).Scan(&user.AppUserID)
 
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -182,29 +189,27 @@ func (r *UserRepository) CreateUser(
 	return user, nil
 }
 
-// UpdateUserPassword updates a user's password
+// UpdateUserPassword updates a user's password. securityContext is the
+// row's own (home) tenant, not the JWT's active one.
 func (r *UserRepository) UpdateUserPassword(
 	ctx context.Context, userID int, newPasswordHash string,
-	updateTS float64, updateUserID int,
+	updateTS float64, updateUserID int, securityContext int,
 ) error {
 	query := `
 		UPDATE app_user
 		SET pw_hash = $1, update_ts = $2, update_user_id = $3
-		WHERE app_user_id = $4 AND delete_user_id IS NULL`
+		WHERE app_user_id = $4 AND security_context_id = $5
+		  AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var err error
-		result, err = r.db.Exec(ctx, query,
-			newPasswordHash, updateTS, updateUserID, userID)
-		return err
-	})
+	result, err := r.db.Exec(ctx, query,
+		newPasswordHash, updateTS, updateUserID, userID,
+		securityContext)
 	if err != nil {
 		return fmt.Errorf("failed to update user password: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("user not found")
+		return fmt.Errorf("user not found: %w", ErrNotFound)
 	}
 
 	return nil
@@ -213,56 +218,120 @@ func (r *UserRepository) UpdateUserPassword(
 // UpdateUserTOTPSeed updates a user's TOTP seed with optimistic locking
 func (r *UserRepository) UpdateUserTOTPSeed(
 	ctx context.Context, userID int, totpSeed string,
-	expectedUpdateTS float64, updateUserID int,
+	expectedUpdateTS float64, updateUserID int, securityContext int,
 ) (newUpdateTS float64, err error) {
-	newUpdateTS = CurrentTimestamp()
+	newUpdateTS = model.Now()
 	query := `
 		UPDATE app_user
 		SET totp_seed = $1, mfa_setup = false, update_ts = $2, update_user_id = $3
-		WHERE app_user_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+		WHERE app_user_id = $4 AND update_ts = $5
+		  AND security_context_id = $6 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			totpSeed, newUpdateTS, updateUserID, userID, expectedUpdateTS)
-		return execErr
-	})
+	result, err := r.db.Exec(ctx, query,
+		totpSeed, newUpdateTS, updateUserID, userID, expectedUpdateTS,
+		securityContext)
 	if err != nil {
 		return 0, fmt.Errorf("failed to update user TOTP seed: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {
-		return 0, fmt.Errorf("user not found or concurrent modification")
+		return 0, zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			userID, securityContext)
 	}
 
 	return newUpdateTS, nil
 }
 
+// UpdateUserAccountStatus blocks or unblocks a login (B034) with
+// optimistic locking: active -> blocked, or blocked -> active, nothing
+// else. securityContext is the row's own (home) tenant.
+func (r *UserRepository) UpdateUserAccountStatus(
+	ctx context.Context, userID int, accountStatus string,
+	expectedUpdateTS float64, updateUserID int, securityContext int,
+) (newUpdateTS float64, err error) {
+	var fromStatus string
+	switch accountStatus {
+	case model.AccountStatusBlocked:
+		fromStatus = model.AccountStatusActive
+	case model.AccountStatusActive:
+		fromStatus = model.AccountStatusBlocked
+	default:
+		return 0, fmt.Errorf(
+			"account status %q is not blocked or active: %w",
+			accountStatus, ErrValidation,
+		)
+	}
+	newUpdateTS = model.Now()
+	query := `
+		UPDATE app_user
+		SET account_status = $1, update_ts = $2, update_user_id = $3
+		WHERE app_user_id = $4 AND security_context_id = $5
+		  AND update_ts = $6 AND account_status = $7
+		  AND delete_user_id IS NULL`
+
+	result, err := r.db.Exec(ctx, query,
+		accountStatus, newUpdateTS, updateUserID, userID, securityContext,
+		expectedUpdateTS, fromStatus)
+	if err != nil {
+		return 0, fmt.Errorf("failed to update user account status: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return 0, zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			userID, securityContext)
+	}
+
+	return newUpdateTS, nil
+}
+
+// RetrieveBlockedUserNameList is every blocked login, across all tenants:
+// the API loads them into the KV at start, because the KV is in-process and
+// a restart would otherwise let a blocked login's unexpired session back
+// in. Unscoped on purpose, like the login-by-name read: user_name is unique.
+func (r *UserRepository) RetrieveBlockedUserNameList(
+	ctx context.Context,
+) ([]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT user_name FROM app_user
+		WHERE account_status = $1 AND delete_user_id IS NULL`,
+		model.AccountStatusBlocked)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list blocked users: %w", err)
+	}
+	defer rows.Close()
+	userNameList := []string{}
+	for rows.Next() {
+		var userName string
+		if err := rows.Scan(&userName); err != nil {
+			return nil, fmt.Errorf("failed to scan blocked user: %w", err)
+		}
+		userNameList = append(userNameList, userName)
+	}
+	return userNameList, rows.Err()
+}
+
 // UpdateUserMFASetup updates a user's MFA setup status with optimistic locking
 func (r *UserRepository) UpdateUserMFASetup(
 	ctx context.Context, userID int, mfaSetup bool,
-	expectedUpdateTS float64, updateUserID int,
+	expectedUpdateTS float64, updateUserID int, securityContext int,
 ) (newUpdateTS float64, err error) {
-	newUpdateTS = CurrentTimestamp()
+	newUpdateTS = model.Now()
 	query := `
 		UPDATE app_user
 		SET mfa_setup = $1, update_ts = $2, update_user_id = $3
-		WHERE app_user_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+		WHERE app_user_id = $4 AND update_ts = $5
+		  AND security_context_id = $6 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			mfaSetup, newUpdateTS, updateUserID, userID, expectedUpdateTS)
-		return execErr
-	})
+	result, err := r.db.Exec(ctx, query,
+		mfaSetup, newUpdateTS, updateUserID, userID, expectedUpdateTS,
+		securityContext)
 	if err != nil {
 		return 0, fmt.Errorf("failed to update user MFA setup: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {
-		return 0, fmt.Errorf("user not found or concurrent modification")
+		return 0, zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			userID, securityContext)
 	}
 
 	return newUpdateTS, nil
@@ -271,47 +340,46 @@ func (r *UserRepository) UpdateUserMFASetup(
 // UpdateUserMFAExempt updates a user's MFA exempt status with optimistic locking
 func (r *UserRepository) UpdateUserMFAExempt(
 	ctx context.Context, userID int, mfaExempt bool,
-	expectedUpdateTS float64, updateUserID int,
+	expectedUpdateTS float64, updateUserID int, securityContext int,
 ) (newUpdateTS float64, err error) {
-	newUpdateTS = CurrentTimestamp()
+	newUpdateTS = model.Now()
 	query := `
 		UPDATE app_user
 		SET mfa_exempt = $1, update_ts = $2, update_user_id = $3
-		WHERE app_user_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
+		WHERE app_user_id = $4 AND update_ts = $5
+		  AND security_context_id = $6 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			mfaExempt, newUpdateTS, updateUserID, userID, expectedUpdateTS)
-		return execErr
-	})
+	result, err := r.db.Exec(ctx, query,
+		mfaExempt, newUpdateTS, updateUserID, userID, expectedUpdateTS,
+		securityContext)
 	if err != nil {
 		return 0, fmt.Errorf("failed to update user MFA exempt: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {
-		return 0, fmt.Errorf("user not found or concurrent modification")
+		return 0, zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			userID, securityContext)
 	}
 
 	return newUpdateTS, nil
 }
 
 // RetrieveUserList retrieves users for a security context,
-// optionally filtered by idList
+// optionally filtered by idList. preference_jsonb is not read: the list
+// is the admin shape, and preferences travel only on /me.
 func (r *UserRepository) RetrieveUserList(
 	ctx context.Context, securityContext int, idList []int, updateTs float64,
 ) ([]*model.AppUserModel, error) {
 	query := `
 		SELECT app_user_id, user_name, first_name, last_name, email,
 		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
-		       preference_jsonb,
+		       account_status,
 		       create_ts, create_user_id, update_ts, update_user_id,
 		       delete_ts, delete_user_id
 		FROM app_user
 		WHERE security_context_id = $1 AND delete_user_id IS NULL`
 
-	args := []interface{}{securityContext}
+	args := []any{securityContext}
 
 	if len(idList) > 0 {
 		query += ` AND app_user_id = ANY($2)`
@@ -326,45 +394,40 @@ func (r *UserRepository) RetrieveUserList(
 
 	query += ` ORDER BY user_name`
 
-	var users []*model.AppUserModel
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		rows, err := r.db.Query(ctx, query, args...)
-		if err != nil {
-			return fmt.Errorf("failed to get users: %w", err)
-		}
-		defer rows.Close()
-
-		users = []*model.AppUserModel{}
-		for rows.Next() {
-			var user model.AppUserModel
-			err := rows.Scan(
-				&user.AppUserID,
-				&user.UserName,
-				&user.FirstName,
-				&user.LastName,
-				&user.Email,
-				&user.SecurityContext,
-				&user.AppUserGroupMembershipList,
-				&user.MFAExempt,
-				&user.TOTPSeed,
-				&user.MFASetup,
-				&user.PreferenceJSONB,
-				&user.CreateTS,
-				&user.CreateUserID,
-				&user.UpdateTS,
-				&user.UpdateUserID,
-				&user.DeleteTS,
-				&user.DeleteUserID,
-			)
-			if err != nil {
-				return fmt.Errorf("failed to scan user: %w", err)
-			}
-			users = append(users, &user)
-		}
-		return nil
-	})
-
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
+		return nil, fmt.Errorf("failed to get users: %w", err)
+	}
+	defer rows.Close()
+
+	users := []*model.AppUserModel{}
+	for rows.Next() {
+		var user model.AppUserModel
+		err := rows.Scan(
+			&user.AppUserID,
+			&user.UserName,
+			&user.FirstName,
+			&user.LastName,
+			&user.Email,
+			&user.SecurityContext,
+			&user.AppUserGroupMembershipList,
+			&user.MFAExempt,
+			&user.TOTPSeed,
+			&user.MFASetup,
+			&user.AccountStatus,
+			&user.CreateTS,
+			&user.CreateUserID,
+			&user.UpdateTS,
+			&user.UpdateUserID,
+			&user.DeleteTS,
+			&user.DeleteUserID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, &user)
+	}
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -385,16 +448,11 @@ func (r *UserRepository) UpdateUser(
 		    update_ts = $7, update_user_id = $8
 		WHERE app_user_id = $9 AND security_context_id = $10 AND update_ts = $11 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			user.UserName, user.FirstName, user.LastName, user.Email,
-			user.AppUserGroupMembershipList, user.MFAExempt,
-			user.UpdateTS, user.UpdateUserID,
-			user.AppUserID, securityContext, clientUpdateTS)
-		return execErr
-	})
+	result, err := r.db.Exec(ctx, query,
+		user.UserName, user.FirstName, user.LastName, user.Email,
+		user.AppUserGroupMembershipList, user.MFAExempt,
+		user.UpdateTS, user.UpdateUserID,
+		user.AppUserID, securityContext, clientUpdateTS)
 	if err != nil {
 		if isUniqueViolation(err) {
 			// app_user.user_name is UNIQUE.
@@ -404,20 +462,8 @@ func (r *UserRepository) UpdateUser(
 	}
 
 	if result.RowsAffected() == 0 {
-		// Check if user exists
-		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user
-			WHERE app_user_id = $1 AND delete_user_id IS NULL)`
-		err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx, checkQuery, user.AppUserID).Scan(&exists)
-		})
-		if err != nil {
-			return fmt.Errorf("failed to check user existence: %w", err)
-		}
-		if !exists {
-			return ErrNotFound
-		}
-		return ErrConflict
+		return zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			user.AppUserID, securityContext)
 	}
 
 	return nil
@@ -437,38 +483,22 @@ func (r *UserRepository) DeleteUser(
 		SET delete_ts = $1, delete_user_id = $2
 		WHERE app_user_id = $3 AND security_context_id = $4 AND update_ts = $5 AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(
-			ctx,
-			query,
-			deleteTS,
-			deleteUserID,
-			userID,
-			securityContext,
-			clientUpdateTS,
-		)
-		return execErr
-	})
+	result, err := r.db.Exec(
+		ctx,
+		query,
+		deleteTS,
+		deleteUserID,
+		userID,
+		securityContext,
+		clientUpdateTS,
+	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete user: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {
-		// Check if user exists
-		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM app_user WHERE app_user_id = $1 AND delete_user_id IS NULL)`
-		err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx, checkQuery, userID).Scan(&exists)
-		})
-		if err != nil {
-			return 0, fmt.Errorf("failed to check user existence: %w", err)
-		}
-		if !exists {
-			return 0, ErrNotFound
-		}
-		return 0, ErrConflict
+		return 0, zeroRowOutcome(ctx, r.db, appUserTable, appUserPK,
+			userID, securityContext)
 	}
 
 	return userID, nil
@@ -477,15 +507,15 @@ func (r *UserRepository) DeleteUser(
 // AddUserListToGroup adds multiple users to a group with optimistic locking
 func (r *UserRepository) AddUserListToGroup(
 	ctx context.Context,
-	userIds []int,
-	groupId int,
+	userIdList []int,
+	appUserGroupId int,
 	updateTsList []float64,
 	updateUserId int,
 	securityContext int,
 ) ([]*model.AppUserModel, error) {
-	if len(userIds) != len(updateTsList) {
+	if len(userIdList) != len(updateTsList) {
 		return nil, fmt.Errorf(
-			"userIds and updateTsList must have the same length",
+			"userIdList and updateTsList must have the same length",
 		)
 	}
 
@@ -497,7 +527,7 @@ func (r *UserRepository) AddUserListToGroup(
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Update each user (only if group not already in membership list)
-	for i, userId := range userIds {
+	for i, userId := range userIdList {
 		result, err := tx.Exec(
 			ctx,
 			`
@@ -505,21 +535,26 @@ func (r *UserRepository) AddUserListToGroup(
 			SET app_user_group_membership_list = array_append(app_user_group_membership_list, $2),
 				update_ts = $3,
 				update_user_id = $4
-			WHERE app_user_id = $1 AND update_ts = $5 AND delete_user_id IS NULL AND $2 != ALL(app_user_group_membership_list)`,
+			WHERE app_user_id = $1 AND update_ts = $5
+			  AND security_context_id = $6 AND delete_user_id IS NULL
+			  AND $2 != ALL(app_user_group_membership_list)`,
 			userId,
-			groupId,
-			float64(time.Now().UnixNano())/1e9,
+			appUserGroupId,
+			model.Now(),
 			updateUserId,
 			updateTsList[i],
+			securityContext,
 		)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to update user %d: %w", userId, err)
 		}
 		if result.RowsAffected() == 0 {
+			// Ambiguous on purpose: absent, already a member, or stale.
 			return nil, fmt.Errorf(
-				"user %d not found, already has group, or concurrent update",
-				userId,
+				"user %d not found, already has group, "+
+					"or concurrent update: %w",
+				userId, ErrConflict,
 			)
 		}
 	}
@@ -530,21 +565,21 @@ func (r *UserRepository) AddUserListToGroup(
 	}
 
 	// Return updated users; rescan required for updated group membership
-	return r.RetrieveUserList(ctx, securityContext, userIds, 0)
+	return r.RetrieveUserList(ctx, securityContext, userIdList, 0)
 }
 
 // RemoveUserListFromGroup removes multiple users from a group with optimistic locking
 func (r *UserRepository) RemoveUserListFromGroup(
 	ctx context.Context,
-	userIds []int,
-	groupId int,
+	userIdList []int,
+	appUserGroupId int,
 	updateTsList []float64,
 	updateUserId int,
 	securityContext int,
 ) ([]*model.AppUserModel, error) {
-	if len(userIds) != len(updateTsList) {
+	if len(userIdList) != len(updateTsList) {
 		return nil, fmt.Errorf(
-			"userIds and updateTsList must have the same length",
+			"userIdList and updateTsList must have the same length",
 		)
 	}
 
@@ -556,7 +591,7 @@ func (r *UserRepository) RemoveUserListFromGroup(
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Update each user
-	for i, userId := range userIds {
+	for i, userId := range userIdList {
 		result, err := tx.Exec(
 			ctx,
 			`
@@ -564,12 +599,14 @@ func (r *UserRepository) RemoveUserListFromGroup(
 			SET app_user_group_membership_list = array_remove(app_user_group_membership_list, $2),
 				update_ts = $3,
 				update_user_id = $4
-			WHERE app_user_id = $1 AND update_ts = $5 AND delete_user_id IS NULL`,
+			WHERE app_user_id = $1 AND update_ts = $5
+			  AND security_context_id = $6 AND delete_user_id IS NULL`,
 			userId,
-			groupId,
-			float64(time.Now().UnixNano())/1e9,
+			appUserGroupId,
+			model.Now(),
 			updateUserId,
 			updateTsList[i],
+			securityContext,
 		)
 
 		if err != nil {
@@ -577,8 +614,8 @@ func (r *UserRepository) RemoveUserListFromGroup(
 		}
 		if result.RowsAffected() == 0 {
 			return nil, fmt.Errorf(
-				"user %d not found or concurrent update",
-				userId,
+				"user %d not found or concurrent update: %w",
+				userId, ErrConflict,
 			)
 		}
 	}
@@ -589,7 +626,7 @@ func (r *UserRepository) RemoveUserListFromGroup(
 	}
 
 	// Return updated users; rescan required for updated group membership
-	return r.RetrieveUserList(ctx, securityContext, userIds, 0)
+	return r.RetrieveUserList(ctx, securityContext, userIdList, 0)
 }
 
 // removeDuplicates removes duplicate integers from a slice
@@ -609,54 +646,6 @@ func removeDuplicates(slice []int) []int {
 	return resultList
 }
 
-// RetrieveUserByID reads one live user in the caller's security context. It
-// is the read behind GET /me; the id comes from the JWT, never the client.
-func (r *UserRepository) RetrieveUserByID(
-	ctx context.Context,
-	userID int,
-	securityContext int,
-) (*model.AppUserModel, error) {
-	query := `
-		SELECT app_user_id, user_name, pw_hash, first_name, last_name, email,
-		       security_context_id, app_user_group_membership_list, mfa_exempt, totp_seed, mfa_setup,
-		       preference_jsonb,
-		       create_ts, create_user_id, update_ts, update_user_id,
-		       delete_ts, delete_user_id
-		FROM app_user
-		WHERE app_user_id = $1 AND security_context_id = $2 AND delete_user_id IS NULL`
-
-	var user model.AppUserModel
-	err := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		return r.db.QueryRow(ctx, query, userID, securityContext).Scan(
-			&user.AppUserID,
-			&user.UserName,
-			&user.PwHash,
-			&user.FirstName,
-			&user.LastName,
-			&user.Email,
-			&user.SecurityContext,
-			&user.AppUserGroupMembershipList,
-			&user.MFAExempt,
-			&user.TOTPSeed,
-			&user.MFASetup,
-			&user.PreferenceJSONB,
-			&user.CreateTS,
-			&user.CreateUserID,
-			&user.UpdateTS,
-			&user.UpdateUserID,
-			&user.DeleteTS,
-			&user.DeleteUserID,
-		)
-	})
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("failed to retrieve user by id: %w", err)
-	}
-	return &user, nil
-}
-
 // UpdateOwnProfile is the narrow write behind PUT /me: the columns a user
 // may change about themselves, nothing else (no user name, groups, MFA
 // flags). Optimistic lock on update_ts; the row's new update_ts is returned.
@@ -670,7 +659,7 @@ func (r *UserRepository) UpdateOwnProfile(
 	preference json.RawMessage,
 	expectedUpdateTS float64,
 ) (newUpdateTS float64, err error) {
-	newUpdateTS = CurrentTimestamp()
+	newUpdateTS = model.Now()
 	query := `
 		UPDATE app_user
 		SET first_name = $1, last_name = $2, email = $3, preference_jsonb = $4,
@@ -678,25 +667,18 @@ func (r *UserRepository) UpdateOwnProfile(
 		WHERE app_user_id = $6 AND security_context_id = $7 AND update_ts = $8
 		      AND delete_user_id IS NULL`
 
-	var result pgconn.CommandTag
-	err = ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-		var execErr error
-		result, execErr = r.db.Exec(ctx, query,
-			firstName, lastName, email, jsonbParam(preference),
-			newUpdateTS, userID, securityContext, expectedUpdateTS)
-		return execErr
-	})
+	result, err := r.db.Exec(ctx, query,
+		firstName, lastName, email, jsonbParam(preference),
+		newUpdateTS, userID, securityContext, expectedUpdateTS)
 	if err != nil {
 		return 0, fmt.Errorf("failed to update own profile: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		var exists bool
-		checkErr := ExecuteWithRetry(ctx, DefaultRetryConfig(), func() error {
-			return r.db.QueryRow(ctx,
-				`SELECT EXISTS(SELECT 1 FROM app_user
-				 WHERE app_user_id = $1 AND security_context_id = $2 AND delete_user_id IS NULL)`,
-				userID, securityContext).Scan(&exists)
-		})
+		checkErr := r.db.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM app_user
+			 WHERE app_user_id = $1 AND security_context_id = $2 AND delete_user_id IS NULL)`,
+			userID, securityContext).Scan(&exists)
 		if checkErr != nil {
 			return 0, fmt.Errorf("failed to assess user state: %w", checkErr)
 		}

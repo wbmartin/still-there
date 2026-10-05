@@ -29,6 +29,7 @@ func (s *UserGrantModelTestSuite) TestGrantConstants() {
 	s.Equal(9004, GrantUserDelete)
 	s.Equal(9008, GrantUserBlock)
 	s.Equal(9009, GrantChangeOtherUserPassword)
+	s.Equal(9020, GrantResetUserMFA)
 }
 
 func (s *UserGrantModelTestSuite) TestAllKnownGrantsMap() {
@@ -52,6 +53,7 @@ func (s *UserGrantModelTestSuite) TestAllKnownGrantsMap() {
 		"DELETE_USER_GROUP":      9013,
 		"ADD_USER_TO_GROUP":      9014,
 		"REMOVE_USER_FROM_GROUP": 9015,
+		"RESET_MFA_TOKEN":        9020,
 	}
 
 	s.Equal(expectedGrants, AllKnownGrants)
@@ -88,6 +90,7 @@ func (s *UserGrantModelTestSuite) TestGrantIDToShortCodeMap() {
 		9013: "DELETE_USER_GROUP",
 		9014: "ADD_USER_TO_GROUP",
 		9015: "REMOVE_USER_FROM_GROUP",
+		9020: "RESET_MFA_TOKEN",
 	}
 
 	s.Equal(expectedMappings, GrantIDToShortCodeMap)

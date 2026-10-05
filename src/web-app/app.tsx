@@ -6,19 +6,32 @@ import {
   useNavigate,
 } from 'react-router-dom'
 import {
+  AppShell,
+  Burger,
+  Group,
+  Menu,
   NavLink,
   Button,
+  ScrollArea,
   Stack,
-  Center,
-  Container,
-  Flex,
   Alert,
   Text,
+  Title,
+  UnstyledButton,
   useMantineColorScheme,
 } from '@mantine/core'
-import { useEffect } from 'react'
+import { useDisclosure } from '@mantine/hooks'
+import {
+  IconChevronDown,
+  IconLogout,
+  IconSettings,
+  IconUserCircle,
+} from '@tabler/icons-react'
+import { useEffect, useRef } from 'react'
 import { useProfileStore } from './stores/profile-store'
+import { useApiStatusStore } from './stores/api-status-store'
 import { usePreference } from './hooks/use-preference'
+import { usePinnedPageHeader } from './hooks/use-pinned-page-header'
 import { reportError } from './utils/report-error'
 import Login from './pages/login'
 import Dashboard from './pages/dashboard'
@@ -30,10 +43,12 @@ import AppUserGroupListPage from './pages/app-user-group-list-page'
 import AppUserGroupEditPage from './pages/app-user-group-edit-page'
 import UserPreferencesPage from './pages/user-preferences-page'
 import MFAOnboardingPage from './pages/mfa-onboarding-page'
+import InvitePage from './pages/invite-page'
 
-import { useAuthStore } from './stores/auth-store'
+import { useAuthStore, setRouteNavigator } from './stores/auth-store'
 import { ROUTES } from './constants/routes'
 import { grants } from './constants/grants'
+import { APP_NAME } from './constants/app'
 
 // Simple error page for route errors
 function ErrorPage() {
@@ -78,6 +93,31 @@ function ApiUnreachableNotice() {
   );
 }
 
+// Shown above the routed page, while signed in, from the first call the API
+// did not answer (a failed fetch, 5xx or 429) until the next one it does.
+// One banner however many calls failed; the session is not touched.
+function ApiUnreachableBanner() {
+  const reason = useApiStatusStore((state) => state.reason)
+  return (
+    <Alert
+      color="orange"
+      title="The server is not answering"
+      role="status"
+      mb="md"
+    >
+      <Text size="sm">
+        You are still signed in. Parts of this page may be empty or out of
+        date; this notice clears itself as soon as the server answers again.
+      </Text>
+      {reason && (
+        <Text size="xs" c="dimmed">
+          {reason}
+        </Text>
+      )}
+    </Alert>
+  )
+}
+
 const router = createBrowserRouter([
   {
     path: '/',
@@ -97,6 +137,16 @@ const router = createBrowserRouter([
         {
           path: ROUTES.MFA_SETUP,
           element: <MFAOnboardingPage />,
+          errorElement: <ErrorPage />,
+        },
+        {
+          path: ROUTES.MFA_VERIFY,
+          element: <MFAOnboardingPage />,
+          errorElement: <ErrorPage />,
+        },
+        {
+          path: ROUTES.INVITE,
+          element: <InvitePage />,
           errorElement: <ErrorPage />,
         },
         {
@@ -143,12 +193,36 @@ const router = createBrowserRouter([
   },
 ])
 
+setRouteNavigator((path) => void router.navigate(path))
+
+const HEADER_HEIGHT = 56;
+
+// Fixed header, a navbar whose link list scrolls on its own (a long list or
+// a short window never pushes it off screen), and the routed page in main,
+// whose title block stays pinned under the header (.app-page in index.css).
+// Below `sm` the navbar is a drawer opened by the burger. Signed out (login,
+// MFA) the shell is disabled: no header, no navbar.
 function AppLayout() {
-  const { logout, authState, grantList, securityContext } = useAuthStore();
+  const {
+    logout,
+    authState,
+    grantList,
+    securityContext,
+    userName,
+  } = useAuthStore();
   const navigate = useNavigate();
   const readProfile = useProfileStore((state) => state.readProfile);
+  const apiUnreachable = useApiStatusStore((state) => state.unreachable);
+  const profileLoaded = useProfileStore((state) => state.profile !== null);
   const { colorScheme } = usePreference();
-  const { setColorScheme } = useMantineColorScheme();
+  const { setColorScheme, clearColorScheme } = useMantineColorScheme();
+  const wasSignedIn = useRef(false);
+  const [navOpened, { toggle: toggleNav, close: closeNav }] =
+    useDisclosure();
+  // Always mounted, whatever the route or session state, so the hook's one
+  // effect run sees every page that renders into it.
+  const pageRef = useRef<HTMLDivElement>(null);
+  usePinnedPageHeader(pageRef);
 
   // The profile (and with it the preferences) follows the session: loaded
   // when it is known, again after a security-context switch. The caches
@@ -159,11 +233,26 @@ function AppLayout() {
     }
   }, [authState, securityContext, readProfile]);
 
+  // Mantine keeps the scheme in localStorage, so a reload starts from the
+  // one last applied. Until /me answers, usePreference holds only the
+  // default; writing that would flash it over the stored scheme. So the
+  // preference applies once the profile is loaded, and the stored scheme
+  // is cleared only when a session ends, not on a cold load signed out.
   useEffect(() => {
-    setColorScheme(colorScheme);
-  }, [colorScheme, setColorScheme]);
+    if (profileLoaded) setColorScheme(colorScheme);
+  }, [profileLoaded, colorScheme, setColorScheme]);
+
+  useEffect(() => {
+    if (authState === 'YES') {
+      wasSignedIn.current = true;
+    } else if (authState === 'NO' && wasSignedIn.current) {
+      wasSignedIn.current = false;
+      clearColorScheme();
+    }
+  }, [authState, clearColorScheme]);
 
   const handleLogout = async () => {
+    closeNav();
     await logout();
     void navigate(ROUTES.LOGIN);
   };
@@ -172,30 +261,84 @@ function AppLayout() {
   const canManageUsers = grantList.includes(grants.CREATE_USER);
   const canManageUserGroups = grantList.includes(grants.CREATE_USER_GROUP);
 
+  // Closing on tap (not on route change) also closes the phone drawer when
+  // the tapped link is the page already shown.
+  const navLink = (to: string, label: string) => (
+    <NavLink component={Link} to={to} label={label} onClick={closeNav} />
+  );
+
   return (
-    <Center w="100%">
-      <Container size="xl" w="100%">
-        <Flex>
-          {authState === 'YES' && (
-            <nav style={{ width: '200px', padding: '1rem', borderRight: '1px solid var(--mantine-color-default-border)' }}>
-              <Stack gap="xs">
-                <NavLink component={Link} to={ROUTES.DASHBOARD} label="Dashboard" />
-                <NavLink component={Link} to={ROUTES.EXAMPLE_LIST} label="Examples" />
-                {canManageUsers && <NavLink component={Link} to={ROUTES.APP_USER_LIST} label="User Admin" />}
-                {canManageUserGroups && <NavLink component={Link} to={ROUTES.APP_USER_GROUP_LIST} label="User Groups" />}
-                <NavLink component={Link} to={ROUTES.USER_PREFERENCES} label="Profile" />
-                <Button variant="subtle" onClick={() => void handleLogout()} fullWidth justify="flex-start">
-                  Logout
-                </Button>
-              </Stack>
-            </nav>
-          )}
-          <main style={{ flex: 1, padding: '1rem' }}>
-            {authState === 'UNREACHABLE' ? <ApiUnreachableNotice /> : <Outlet />}
-          </main>
-        </Flex>
-      </Container>
-    </Center>
+    <AppShell
+      header={{ height: HEADER_HEIGHT }}
+      navbar={{
+        width: 240,
+        breakpoint: 'sm',
+        collapsed: { mobile: !navOpened },
+      }}
+      padding="md"
+      disabled={authState !== 'YES'}
+    >
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Group wrap="nowrap">
+            <Burger
+              opened={navOpened}
+              onClick={toggleNav}
+              hiddenFrom="sm"
+              size="sm"
+              aria-label="Toggle navigation"
+            />
+            <Title order={4}>{APP_NAME}</Title>
+          </Group>
+          <Menu shadow="md" width={200} position="bottom-end">
+            <Menu.Target>
+              <UnstyledButton aria-label="Account menu">
+                <Group gap={4} wrap="nowrap">
+                  <IconUserCircle size={18} />
+                  <Text size="sm">{userName}</Text>
+                  <IconChevronDown size={14} />
+                </Group>
+              </UnstyledButton>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                component={Link}
+                to={ROUTES.USER_PREFERENCES}
+                leftSection={<IconSettings size={14} />}
+                onClick={closeNav}
+              >
+                Profile
+              </Menu.Item>
+              <Menu.Divider />
+              <Menu.Item
+                leftSection={<IconLogout size={14} />}
+                onClick={() => void handleLogout()}
+              >
+                Logout
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </Group>
+      </AppShell.Header>
+      <AppShell.Navbar p="xs">
+        <AppShell.Section grow component={ScrollArea} type="auto">
+          <Stack gap={2}>
+            {navLink(ROUTES.DASHBOARD, 'Dashboard')}
+            {navLink(ROUTES.EXAMPLE_LIST, 'Examples')}
+            {canManageUsers && navLink(ROUTES.APP_USER_LIST, 'User Admin')}
+            {canManageUserGroups &&
+              navLink(ROUTES.APP_USER_GROUP_LIST, 'User Groups')}
+            {navLink(ROUTES.USER_PREFERENCES, 'Profile')}
+          </Stack>
+        </AppShell.Section>
+      </AppShell.Navbar>
+      <AppShell.Main>
+        {authState === 'YES' && apiUnreachable && <ApiUnreachableBanner />}
+        <div className="app-page" ref={pageRef}>
+          {authState === 'UNREACHABLE' ? <ApiUnreachableNotice /> : <Outlet />}
+        </div>
+      </AppShell.Main>
+    </AppShell>
   )
 }
 

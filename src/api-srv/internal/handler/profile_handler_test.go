@@ -20,10 +20,10 @@ type MockProfileRepository struct {
 	mock.Mock
 }
 
-func (m *MockProfileRepository) RetrieveUserByID(
-	ctx context.Context, userID int, securityContext int,
+func (m *MockProfileRepository) RetrieveUserByUserName(
+	ctx context.Context, userName string,
 ) (*model.AppUserModel, error) {
-	args := m.Called(ctx, userID, securityContext)
+	args := m.Called(ctx, userName)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -40,15 +40,26 @@ func (m *MockProfileRepository) UpdateOwnProfile(
 	return args.Get(0).(float64), args.Error(1)
 }
 
-// meRequest is a <method> /me for user 42 in security context 1 with the
-// given grants and body, carrying the auth cookie and matching CSRF header.
+// meRequest is a <method> /me for alice (user 42) in security context 1
+// with the given grants and body, carrying the auth cookie and matching
+// CSRF header.
 func meRequest(
 	t *testing.T, s *app.Services, method string, grants []int, body string,
 ) *http.Request {
 	t.Helper()
+	return meRequestAs(t, s, method, grants, body, 42, 1)
+}
+
+// meRequestAs is meRequest for alice's JWT carrying userID and
+// securityContext.
+func meRequestAs(
+	t *testing.T, s *app.Services, method string, grants []int, body string,
+	userID int, securityContext int,
+) *http.Request {
+	t.Helper()
 	const sessionID = "session-abc"
 	token, err := auth.GenerateJWT(
-		"Test", "alice", 42, sessionID, 1, grants,
+		"Test", "alice", userID, sessionID, securityContext, grants,
 		s.Config.JWTSecret, s.Config.JWTSessionExpireHours,
 	)
 	if err != nil {
@@ -84,6 +95,17 @@ func TestProfileHandler_CheckSequence(t *testing.T) {
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
+			name:   "rate limit spent → 429, before CSRF and authorization",
+			method: http.MethodPut,
+			request: func(t *testing.T, s *app.Services) *http.Request {
+				s.Config.MaxUserReqPerMin = 0
+				r := meRequest(t, s, http.MethodPut, []int{}, validProfileBody)
+				r.Header.Del("X-CSRF-Token")
+				return r
+			},
+			wantStatus: http.StatusTooManyRequests,
+		},
+		{
 			name:   "PUT without CSRF header → 403 from CheckCSRF",
 			method: http.MethodPut,
 			request: func(t *testing.T, s *app.Services) *http.Request {
@@ -117,7 +139,7 @@ func TestProfileHandler_CheckSequence(t *testing.T) {
 			s := testServices(t)
 			repo := new(MockProfileRepository)
 			if tt.reachesDB {
-				repo.On("RetrieveUserByID", mock.Anything, 42, 1).
+				repo.On("RetrieveUserByUserName", mock.Anything, "alice").
 					Return(&model.AppUserModel{AppUserID: 42, UserName: "alice",
 						SecurityContext: 1, PwHash: "secret"}, nil)
 			}
@@ -135,6 +157,7 @@ func TestProfileHandler_CheckSequence(t *testing.T) {
 			repo.AssertExpectations(t)
 			if tt.wantStatus == http.StatusOK {
 				assert.NotContains(t, w.Body.String(), "pwHash")
+				assert.NotContains(t, w.Body.String(), "password")
 				assert.NotContains(t, w.Body.String(), "secret")
 			}
 		})
@@ -168,8 +191,9 @@ func TestUpdateOwnProfile_ValidationAndLock(t *testing.T) {
 		repo.On("UpdateOwnProfile", mock.Anything, 42, 1, "Alice", "Smith",
 			"alice@example.com", json.RawMessage(`{"colorScheme":"dark"}`), 1.5).
 			Return(2.5, nil)
-		repo.On("RetrieveUserByID", mock.Anything, 42, 1).
-			Return(&model.AppUserModel{AppUserID: 42, FirstName: "Alice", UpdateTS: 2.5}, nil)
+		repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+			Return(&model.AppUserModel{AppUserID: 42, UserName: "alice",
+				SecurityContext: 1, FirstName: "Alice", UpdateTS: 2.5}, nil)
 		w := httptest.NewRecorder()
 		body := strings.Replace(validProfileBody, `"firstName":"Alice"`, `"firstName":"  Alice "`, 1)
 		NewProfileHandler(s, repo).UpdateOwnProfile(w,
@@ -182,6 +206,9 @@ func TestUpdateOwnProfile_ValidationAndLock(t *testing.T) {
 	t.Run("stale updateTs → 409", func(t *testing.T) {
 		s := testServices(t)
 		repo := new(MockProfileRepository)
+		repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+			Return(&model.AppUserModel{AppUserID: 42, UserName: "alice",
+				SecurityContext: 1}, nil)
 		repo.On("UpdateOwnProfile", mock.Anything, 42, 1, "Alice", "Smith",
 			"alice@example.com", mock.Anything, 1.5).
 			Return(float64(0), repository.ErrConflict)
@@ -190,4 +217,170 @@ func TestUpdateOwnProfile_ValidationAndLock(t *testing.T) {
 			meRequest(t, s, http.MethodPut, []int{model.GrantLogon}, validProfileBody))
 		assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
 	})
+}
+
+// After /changeSecurityContext the JWT names tenant 3 while alice's row
+// stays home in tenant 2: GET and PUT /me still find it, and the write is
+// scoped by the row's tenant, not the session's.
+func TestOwnProfile_AfterContextSwitch(t *testing.T) {
+	homeRow := func(updateTS float64) *model.AppUserModel {
+		return &model.AppUserModel{AppUserID: 42, UserName: "alice",
+			FirstName: "Alice", SecurityContext: 2, UpdateTS: updateTS}
+	}
+
+	t.Run("GET → 200 with the home row", func(t *testing.T) {
+		s := testServices(t)
+		repo := new(MockProfileRepository)
+		repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+			Return(homeRow(1.5), nil)
+		w := httptest.NewRecorder()
+		NewProfileHandler(s, repo).RetrieveOwnProfile(w,
+			meRequestAs(t, s, http.MethodGet, []int{model.GrantLogon}, "",
+				42, 3))
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), `"securityContext":2`)
+		repo.AssertExpectations(t)
+	})
+
+	t.Run("GET → 200 carries the preferences, not admin fields", func(t *testing.T) {
+		s := testServices(t)
+		repo := new(MockProfileRepository)
+		row := homeRow(1.5)
+		row.PreferenceJSONB = json.RawMessage(`{"colorScheme":"dark"}`)
+		row.AccountStatus = model.AccountStatusActive
+		repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+			Return(row, nil)
+		w := httptest.NewRecorder()
+		NewProfileHandler(s, repo).RetrieveOwnProfile(w,
+			meRequestAs(t, s, http.MethodGet, []int{model.GrantLogon}, "",
+				42, 2))
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(),
+			`"preferenceJsonb":{"colorScheme":"dark"}`)
+		assert.NotContains(t, w.Body.String(), "accountStatus")
+		assert.NotContains(t, w.Body.String(), "appUserGroupMembershipList")
+	})
+
+	t.Run("PUT → 200, written in tenant 2", func(t *testing.T) {
+		s := testServices(t)
+		repo := new(MockProfileRepository)
+		repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+			Return(homeRow(1.5), nil).Once()
+		repo.On("UpdateOwnProfile", mock.Anything, 42, 2, "Alice", "Smith",
+			"alice@example.com", mock.Anything, 1.5).
+			Return(2.5, nil)
+		repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+			Return(homeRow(2.5), nil).Once()
+		w := httptest.NewRecorder()
+		NewProfileHandler(s, repo).UpdateOwnProfile(w,
+			meRequestAs(t, s, http.MethodPut, []int{model.GrantLogon},
+				validProfileBody, 42, 3))
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), `"updateTs":2.5`)
+		repo.AssertExpectations(t)
+	})
+}
+
+// A JWT whose uid is not the id of the row its subject names is a session
+// for someone else: 401 on GET and PUT, and nothing is written.
+func TestOwnProfile_SubjectAndUserIDMismatchIs401(t *testing.T) {
+	for _, method := range []string{http.MethodGet, http.MethodPut} {
+		t.Run(method, func(t *testing.T) {
+			s := testServices(t)
+			repo := new(MockProfileRepository)
+			repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+				Return(&model.AppUserModel{AppUserID: 7, UserName: "alice",
+					SecurityContext: 2, UpdateTS: 1.5}, nil)
+			h := NewProfileHandler(s, repo)
+			w := httptest.NewRecorder()
+			r := meRequestAs(t, s, method, []int{model.GrantLogon},
+				validProfileBody, 42, 2)
+			if method == http.MethodPut {
+				h.UpdateOwnProfile(w, r)
+			} else {
+				h.RetrieveOwnProfile(w, r)
+			}
+			assert.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), "Session does not match")
+			repo.AssertNotCalled(t, "UpdateOwnProfile")
+			repo.AssertExpectations(t)
+		})
+	}
+}
+
+// Lengths are characters, not bytes: 200 two-byte runes fit VARCHAR(200).
+func TestUpdateOwnProfile_LengthCountsRunes(t *testing.T) {
+	fits := strings.Repeat("é", 200)
+	s := testServices(t)
+	repo := new(MockProfileRepository)
+	repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+		Return(&model.AppUserModel{AppUserID: 42, UserName: "alice",
+			SecurityContext: 1, UpdateTS: 1.5}, nil)
+	repo.On("UpdateOwnProfile", mock.Anything, 42, 1, fits, "Smith",
+		"alice@example.com", mock.Anything, 1.5).Return(2.5, nil)
+	w := httptest.NewRecorder()
+	body := strings.Replace(validProfileBody, `"firstName":"Alice"`,
+		`"firstName":"`+fits+`"`, 1)
+	NewProfileHandler(s, repo).UpdateOwnProfile(w,
+		meRequest(t, s, http.MethodPut, []int{model.GrantLogon}, body))
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	repo = new(MockProfileRepository)
+	w = httptest.NewRecorder()
+	body = strings.Replace(validProfileBody, `"firstName":"Alice"`,
+		`"firstName":"`+fits+`é"`, 1)
+	NewProfileHandler(s, repo).UpdateOwnProfile(w,
+		meRequest(t, s, http.MethodPut, []int{model.GrantLogon}, body))
+	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	repo.AssertExpectations(t)
+}
+
+// TestOwnProfile_CarriesAllowMFAExemptViaAPI: GET and PUT /me answer the
+// server's ALLOW_MFA_EXEMPT_VIA_API (B097), which the user edit page reads
+// to hide the MFA-exempt checkbox when the API would refuse it.
+func TestOwnProfile_CarriesAllowMFAExemptViaAPI(t *testing.T) {
+	row := func(updateTS float64) *model.AppUserModel {
+		return &model.AppUserModel{AppUserID: 42, UserName: "alice",
+			FirstName: "Alice", SecurityContext: 1, UpdateTS: updateTS}
+	}
+	for _, allowed := range []bool{false, true} {
+		expected := `"allowMfaExemptViaApi":false`
+		if allowed {
+			expected = `"allowMfaExemptViaApi":true`
+		}
+
+		t.Run("GET "+expected, func(t *testing.T) {
+			s := testServices(t)
+			s.Config.AllowMFAExemptViaAPI = allowed
+			repo := new(MockProfileRepository)
+			repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+				Return(row(1.5), nil)
+			w := httptest.NewRecorder()
+			NewProfileHandler(s, repo).RetrieveOwnProfile(w,
+				meRequest(t, s, http.MethodGet, []int{model.GrantLogon}, ""))
+			assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), expected)
+			assert.Contains(t, w.Body.String(), `"userName":"alice"`)
+		})
+
+		t.Run("PUT "+expected, func(t *testing.T) {
+			s := testServices(t)
+			s.Config.AllowMFAExemptViaAPI = allowed
+			repo := new(MockProfileRepository)
+			repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+				Return(row(1.5), nil).Once()
+			repo.On("UpdateOwnProfile", mock.Anything, 42, 1, "Alice",
+				"Smith", "alice@example.com", mock.Anything, 1.5).
+				Return(2.5, nil)
+			repo.On("RetrieveUserByUserName", mock.Anything, "alice").
+				Return(row(2.5), nil).Once()
+			w := httptest.NewRecorder()
+			NewProfileHandler(s, repo).UpdateOwnProfile(w,
+				meRequest(t, s, http.MethodPut, []int{model.GrantLogon},
+					validProfileBody))
+			assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), expected)
+			assert.Contains(t, w.Body.String(), `"updateTs":2.5`)
+		})
+	}
 }

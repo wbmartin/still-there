@@ -13,7 +13,25 @@ This section describes how I'd like an AI to think and respond for database desi
   from the authenticated caller's JWT claim, never from a client-supplied
   field; handlers overwrite `security_context_id` on the way in. Tests
   therefore select their tenant by the seeded user they authenticate as, and a
-  test that must prove isolation uses 1 and 2 as the two sides.
+  test that must prove isolation uses 2 and 3 as the two sides.
+- Test databases (`*_test_db`, `*_e2e_db`) hold no tenant 1. `bin/510`
+  seeds `sql/fixtures/test-seed.sql` (logins and groups 1-3 in 2, groups 4-5
+  in 3), then `sql/fixtures/test-tenant-lock.sql` adds
+  `CHECK (security_context_id <> 1)` to every table with that column, read
+  from the catalog so a new table is covered with no edit. A test that writes
+  tenant 1 fails at the database. A developer's own database takes
+  `local-seed.sql` (tenant 1) and is never locked.
+- Every UPDATE/DELETE matches on the caller's tenant as well as the id, and
+  the follow-up check that explains a zero-row write ("absent" 404 vs
+  "stale `update_ts`" 409) uses the same tenant predicate. A row in another
+  tenant reads as absent, so an id is never confirmed across tenants. Two
+  named lookups are exempt: `RetrieveUserByUserName` and
+  `GetGrantsForGroups` (see doc/105, Optimistic Locking).
+- Isolation is enforced in application code only: no row-level security,
+  and the API role reads and writes every tenant. A new tenant table ships
+  with a cross-tenant negative test at the repository layer (read, update,
+  delete of another tenant's row answer not-found); the threat model and
+  the per-table list are in `doc/110-security-architecture.md`.
 - Don't create foreign keys / Postgres references within the database - managed in the application layer similar to how nosql is managed.
 - Don't create triggers for updating dates within the database - managed by the application layer.
 - Schema changes are versioned SQL files applied by the project's own migrator (`src/api-srv/cmd/migrate`); see "Schema changes" below. No third-party migration framework.
@@ -24,7 +42,7 @@ This section describes how I'd like an AI to think and respond for database desi
   - Use the INSERT INTO ... SELECT ... FROM common_vars_cte, (VALUES ...) AS data(...) format for inserting the data. This allows selecting values from both the CTE and the VALUES clause containing the row data.
 - Strictly prohibit the use of database DEFAULT clauses, triggers, or SQL functions for generating or managing any application data fields like create_ts or update_ts. All such values must be calculated and set within the application code before executing the SQL INSERT or UPDATE statement.
 - The database schema should define the create_ts, update_ts, and delete_ts columns (e.g., numeric(17,7) NOT NULL), but responsibility for providing their values lies entirely with the API application handlers.
-- CRITICAL: For ALL SQL queries, the migrations in `src/api-srv/sql/migrations/` are the exclusive and absolute source for table and column names. Do NOT infer, assume, or 'hallucinate' any column names not defined there for the respective table.
+- CRITICAL: For ALL SQL queries, `doc/003-schema-reference.sql` is the source for table and column names: the schema every migration in `src/api-srv/sql/migrations/` adds up to, generated (never hand-edited) so nobody has to replay `ALTER`s in their head. Do NOT infer, assume, or 'hallucinate' any column names not listed there for the respective table. Read it; change the schema only with a new migration.
 - DO NOT add a delete_ts column to any query if it is not in the schema.
 
 # Database related code approach
@@ -59,7 +77,12 @@ order, forward only. The migrator records each file's SHA-256 in
   on drift. A wrong migration is fixed by the next one.
 - Seed/test data is a fixture (`sql/fixtures/`), not a migration.
 - `bin/510-reset-test-db` runs `migrate up` on an empty database, so every
-  reset proves the full chain applies cleanly.
+  reset proves the full chain applies cleanly. It then writes
+  `doc/003-schema-reference.sql` (`proto-migrate schema-reference`) from
+  that database, and `bin/300-run-tests go` fails when the committed copy
+  differs: a migration lands with its regenerated reference.
+- A developer's own database: `bin/205-migrate-db` (creates it and seeds
+  tenant 1 the first time, migrations only after that).
 
 ```
 proto-migrate (-config <env file> | -url <url>) status     applied / pending / drifted / orphaned, per version
@@ -67,6 +90,9 @@ proto-migrate ... pending                                  count of pending file
 proto-migrate ... verify                                   fail if the database disagrees with the files
 proto-migrate ... up                                       apply every pending file, in order
 proto-migrate ... stamp <version>                          record up to <version> as applied WITHOUT running
+proto-migrate ... schema-reference                         print the schema as CREATE TABLE/INDEX text (doc/003)
+proto-migrate ... -base-url <origin> [-invite-ttl-hours N] invite <userName>
+                                                           first sign-in link for an invited login (doc/330 A9)
 ```
 
 `-config` reads only `DATABASE_URL` from a KEY=VALUE file -- the migrator's

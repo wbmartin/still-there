@@ -1,9 +1,8 @@
 import type { Example } from "../types/example-type";
 import type { ApiResponse } from "../types/api";
-import { apiRequest, throwForFailedResponse } from "../utils/api";
+import { apiJson, isApiStatus } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { createEntityStore } from "./create-entity-store";
-import { readErrorMessage } from "../utils/api";
 
 interface ExampleExtras {
   // GET /example?exampleId=N. Returns null when the row does not exist.
@@ -19,14 +18,15 @@ export const useExamplesStore = createEntityStore<Example, ExampleExtras>(
   },
   (set, get) => ({
     readExampleById: async (id: number) => {
-      const response = await apiRequest(
-        `${API_ENDPOINTS.EXAMPLE}?exampleId=${id}`,
-      );
-      if (response.status === 404 || response.status === 400) return null;
-      if (!response.ok) {
-        await throwForFailedResponse(response, readErrorMessage);
+      let example: Example;
+      try {
+        ({ data: example } = await apiJson<ApiResponse<Example>>(
+          `${API_ENDPOINTS.EXAMPLE}?exampleId=${id}`,
+        ));
+      } catch (err) {
+        if (isApiStatus(err, 404, 400)) return null;
+        throw err;
       }
-      const example = ((await response.json()) as ApiResponse<Example>).data;
       // Refresh the cached row if it is present; do not add it otherwise, or
       // the list would grow without a matching maxUpdateTs.
       set({

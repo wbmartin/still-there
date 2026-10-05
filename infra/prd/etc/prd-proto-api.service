@@ -1,4 +1,6 @@
-
+# /srv/prd-proto/etc/prd-proto-api.service, symlinked from
+# /etc/systemd/system/ (infra/README.md). Edit the repo copy, then copy it
+# to the host and daemon-reload.
 [Unit]
 Description=Proto API (Go)
 After=network-online.target postgresql.service
@@ -8,16 +10,36 @@ StartLimitIntervalSec=120
 
 [Service]
 Type=simple
-User=prd-proto
-Group=proto
-ExecStart=/srv/prd-proto/libexec/proto-api /srv/prd-proto/etc/prd-proto-api.env
+User=svc-proto
+Group=svc-proto
+WorkingDirectory=/srv/prd-proto
+ExecStart=/srv/prd-proto/libexec/api-srv /srv/prd-proto/etc/prd-proto-api.env
 Restart=on-failure
 RestartSec=5
+
+# The API writes no files: it logs to the journal and keeps its state in
+# Postgres, so the whole filesystem is read-only to it.
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/srv/prd-proto/log
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
 
 StandardOutput=journal
 StandardError=journal

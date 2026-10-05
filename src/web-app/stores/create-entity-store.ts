@@ -1,8 +1,6 @@
 import type { EntityBase } from "../types/api";
 import { create, type StateCreator } from "zustand";
-import { apiRequest, throwForFailedResponse,
-  readErrorMessage,
-} from "../utils/api";
+import { apiJson, jsonBody } from "../utils/api";
 import { registerCacheClearer } from "../utils/cache-utils";
 
 export interface EntityStoreState<TEntity> {
@@ -95,14 +93,10 @@ export const createEntityStore = <
           }
 
           const query = searchParams.toString();
-          const response = await apiRequest(
+          const body = await apiJson<{ data?: TEntity[] } | undefined>(
             `${config.listEndpoint}${query ? `?${query}` : ""}`,
           );
-          if (!response.ok) {
-            await throwForFailedResponse(response, readErrorMessage);
-          }
-          const body = (await response.json()) as { data?: TEntity[] };
-          const returnedList: TEntity[] = body.data ?? [];
+          const returnedList: TEntity[] = body?.data ?? [];
 
           if (!isIncremental) {
             // Full read. The server excludes deleted rows here, so whatever
@@ -146,15 +140,10 @@ export const createEntityStore = <
       },
 
       createItem: async (item: Partial<TEntity>) => {
-        const response = await apiRequest(config.itemEndpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(item),
-        });
-        if (!response.ok) {
-          await throwForFailedResponse(response, readErrorMessage);
-        }
-        const payload = ((await response.json()) as { data: unknown }).data;
+        const { data: payload } = await apiJson<{ data: unknown }>(
+          config.itemEndpoint,
+          { method: "POST", ...jsonBody(item) },
+        );
         const created: TEntity = config.unwrapCreated
           ? config.unwrapCreated(payload)
           : (payload as TEntity);
@@ -164,15 +153,10 @@ export const createEntityStore = <
       },
 
       updateItem: async (item: Partial<TEntity>) => {
-        const response = await apiRequest(config.itemEndpoint, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(item),
-        });
-        if (!response.ok) {
-          await throwForFailedResponse(response, readErrorMessage);
-        }
-        const updated = ((await response.json()) as { data: TEntity }).data;
+        const { data: updated } = await apiJson<{ data: TEntity }>(
+          config.itemEndpoint,
+          { method: "PUT", ...jsonBody(item) },
+        );
         set({
           itemList: get().itemList.map((existing) =>
             existing[config.idField] === updated[config.idField]
@@ -188,13 +172,10 @@ export const createEntityStore = <
           [config.idParamName]: String(id),
           updateTs: String(updateTs),
         });
-        const response = await apiRequest(
+        await apiJson<unknown>(
           `${config.itemEndpoint}?${searchParams.toString()}`,
           { method: "DELETE" },
         );
-        if (!response.ok) {
-          await throwForFailedResponse(response, readErrorMessage);
-        }
         set({
           itemList: get().itemList.filter(
             (existing) => existing[config.idField] !== id,

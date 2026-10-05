@@ -17,17 +17,17 @@ import (
 
 // Every handler runs its own security checks, explicitly, in its own body:
 //
-//	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveExample")
-//	app.CheckJWT()
-//	app.CheckRateLimitAndUserBlock()
-//	app.CheckCSRF()
-//	app.CheckAuthorization(model.GrantExampleRead)
-//	if !app.CheckAllChecksComplete() { return }
+//	appHelper := security.NewAppHelper(w, r, h.appsrv, "RetrieveExample")
+//	appHelper.CheckJWT()
+//	appHelper.CheckRateLimitAndUserBlock()
+//	appHelper.CheckCSRF()
+//	appHelper.CheckAuthorization(model.GrantExampleRead)
+//	if !appHelper.CheckAllChecksComplete() { return }
 //
 // An endpoint that needs less writes the difference with Skip* calls in the
 // same place, so an auditor reads the whole policy in the handler. This is
 // deliberate and not to be replaced by middleware or a route wrapper
-// (Brandon, PS0009; doc/105 "Security checks"). CheckAllChecksComplete
+// (Brandon; doc/105 "Security checks"). CheckAllChecksComplete
 // refuses to proceed unless all five were either checked or skipped.
 
 // contextKey is a custom type for context keys to avoid collisions
@@ -207,7 +207,7 @@ func (ah *AppHelper) WarnWithCallerSkip(code, message string, skip int) {
 func (ah *AppHelper) WriteJSON(
 	w http.ResponseWriter,
 	status int,
-	data interface{},
+	data any,
 ) {
 	// Only enforce security checks for success responses (status < 400)
 	// Error responses (4xx/5xx) are allowed even if checks failed
@@ -297,6 +297,33 @@ func (sh *AppHelper) CheckJWT() *AppHelper {
 		return sh
 	}
 
+	// A valid signature is not enough: the session may have been ended or
+	// the login's tokens revoked (session_revocation.go). An unreadable KV
+	// fails closed.
+	revoked, err := sessionRevoked(sh.appServices, claims)
+	if err != nil {
+		sh.appServices.Logger.Error(
+			"JWR0",
+			"Session revocation check failed, failing closed: "+err.Error(),
+		)
+		sh.failAndRespond(
+			http.StatusInternalServerError,
+			"Session check failed",
+		)
+		return sh
+	}
+	if revoked {
+		sh.appServices.Logger.Warn(
+			"JWR1",
+			"Revoked session refused: "+claims.Subject,
+		)
+		sh.failAndRespond(
+			http.StatusUnauthorized,
+			"Session has ended; sign in again",
+		)
+		return sh
+	}
+
 	sh.claims = claims
 	sh.ctx = context.WithValue(sh.r.Context(), claimsKey, claims)
 	sh.username = claims.Subject
@@ -304,21 +331,56 @@ func (sh *AppHelper) CheckJWT() *AppHelper {
 	return sh
 }
 
-// ClientIP returns the caller's IP: the first valid entry of
-// X-Forwarded-For when a proxy set it, else the host part of RemoteAddr.
-// It keys anonymous rate limiting and login lockout, so both paths agree.
-func ClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		ip := strings.TrimSpace(strings.Split(xff, ",")[0])
-		if net.ParseIP(ip) != nil {
-			return ip
+// ClientIP returns the caller's IP. It keys anonymous rate limiting and
+// login lockout, so both paths agree.
+//
+// trustedProxyCount is how many proxies in front of the API append to
+// X-Forwarded-For (TRUSTED_PROXY_COUNT). Each appends the address it saw,
+// so only the right-hand entries are trustworthy; everything to their left
+// is whatever the client sent. 0 ignores the header and uses RemoteAddr.
+// N takes the entry N hops from the right (the one the outermost trusted
+// proxy wrote), falling back to RemoteAddr when the header is shorter or
+// that entry is not an address.
+func ClientIP(r *http.Request, trustedProxyCount int) string {
+	if trustedProxyCount > 0 {
+		var hopList []string
+		for _, value := range r.Header.Values("X-Forwarded-For") {
+			hopList = append(hopList, strings.Split(value, ",")...)
+		}
+		if len(hopList) >= trustedProxyCount {
+			hop := hopList[len(hopList)-trustedProxyCount]
+			if ip := parseHostIP(hop); ip != "" {
+				return ip
+			}
 		}
 	}
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
+	if ip := parseHostIP(r.RemoteAddr); ip != "" {
+		return ip
 	}
-	return ip
+	return r.RemoteAddr
+}
+
+// anonRateIdentifier is the rate-limit key identifier for an anonymous
+// caller: "ip:" plus ClientIP. The prefix keeps anonymous buckets out of the
+// signed-in key space, where the identifier is the user name, so a user
+// named "10.0.0.5" never shares a bucket with that address.
+func anonRateIdentifier(r *http.Request, trustedProxyCount int) string {
+	return "ip:" + ClientIP(r, trustedProxyCount)
+}
+
+// parseHostIP returns the IP in "ip", "ip:port", "[v6]" or "[v6]:port", in
+// canonical form, or "" when there is none.
+func parseHostIP(value string) string {
+	host := strings.TrimSpace(value)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return ""
+	}
+	return ip.String()
 }
 
 // CheckRateLimit checks request rate limits
@@ -357,7 +419,9 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 		keyIdentifier = sh.claims.Subject
 	} else {
 		limit = sh.appServices.Config.MaxUnauthReqPerMin
-		keyIdentifier = ClientIP(sh.r)
+		keyIdentifier = anonRateIdentifier(
+			sh.r, sh.appServices.Config.TrustedProxyCount,
+		)
 	}
 
 	currentMinute := time.Now().Minute()
@@ -409,7 +473,10 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 		rateKey = fmt.Sprintf("RPM*%s*%d", sh.claims.Subject, currentMinute)
 		limit = sh.appServices.Config.MaxUserReqPerMin
 	} else {
-		rateKey = fmt.Sprintf("RPM*%s*%d", ClientIP(sh.r), currentMinute)
+		anonIdentifier := anonRateIdentifier(
+			sh.r, sh.appServices.Config.TrustedProxyCount,
+		)
+		rateKey = fmt.Sprintf("RPM*%s*%d", anonIdentifier, currentMinute)
 		limit = sh.appServices.Config.MaxUnauthReqPerMin
 	}
 
@@ -456,34 +523,6 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 	return sh
 }
 
-// CheckUserBlocked checks if the user is blocked
-func (sh *AppHelper) CheckUserBlocked() *AppHelper {
-	if sh.blocked || sh.claims == nil {
-		return sh
-	}
-
-	blockedKey := "BLOCKED*" + sh.claims.Subject
-	blockedValue, err := sh.appServices.KV.Get(blockedKey)
-	if err != nil {
-		sh.appServices.Logger.Error("UBK0",
-			"Blocked-status check failed: "+err.Error())
-		sh.failAndRespond(http.StatusInternalServerError, "User block check failed")
-		return sh
-	}
-
-	if blockedValue != "" {
-		// Key exists, user is blocked
-		sh.appServices.Logger.Warn(
-			"UBK0",
-			"User is blocked: "+sh.claims.Subject,
-		)
-		sh.failAndRespond(http.StatusForbidden, "User account is blocked")
-		return sh
-	}
-
-	return sh
-}
-
 // CheckCSRF validates the CSRF token
 func (sh *AppHelper) CheckCSRF() *AppHelper {
 	sh.csrfChecked = true
@@ -505,7 +544,7 @@ func (sh *AppHelper) CheckCSRF() *AppHelper {
 
 	csrfToken := sh.r.Header.Get("X-CSRF-Token")
 	if csrfToken == "" {
-		sh.failAndRespond(http.StatusForbidden, "Missing CSRF token")
+		sh.refuseCSRF("Missing CSRF token")
 		return sh
 	}
 
@@ -516,15 +555,12 @@ func (sh *AppHelper) CheckCSRF() *AppHelper {
 
 	expectedToken := sh.claims.SessionID[len(sh.claims.SessionID)-3:]
 	if csrfToken != expectedToken {
-		// The expected value is deliberately NOT logged. It is a slice of the
-		// session ID, so logging it hands anyone with read access to the logs
-		// both the answer to this check and a piece of the session itself.
-		// The received value is enough to tell a stale tab from an attack.
-		sh.appServices.Logger.Warn(
-			"CSM0",
-			"CSRF token mismatch - received: "+csrfToken,
-		)
-		sh.failAndRespond(http.StatusForbidden, "CSRF validation failed")
+		// Neither token is logged. Both are slices of a session ID (the
+		// received one from a stale tab is an earlier session's), so logging
+		// either hands anyone with read access to the logs a piece of a
+		// session.
+		sh.appServices.Logger.Warn("CSM0", "CSRF token mismatch")
+		sh.refuseCSRF("CSRF validation failed")
 		return sh
 	}
 
@@ -658,4 +694,19 @@ func (sh *AppHelper) failAndRespond(statusCode int, reason string) {
 
 	sh.blocked = true
 	sh.WriteError(sh.w, statusCode, reason, "SECF", nil)
+}
+
+// refuseCSRF answers 403 with "code": "CSRF" beside the message: the web
+// client resyncs its token once on that code, never on the message text.
+func (sh *AppHelper) refuseCSRF(reason string) {
+	if sh.blocked {
+		return
+	}
+
+	sh.blocked = true
+	sh.appServices.Logger.Error("SECF", reason, "username", sh.username)
+	sh.WriteJSON(sh.w, http.StatusForbidden, map[string]string{
+		"error": reason,
+		"code":  "CSRF",
+	})
 }

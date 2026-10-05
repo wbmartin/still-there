@@ -1,131 +1,59 @@
-import pytest
-import time
+import requests
+
+
+ERROR_REPORT = {
+    "message": "Test error message",
+    "stack": "Error: Test error\n    at testFunction (test.js:10:5)",
+    "url": "https://example.com/test",
+}
 
 
 class TestErrorReporting:
-    """Testing of client-side error reporting functionality"""
+    """POST /error-report: a signed-in caller's client-side error, logged
+    with its username. Anonymous callers cannot write to the log."""
 
-    def test_error_report_endpoint_accepts_reports(self, test_client):
-        """Test that error reports are accepted and return success"""
-        error_data = {
-            "message": "Test error message",
-            "stack": "Error: Test error\n    at testFunction (test.js:10:5)",
-            "userAgent": "Mozilla/5.0 (Test Browser)",
-            "url": "https://example.com/test",
-            "timestamp": "2024-01-01T12:00:00.000Z"
-        }
+    def test_signed_in_report_is_accepted(self, test_client):
+        response = test_client.make_request(
+            "POST", "/error-report", json=ERROR_REPORT
+        )
+        assert response.status_code == 200, response.text
+        assert response.json() == {"status": "reported"}
 
-        # Error reporting should work without authentication (rate limited by IP)
-        response = test_client.make_request("POST", "/error-report", json=error_data)
-        # Admin may be rate limited if previous tests hit the limit
-        assert response.status_code in [200, 429]
+    def test_basic_user_can_report(self, basic_user_client):
+        response = basic_user_client.make_request(
+            "POST", "/error-report", json=ERROR_REPORT
+        )
+        assert response.status_code == 200, response.text
 
-        if response.status_code == 200:
-            data = response.json()
-            assert data == {"status": "reported"}
+    def test_no_session_is_401(self, test_client):
+        response = requests.post(
+            f"{test_client.base_url}/error-report",
+            json=ERROR_REPORT,
+            verify=False,
+        )
+        assert response.status_code == 401, response.text
 
-    def test_error_report_no_authentication_required(self, test_client):
-        """Test that error reports work without JWT tokens"""
-        # Remove authentication
-        original_jwt = test_client.jwt_token
-        test_client.jwt_token = None
-        test_client.session.cookies.clear()
+    def test_session_without_csrf_is_403(self, test_client):
+        response = test_client.session.post(
+            f"{test_client.base_url}/error-report", json=ERROR_REPORT
+        )
+        assert response.status_code == 403, response.text
 
-        error_data = {
-            "message": "Unauthenticated error report",
-            "userAgent": "Test Browser",
-            "url": "https://example.com/test",
-            "timestamp": "2024-01-01T12:00:00.000Z"
-        }
-
-        response = test_client.make_request("POST", "/error-report", json=error_data)
-        # Since no auth, may be rate limited by IP
-        assert response.status_code in [200, 429]
-
-        if response.status_code == 200:
-            data = response.json()
-            assert data == {"status": "reported"}
-
-        # Restore authentication for other tests
-        test_client.jwt_token = original_jwt
-
-    def test_error_report_truncation(self, test_client):
-        """Test that error reports over 2000 characters are truncated"""
-        # Create a report longer than 2000 characters
-        long_message = "A" * 2500  # 2500 characters
-        error_data = {
-            "message": long_message,
-            "stack": "Error: Long error\n    at longFunction (long.js:100:10)",
-            "userAgent": "Mozilla/5.0 (Long Browser)",
-            "url": "https://example.com/long-test",
-            "timestamp": "2024-01-01T12:00:00.000Z"
-        }
-
-        response = test_client.make_request("POST", "/error-report", json=error_data)
-        # Admin may be rate limited if previous tests hit the limit
-        assert response.status_code in [200, 429]
-
-        if response.status_code == 200:
-            data = response.json()
-            assert data == {"status": "reported"}
-
-        # The report should be truncated in the logs, but we can't easily verify that
-        # from the client side. The endpoint accepted it, which is what we can test.
-
-    def test_error_report_rate_limiting(self, basic_user_client):
-        """Test that error reports are subject to rate limiting"""
-        error_data = {
-            "message": "Rate limit test error",
-            "userAgent": "Mozilla/5.0 (Rate Test Browser)",
-            "url": "https://example.com/rate-test",
-            "timestamp": "2024-01-01T12:00:00.000Z"
-        }
-
-        # Make multiple rapid requests to potentially trigger rate limiting
-        responses = []
-        for i in range(15):  # Make more requests than typical rate limit
-            response = basic_user_client.make_request("POST", "/error-report", json=error_data)
-            responses.append(response.status_code)
-            if response.status_code == 429:  # Too Many Requests
-                break
-            time.sleep(0.01)  # Small delay between requests
-
-        # Rate limiting should trigger (429) or at least not fail
-        assert all(code in [200, 429] for code in responses), f"Unexpected status codes: {responses}"
-        # If rate limiting triggered, that's good
-        if 429 in responses:
-            assert True, "Rate limiting is working"
-        else:
-            assert 200 in responses, f"Expected some successful responses, got: {responses}"
-
-        # Note: Rate limiting might not trigger in test environment depending on
-        # configuration, so we just verify the endpoint accepts requests
-
-    def test_error_report_invalid_method(self, test_client):
-        """Test that GET requests to error-report endpoint are rejected"""
+    def test_get_is_405(self, test_client):
         response = test_client.make_request("GET", "/error-report")
-        assert response.status_code == 405  # Method Not Allowed
+        assert response.status_code == 405
 
-    def test_error_report_empty_body(self, test_client):
-        """Test that empty request bodies are handled gracefully"""
-        response = test_client.make_request("POST", "/error-report", data="")
-        # Should still return success since we handle empty/truncated reports
-        # Accept both success and rate limited
-        assert response.status_code in [200, 429]
+    def test_raw_body_is_logged_as_sent(self, test_client):
+        """The body is logged raw, not parsed: empty or non-JSON is fine."""
+        for body in ["", "invalid json {"]:
+            response = test_client.make_request(
+                "POST", "/error-report", data=body,
+                headers={"Content-Type": "application/json"},
+            )
+            assert response.status_code == 200, (body, response.text)
 
-        if response.status_code == 200:
-            data = response.json()
-            assert data == {"status": "reported"}
-
-    def test_error_report_malformed_json(self, test_client):
-        """Test that malformed JSON is handled gracefully"""
-        response = test_client.make_request("POST", "/error-report",
-            data="invalid json {",
-            headers={"Content-Type": "application/json"})
-        # Should still return success since we just log the raw body
-        # Accept both success and rate limited
-        assert response.status_code in [200, 429]
-
-        if response.status_code == 200:
-            data = response.json()
-            assert data == {"status": "reported"}
+    def test_over_8_kib_is_413(self, test_client):
+        response = test_client.make_request(
+            "POST", "/error-report", data="a" * (8 * 1024 + 1)
+        )
+        assert response.status_code == 413, response.text

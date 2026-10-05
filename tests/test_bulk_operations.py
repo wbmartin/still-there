@@ -2,6 +2,8 @@ import time
 
 import pytest
 
+from conftest import TEST_TENANT
+
 
 class TestBulkOperations:
     """Test bulk CRUD operations for performance and correctness"""
@@ -15,7 +17,6 @@ class TestBulkOperations:
                 "exampleFloat": float(i) * 1.5,
                 "exampleIntArray": [i, i + 1, i + 2],
                 "exampleFloatArray": [float(i), float(i) + 0.5],
-                "securityContext": 1,
             }
             for i in range(10)
         ]
@@ -33,7 +34,7 @@ class TestBulkOperations:
         for i, example in enumerate(created_examples):
             assert example["exampleText"] == f"Bulk Create Test {i}"
             assert example["exampleInt"] == i
-            assert example["securityContext"] == 1
+            assert example["securityContext"] == TEST_TENANT
 
     def test_bulk_retrieve_operations(self, test_client):
         """Test retrieving multiple examples by ID list"""
@@ -46,7 +47,6 @@ class TestBulkOperations:
                 json={
                     "exampleText": f"Bulk Retrieve Test {i}",
                     "exampleInt": i * 10,
-                    "securityContext": 1,
                 },
             )
             assert response.status_code == 201
@@ -85,7 +85,6 @@ class TestBulkOperations:
                 json={
                     "exampleText": f"Bulk Update Test {i}",
                     "exampleInt": i,
-                    "securityContext": 1,
                 },
             )
             assert response.status_code == 201
@@ -100,7 +99,6 @@ class TestBulkOperations:
                 "exampleId": example["exampleId"],
                 "exampleText": f"Updated {example['exampleText']}",
                 "exampleInt": example["exampleInt"] * 2,
-                "securityContext": 1,
                 "updateTs": example["updateTs"],
             }
             response = test_client.make_request("PUT", "/example", json=update_data)
@@ -125,7 +123,6 @@ class TestBulkOperations:
                 json={
                     "exampleText": f"Bulk Delete Test {i}",
                     "exampleInt": i * 100,
-                    "securityContext": 1,
                 },
             )
             assert response.status_code == 201
@@ -158,7 +155,7 @@ class TestBulkOperations:
             response = test_client.make_request(
                 "GET", "/example", params={"exampleId": example["exampleId"]}
             )
-            assert response.status_code == 410  # Gone
+            assert response.status_code == 404  # soft-deleted reads as missing
 
     def test_empty_bulk_operations(self, test_client):
         """Test bulk operations with empty or invalid inputs"""
@@ -181,7 +178,7 @@ class TestBulkOperations:
             response = test_client.make_request(
                 "POST",
                 "/example",
-                json={"exampleText": f"Partial Test {i}", "securityContext": 1},
+                json={"exampleText": f"Partial Test {i}"},
             )
             assert response.status_code == 201
             example = response.json()["data"]
@@ -205,7 +202,7 @@ class TestBulkOperations:
 
         # Should either fail completely or handle partial failures
         # The exact behavior depends on implementation
-        assert response.status_code in [200, 400, 409, 410]
+        assert response.status_code in [200, 400, 404, 409]
 
     def test_bulk_performance_under_load(self, test_client):
         """Test bulk operations performance with larger datasets"""
@@ -218,7 +215,6 @@ class TestBulkOperations:
                 json={
                     "exampleText": f"Performance Test {i}",
                     "exampleInt": i,
-                    "securityContext": 1,
                 },
             )
             assert response.status_code == 201

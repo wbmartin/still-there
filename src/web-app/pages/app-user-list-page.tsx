@@ -1,6 +1,16 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Table, Button, Title, Group, Pagination, Container, Loader, Alert } from "@mantine/core";
+import {
+  Table,
+  Button,
+  Title,
+  Group,
+  Pagination,
+  Container,
+  Loader,
+  Alert,
+  Badge,
+} from "@mantine/core";
 import { useAppUserStore } from "../stores/app-user-store";
 import { useAppUserGroupStore } from "../stores/app-user-group-store";
 import useAuthGuard from "../hooks/use-auth-guard";
@@ -9,6 +19,8 @@ import { confirmDelete } from "../utils/confirm-delete";
 import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import type { User } from "../types/user-type";
+import { SortTh } from "../components/sort-th";
+import { notifications } from "@mantine/notifications";
 import { reportError } from "../utils/report-error";
 
 function UserAdminPage() {
@@ -23,21 +35,32 @@ function UserAdminPage() {
     useAppUserGroupStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  // Page lives in the URL so a refresh or a shared link keeps its place.
-  const page = Math.max(1, Number(searchParams.get("page")) || 1);
-  const setPage = (nextPage: number) =>
+  // Page and sort live in the URL so a refresh or a shared link keeps its
+  // place. setListParams merges into the query string, so a parameter a
+  // derived page adds (a filter) survives a sort or a page change; an
+  // empty value removes its key.
+  const setListParams = (update: Record<string, string>) =>
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
-      if (nextPage > 1) next.set("page", String(nextPage));
-      else next.delete("page");
+      for (const [key, value] of Object.entries(update)) {
+        if (value) next.set(key, value);
+        else next.delete(key);
+      }
       return next;
     });
+  // As asked for; clamped to the last page once the list is known.
+  const requestedPage = Math.max(
+    1,
+    Math.floor(Number(searchParams.get("page"))) || 1,
+  );
+  const setPage = (nextPage: number) =>
+    setListParams({ page: nextPage > 1 ? String(nextPage) : "" });
   const itemsPerPage = useRowsPerPage();
   const hasFetched = useRef(false);
 
   // Sort state from URL params
   const sortColumn = searchParams.get("sort") || "appUserId";
-  const sortDirection = (searchParams.get("dir") || "asc") as "asc" | "desc";
+  const sortDirection = searchParams.get("dir") === "desc" ? "desc" : "asc";
 
   useEffect(() => {
     if (!hasFetched.current && authState === "YES") {
@@ -89,6 +112,9 @@ function UserAdminPage() {
   });
 
   const totalPageCount = Math.ceil(sortedUserList.length / itemsPerPage);
+  // A stale link, or deleting the last row of the last page, can ask for a
+  // page past the end: show the last page rather than an empty table.
+  const page = Math.min(requestedPage, Math.max(1, totalPageCount));
   const paginatedUserList = sortedUserList.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage,
@@ -103,8 +129,22 @@ function UserAdminPage() {
     if (user) {
       try {
         await deleteUser(user.appUserId, user.updateTs);
+        notifications.show({
+          title: "Success",
+          message: "User deleted successfully",
+          color: "green",
+          autoClose: 3000,
+          withCloseButton: false,
+        });
       } catch (error) {
         reportError(error, "deleting user");
+        notifications.show({
+          title: "Error",
+          message: "Failed to delete user",
+          color: "red",
+          autoClose: 5000,
+          withCloseButton: true,
+        });
       }
     }
   };
@@ -112,8 +152,8 @@ function UserAdminPage() {
   const handleSort = (column: string) => {
     const newDirection =
       sortColumn === column && sortDirection === "asc" ? "desc" : "asc";
-    // Dropping "page" resets to the first page
-    setSearchParams({ sort: column, dir: newDirection });
+    // A new order starts from the first page.
+    setListParams({ sort: column, dir: newDirection, page: "" });
   };
 
   return (
@@ -131,37 +171,36 @@ function UserAdminPage() {
       <Table>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("appUserId")}
-            >
-              ID{" "}
-              {sortColumn === "appUserId" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("userName")}
-            >
-              Username{" "}
-              {sortColumn === "userName" &&
-                (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("name")}
-            >
-              Name{" "}
-              {sortColumn === "name" && (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
-            <Table.Th
-              className="sortable-column"
-              onClick={() => handleSort("email")}
-            >
-              Email{" "}
-              {sortColumn === "email" && (sortDirection === "asc" ? "↑" : "↓")}
-            </Table.Th>
+            <SortTh
+              label="ID"
+              column="appUserId"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Username"
+              column="userName"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Name"
+              column="name"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortTh
+              label="Email"
+              column="email"
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+            />
             <Table.Th>Groups</Table.Th>
+            <Table.Th>Status</Table.Th>
             <Table.Th>Actions</Table.Th>
           </Table.Tr>
         </Table.Thead>
@@ -178,6 +217,15 @@ function UserAdminPage() {
                 {user.appUserGroupMembershipList
                   .map((id) => getGroupName(id))
                   .join(", ")}
+              </Table.Td>
+              <Table.Td>
+                {user.accountStatus === "blocked" ? (
+                  <Badge color="red" variant="light">Blocked</Badge>
+                ) : user.accountStatus === "invited" ? (
+                  <Badge color="blue" variant="light">Invited</Badge>
+                ) : (
+                  <Badge color="gray" variant="light">Active</Badge>
+                )}
               </Table.Td>
               <Table.Td>
                 <Group gap="xs" wrap="nowrap">

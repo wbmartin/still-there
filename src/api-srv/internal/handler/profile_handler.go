@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/mail"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/wbmartin/starter-api/internal/app"
 	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
 )
 
@@ -25,13 +24,23 @@ type ProfileUpdateRequest struct {
 	UpdateTS        float64         `json:"updateTs"`
 }
 
+// ownProfileResponse is what GET and PUT /me return: the caller's own row
+// plus server settings the web app shapes its pages by.
+// AllowMFAExemptViaAPI mirrors the config key of that name (B097): when
+// false, POST /user and /userInvite refuse mfaExempt true and PUT /user
+// refuses turning it on, so the user edit page hides the checkbox.
+type ownProfileResponse struct {
+	model.AppUserOwnProfileModel
+	AllowMFAExemptViaAPI bool `json:"allowMfaExemptViaApi"`
+}
+
 // Bound on the preferences document; it is a handful of UI settings.
 const maxPreferenceBytes = 8 << 10
 
 // ProfileRepositoryInterface is the slice of the user repository /me needs.
 type ProfileRepositoryInterface interface {
-	RetrieveUserByID(
-		ctx context.Context, userID int, securityContext int,
+	RetrieveUserByUserName(
+		ctx context.Context, userName string,
 	) (*model.AppUserModel, error)
 	UpdateOwnProfile(
 		ctx context.Context, userID int, securityContext int,
@@ -56,35 +65,27 @@ func (h *ProfileHandler) RetrieveOwnProfile(
 	w http.ResponseWriter, r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "RetrieveOwnProfile")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantLogon)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "RetrieveOwnProfile")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantLogon)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("ME_RD_START", "RetrieveOwnProfile invoked")
-	jwtClaims := app.GetClaims()
+	appHelper.Info("ME_RD_START", "RetrieveOwnProfile invoked")
 
-	user, err := h.userRepo.RetrieveUserByID(
-		r.Context(), jwtClaims.UserID, jwtClaims.SecurityContext,
+	user, ok := h.retrieveOwnRow(appHelper, w, r, "ME_RD_FAIL")
+	if !ok {
+		return
+	}
+
+	appHelper.WriteJSON(
+		w, http.StatusOK, model.DataWrapper{Data: h.ownProfileOf(user)},
 	)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			app.WriteError(w, http.StatusNotFound, "User not found",
-				"NOT_FOUND", nil)
-			return
-		}
-		app.WriteError(w, http.StatusInternalServerError,
-			"Failed to retrieve profile", "ME_RD_FAIL", err)
-		return
-	}
-
-	app.WriteJSON(w, http.StatusOK, model.DataWrapper{Data: user})
-	app.Info("ME_RD_DONE", "RetrieveOwnProfile completed")
+	appHelper.Info("ME_RD_DONE", "RetrieveOwnProfile completed")
 }
 
 // UpdateOwnProfile handles PUT /me: first/last name, email and the
@@ -93,24 +94,22 @@ func (h *ProfileHandler) UpdateOwnProfile(
 	w http.ResponseWriter, r *http.Request,
 ) {
 	// Security checks
-	app := security.NewAppHelper(w, r, h.appsrv, "UpdateOwnProfile")
-	app.CheckJWT()
-	app.CheckRateLimitAndUserBlock()
-	app.CheckCSRF()
-	app.CheckAuthorization(model.GrantLogon)
+	appHelper := security.NewAppHelper(w, r, h.appsrv, "UpdateOwnProfile")
+	appHelper.CheckJWT()
+	appHelper.CheckRateLimitAndUserBlock()
+	appHelper.CheckCSRF()
+	appHelper.CheckAuthorization(model.GrantLogon)
 
-	if !app.CheckAllChecksComplete() {
+	if !appHelper.CheckAllChecksComplete() {
 		return
 	}
 
-	app.Info("ME_UP_START", "UpdateOwnProfile invoked")
-	jwtClaims := app.GetClaims()
+	appHelper.Info("ME_UP_START", "UpdateOwnProfile invoked")
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxAuthBodyBytes+maxPreferenceBytes)
 	var req ProfileUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.WriteError(w, http.StatusBadRequest, "Invalid request body",
-			"BAD_REQUEST", err)
+	if !decodeJSONBody(
+		appHelper, w, r, maxAuthBodyBytes+maxPreferenceBytes, &req,
+	) {
 		return
 	}
 
@@ -120,61 +119,96 @@ func (h *ProfileHandler) UpdateOwnProfile(
 	req.Email = strings.TrimSpace(req.Email)
 	switch {
 	case req.FirstName == "" || req.LastName == "":
-		app.WriteError(w, http.StatusBadRequest,
+		appHelper.WriteError(w, http.StatusBadRequest,
 			"firstName and lastName are required", "BAD_REQUEST", nil)
 		return
-	case len(req.FirstName) > 200 || len(req.LastName) > 200 || len(req.Email) > 200:
-		app.WriteError(w, http.StatusBadRequest,
+	case utf8.RuneCountInString(req.FirstName) > 200 ||
+		utf8.RuneCountInString(req.LastName) > 200 ||
+		utf8.RuneCountInString(req.Email) > 200:
+		appHelper.WriteError(w, http.StatusBadRequest,
 			"firstName, lastName and email are at most 200 characters",
 			"BAD_REQUEST", nil)
 		return
 	case !isPlainEmailAddress(req.Email):
-		app.WriteError(w, http.StatusBadRequest, "email is not valid",
+		appHelper.WriteError(w, http.StatusBadRequest, "email is not valid",
 			"BAD_REQUEST", nil)
 		return
 	case req.UpdateTS == 0:
-		app.WriteError(w, http.StatusBadRequest, "updateTs is required",
+		appHelper.WriteError(w, http.StatusBadRequest, "updateTs is required",
 			"BAD_REQUEST", nil)
 		return
 	case !isPreferenceDocument(req.PreferenceJSONB):
-		app.WriteError(w, http.StatusBadRequest,
+		appHelper.WriteError(w, http.StatusBadRequest,
 			"preferenceJsonb must be a JSON object of at most 8 KiB",
 			"BAD_REQUEST", nil)
 		return
 	}
 
+	user, ok := h.retrieveOwnRow(appHelper, w, r, "ME_UP_FAIL")
+	if !ok {
+		return
+	}
+
+	// The row's own tenant, not the session's: after a context switch the
+	// JWT names another tenant while the row stays home.
 	_, err := h.userRepo.UpdateOwnProfile(
-		r.Context(), jwtClaims.UserID, jwtClaims.SecurityContext,
+		r.Context(), user.AppUserID, user.SecurityContext,
 		req.FirstName, req.LastName, req.Email, req.PreferenceJSONB,
 		req.UpdateTS,
 	)
 	if err != nil {
-		switch {
-		case errors.Is(err, repository.ErrConflict):
-			app.WriteError(w, http.StatusConflict,
-				"Profile was modified by another request; reload and retry",
-				"CONFLICT", nil)
-		case errors.Is(err, repository.ErrNotFound):
-			app.WriteError(w, http.StatusNotFound, "User not found",
-				"NOT_FOUND", nil)
-		default:
-			app.WriteError(w, http.StatusInternalServerError,
-				"Failed to update profile", "ME_UP_FAIL", err)
-		}
+		mapRepoError(
+			appHelper, w, err, "Failed to update profile", "ME_UP_FAIL",
+		)
 		return
 	}
 
 	// Return the row as stored so the client's next PUT carries the lock.
-	user, err := h.userRepo.RetrieveUserByID(
-		r.Context(), jwtClaims.UserID, jwtClaims.SecurityContext,
-	)
+	user, err = h.userRepo.RetrieveUserByUserName(r.Context(), user.UserName)
 	if err != nil {
-		app.WriteError(w, http.StatusInternalServerError,
+		appHelper.WriteError(w, http.StatusInternalServerError,
 			"Profile updated but could not be re-read", "ME_UP_FAIL", err)
 		return
 	}
-	app.WriteJSON(w, http.StatusOK, model.DataWrapper{Data: user})
-	app.Info("ME_UP_DONE", "UpdateOwnProfile completed")
+	appHelper.WriteJSON(
+		w, http.StatusOK, model.DataWrapper{Data: h.ownProfileOf(user)},
+	)
+	appHelper.Info("ME_UP_DONE", "UpdateOwnProfile completed")
+}
+
+// ownProfileOf is the /me answer for the caller's row.
+func (h *ProfileHandler) ownProfileOf(
+	user *model.AppUserModel,
+) ownProfileResponse {
+	return ownProfileResponse{
+		AppUserOwnProfileModel: user.OwnProfile(),
+		AllowMFAExemptViaAPI:   h.appsrv.Config.AllowMFAExemptViaAPI,
+	}
+}
+
+// retrieveOwnRow reads the caller's row by the JWT's subject. user_name is
+// unique installation-wide, so the read is tenant-free: a user's row stays
+// in its home tenant while /changeSecurityContext moves the JWT to another.
+// A row whose id is not the JWT's uid is a session for someone else: 401,
+// nothing written.
+func (h *ProfileHandler) retrieveOwnRow(
+	app *security.AppHelper, w http.ResponseWriter, r *http.Request,
+	failCode string,
+) (*model.AppUserModel, bool) {
+	jwtClaims := app.GetClaims()
+	user, err := h.userRepo.RetrieveUserByUserName(
+		r.Context(), jwtClaims.Subject,
+	)
+	if err != nil {
+		mapRepoError(app, w, err, "Failed to retrieve profile", failCode)
+		return nil, false
+	}
+	if user.AppUserID != jwtClaims.UserID {
+		app.WriteError(w, http.StatusUnauthorized,
+			"Session does not match the user", "SESSION_MISMATCH", nil)
+		return nil, false
+	}
+	return user, true
 }
 
 // isPlainEmailAddress accepts "user@host" forms only, not "Name <user@host>".

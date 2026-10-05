@@ -58,7 +58,7 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserByUserName() {
 		FirstName:                  "Test",
 		LastName:                   "User",
 		Email:                      "test@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1}, // Assuming group 1 exists
 		MFAExempt:                  false,
 		CreateTS:                   1234567890.123,
@@ -67,7 +67,7 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserByUserName() {
 		UpdateUserID:               1,
 	}
 
-	created, err := s.repo.CreateUser(context.Background(), testUser, 1)
+	created, err := s.repo.CreateUser(context.Background(), testUser, testTenant)
 	s.NoError(err)
 	s.NotNil(created)
 
@@ -81,7 +81,7 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserByUserName() {
 	s.Equal(testUserName, user.UserName)
 	s.Equal("User", user.LastName)
 	s.Equal("test@example.com", user.Email)
-	s.Equal(1, user.SecurityContext)
+	s.Equal(testTenant, user.SecurityContext)
 	s.False(user.MFAExempt)
 	s.NotNil(user.AppUserGroupMembershipList)
 	s.True(len(user.AppUserGroupMembershipList) > 0)
@@ -97,7 +97,7 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserByUserNameNotFound() {
 	)
 	s.Error(err)
 	s.Nil(user)
-	s.Contains(err.Error(), "user not found")
+	s.ErrorIs(err, ErrNotFound, "/auth tells not-found from an outage")
 }
 
 func (s *UserRepositoryTestSuite) TestGetGrantsForGroups() {
@@ -117,11 +117,8 @@ func (s *UserRepositoryTestSuite) TestGetGrantsForGroups() {
 		existingGroupIDList = append(existingGroupIDList, id)
 	}
 
-	if len(existingGroupIDList) == 0 {
-		// No groups in database, skip this test
-		s.T().Skip("No user groups found in database - skipping grants test")
-		return
-	}
+	// The seed has groups; none means the fixture broke, not a pass.
+	s.Require().NotEmpty(existingGroupIDList, "no seeded user groups")
 
 	// Test retrieving grants for existing groups
 	grantsMap, err := s.repo.GetGrantsForGroups(
@@ -168,7 +165,7 @@ func (s *UserRepositoryTestSuite) TestCreateUser() {
 		FirstName:                  "Test",
 		LastName:                   "User",
 		Email:                      "test@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1}, // Assuming group 1 exists
 		MFAExempt:                  false,
 		CreateTS:                   1234567890.123,
@@ -177,7 +174,7 @@ func (s *UserRepositoryTestSuite) TestCreateUser() {
 		UpdateUserID:               1,
 	}
 
-	created, err := s.repo.CreateUser(context.Background(), user, 1)
+	created, err := s.repo.CreateUser(context.Background(), user, testTenant)
 	s.NoError(err)
 	s.NotNil(created)
 	s.NotZero(created.AppUserID)
@@ -195,7 +192,7 @@ func (s *UserRepositoryTestSuite) TestCreateUserInvalidUsername() {
 		FirstName:                  "Test",
 		LastName:                   "User",
 		Email:                      "test@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1},
 		MFAExempt:                  false,
 		CreateTS:                   1234567890.123,
@@ -204,12 +201,16 @@ func (s *UserRepositoryTestSuite) TestCreateUserInvalidUsername() {
 		UpdateUserID:               1,
 	}
 
-	created, err := s.repo.CreateUser(context.Background(), user, 1)
+	created, err := s.repo.CreateUser(context.Background(), user, testTenant)
 	s.Error(err)
 	s.Nil(created)
-	s.Contains(
-		err.Error(),
-		"username must contain only alphanumeric characters, hyphens, and underscores",
+	s.ErrorIs(err, ErrValidation)
+	var clientErr *ClientMessageError
+	s.Require().ErrorAs(err, &clientErr)
+	s.Equal(
+		"username must contain only alphanumeric characters, "+
+			"hyphens, and underscores",
+		clientErr.Message,
 	)
 }
 
@@ -221,7 +222,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserPassword() {
 		FirstName:                  "Password",
 		LastName:                   "Test",
 		Email:                      "password@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1},
 		MFAExempt:                  false,
 		CreateTS:                   1234567890.123,
@@ -230,7 +231,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserPassword() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user, 1)
+	created, _ := s.repo.CreateUser(context.Background(), user, testTenant)
 
 	// Update password
 	newHash := "$2a$10$new.hash.for.testing"
@@ -240,6 +241,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserPassword() {
 		newHash,
 		1234567891.456,
 		2,
+		testTenant,
 	)
 	s.NoError(err)
 
@@ -259,9 +261,9 @@ func (s *UserRepositoryTestSuite) TestUpdateUserPasswordNotFound() {
 		"newhash",
 		1234567890.123,
 		1,
+		testTenant,
 	)
-	s.Error(err)
-	s.Contains(err.Error(), "user not found")
+	s.ErrorIs(err, ErrNotFound)
 }
 
 func (s *UserRepositoryTestSuite) TestRemoveDuplicates() {
@@ -290,7 +292,7 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserList() {
 		FirstName:                  "List",
 		LastName:                   "User1",
 		Email:                      "list1@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1},
 		MFAExempt:                  false,
 		CreateTS:                   1234567890.123,
@@ -299,10 +301,10 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserList() {
 		UpdateUserID:               1,
 	}
 
-	created1, _ := s.repo.CreateUser(context.Background(), user1, 1)
+	created1, _ := s.repo.CreateUser(context.Background(), user1, testTenant)
 
-	// Test retrieve all users in security context 1
-	users, err := s.repo.RetrieveUserList(context.Background(), 1, nil, 0)
+	// Test retrieve all users in the test tenant
+	users, err := s.repo.RetrieveUserList(context.Background(), testTenant, nil, 0)
 	s.NoError(err)
 	s.NotNil(users)
 	s.True(len(users) >= 1) // At least our test user
@@ -318,7 +320,7 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserList() {
 	idList := []int{created1.AppUserID}
 	specificUsers, err := s.repo.RetrieveUserList(
 		context.Background(),
-		1,
+		testTenant,
 		idList,
 		0,
 	)
@@ -329,7 +331,7 @@ func (s *UserRepositoryTestSuite) TestRetrieveUserList() {
 	futureTs := 2000000000.0
 	filteredUsers, err := s.repo.RetrieveUserList(
 		context.Background(),
-		1,
+		testTenant,
 		nil,
 		futureTs,
 	)
@@ -345,7 +347,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserTOTPSeed() {
 		FirstName:                  "TOTP",
 		LastName:                   "User",
 		Email:                      "totp@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1},
 		MFAExempt:                  false,
 		CreateTS:                   1234567890.123,
@@ -354,7 +356,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserTOTPSeed() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user, 1)
+	created, _ := s.repo.CreateUser(context.Background(), user, testTenant)
 
 	// Update TOTP seed
 	newSeed := "JBSWY3DPEHPK3PXP"
@@ -365,6 +367,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserTOTPSeed() {
 		newSeed,
 		expectedUpdateTS,
 		2,
+		testTenant,
 	)
 	s.NoError(err)
 	s.Greater(newUpdateTS, expectedUpdateTS)
@@ -383,9 +386,9 @@ func (s *UserRepositoryTestSuite) TestUpdateUserTOTPSeed() {
 		"newseed",
 		expectedUpdateTS,
 		2,
+		testTenant,
 	)
-	s.Error(err)
-	s.Contains(err.Error(), "user not found or concurrent modification")
+	s.ErrorIs(err, ErrConflict)
 
 	// Test update non-existent user
 	_, err = s.repo.UpdateUserTOTPSeed(
@@ -394,9 +397,66 @@ func (s *UserRepositoryTestSuite) TestUpdateUserTOTPSeed() {
 		"seed",
 		1234567890.123,
 		2,
+		testTenant,
 	)
-	s.Error(err)
-	s.Contains(err.Error(), "user not found or concurrent modification")
+	s.ErrorIs(err, ErrNotFound)
+}
+
+// B034: a login is created active; active -> blocked -> active, never from
+// another state or another tenant; and the blocked list the API reloads
+// into the KV at start.
+func (s *UserRepositoryTestSuite) TestUpdateUserAccountStatus() {
+	ctx := context.Background()
+	user := &model.AppUserModel{
+		UserName: "RepoTestBlockUser", PwHash: "$2a$10$test.hash",
+		FirstName: "Block", LastName: "User", Email: "block@example.com",
+		SecurityContext: testTenant, AppUserGroupMembershipList: []int{1},
+		CreateTS: 1234567890.123, CreateUserID: 1,
+		UpdateTS: 1234567890.123, UpdateUserID: 1,
+	}
+	created, err := s.repo.CreateUser(ctx, user, testTenant)
+	s.Require().NoError(err)
+	read, err := s.repo.RetrieveUserByUserName(ctx, "RepoTestBlockUser")
+	s.Require().NoError(err)
+	s.Equal(model.AccountStatusActive, read.AccountStatus)
+
+	// unblocking an active login touches nothing
+	_, err = s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		model.AccountStatusActive, created.UpdateTS, 2, testTenant)
+	s.ErrorIs(err, ErrConflict)
+
+	// another tenant's context finds no row
+	_, err = s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		model.AccountStatusBlocked, created.UpdateTS, 2, otherTenant)
+	s.ErrorIs(err, ErrNotFound)
+
+	blockedTS, err := s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		model.AccountStatusBlocked, created.UpdateTS, 2, testTenant)
+	s.Require().NoError(err)
+	userList, err := s.repo.RetrieveUserList(ctx, testTenant,
+		[]int{created.AppUserID}, 0)
+	s.Require().NoError(err)
+	s.Require().Len(userList, 1)
+	s.Equal(model.AccountStatusBlocked, userList[0].AccountStatus)
+	blockedList, err := s.repo.RetrieveBlockedUserNameList(ctx)
+	s.Require().NoError(err)
+	s.Contains(blockedList, "RepoTestBlockUser")
+
+	// a stale update_ts is a conflict
+	_, err = s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		model.AccountStatusActive, created.UpdateTS, 2, testTenant)
+	s.ErrorIs(err, ErrConflict)
+
+	_, err = s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		model.AccountStatusActive, blockedTS, 2, testTenant)
+	s.Require().NoError(err)
+	blockedList, err = s.repo.RetrieveBlockedUserNameList(ctx)
+	s.Require().NoError(err)
+	s.NotContains(blockedList, "RepoTestBlockUser")
+
+	_, err = s.repo.UpdateUserAccountStatus(ctx, created.AppUserID,
+		"invited", blockedTS, 2, testTenant)
+	s.ErrorIs(err, ErrValidation)
 }
 
 func (s *UserRepositoryTestSuite) TestUpdateUserMFAExempt() {
@@ -407,7 +467,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserMFAExempt() {
 		FirstName:                  "MFA",
 		LastName:                   "User",
 		Email:                      "mfa@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1},
 		MFAExempt:                  false,
 		CreateTS:                   1234567890.123,
@@ -416,7 +476,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserMFAExempt() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user, 1)
+	created, _ := s.repo.CreateUser(context.Background(), user, testTenant)
 
 	// Update MFA exempt to true
 	expectedUpdateTS := created.UpdateTS
@@ -426,6 +486,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUserMFAExempt() {
 		true,
 		expectedUpdateTS,
 		2,
+		testTenant,
 	)
 	s.NoError(err)
 	s.Greater(newUpdateTS, expectedUpdateTS)
@@ -444,9 +505,9 @@ func (s *UserRepositoryTestSuite) TestUpdateUserMFAExempt() {
 		false,
 		expectedUpdateTS,
 		2,
+		testTenant,
 	)
-	s.Error(err)
-	s.Contains(err.Error(), "user not found or concurrent modification")
+	s.ErrorIs(err, ErrConflict)
 }
 
 func (s *UserRepositoryTestSuite) TestUpdateUser() {
@@ -457,7 +518,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUser() {
 		FirstName:                  "Update",
 		LastName:                   "User",
 		Email:                      "update@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1},
 		MFAExempt:                  false,
 		CreateTS:                   1234567890.123,
@@ -466,7 +527,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUser() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user, 1)
+	created, _ := s.repo.CreateUser(context.Background(), user, testTenant)
 
 	// Update user details
 	updatedUser := &model.AppUserModel{
@@ -485,7 +546,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUser() {
 		context.Background(),
 		updatedUser,
 		created.UpdateTS,
-		1,
+		testTenant,
 	)
 	s.NoError(err)
 
@@ -505,7 +566,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUser() {
 		context.Background(),
 		updatedUser,
 		created.UpdateTS,
-		1,
+		testTenant,
 	)
 	s.Error(err)
 	s.Equal(ErrConflict, err)
@@ -520,7 +581,7 @@ func (s *UserRepositoryTestSuite) TestUpdateUser() {
 		context.Background(),
 		nonExistent,
 		1234567890.123,
-		1,
+		testTenant,
 	)
 	s.Error(err)
 	s.Equal(ErrNotFound, err)
@@ -534,7 +595,7 @@ func (s *UserRepositoryTestSuite) TestDeleteUser() {
 		FirstName:                  "Delete",
 		LastName:                   "User",
 		Email:                      "delete@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1},
 		MFAExempt:                  false,
 		CreateTS:                   1234567890.123,
@@ -543,14 +604,14 @@ func (s *UserRepositoryTestSuite) TestDeleteUser() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user, 1)
+	created, _ := s.repo.CreateUser(context.Background(), user, testTenant)
 
 	// Delete user
 	deleteTS := 1234567892.789
 	deletedID, err := s.repo.DeleteUser(
 		context.Background(),
 		created.AppUserID,
-		1,
+		testTenant,
 		created.UpdateTS,
 		deleteTS,
 		2,
@@ -573,14 +634,15 @@ func (s *UserRepositoryTestSuite) TestDeleteUser() {
 		"newhash",
 		1234567890.123,
 		2,
+		testTenant,
 	)
-	s.Error(err) // Should fail because user is deleted
+	s.ErrorIs(err, ErrNotFound) // the user is deleted
 
 	// Test delete non-existent user
 	_, err = s.repo.DeleteUser(
 		context.Background(),
 		99999,
-		1,
+		testTenant,
 		1234567890.123,
 		deleteTS,
 		2,
@@ -597,16 +659,16 @@ func (s *UserRepositoryTestSuite) TestAddUserListToGroup() {
 		FirstName:                  "Group",
 		LastName:                   "User1",
 		Email:                      "group1@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{}, // Start with no groups
 		MFAExempt:                  false,
-		CreateTS:                   CurrentTimestamp(),
+		CreateTS:                   model.Now(),
 		CreateUserID:               1,
-		UpdateTS:                   CurrentTimestamp(),
+		UpdateTS:                   model.Now(),
 		UpdateUserID:               1,
 	}
 
-	created1, _ := s.repo.CreateUser(context.Background(), user1, 1)
+	created1, _ := s.repo.CreateUser(context.Background(), user1, testTenant)
 
 	// Verify user starts with empty group membership
 	var groups1 []int
@@ -615,7 +677,7 @@ func (s *UserRepositoryTestSuite) TestAddUserListToGroup() {
 	s.Equal([]int{}, groups1)
 
 	// Use the update timestamp from the created user object
-	testGroupID := 3 // Use group 3 which should exist in security context 1
+	testGroupID := 3 // Use group 3 which is the test tenant's (seed)
 	userIDs := []int{created1.AppUserID}
 	updateTSList := []float64{created1.UpdateTS}
 
@@ -625,7 +687,7 @@ func (s *UserRepositoryTestSuite) TestAddUserListToGroup() {
 		testGroupID,
 		updateTSList,
 		2,
-		1,
+		testTenant,
 	)
 	s.NoError(err)
 	s.Len(updatedUsers, 1)
@@ -642,7 +704,7 @@ func (s *UserRepositoryTestSuite) TestRemoveUserListFromGroup() {
 		FirstName:                  "Remove",
 		LastName:                   "User",
 		Email:                      "remove@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1, 2}, // Start with groups
 		MFAExempt:                  false,
 		CreateTS:                   1234567890.123,
@@ -651,7 +713,7 @@ func (s *UserRepositoryTestSuite) TestRemoveUserListFromGroup() {
 		UpdateUserID:               1,
 	}
 
-	created, _ := s.repo.CreateUser(context.Background(), user, 1)
+	created, _ := s.repo.CreateUser(context.Background(), user, testTenant)
 
 	// Remove user from group 1
 	updatedUsers, err := s.repo.RemoveUserListFromGroup(
@@ -660,7 +722,7 @@ func (s *UserRepositoryTestSuite) TestRemoveUserListFromGroup() {
 		1,
 		[]float64{created.UpdateTS},
 		2,
-		1,
+		testTenant,
 	)
 	s.NoError(err)
 	s.Len(updatedUsers, 1)
@@ -677,22 +739,13 @@ func (s *UserRepositoryTestSuite) TestRemoveUserListFromGroup() {
 		3,
 		[]float64{u.UpdateTS},
 		2,
-		1,
+		testTenant,
 	)
 	s.NoError(err)
 	s.Len(updatedUsers2, 1)
 }
 
-func (s *UserRepositoryTestSuite) TestCurrentTimestamp() {
-	ts1 := CurrentTimestamp()
-	time.Sleep(10 * time.Millisecond) // Longer delay to ensure difference
-	ts2 := CurrentTimestamp()
-
-	s.True(ts2 > ts1, "Second timestamp should be greater than first")
-	s.True(ts1 > 0, "Timestamp should be positive")
-}
-
-// GET/PUT /me round trip: read by id, narrow update of the profile columns
+// GET/PUT /me round trip: read by user name, narrow update of the profile columns
 // and the preferences document, optimistic lock, and nothing else touched.
 func (s *UserRepositoryTestSuite) TestOwnProfileRoundTrip() {
 	user := &model.AppUserModel{
@@ -701,28 +754,28 @@ func (s *UserRepositoryTestSuite) TestOwnProfileRoundTrip() {
 		FirstName:                  "Before",
 		LastName:                   "Change",
 		Email:                      "before@example.com",
-		SecurityContext:            1,
+		SecurityContext:            testTenant,
 		AppUserGroupMembershipList: []int{1},
 		CreateTS:                   1234567890.123,
 		CreateUserID:               1,
 		UpdateTS:                   1234567890.123,
 		UpdateUserID:               1,
 	}
-	created, err := s.repo.CreateUser(context.Background(), user, 1)
+	created, err := s.repo.CreateUser(context.Background(), user, testTenant)
 	s.Require().NoError(err)
 
-	read, err := s.repo.RetrieveUserByID(context.Background(), created.AppUserID, 1)
+	read, err := s.repo.RetrieveUserByUserName(context.Background(), user.UserName)
 	s.Require().NoError(err)
 	s.Equal("Before", read.FirstName)
 	s.Nil(read.PreferenceJSONB) // no preferences yet: SQL NULL
 
 	newTS, err := s.repo.UpdateOwnProfile(context.Background(),
-		created.AppUserID, 1, "After", "Changed", "after@example.com",
+		created.AppUserID, testTenant, "After", "Changed", "after@example.com",
 		json.RawMessage(`{"colorScheme": "dark", "rowsPerPage": 25}`), read.UpdateTS)
 	s.Require().NoError(err)
 	s.Greater(newTS, read.UpdateTS)
 
-	updated, err := s.repo.RetrieveUserByID(context.Background(), created.AppUserID, 1)
+	updated, err := s.repo.RetrieveUserByUserName(context.Background(), user.UserName)
 	s.Require().NoError(err)
 	s.Equal("After", updated.FirstName)
 	s.Equal("after@example.com", updated.Email)
@@ -734,11 +787,110 @@ func (s *UserRepositoryTestSuite) TestOwnProfileRoundTrip() {
 
 	// Stale lock → ErrConflict; wrong context → ErrNotFound.
 	_, err = s.repo.UpdateOwnProfile(context.Background(),
-		created.AppUserID, 1, "X", "Y", "x@y.z", nil, read.UpdateTS)
+		created.AppUserID, testTenant, "X", "Y", "x@y.z", nil, read.UpdateTS)
 	s.ErrorIs(err, ErrConflict)
 	_, err = s.repo.UpdateOwnProfile(context.Background(),
 		created.AppUserID, 999, "X", "Y", "x@y.z", nil, newTS)
 	s.ErrorIs(err, ErrNotFound)
-	_, err = s.repo.RetrieveUserByID(context.Background(), created.AppUserID, 999)
+	_, err = s.repo.RetrieveUserByUserName(context.Background(), "NoSuchUser")
 	s.ErrorIs(err, ErrNotFound)
+}
+
+// otherTenantUser creates a live user in otherTenant, never the caller's.
+func (s *UserRepositoryTestSuite) otherTenantUser(
+	userName string,
+) *model.AppUserModel {
+	user := &model.AppUserModel{
+		UserName:                   userName,
+		PwHash:                     "$2a$10$other.tenant.hash",
+		FirstName:                  "Other",
+		LastName:                   "Tenant",
+		Email:                      "other@example.com",
+		SecurityContext:            otherTenant,
+		AppUserGroupMembershipList: []int{},
+		CreateTS:                   model.Now(),
+		CreateUserID:               1,
+		UpdateTS:                   model.Now(),
+		UpdateUserID:               1,
+	}
+	created, err := s.repo.CreateUser(context.Background(), user, otherTenant)
+	s.Require().NoError(err)
+	return created
+}
+
+// Another tenant's id, even with its real update_ts, reads as absent from
+// every write: ErrNotFound (404), never ErrConflict (409), and the row is
+// untouched.
+func (s *UserRepositoryTestSuite) TestUserWriteOtherSecurityContextIsNotFound() {
+	ctx := context.Background()
+	other := s.otherTenantUser("RepoTestOtherCtxUser")
+
+	err := s.repo.UpdateUser(ctx, &model.AppUserModel{
+		AppUserID: other.AppUserID, UserName: "RepoTestOtherCtxRenamed",
+		AppUserGroupMembershipList: []int{}, UpdateTS: model.Now(),
+		UpdateUserID: 1,
+	}, other.UpdateTS, testTenant)
+	s.ErrorIs(err, ErrNotFound)
+
+	_, err = s.repo.DeleteUser(
+		ctx, other.AppUserID, testTenant, other.UpdateTS, model.Now(), 1)
+	s.ErrorIs(err, ErrNotFound)
+
+	err = s.repo.UpdateUserPassword(
+		ctx, other.AppUserID, "changed", model.Now(), 1, testTenant)
+	s.ErrorIs(err, ErrNotFound)
+	_, err = s.repo.UpdateUserTOTPSeed(
+		ctx, other.AppUserID, "SEED", other.UpdateTS, 1, testTenant)
+	s.ErrorIs(err, ErrNotFound)
+	_, err = s.repo.UpdateUserMFASetup(
+		ctx, other.AppUserID, true, other.UpdateTS, 1, testTenant)
+	s.ErrorIs(err, ErrNotFound)
+	_, err = s.repo.UpdateUserMFAExempt(
+		ctx, other.AppUserID, true, other.UpdateTS, 1, testTenant)
+	s.ErrorIs(err, ErrNotFound)
+
+	_, err = s.repo.AddUserListToGroup(ctx, []int{other.AppUserID}, 1,
+		[]float64{other.UpdateTS}, 1, testTenant)
+	s.ErrorIs(err, ErrConflict)
+
+	unchanged, err := s.repo.RetrieveUserByUserName(ctx, other.UserName)
+	s.Require().NoError(err)
+	s.Equal(other.UserName, unchanged.UserName)
+	s.Equal(other.PwHash, unchanged.PwHash)
+	s.Equal(other.UpdateTS, unchanged.UpdateTS)
+	s.Empty(unchanged.AppUserGroupMembershipList)
+
+	// The row's own tenant still writes.
+	_, err = s.repo.DeleteUser(
+		ctx, other.AppUserID, otherTenant, other.UpdateTS, model.Now(), 1)
+	s.NoError(err)
+}
+
+// A stale update_ts on a membership write is a conflict (409), not a 500.
+func (s *UserRepositoryTestSuite) TestMembershipWriteStaleUpdateTSIsConflict() {
+	ctx := context.Background()
+	user := &model.AppUserModel{
+		UserName:                   "RepoTestStaleMembership",
+		PwHash:                     "$2a$10$test.hash",
+		SecurityContext:            testTenant,
+		AppUserGroupMembershipList: []int{1},
+		CreateTS:                   model.Now(),
+		CreateUserID:               1,
+		UpdateTS:                   model.Now(),
+		UpdateUserID:               1,
+	}
+	created, err := s.repo.CreateUser(ctx, user, testTenant)
+	s.Require().NoError(err)
+	staleTS := created.UpdateTS - 1
+
+	_, err = s.repo.AddUserListToGroup(ctx, []int{created.AppUserID}, 3,
+		[]float64{staleTS}, 1, testTenant)
+	s.ErrorIs(err, ErrConflict)
+	_, err = s.repo.RemoveUserListFromGroup(ctx, []int{created.AppUserID}, 1,
+		[]float64{staleTS}, 1, testTenant)
+	s.ErrorIs(err, ErrConflict)
+
+	unchanged, err := s.repo.RetrieveUserByUserName(ctx, user.UserName)
+	s.Require().NoError(err)
+	s.Equal([]int{1}, unchanged.AppUserGroupMembershipList)
 }

@@ -15,7 +15,7 @@ import {
 } from "@mantine/core";
 import { IconCopy, IconCheck } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { apiJson, jsonBody } from "../utils/api";
+import { apiJson, isApiStatus, jsonBody } from "../utils/api";
 import { API_ENDPOINTS } from "../constants/api";
 import { useAuthStore } from "../stores/auth-store";
 import { ROUTES } from "../constants/routes";
@@ -28,25 +28,24 @@ function MFAOnboardingPage() {
   const [totpCode, setTotpCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [mfaAlreadySetup, setMfaAlreadySetup] = useState(false);
   const navigate = useNavigate();
-  const { tempToken } = useAuthStore();
+  const { tempToken, mfaEnrolled } = useAuthStore();
+  // An enrolled user only verifies: /mfaSetup is never asked, and it would
+  // refuse them anyway.
+  const [mfaAlreadySetup, setMfaAlreadySetup] = useState(mfaEnrolled);
   const hasFetched = useRef(false);
 
   useEffect(() => {
-    if (!tempToken || hasFetched.current) return;
+    if (!tempToken || mfaAlreadySetup || hasFetched.current) return;
     hasFetched.current = true;
 
     const fetchSetup = async () => {
       setLoading(true);
       try {
-        // anonymous: this runs on a temp token, before there is a session
+        // A temp token, not a session: anonymous, so a refusal here does
+        // not touch the session.
         const data = await apiJson<{
-          data: {
-            secret: string;
-            qrCodeImage: string;
-            mfaAlreadySetup: boolean;
-          };
+          data: { secret: string; qrCodeImage: string };
         }>(
           API_ENDPOINTS.MFA_SETUP,
           { method: "POST", ...jsonBody({ tempToken }) },
@@ -54,8 +53,13 @@ function MFAOnboardingPage() {
         );
         setSecret(data.data.secret);
         setQrCodeImage(data.data.qrCodeImage);
-        setMfaAlreadySetup(data.data.mfaAlreadySetup || false);
       } catch (err) {
+        // 409: enrolled after all (the login answer was stale); ask for
+        // the code.
+        if (isApiStatus(err, 409)) {
+          setMfaAlreadySetup(true);
+          return;
+        }
         notifications.show({
           title: "Error",
           message: err instanceof Error ? err.message : "Unknown error",
@@ -67,7 +71,7 @@ function MFAOnboardingPage() {
     };
 
     void fetchSetup();
-  }, [tempToken, hasFetched]);
+  }, [tempToken, mfaAlreadySetup]);
 
   // ^^^^^^^^^^^^^^^^^^^^^^^^ Hook Line  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

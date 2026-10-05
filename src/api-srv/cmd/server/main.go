@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -40,12 +42,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	// In-process key-value store (rate limits, lockouts, MFA temp tokens)
+	// In-process key-value store (rate limits, lockouts, MFA temp tokens,
+	// session revocations)
 	kv := cache.NewKV()
 	defer kv.Close()
 
 	// slog to stderr; systemd captures it into journald
-	logger := logging.NewLogger(config.ServerName, os.Stderr)
+	logger := logging.NewLogger(
+		config.ServerName, os.Stderr, config.LogLevel,
+	)
 	logger.Info("SERVER_INIT", "Starting API server", "username", "app-root")
 
 	// Initialize database
@@ -71,6 +76,7 @@ func main() {
 	userRepo := repository.NewUserRepository(dbPool)
 	appUserGroupRepo := repository.NewAppUserGroupRepository(dbPool)
 	exampleRepo := repository.NewExampleRepository(dbPool)
+	userInviteRepository := repository.NewUserInviteRepository(dbPool)
 
 	// Initialize app dependencies
 	appServices := &app.Services{
@@ -78,6 +84,21 @@ func main() {
 		Config: config,
 		Logger: logger,
 	}
+
+	// The KV is in-process, so a start has no block flags: put every blocked
+	// login's back before the first request (B034, user_block_handler.go).
+	blockedUserNameList, err := userRepo.RetrieveBlockedUserNameList(
+		context.Background())
+	if err == nil {
+		err = handler.LoadBlockedUsers(appServices, blockedUserNameList)
+	}
+	if err != nil {
+		logger.Error("BLK_LOAD", "Failed to load blocked users: "+err.Error(),
+			"username", "app-root")
+		os.Exit(1)
+	}
+	logger.Info("BLK_LOAD", fmt.Sprintf("%d blocked login(s) flagged",
+		len(blockedUserNameList)), "username", "app-root")
 
 	// Initialize handlers
 	healthHandler := handler.HealthHandler(appServices)
@@ -107,6 +128,11 @@ func main() {
 	userSelfCreateHandler := handler.UserSelfCreateHandler(
 		appServices,
 		userRepo,
+	)
+	userInviteHandler := handler.NewUserInviteHandler(
+		appServices,
+		appUserGroupRepo,
+		userInviteRepository,
 	)
 	mfaSetupHandler := handler.MFASetupHandler(appServices, userRepo)
 	mfaVerifyHandler := handler.MFAVerifyHandler(appServices, userRepo)
@@ -153,6 +179,11 @@ func main() {
 	// User self-create (public)
 	mux.HandleFunc("POST /userSelfCreate", userSelfCreateHandler)
 
+	// Invite links (public half): read and redeem a link, no session
+	// (user_invite_handler.go)
+	mux.HandleFunc("POST /inviteCheck", userInviteHandler.CheckInvite)
+	mux.HandleFunc("POST /inviteRedeem", userInviteHandler.RedeemInvite)
+
 	// MFA
 	mux.HandleFunc("POST /mfaSetup", mfaSetupHandler)
 	mux.HandleFunc("POST /mfaVerify", mfaVerifyHandler)
@@ -171,12 +202,25 @@ func main() {
 	mux.HandleFunc("POST /removeUserListFromGroup",
 		userHandler.RemoveUserListFromGroupHandler)
 
+	// Invite links (admin half): an invited login and its one-time link
+	mux.HandleFunc("POST /userInvite", userInviteHandler.CreateInvitedUser)
+	mux.HandleFunc("POST /userInviteReissue",
+		userInviteHandler.ReissueInvite)
+	mux.HandleFunc("POST /userInviteRevoke", userInviteHandler.RevokeInvite)
+
 	// Admin reset MFA
 	adminResetMFAHandler := handler.AdminResetUserMFAHandler(
 		appServices,
 		userRepo,
 	)
 	mux.HandleFunc("POST /admin/resetUserMFA", adminResetMFAHandler)
+
+	// Block / unblock a login: account_status for /auth, revocation and the
+	// BLOCKED* KV flag for live sessions (user_block_handler.go)
+	mux.HandleFunc("POST /admin/blockUser",
+		handler.AdminBlockUserHandler(appServices, userRepo, true))
+	mux.HandleFunc("POST /admin/unblockUser",
+		handler.AdminBlockUserHandler(appServices, userRepo, false))
 
 	// Receive Grant list is available, but shouldn't be used in most cases.  Clients will have their own copy of it.
 	// This is an intentional coupling point, mitigated by most changes being additive only.
@@ -194,12 +238,16 @@ func main() {
 		appUserGroupHandler.DeleteAppUserGroup,
 	)
 
-	// Error reporting (no auth required)
+	// Client error reports (signed-in callers only)
 	mux.HandleFunc("POST /error-report", errorReportHandler.HandleErrorReport)
 
 	// Create server
 	server := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", config.ServerBindAddress, config.ServerPort),
+		// JoinHostPort brackets an IPv6 bind ("[::1]:8080"). The address
+		// is never empty: LoadConfig requires SERVER_BIND_ADDRESS.
+		Addr: net.JoinHostPort(
+			config.ServerBindAddress, strconv.Itoa(config.ServerPort),
+		),
 		Handler: securedMux,
 	}
 

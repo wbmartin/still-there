@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# Export the local database for a post-sales host, scrubbed of every
+# credential: the one file doc/330 (UAT) and doc/331 (prod) load from.
+#
+#   bin/620-export-tenant-data <out-dir> [api-env-file]
+#
+#   <out-dir>       where the export goes; must be OUTSIDE this checkout
+#                   (customer data never sits in the repo: DERIVING.md 2)
+#   [api-env-file]  whose DATABASE_URL names the source database; default
+#                   LOCAL_ENV_FILE from etc/uat-deploy.env
+#
+#   1. preflight: the source database's schema_migration matches this
+#      checkout's migrations exactly (version and checksum, none pending)
+#   2. copy it into a throwaway <source>_export (the source is only read)
+#   3. src/api-srv/sql/export-scrub.sql, one transaction: refuses tenant-2
+#      rows and the seeded fixture logins; every credential emptied, every
+#      live login "invited", open invite links revoked
+#   4. pg_dump -Fc --no-owner --no-privileges (the host restores it as its
+#      DDL role, which then owns everything)
+#   5. <name>.dump, <name>.dump.sha256 and <name>.manifest (commit, schema
+#      version, rows per table per tenant, logins); the throwaway database
+#      is dropped
+#
+# The scrub removes credentials, not content: the export is the customer's
+# data. Keep it off shared drives, scp it straight to the host, delete it
+# once loaded. Nobody can sign in to what it loads until an invite link is
+# issued on the host (doc/330 A9).
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
+
+usage="usage: bin/620-export-tenant-data <out-dir> [api-env-file]"
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then echo "$usage"; exit 2; fi
+
+# shellcheck disable=SC1091
+source etc/app.env
+# PG_CONTAINER and LOCAL_ENV_FILE: the laptop side of the presales file.
+# shellcheck disable=SC1091
+source etc/uat-deploy.env
+for var in APP_SLUG PG_CONTAINER LOCAL_ENV_FILE; do
+    [ -n "${!var:-}" ] || { echo "[ERROR] $var not set"; exit 1; }
+done
+SOURCE_ENV="${2:-$LOCAL_ENV_FILE}"
+[ -r "$SOURCE_ENV" ] || { echo "[ERROR] not readable: $SOURCE_ENV"; exit 1; }
+
+OUT_PARENT="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" \
+    || { echo "[ERROR] no such directory: $(dirname "$1")"; exit 1; }
+OUT_DIR="$OUT_PARENT/$(basename "$1")"
+case "$OUT_DIR/" in
+    "$(pwd -P)/"*)
+        echo "[ERROR] $OUT_DIR is inside this checkout: an export is" \
+            "customer data and goes outside the repo"
+        exit 1
+        ;;
+esac
+mkdir -p "$OUT_DIR"
+
+SOURCE_DB="$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' \
+    "$SOURCE_ENV" | head -1)"
+case "$SOURCE_DB" in
+    ""|*[!a-z0-9_]*)
+        echo "[ERROR] no plain database name in $SOURCE_ENV's" \
+            "DATABASE_URL (got '$SOURCE_DB')"
+        exit 1
+        ;;
+    *_export)
+        echo "[ERROR] $SOURCE_DB is a throwaway export copy, not a source"
+        exit 1
+        ;;
+esac
+EXPORT_DB="${SOURCE_DB}_export"
+
+psql_on() {
+    docker exec -i "$PG_CONTAINER" psql -X -q -v ON_ERROR_STOP=1 \
+        -U postgres -d "$1"
+}
+psql_value() {
+    docker exec "$PG_CONTAINER" psql -X -At -v ON_ERROR_STOP=1 \
+        -U postgres -d "$1" -c "$2"
+}
+
+echo "[1/5] preflight: $SOURCE_DB against this checkout" \
+    "($(git rev-parse --short HEAD))"
+psql_value "$SOURCE_DB" 'SELECT 1' >/dev/null \
+    || { echo "[ERROR] cannot reach $SOURCE_DB in $PG_CONTAINER"; exit 1; }
+repo_migration_list="$(
+    for file in src/api-srv/sql/migrations/[0-9]*.sql; do
+        name="${file##*/}"
+        echo "$((10#${name%%_*})) $(shasum -a 256 "$file" | cut -d' ' -f1)"
+    done)"
+db_migration_list="$(psql_value "$SOURCE_DB" \
+    "SELECT version || ' ' || checksum FROM schema_migration
+     ORDER BY version")"
+if [ "$repo_migration_list" != "$db_migration_list" ]; then
+    echo "[ERROR] $SOURCE_DB is not this checkout's schema (pending," \
+        "edited or unknown migrations): migrate it, or check out the" \
+        "commit it was built from. Database vs repo (version checksum):"
+    diff <(echo "$db_migration_list") <(echo "$repo_migration_list") || true
+    exit 1
+fi
+SCHEMA_VERSION="${db_migration_list##*$'\n'}"
+SCHEMA_VERSION="${SCHEMA_VERSION%% *}"
+
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+NAME="$APP_SLUG-data-$STAMP"
+COMMIT="$(git rev-parse HEAD)"
+[ -z "$(git status --porcelain)" ] || COMMIT="$COMMIT (dirty)"
+
+echo "[2/5] copy $SOURCE_DB -> $EXPORT_DB"
+drop_export() {
+    psql_on postgres >/dev/null 2>&1 \
+        <<< "DROP DATABASE IF EXISTS $EXPORT_DB WITH (FORCE)" || true
+}
+drop_export
+trap drop_export EXIT
+psql_on postgres <<< "CREATE DATABASE $EXPORT_DB" >/dev/null
+docker exec "$PG_CONTAINER" sh -c \
+    "pg_dump -U postgres -Fc '$SOURCE_DB' \
+     | pg_restore -U postgres --no-owner --exit-on-error -d '$EXPORT_DB'"
+
+echo "[3/5] scrub credentials (src/api-srv/sql/export-scrub.sql)"
+docker exec -i "$PG_CONTAINER" psql -X -q -v ON_ERROR_STOP=1 \
+    --single-transaction -U postgres -d "$EXPORT_DB" \
+    < src/api-srv/sql/export-scrub.sql
+
+echo "[4/5] dump"
+DUMP="$OUT_DIR/$NAME.dump"
+docker exec "$PG_CONTAINER" pg_dump -U postgres -Fc --no-owner \
+    --no-privileges "$EXPORT_DB" > "$DUMP"
+(cd "$OUT_DIR" && shasum -a 256 "$NAME.dump" > "$NAME.dump.sha256")
+
+echo "[5/5] manifest"
+tenant_table_list="$(psql_value "$EXPORT_DB" "
+    SELECT c.table_name FROM information_schema.columns c
+    JOIN information_schema.tables t USING (table_schema, table_name)
+    WHERE c.table_schema = 'public'
+      AND c.column_name = 'security_context_id'
+      AND t.table_type = 'BASE TABLE'
+    ORDER BY 1")"
+{
+    echo "export=$NAME"
+    echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "source_db=$SOURCE_DB"
+    echo "git=$COMMIT"
+    # a host's pg_restore reads older dumps, never newer ones
+    echo "pg_dump=$(docker exec "$PG_CONTAINER" pg_dump --version \
+        | sed -E 's/^pg_dump \(PostgreSQL\) ([0-9.]+).*/\1/')"
+    echo "schema_version=$SCHEMA_VERSION"
+    for table in $tenant_table_list; do
+        psql_value "$EXPORT_DB" "
+            SELECT 'rows.$table.tenant_' || security_context_id || '='
+                   || count(*)
+            FROM public.$table WHERE delete_ts IS NULL
+            GROUP BY security_context_id ORDER BY security_context_id"
+    done
+    psql_value "$EXPORT_DB" "
+        SELECT 'logins.tenant_' || security_context_id || '='
+               || string_agg(user_name || ':' || account_status, ' '
+                             ORDER BY user_name)
+        FROM app_user WHERE delete_ts IS NULL
+        GROUP BY security_context_id ORDER BY security_context_id"
+    echo "sha256=$(cut -d' ' -f1 "$OUT_DIR/$NAME.dump.sha256")"
+} > "$OUT_DIR/$NAME.manifest"
+sed 's/^/  /' "$OUT_DIR/$NAME.manifest"
+
+echo
+echo "$DUMP ($(du -h "$DUMP" | awk '{print $1}')), with .sha256 and .manifest:"
+echo "customer data -- scp it straight to the host, delete it once loaded."
+echo "Next: doc/330 0.4 (UAT), then doc/331 0.3 (prod, the same export)."

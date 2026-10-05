@@ -3,6 +3,7 @@ package logging
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"runtime"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ func viaWrapper(l *Logger) {
 
 func TestLogger_CodeAttrAndSource(t *testing.T) {
 	var buf bytes.Buffer
-	l := NewLogger("test-svc", &buf)
+	l := NewLogger("test-svc", &buf, slog.LevelDebug)
 
 	_, _, here, _ := runtime.Caller(0)
 	l.Info("EX_CR_START", "example created", "username", "alice", "exampleId", 7)
@@ -42,16 +43,56 @@ func TestLogger_CodeAttrAndSource(t *testing.T) {
 	}
 }
 
-func TestLogger_LevelsAndDebugNotDropped(t *testing.T) {
+func TestLogger_DebugLevelWritesEveryLevel(t *testing.T) {
 	var buf bytes.Buffer
-	l := NewLogger("svc", &buf)
+	l := NewLogger("svc", &buf, slog.LevelDebug)
 	l.Debug("D", "d")
 	l.Warn("W", "w")
 	l.Error("E", "e")
 	out := buf.String()
-	for _, want := range []string{"level=DEBUG", "code=D", "level=WARN", "code=W", "level=ERROR", "code=E"} {
+	for _, want := range []string{
+		"level=DEBUG", "code=D", "level=WARN", "code=W",
+		"level=ERROR", "code=E",
+	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+}
+
+func TestLogger_InfoLevelDropsDebug(t *testing.T) {
+	var buf bytes.Buffer
+	l := NewLogger("svc", &buf, slog.LevelInfo)
+	l.Debug("D", "d")
+	l.DebugWithCallerSkip("DS", "ds", 2)
+	l.Info("I", "i")
+	l.Warn("W", "w")
+	out := buf.String()
+	if strings.Contains(out, "level=DEBUG") {
+		t.Errorf("debug line written at info:\n%s", out)
+	}
+	for _, want := range []string{"code=I", "code=W"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+}
+
+func TestParseLevel(t *testing.T) {
+	wantByName := map[string]slog.Level{
+		"debug": slog.LevelDebug, "info": slog.LevelInfo,
+		"warn": slog.LevelWarn, "error": slog.LevelError,
+	}
+	for name, want := range wantByName {
+		got, ok := ParseLevel(name)
+		if !ok || got != want {
+			t.Errorf("ParseLevel(%q) = %v, %v; want %v, true",
+				name, got, ok, want)
+		}
+	}
+	for _, name := range []string{"", "INFO", "verbose", "warning", " info"} {
+		if _, ok := ParseLevel(name); ok {
+			t.Errorf("ParseLevel(%q) accepted", name)
 		}
 	}
 }
