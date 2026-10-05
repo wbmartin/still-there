@@ -327,6 +327,10 @@ lines below.
   Leave out GRC's uat → main flow (B057).
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. "Host
+  work" is the `tasks/todo.md` section name. Other skills have no
+  "Brandon"; CLAUDE.md (2) and `tasks/todo.md` (3, incl. the §0 heading)
+  still do, left for a decision.
 
 ### C020 — The customer's people by id, never by name
 
