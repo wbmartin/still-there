@@ -39,38 +39,14 @@ an hour, M is a half day.
 
 ## Start here
 
-Real bugs PROTO has today, all S except C001:
-
-1. **C001:** the runbook paste guards do not stop a pasted `chown -R` or
- `mv` from running against `/bin` or `/etc` when a variable is lost.
-2. **C002:** after MFA sign-in the web app drops the CSRF token, so the
- first write costs a 403 and a retry.
-3. **C003:** a non-hex `TOTP_ENCRYPTION_KEY` loads fine and then fails at
- the first MFA login. The UAT e2e env file has one.
-4. **C004:** `/mfaSetup` and `/mfaVerify` keep a dead session path that
- skips CSRF.
-5. **C005:** a database error during a tenant check answers 403, which
- hides the outage.
-6. **C006:** an admin can delete their own login, which can leave a tenant
- with no admin.
-
-Then the infra and docs process items (C007-C024).
+C001-C010 are done (PR #6, merged 2026-10-05) and sit under
+**Settled** at the bottom, numbers unchanged. Review picks up at C011.
 
 ## Decision table
 
 
 | Item                                                    | Area   | Rec   | Size |
 | ------------------------------------------------------- | ------ | ----- | ---- |
-| C001 Runbook `${VAR:?}` inline guards                   | infra  | pull  | M    |
-| C002 MFA onboarding stores the CSRF token               | web    | pull  | S    |
-| C003 Config shape checks: JWT secret, TOTP key          | go     | adapt | S    |
-| C004 MFA routes temp-token only                         | go     | pull  | S    |
-| C005 Tenant-check DB error is 500, not 403              | go     | pull  | S    |
-| C006 Admin cannot delete own login                      | go     | pull  | S    |
-| C007 One pending host-work list, guarded host blocks    | infra  | adapt | S    |
-| C008 Retiring presales in a derived app (doc/330 D)     | infra  | adapt | S    |
-| C009 `bin/600` leaves DB-dump bundles in `dist/`        | infra  | adapt | S    |
-| C010 Release by merge commit, `git merge-tree` check    | infra  | adapt | S    |
 | C011 Dev env-file comments and dead keys                | infra  | pull  | S    |
 | C012 `bin/216` stops vite by port; `bin/330` pins URL   | infra  | adapt | S    |
 | C013 `.gitignore` and tracker-secret rule               | infra  | pull  | S    |
@@ -101,269 +77,7 @@ Then the infra and docs process items (C007-C024).
 C034 and C035 were skipped in round 1. GRC has fixed both since, so they are
 listed in case Brandon wants to reopen them.
 
-# P1: real bugs in PROTO
-
-### C001 — Runbook paste blocks guard each variable inside the command
-
-- **GRC source:** 1803424; RG0043 #105.
-- **GRC did:** Every use of a variable set in an earlier block became
-`${APP:?}` inside the command itself (23 blocks across doc/330 and
-doc/331). A guard line on top does not work in an interactive root shell:
-a failed `${VAR:?}` aborts only that line, and the next pasted line runs
-with the variable empty.
-- **PROTO differs:** It uses the guard-line form GRC rejected:
-`: "${APP_ROOT:?}"`, then plain `"$APP_ROOT/..."`. There are 51 guard
-lines across `doc/330-uat-postsales-cutover.md`,
-`doc/331-prd-postsales-install.md`, `doc/340-db-host-setup.md`,
-`doc/350-repository-reset.md` and `infra/README.md`. The failure was
-reproduced in `bash -i` and `zsh -i`. Where it would damage a host:
-  - doc/330 near line 296: `chown -R ... "$APP_ROOT"/{bin,libexec,...}`
-  would chown `/bin`;
-  - doc/330 near line 657: `mv "$APP_ROOT/etc" ...` would move `/etc`.
-
-  The rule is also stated wrongly in `infra/README.md` (around line 187)
-  and in the doc/330 Lessons.
-- **Recommend:** pull.
-  1. In doc/330, 331, 340 and 350, write every earlier-block variable as
-   `${VAR:?}` inside each destructive or path-building command (`rm`,
-   `mv`, `cp`, `chown`, `chmod`, `mkdir`, `tar -C`, `sed -i`). The top
-   guard line can stay.
-  2. Correct the two rule statements and say why.
-- **Size:** M
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
-  Recommend: a guard inside `$(...)` stops only the substitution, so the
-  `{ ...; } | psql` groups (doc/330 A5 and rollback, doc/331, doc/340)
-  open with their own `:` guard, and the 0.2 uuid fetches are assigned
-  first and used as `${NACK_ID:?}` etc. in `git mv`.
-
-### C002 — MFA onboarding drops `/mfaVerify`'s CSRF token
-
-- **GRC source:** 350bb3a; RG0043 #76.
-- **GRC did:** The onboarding page calls `setCsrfToken(data.csrfToken)`
-before it sets the auth state, as the `/auth` path does.
-- **PROTO differs:** It has the same bug.
-`src/web-app/pages/mfa-onboarding-page.tsx` sets `authState: "YES"`
-(line 90) but never stores the token the API returns. Every other path
-that mints a session stores it (`src/web-app/stores/auth-store.ts`). The
-first write after MFA gets a 403, a `/refresh` and a retry (B004's
-resync hides it).
-- **Recommend:** pull. Call `setCsrfToken` inside `if (data.user)`. Add a
-vitest case asserting the next write carries `X-CSRF-Token`.
-- **Size:** S
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-round-2
-
-### C003 — Config refuses a bad JWT secret or TOTP key at load
-
-- **GRC source:** 8f36989; RG0043 #48. Round 1 B032 already did the
-integer and duration keys.
-- **GRC did:** `LoadConfig` refuses a `JWT_SECRET` shorter than 32
-characters and a `TOTP_ENCRYPTION_KEY` that is not 64 hex characters
-(AES-256). GRC rotated its short dev secret to pass.
-- **PROTO differs:** Both keys are checked for presence only
-(`src/api-srv/internal/config/config.go`, around lines 239-248), while
-`internal/auth/totp.go` hex-decodes the key for `aes.NewCipher`. A bad
-key loads, then answers 500 at the first enrolment or login. It is live
-in `infra/uat/etc/uat-proto-e2e-api.env`:
-`TOTP_ENCRYPTION_KEY=e2e-only-totp-key-not-for-deployment` (not hex), so
-MFA on the post-sales UAT e2e harness would fail.
-- **Recommend:** adapt.
-  1. Add the two checks.
-  2. Give the e2e file a 64-hex key.
-  3. `TestLoadConfig_RepoEnvFiles` loads the redacted SERVERONLY copies
-   and the `__TOTP_KEY__` template too, so exempt those placeholders or
-   assert them separately.
-- **Size:** S
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
-  repo-file test asserts the redacted copies and the template hold
-  placeholders, then appends stand-ins; harness files load as written.
-
-### C004 — `/mfaSetup` and `/mfaVerify` accept a temp token only
-
-- **GRC source:** 3d44381; RG0043 #61.
-- **GRC did:** Removed the session (JWT) branch from both handlers. It ran
-after `SkipCSRF()`, so a signed-in write skipped CSRF, and nothing called
-  it. A missing temp token answers 401.
-- **PROTO differs:** Both branches are still there
-(`src/api-srv/internal/handler/user_mfa_handler.go`; B094 added a block
-check to them). No caller uses them: the web app and every pytest send
-`tempToken`.
-- **Recommend:** pull. Delete both session branches and answer 401
-without a temp token. In the same commit:
-  - update the two rows in `route_check_contract_test.go`;
-  - update B094's session subtests;
-  - update the doc/105 route table;
-  - update `doc/110-security-architecture.md` line 130, which cites "the
-  session path of `/mfaSetup` and `/mfaVerify`".
-- **Size:** S
-- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
-  GRC: the checks now run before the body is read (the body no
-  longer picks a path), and B094's block subtests became 401 cases.
-
-### C005 — A failed tenant-check lookup answers 500, not 403
-
-- **GRC source:** 8f36989; RG0043 #51.
-- **GRC did:** The security-context helpers return `(false, nil)` on a
-mismatch and an error only when the lookup fails. Callers answer 500
-(`SEC_CTX_CHECK`) on an error and 403 on `!valid`.
-- **PROTO differs:** The helpers return an error for a mismatch, and seven
-callers fold `!valid || err != nil` into 403
-(`src/api-srv/internal/handler/user_handler.go`,
-`user_invite_handler.go`). A DB outage reads as "access denied", and
-since B006 a 403 no longer signs the user out, so nobody notices.
-- **Recommend:** pull GRC's split as is, and update
-`user_handler_test.go`. Derived apps copy this handler shape for every
-tenant check.
-- **Size:** S
-- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-round-2
-
-### C006 — An admin cannot delete their own login
-
-- **GRC source:** 8f36989; RG0043 #53.
-- **GRC did:** `DELETE /user` with the caller's own id answers 400
-(`DEL_SELF`), like the existing self-block refusal.
-- **PROTO differs:** `DeleteUser` in `user_handler.go` has no self check,
-while `user_block_handler.go` refuses self-block (`BLK_SELF`). The last
-admin can delete themselves.
-- **Recommend:** pull. Four lines and a Go test. Optionally hide Delete on
-the user's own row in the web app.
-- **Size:** S
-- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
-  optional web change was taken: Delete is hidden on the caller's own
-  login (list row and edit page), matched by user name as Block is.
-
 # P2: infra and operations
-
-### C007 — One list of pending host work; a guarded host-change block
-
-- **GRC source:** RG0045 (83d9282, e3e02d3, 4d9c265, 177182e, 11b0f29 and
-more); GRC CLAUDE.md rule.
-- **GRC did:**
-  - **One list.** All server work not yet done lives in one list. Each line
-  gives the host, the command, the check that proves it, and the
-  rollback. Agents add lines but never run or tick them; only Brandon's
-  report ticks one.
-  - **It caught a real miss.** A read-only re-check found that a UAT nginx
-  step from the first release had never been run.
-  - **Reusable shapes:**
-    - `hostname` as the first line of every block;
-    - host SQL hash-checked against `git show origin/main:`;
-    - backup first, then stop if `echo "backup exit $?"` is not 0;
-    - then apply, verify, and keep a one-statement rollback;
-    - before a release that tightens config validation, an env-file
-    pre-check that prints key presence and lengths, never values;
-    - `sleep 2` between `systemctl reload nginx` and the `curl` check
-    (the old workers answer otherwise).
-- **PROTO differs:**
-  - `infra/README.md` has the release checklist and the hash-checked file
-  move (B082). It has no `hostname` line, no host-SQL variant, no config
-  pre-check and no host-work rule.
-  - `tasks/todo.md` §0 mixes Brandon's decisions with host env edits
-  (`LOG_LEVEL`, `SERVER_BIND_ADDRESS`, `INVITE_TTL_HOURS`,
-  `ALLOW_MFA_EXEMPT_VIA_API`) that have no check or rollback. A promote
-  with any of them missing installs an API that refuses to start.
-- **Recommend:** adapt.
-  1. Add a `## Host work` section to `tasks/todo.md` (host, change,
-   command, check, rollback) and move the host steps out of §0.
-  2. Add a CLAUDE.md Conventions bullet: a change that needs a hand step on
-   a host adds a line there; agents never run or tick it.
-  3. In the `infra/README.md` Release checklist, add:
-     - a pre-flight item: a new or tightened required key means check each
-      host's env file first, printing lengths only;
-     - `hostname` first;
-     - the host-SQL block (backup, stop, apply, verify, rollback);
-     - `sleep 2` after a reload.
-- **Size:** S
-- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Host work
-  in `tasks/todo.md` (H1-H12) gives each step a host, command, check and
-  rollback, plus the C003 e2e env-file step; the host-SQL block in
-  `infra/README.md` splits backup and apply into two pastes, so a failed
-  backup stops the paste rather than relying on a comment.
-
-### C008 — How a derived app retires the presales path
-
-- **GRC source:** 4231421, 9400622; RG0043 #85, #86, #90, #91, #98.
-- **GRC did:** After cutover it deleted:
-  - the presales bundle and deploy scripts, the two `etc/uat-*` templates
-  and the hand-deploy web tarball script;
-  - the presales-only skills and their doc/902 rows;
-  - the one-time fail2ban migration script, already applied;
-  - the local bundles in `dist/`.
-
-  doc/330's opening line records the retirement.
-- **PROTO differs:** It is a template and keeps presales, which is right,
-but no document says how a derived app retires it. Section B5 of
-`doc/330-uat-postsales-cutover.md` only says 610 now refuses, and C only
-drops the presales DB. Deleting by hand has traps:
-  - `bin/620-export-tenant-data` and `bin/605-survey-host` both source
-  `etc/uat-deploy.env`;
-  - `scripts/doc-paths-allow.txt` allows doc/320 paths;
-  - `doc/110-security-architecture.md` rows 2.5, 3.1 and 3.5 describe
-  presales controls;
-  - CLAUDE.md, `DERIVING.md` §3, the `infra/README.md` banner and the
-  presales-deploy and handoff skills all mention it.
-- **Recommend:** adapt, docs only (delete nothing in PROTO). Add section
-"D. Retire the presales path in this app's repo" to doc/330. It lists:
-  - the files to delete;
-  - the keys to move out of `etc/uat-deploy.env` first;
-  - the docs to reword and the allow lines to drop;
-  - deleting `migrate-to-srv-config` once every host has run it.
-
-  Point to it from `DERIVING.md` §3.
-- **Size:** S
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Also
-  lists two traps found in the tree: the Go env-file test counts the
-  template (fails at 5), and `bin/110-build-web-app` becomes optional dead
-  weight.
-
-### C009 — `bin/600` leaves full DB-dump bundles in `dist/`
-
-- **GRC source:** RG0043 #91, #123 (a presales bundle holding an unscrubbed
-real DB sat in the ignored `dist/`).
-- **GRC did:** Deleted the bundles. Its export script names any leftover
-in `dist/` and prints the `rm`.
-- **PROTO differs:** `bin/620-export-tenant-data` already refuses an output
-directory inside the checkout, which is stronger than GRC. But
-`bin/600-bundle-uat` writes a tarball holding a full `pg_dump` to
-`dist/` and never removes it after the scp, so bundles pile up: GRC's
-exact case.
-- **Recommend:** adapt. Delete the tarball after a successful scp. For a
-`--no-scp` build, list the earlier bundles found and print the `rm -f`.
-- **Size:** S
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
-  Recommend: a failed scp keeps the bundle and prints the retry; a failed
-  build removes its staging dir (EXIT trap); the earlier-bundle list
-  prints on every run, not only `--no-scp`.
-
-### C010 — Release branches advance by merge commit, checked first
-
-- **GRC source:** f2ebccf; RG0043 "Worked 2026-10-03"; RG0045 A2, B2.
-- **GRC did:** Moved to feature → uat → main. A release is a uat → main PR
-with a merge commit, never a squash, and
-`git merge-tree --write-tree origin/main origin/uat` must exit 0 first.
-One squash left the branches conflicting in 19 files, and fixing it took
-a synthetic release branch with both parents.
-- **PROTO differs:** It is main-only (B057 skipped the two-branch model).
-`doc/331-prd-postsales-install.md` B6 discusses the release-branch choice
-but not how that branch is advanced.
-- **Recommend:** adapt, docs only. Add two sentences to doc/331 B6 and a
-pre-flight item to `infra/README.md`: if an app moves an integration
-branch into a release branch, use merge commits only, and run the
-`git merge-tree` check before the PR. Add GRC's read-only grep that the
-build hook's branch and `BRANCH_TO_CHECKOUT` agree.
-- **Size:** S
-- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
-- **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
-  branch/hook grep went into `infra/README.md` one-time setup step 7
-  (where the hook branch is set), with the prod promote-hook variant.
 
 ### C011 — Dev env-file comments and dead keys
 
@@ -929,3 +643,281 @@ release-safety part is in C010.
 `doc/331-prd-postsales-install.md`), GRC doc/105 and doc/810 counts, GRC
 doc/902 rows, the GRC CLAUDE.md example names, and the R2 and Entra text.
 
+# Settled
+
+Done items, moved here in their original order with their original
+numbers. All ten merged to `main` in PR #6 (merge 854e31f). Each keeps its
+Status line.
+
+| Item | Decision | Commit |
+|---|---|---|
+| C001 Runbook paste blocks guard each variable inside the command | done | 4ba97d9 |
+| C002 MFA onboarding drops `/mfaVerify`'s CSRF token | done | b21bec6 |
+| C003 Config refuses a bad JWT secret or TOTP key at load | done | a84ba5c |
+| C004 `/mfaSetup` and `/mfaVerify` accept a temp token only | done | a0be2e4 |
+| C005 A failed tenant-check lookup answers 500, not 403 | done | 4016c17 |
+| C006 An admin cannot delete their own login | done | b634ffd |
+| C007 One list of pending host work; a guarded host-change block | done | ab16fe5 |
+| C008 How a derived app retires the presales path | done | dfea118 |
+| C009 `bin/600` leaves full DB-dump bundles in `dist/` | done | 068fc16 |
+| C010 Release branches advance by merge commit, checked first | done | 3e5bf31 |
+
+### C001 — Runbook paste blocks guard each variable inside the command
+
+- **GRC source:** 1803424; RG0043 #105.
+- **GRC did:** Every use of a variable set in an earlier block became
+`${APP:?}` inside the command itself (23 blocks across doc/330 and
+doc/331). A guard line on top does not work in an interactive root shell:
+a failed `${VAR:?}` aborts only that line, and the next pasted line runs
+with the variable empty.
+- **PROTO differs:** It uses the guard-line form GRC rejected:
+`: "${APP_ROOT:?}"`, then plain `"$APP_ROOT/..."`. There are 51 guard
+lines across `doc/330-uat-postsales-cutover.md`,
+`doc/331-prd-postsales-install.md`, `doc/340-db-host-setup.md`,
+`doc/350-repository-reset.md` and `infra/README.md`. The failure was
+reproduced in `bash -i` and `zsh -i`. Where it would damage a host:
+  - doc/330 near line 296: `chown -R ... "$APP_ROOT"/{bin,libexec,...}`
+  would chown `/bin`;
+  - doc/330 near line 657: `mv "$APP_ROOT/etc" ...` would move `/etc`.
+
+  The rule is also stated wrongly in `infra/README.md` (around line 187)
+  and in the doc/330 Lessons.
+- **Recommend:** pull.
+  1. In doc/330, 331, 340 and 350, write every earlier-block variable as
+   `${VAR:?}` inside each destructive or path-building command (`rm`,
+   `mv`, `cp`, `chown`, `chmod`, `mkdir`, `tar -C`, `sed -i`). The top
+   guard line can stay.
+  2. Correct the two rule statements and say why.
+- **Size:** M
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
+  Recommend: a guard inside `$(...)` stops only the substitution, so the
+  `{ ...; } | psql` groups (doc/330 A5 and rollback, doc/331, doc/340)
+  open with their own `:` guard, and the 0.2 uuid fetches are assigned
+  first and used as `${NACK_ID:?}` etc. in `git mv`.
+
+### C002 — MFA onboarding drops `/mfaVerify`'s CSRF token
+
+- **GRC source:** 350bb3a; RG0043 #76.
+- **GRC did:** The onboarding page calls `setCsrfToken(data.csrfToken)`
+before it sets the auth state, as the `/auth` path does.
+- **PROTO differs:** It has the same bug.
+`src/web-app/pages/mfa-onboarding-page.tsx` sets `authState: "YES"`
+(line 90) but never stores the token the API returns. Every other path
+that mints a session stores it (`src/web-app/stores/auth-store.ts`). The
+first write after MFA gets a 403, a `/refresh` and a retry (B004's
+resync hides it).
+- **Recommend:** pull. Call `setCsrfToken` inside `if (data.user)`. Add a
+vitest case asserting the next write carries `X-CSRF-Token`.
+- **Size:** S
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2
+
+### C003 — Config refuses a bad JWT secret or TOTP key at load
+
+- **GRC source:** 8f36989; RG0043 #48. Round 1 B032 already did the
+integer and duration keys.
+- **GRC did:** `LoadConfig` refuses a `JWT_SECRET` shorter than 32
+characters and a `TOTP_ENCRYPTION_KEY` that is not 64 hex characters
+(AES-256). GRC rotated its short dev secret to pass.
+- **PROTO differs:** Both keys are checked for presence only
+(`src/api-srv/internal/config/config.go`, around lines 239-248), while
+`internal/auth/totp.go` hex-decodes the key for `aes.NewCipher`. A bad
+key loads, then answers 500 at the first enrolment or login. It is live
+in `infra/uat/etc/uat-proto-e2e-api.env`:
+`TOTP_ENCRYPTION_KEY=e2e-only-totp-key-not-for-deployment` (not hex), so
+MFA on the post-sales UAT e2e harness would fail.
+- **Recommend:** adapt.
+  1. Add the two checks.
+  2. Give the e2e file a 64-hex key.
+  3. `TestLoadConfig_RepoEnvFiles` loads the redacted SERVERONLY copies
+   and the `__TOTP_KEY__` template too, so exempt those placeholders or
+   assert them separately.
+- **Size:** S
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
+  repo-file test asserts the redacted copies and the template hold
+  placeholders, then appends stand-ins; harness files load as written.
+
+### C004 — `/mfaSetup` and `/mfaVerify` accept a temp token only
+
+- **GRC source:** 3d44381; RG0043 #61.
+- **GRC did:** Removed the session (JWT) branch from both handlers. It ran
+after `SkipCSRF()`, so a signed-in write skipped CSRF, and nothing called
+  it. A missing temp token answers 401.
+- **PROTO differs:** Both branches are still there
+(`src/api-srv/internal/handler/user_mfa_handler.go`; B094 added a block
+check to them). No caller uses them: the web app and every pytest send
+`tempToken`.
+- **Recommend:** pull. Delete both session branches and answer 401
+without a temp token. In the same commit:
+  - update the two rows in `route_check_contract_test.go`;
+  - update B094's session subtests;
+  - update the doc/105 route table;
+  - update `doc/110-security-architecture.md` line 130, which cites "the
+  session path of `/mfaSetup` and `/mfaVerify`".
+- **Size:** S
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
+  GRC: the checks now run before the body is read (the body no
+  longer picks a path), and B094's block subtests became 401 cases.
+
+### C005 — A failed tenant-check lookup answers 500, not 403
+
+- **GRC source:** 8f36989; RG0043 #51.
+- **GRC did:** The security-context helpers return `(false, nil)` on a
+mismatch and an error only when the lookup fails. Callers answer 500
+(`SEC_CTX_CHECK`) on an error and 403 on `!valid`.
+- **PROTO differs:** The helpers return an error for a mismatch, and seven
+callers fold `!valid || err != nil` into 403
+(`src/api-srv/internal/handler/user_handler.go`,
+`user_invite_handler.go`). A DB outage reads as "access denied", and
+since B006 a 403 no longer signs the user out, so nobody notices.
+- **Recommend:** pull GRC's split as is, and update
+`user_handler_test.go`. Derived apps copy this handler shape for every
+tenant check.
+- **Size:** S
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2
+
+### C006 — An admin cannot delete their own login
+
+- **GRC source:** 8f36989; RG0043 #53.
+- **GRC did:** `DELETE /user` with the caller's own id answers 400
+(`DEL_SELF`), like the existing self-block refusal.
+- **PROTO differs:** `DeleteUser` in `user_handler.go` has no self check,
+while `user_block_handler.go` refuses self-block (`BLK_SELF`). The last
+admin can delete themselves.
+- **Recommend:** pull. Four lines and a Go test. Optionally hide Delete on
+the user's own row in the web app.
+- **Size:** S
+- **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
+  optional web change was taken: Delete is hidden on the caller's own
+  login (list row and edit page), matched by user name as Block is.
+
+### C007 — One list of pending host work; a guarded host-change block
+
+- **GRC source:** RG0045 (83d9282, e3e02d3, 4d9c265, 177182e, 11b0f29 and
+more); GRC CLAUDE.md rule.
+- **GRC did:**
+  - **One list.** All server work not yet done lives in one list. Each line
+  gives the host, the command, the check that proves it, and the
+  rollback. Agents add lines but never run or tick them; only Brandon's
+  report ticks one.
+  - **It caught a real miss.** A read-only re-check found that a UAT nginx
+  step from the first release had never been run.
+  - **Reusable shapes:**
+    - `hostname` as the first line of every block;
+    - host SQL hash-checked against `git show origin/main:`;
+    - backup first, then stop if `echo "backup exit $?"` is not 0;
+    - then apply, verify, and keep a one-statement rollback;
+    - before a release that tightens config validation, an env-file
+    pre-check that prints key presence and lengths, never values;
+    - `sleep 2` between `systemctl reload nginx` and the `curl` check
+    (the old workers answer otherwise).
+- **PROTO differs:**
+  - `infra/README.md` has the release checklist and the hash-checked file
+  move (B082). It has no `hostname` line, no host-SQL variant, no config
+  pre-check and no host-work rule.
+  - `tasks/todo.md` §0 mixes Brandon's decisions with host env edits
+  (`LOG_LEVEL`, `SERVER_BIND_ADDRESS`, `INVITE_TTL_HOURS`,
+  `ALLOW_MFA_EXEMPT_VIA_API`) that have no check or rollback. A promote
+  with any of them missing installs an API that refuses to start.
+- **Recommend:** adapt.
+  1. Add a `## Host work` section to `tasks/todo.md` (host, change,
+   command, check, rollback) and move the host steps out of §0.
+  2. Add a CLAUDE.md Conventions bullet: a change that needs a hand step on
+   a host adds a line there; agents never run or tick it.
+  3. In the `infra/README.md` Release checklist, add:
+     - a pre-flight item: a new or tightened required key means check each
+      host's env file first, printing lengths only;
+     - `hostname` first;
+     - the host-SQL block (backup, stop, apply, verify, rollback);
+     - `sleep 2` after a reload.
+- **Size:** S
+- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Host work
+  in `tasks/todo.md` (H1-H12) gives each step a host, command, check and
+  rollback, plus the C003 e2e env-file step; the host-SQL block in
+  `infra/README.md` splits backup and apply into two pastes, so a failed
+  backup stops the paste rather than relying on a comment.
+
+### C008 — How a derived app retires the presales path
+
+- **GRC source:** 4231421, 9400622; RG0043 #85, #86, #90, #91, #98.
+- **GRC did:** After cutover it deleted:
+  - the presales bundle and deploy scripts, the two `etc/uat-*` templates
+  and the hand-deploy web tarball script;
+  - the presales-only skills and their doc/902 rows;
+  - the one-time fail2ban migration script, already applied;
+  - the local bundles in `dist/`.
+
+  doc/330's opening line records the retirement.
+- **PROTO differs:** It is a template and keeps presales, which is right,
+but no document says how a derived app retires it. Section B5 of
+`doc/330-uat-postsales-cutover.md` only says 610 now refuses, and C only
+drops the presales DB. Deleting by hand has traps:
+  - `bin/620-export-tenant-data` and `bin/605-survey-host` both source
+  `etc/uat-deploy.env`;
+  - `scripts/doc-paths-allow.txt` allows doc/320 paths;
+  - `doc/110-security-architecture.md` rows 2.5, 3.1 and 3.5 describe
+  presales controls;
+  - CLAUDE.md, `DERIVING.md` §3, the `infra/README.md` banner and the
+  presales-deploy and handoff skills all mention it.
+- **Recommend:** adapt, docs only (delete nothing in PROTO). Add section
+"D. Retire the presales path in this app's repo" to doc/330. It lists:
+  - the files to delete;
+  - the keys to move out of `etc/uat-deploy.env` first;
+  - the docs to reword and the allow lines to drop;
+  - deleting `migrate-to-srv-config` once every host has run it.
+
+  Point to it from `DERIVING.md` §3.
+- **Size:** S
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Also
+  lists two traps found in the tree: the Go env-file test counts the
+  template (fails at 5), and `bin/110-build-web-app` becomes optional dead
+  weight.
+
+### C009 — `bin/600` leaves full DB-dump bundles in `dist/`
+
+- **GRC source:** RG0043 #91, #123 (a presales bundle holding an unscrubbed
+real DB sat in the ignored `dist/`).
+- **GRC did:** Deleted the bundles. Its export script names any leftover
+in `dist/` and prints the `rm`.
+- **PROTO differs:** `bin/620-export-tenant-data` already refuses an output
+directory inside the checkout, which is stronger than GRC. But
+`bin/600-bundle-uat` writes a tarball holding a full `pg_dump` to
+`dist/` and never removes it after the scp, so bundles pile up: GRC's
+exact case.
+- **Recommend:** adapt. Delete the tarball after a successful scp. For a
+`--no-scp` build, list the earlier bundles found and print the `rm -f`.
+- **Size:** S
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
+  Recommend: a failed scp keeps the bundle and prints the retry; a failed
+  build removes its staging dir (EXIT trap); the earlier-bundle list
+  prints on every run, not only `--no-scp`.
+
+### C010 — Release branches advance by merge commit, checked first
+
+- **GRC source:** f2ebccf; RG0043 "Worked 2026-10-03"; RG0045 A2, B2.
+- **GRC did:** Moved to feature → uat → main. A release is a uat → main PR
+with a merge commit, never a squash, and
+`git merge-tree --write-tree origin/main origin/uat` must exit 0 first.
+One squash left the branches conflicting in 19 files, and fixing it took
+a synthetic release branch with both parents.
+- **PROTO differs:** It is main-only (B057 skipped the two-branch model).
+`doc/331-prd-postsales-install.md` B6 discusses the release-branch choice
+but not how that branch is advanced.
+- **Recommend:** adapt, docs only. Add two sentences to doc/331 B6 and a
+pre-flight item to `infra/README.md`: if an app moves an integration
+branch into a release branch, use merge commits only, and run the
+`git merge-tree` check before the PR. Add GRC's read-only grep that the
+build hook's branch and `BRANCH_TO_CHECKOUT` agree.
+- **Size:** S
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
+  branch/hook grep went into `infra/README.md` one-time setup step 7
+  (where the hook branch is set), with the prod promote-hook variant.
