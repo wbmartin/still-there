@@ -398,6 +398,9 @@ paste blocks (B051, B075, B086, B090). The remaining gaps:
 - **Recommend:** pull. Three tree lines and one index row.
 - **Size:** S
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Also
+indexed `doc/700-grc-backport-round-2.md` itself (temporary), the only
+other `doc/` file missing from the index.
 
 ### C024 — Tag a template sync point after this round
 
