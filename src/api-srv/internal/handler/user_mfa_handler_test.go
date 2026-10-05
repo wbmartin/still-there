@@ -158,35 +158,6 @@ func TestMFAVerifyHandler_TempTokenPath(t *testing.T) {
 	})
 }
 
-// TestMFAVerifyHandler_JWTPath: with a session and no temp token the JWT
-// is required, and a user who never completed setup is told so.
-func TestMFAVerifyHandler_JWTPath(t *testing.T) {
-	t.Run("no cookie, no temp token → 401 from CheckJWT", func(t *testing.T) {
-		s := testServices(t)
-		repo := new(MockUserRepository)
-		w := httptest.NewRecorder()
-		MFAVerifyHandler(s, repo)(w, mfaVerifyRequest(`{"totpCode":"000000"}`))
-		assert.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
-		repo.AssertExpectations(t)
-	})
-
-	t.Run("session but MFA never set up → 400", func(t *testing.T) {
-		s := testServices(t)
-		s.Config.TOTPEncryptionKey = testTOTPKey
-		user, _ := mfaUser(t, false)
-		repo := new(MockUserRepository)
-		repo.On("RetrieveUserByUserName", mock.Anything, "mfa").Return(user, nil)
-		token, err := auth.GenerateJWT("Test", "mfa", 7, "session-abc", 1,
-			[]int{model.GrantLogon}, s.Config.JWTSecret, s.Config.JWTSessionExpireHours)
-		require.NoError(t, err)
-		r := mfaVerifyRequest(`{"totpCode":"000000"}`)
-		r.AddCookie(&http.Cookie{Name: "auth", Value: token})
-		w := httptest.NewRecorder()
-		MFAVerifyHandler(s, repo)(w, r)
-		assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	})
-}
-
 // mfaRouteList is both MFA routes, for tests that hold for each.
 var mfaRouteList = []struct {
 	path    string
@@ -196,8 +167,8 @@ var mfaRouteList = []struct {
 	{"/mfaVerify", MFAVerifyHandler},
 }
 
-// mfaSessionRequest is a session-path request (no temp token) carrying a
-// valid auth cookie for the test tenant's "mfa" login.
+// mfaSessionRequest carries a valid auth cookie for the test tenant's "mfa"
+// login and no temp token: the session path these routes no longer have.
 func mfaSessionRequest(
 	t *testing.T, s *app.Services, path string,
 ) *http.Request {
@@ -213,66 +184,84 @@ func mfaSessionRequest(
 	return r
 }
 
-// TestMFAHandlers_SessionPathReadsTheBlockFlag (B094): a block revokes
-// every session, but revocations live in the in-process store and are lost
-// on restart while the BLOCKED* flag is reloaded. A pre-block token with
-// its session never ended must still be refused on the session path of
-// both routes, before the repository.
-func TestMFAHandlers_SessionPathReadsTheBlockFlag(t *testing.T) {
+// TestMFARoutesRefuseASessionWithoutATempToken (GRC backport C004):
+// /mfaSetup and /mfaVerify take a temp token and nothing else. The session
+// path they also had -- unused, and CSRF-free on a signed-in write --
+// answers 401 now, and neither route reaches the repository. That holds
+// for a blocked login too (B094's case): it is refused before the user is
+// read, whatever the BLOCKED* flag says.
+func TestMFARoutesRefuseASessionWithoutATempToken(t *testing.T) {
 	for _, route := range mfaRouteList {
-		t.Run(route.path+" blocked login → 403", func(t *testing.T) {
+		t.Run(route.path+" session, no temp token → 401", func(t *testing.T) {
 			s := testServices(t)
-			// After the restart: the flag is back, the revocation is not.
-			require.NoError(t, s.KV.Set(blockedKey("mfa"), "1", ""))
 			// No expectations: a lookup panics, which callRoute reports.
 			w, reached := callRoute(
 				route.handler(s, new(MockUserRepository)),
 				mfaSessionRequest(t, s, route.path))
 			assert.False(t, reached, "repository reached")
-			assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
-			assert.Contains(t, w.Body.String(), "User account is blocked")
+			assert.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), "tempToken is required")
+			assert.Empty(t, w.Result().Cookies())
 		})
 
-		t.Run(route.path+" session counts in the per-user bucket",
+		t.Run(route.path+" blocked session, no temp token → 401",
 			func(t *testing.T) {
 				s := testServices(t)
-				s.Config.MaxUnauthReqPerMin = 0
-				user, _ := mfaUser(t, true)
-				user.MFAExempt = true // stops /mfaSetup right after lookup
-				repo := new(MockUserRepository)
-				repo.On("RetrieveUserByUserName", mock.Anything, "mfa").
-					Return(user, nil)
-				w := httptest.NewRecorder()
-				route.handler(s, repo)(w, mfaSessionRequest(t, s, route.path))
-				assert.NotContains(t, w.Body.String(), "Rate limit exceeded")
-				repo.AssertExpectations(t)
+				require.NoError(t, s.KV.Set(blockedKey("mfa"), "1", ""))
+				w, reached := callRoute(
+					route.handler(s, new(MockUserRepository)),
+					mfaSessionRequest(t, s, route.path))
+				assert.False(t, reached, "repository reached")
+				assert.Equal(t, http.StatusUnauthorized, w.Code,
+					w.Body.String())
+				assert.Contains(t, w.Body.String(), "tempToken is required")
 			})
 
-		t.Run(route.path+" temp token counts per address",
+		t.Run(route.path+" no cookie, no temp token → 401",
 			func(t *testing.T) {
 				s := testServices(t)
-				s.Config.MaxUnauthReqPerMin = 1
-				s.Config.MaxUserReqPerMin = 0
-				h := route.handler(s, new(MockUserRepository))
-				tempRequest := func(remoteAddr string) *http.Request {
-					r := httptest.NewRequest(http.MethodPost, route.path,
-						strings.NewReader(`{"tempToken":"nope"}`))
-					r.RemoteAddr = remoteAddr
-					return r
-				}
-				// "nope" is no live temp token: past the checks it is 401.
-				w := httptest.NewRecorder()
-				h(w, tempRequest("192.0.2.10:1000"))
-				assert.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
-				w = httptest.NewRecorder()
-				h(w, tempRequest("192.0.2.10:1001"))
-				assert.Equal(t, http.StatusTooManyRequests, w.Code,
-					w.Body.String())
-				w = httptest.NewRecorder()
-				h(w, tempRequest("192.0.2.11:1000"))
+				r := httptest.NewRequest(http.MethodPost, route.path,
+					strings.NewReader(`{}`))
+				w, reached := callRoute(
+					route.handler(s, new(MockUserRepository)), r)
+				assert.False(t, reached, "repository reached")
 				assert.Equal(t, http.StatusUnauthorized, w.Code,
-					"another address has its own allowance: "+w.Body.String())
+					w.Body.String())
+				assert.Contains(t, w.Body.String(), "tempToken is required")
 			})
+	}
+}
+
+// TestMFAHandlers_TempTokenCountsPerAddress: there is no session yet, so
+// the rate limit is the per-address bucket, and it answers before the temp
+// token is looked up.
+func TestMFAHandlers_TempTokenCountsPerAddress(t *testing.T) {
+	for _, route := range mfaRouteList {
+		t.Run(route.path, func(t *testing.T) {
+			s := testServices(t)
+			s.Config.MaxUnauthReqPerMin = 1
+			s.Config.MaxUserReqPerMin = 0
+			h := route.handler(s, new(MockUserRepository))
+			tempRequest := func(remoteAddr string) *http.Request {
+				r := httptest.NewRequest(http.MethodPost, route.path,
+					strings.NewReader(`{"tempToken":"nope"}`))
+				r.RemoteAddr = remoteAddr
+				return r
+			}
+			// "nope" is no live temp token: past the checks it is 401.
+			w := httptest.NewRecorder()
+			h(w, tempRequest("192.0.2.10:1000"))
+			assert.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), "Invalid temp token")
+			w = httptest.NewRecorder()
+			h(w, tempRequest("192.0.2.10:1001"))
+			assert.Equal(t, http.StatusTooManyRequests, w.Code,
+				w.Body.String())
+			w = httptest.NewRecorder()
+			h(w, tempRequest("192.0.2.11:1000"))
+			assert.Equal(t, http.StatusUnauthorized, w.Code,
+				"another address has its own allowance: "+w.Body.String())
+		})
 	}
 }
 

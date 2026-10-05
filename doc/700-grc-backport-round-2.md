@@ -199,6 +199,9 @@ without a temp token. In the same commit:
   session path of `/mfaSetup` and `/mfaVerify`".
 - **Size:** S
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
+  GRC: the checks now run before the body is read (the body no
+  longer picks a path), and B094's block subtests became 401 cases.
 
 ### C005 — A failed tenant-check lookup answers 500, not 403
 

@@ -157,8 +157,9 @@ lockout counters and the TOTP replay key follow the same rule.
 reason: `/health` and `/auth` skip all five; `/refresh`, `/logoff` and
 `/changeSecurityContext` skip CSRF and the grant; the public
 `/userSelfCreate`, `/inviteCheck`, `/inviteRedeem` run only the
-per-address rate limit (the invite routes then the lockout); `/mfaSetup` and `/mfaVerify` accept a temp token
-in place of a session. The table with the reason for each is in doc/105
+per-address rate limit (the invite routes then the lockout); `/mfaSetup`
+and `/mfaVerify` take a temp token in place of a session, and only that
+(no temp token is 401, a session cookie or not). The table with the reason for each is in doc/105
 (Security Checks, Exceptions). The `admin` subject skips the rate limit
 and the block flag (`app_helper.go`), stated there too.
 
