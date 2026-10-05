@@ -244,7 +244,8 @@ func TestLoadConfig_TrustedProxyCount(t *testing.T) {
 			))
 			if testCase.wantErr {
 				if err == nil {
-					t.Fatalf("want an error, got %+v", config)
+					t.Fatalf("want an error, got TrustedProxyCount %d",
+						config.TrustedProxyCount)
 				}
 				return
 			}
