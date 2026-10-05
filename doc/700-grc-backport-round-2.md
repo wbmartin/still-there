@@ -366,6 +366,9 @@ environment variable. Then list the test-only ones with their reader and
 setter.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. List
+built from the tree; also covers `TEST_ENV` and the other `bin/` overrides,
+`VITE_API_PROXY_URL`, and the libpq variables pgx falls back to.
 
 ### C022 — `doc/904` says what Python the tree actually uses
 
