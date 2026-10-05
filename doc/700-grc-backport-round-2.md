@@ -101,6 +101,9 @@ listed in case Brandon wants to reopen them.
 both `.env.*` comments, and re-run `TestLoadConfig_RepoEnvFiles`.
 - **Size:** S
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; also
+  `src/web-app/README.md` (API Proxy), which named a default and
+  `.env.production` for `VITE_API_PROXY_URL`.
 
 ### C012 — Stopping dev leaves a test run alone; the load test cannot be re-aimed
 
