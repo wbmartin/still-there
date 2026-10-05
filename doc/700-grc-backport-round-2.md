@@ -2,7 +2,7 @@
 
 A decision list of generic improvements made in radley-grc (GRC) since the
 last backport that ProtoStack (PROTO) lacks. Nothing here is applied. It is
-not a plan: Brandon marks each **Decision**, and the work comes out of that.
+not a plan: staff mark each **Decision**, and the work comes out of that.
 
 - **PROTO:** `main` @ 3727be2 (round 1, B001-B099, merged and closed).
 - **GRC:** branch uat @ 4ffa9e9. Range reviewed: bedf958..uat, 102 commits,
@@ -18,13 +18,13 @@ Every PROTO claim was checked against the file at 3727be2.
 commit:
 
 1. **RG0043 rounds 3-6** (8f36989..0b4d056). GRC's code review findings
- 47-124, each with a fix. This is where nearly all the generic work is.
+47-124, each with a fix. This is where nearly all the generic work is.
 2. **RG0045 host work** (83d9282..d8ac326). UAT and prod steps. The
- procedure is generic; the host values are not.
+procedure is generic; the host values are not.
 3. **House work items #55-#93** (f1366cf..efc7b82), plus the move from
- tickets to the Radley House tracker (5b6c300, f2ebccf). All are GRC
- product features (evidence, risks, SoD, escalation, notifications,
- nightly pass, legacy files) except #55, invite e-mail (C028).
+tickets to the Radley House tracker (5b6c300, f2ebccf). All are GRC
+product features (evidence, risks, SoD, escalation, notifications,
+nightly pass, legacy files) except #55, invite e-mail (C028).
 
 The full exclusion list is at the end. The diff is heavy on docs and infra,
 as expected, but rounds 3-4 also hold small security fixes to code PROTO
@@ -75,7 +75,7 @@ C001-C010 are done (PR #6, merged 2026-10-05) and sit under
 
 
 C034 and C035 were skipped in round 1. GRC has fixed both since, so they are
-listed in case Brandon wants to reopen them.
+listed in case staff want to reopen them.
 
 # P2: infra and operations
 
@@ -100,7 +100,10 @@ listed in case Brandon wants to reopen them.
 - **Recommend:** pull. Drop the dead key and the port 3000 origin, rewrite
 both `.env.*` comments, and re-run `TestLoadConfig_RepoEnvFiles`.
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; also
+  `src/web-app/README.md` (API Proxy), which named a default and
+  `.env.production` for `VITE_API_PROXY_URL`.
 
 ### C012 — Stopping dev leaves a test run alone; the load test cannot be re-aimed
 
@@ -118,7 +121,11 @@ The load-test script refuses a `--base-url` on its command line.
 - **Recommend:** adapt. Kill vite by port 5173 in bin/216. Refuse
 `--base-url`, `-base-url` and `--env` in bin/330.
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Adapted:
+bin/216 kills a pid on 5173 only if its argv is also this checkout's vite,
+so another checkout's dev vite on 5173 survives (GRC kills any listener);
+bin/330 also refuses `--env`/`-env` and runs the check before the DB rebuild.
 
 ### C013 — `.gitignore` and the tracker-secret rule
 
@@ -143,9 +150,12 @@ call".
   1. Add `/.claude/settings.local.json` and drop `examples`.
   2. Add the tracker-secret line to `DERIVING.md` §5.
   3. Close the todo item with that explanation, and ignore the name or a
-   narrow `/*-token` pattern.
+  narrow `/*-token` pattern.
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Ignores
+  root-only `/*-token`, not the exact name: the name is a derived app's,
+  and no tracked file matches.
 
 ### C014 — Retire `doc/310`: it copies a host's TLS private key to a laptop
 
@@ -157,7 +167,7 @@ laptop's etc/crt directory. `bin/400-make-local-dev-certs` already makes local
 TLS (self-signed, mode 600), and the hosts renew their own
 (`infra/uat/bin/uat-proto-renew-web-certs`). PROTO's TLS keys in
 `etc/loc-api-srv.env` are live (bin/400 writes those paths), so they stay.
-- **Recommend:** adapt (Brandon's call). Delete doc/310 and point the four
+- **Recommend:** adapt (staff's call). Delete doc/310 and point the four
 references (CLAUDE.md, README, bin/400 header, doc/902) at bin/400 for
 local TLS and at the host renew scripts. A real host key on a workstation
 is not a practice to hand the next app.
@@ -177,7 +187,10 @@ connection forever. Round 1 listed this as "open in both".
 match PROTO's nginx. This matters most where a derived app runs without
 nginx.
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Fields
+set in a new `newHTTPServer` so a test checks them and that
+`WriteTimeout` equals nginx's `proxy_read_timeout`.
 
 ### C016 — Sliding-window rate limit
 
@@ -194,7 +207,10 @@ this as "open in both".
 PROTO's `ip:` anonymous key (B059). Low risk, since the lockout is the
 real brake on guessing; the change makes the key mean what it says.
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. PROTO's
+KV has no batch, so both checks share `rateWindow.incrementAndCount`
+(INCR then GET); PROTO's `Get` answers "" for an absent key.
 
 # P2: docs and process
 
@@ -203,7 +219,7 @@ real brake on guessing; the change makes the key mean what it says.
 - **GRC source:** RG0043 header and section 11 preamble; abc1d8e, d951ec0,
 9120ee0, db21a8e, 150274d, 0b4d056.
 - **GRC did:** Ran its 124-finding review as six fix rounds. Each round
-was a PR, then the gate, then Brandon's UAT check, then the items moved
+was a PR, then the gate, then the staff UAT check, then the items moved
 to Settled with a Status line (disposition, who ruled, date, commit).
 The bookkeeping is where it broke:
   - the sections were renumbered after every round, so "(r2)" means two
@@ -220,22 +236,28 @@ findings go in `tasks/todo.md`". The skill has no ids, no Status format,
 no Settled list and no rule for fix rounds.
 - **Recommend:** adapt. Add a "Triage and settling" section:
   1. Each finding gets an id once (F001…) that is never renumbered;
-   commits and comments cite it.
+  commits and comments cite it.
   2. After triage, write the findings to one committed file. Each gets a
-   Status line, and settled items move to `## Settled` in id order.
+  Status line, and settled items move to `## Settled` in id order.
   3. One defect per item; a sweep becomes F041a, F041b.
-  4. One settle gate for every round: merged, gate green, Brandon's check.
+  4. One settle gate for every round: merged, gate green, staff check.
   5. A long-lived review branch takes merge commits, or each round gets a
-   fresh branch.
+  fresh branch.
   6. Keep a frozen at-review severity table and a live open count, updated
-   in the commit that settles items.
+  in the commit that settles items.
 - **Size:** M
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; "staff"
+  for the human who triages and checks; the Report section
+  now numbers findings and gives an area × severity table, and
+  `tasks/todo.md` points at the review file instead of holding findings.
 
 ### C018 — Review skill: checklist lines from GRC's run
 
 - **GRC source:** RG0043 section 7 (Checked and clean), 8 (Not covered),
+
 #105, #106, #111-#124.
+
 - **GRC did:** Recorded counted assertions PROTO's checklist does not ask
 for, and found a class of docs and process defects in round 6.
 - **PROTO differs:** The checklist in the skill covers check order, tenant
@@ -274,7 +296,10 @@ lines below.
   - **Not covered:** add a prompt for generated files and docs that are
   historical by label.
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; Tasks
+  is its own checklist group, the dist/tmp line sits under Data and
+  docs; the doc/902 row check is not yet in `bin/300-run-tests docs`.
 
 ### C019 — Handoff skill corrections
 
@@ -297,10 +322,15 @@ lines below.
   - Add "deployed to UAT: sha or no" to the State line.
   - In step 2: re-read §0, check off what is now true with reason and
   date, and verify or strike anything marked unverified.
+  - Make sure all references to brandon are updated to "staff" so other people can use this
 
   Leave out GRC's uat → main flow (B057).
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. "Host
+  work" is the `tasks/todo.md` section name. Other skills have no
+  "Brandon"; CLAUDE.md, `tasks/todo.md`, doc/330 and an app_helper.go
+  comment did, and say "staff" too since (staff ruling: throughout).
 
 ### C020 — The customer's people by id, never by name
 
@@ -314,7 +344,11 @@ commit messages, which is where GRC leaked them.
 people: `tasks/`, docs and commit messages refer to them by person id".
 Add the line to the review checklist (C018).
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; "by
+  person id or role", matching clause in `DERIVING.md` §2; review
+  checklist line aligned. No customer names found in `tasks/`, `doc/`
+  or the last 200 commit messages.
 
 ### C021 — `doc/905` lists every environment variable anything reads
 
@@ -331,7 +365,10 @@ harnesses also read `TEST_API_ENV`, `TEST_BASE_URL` (`tests/conftest.py`),
 environment variable. Then list the test-only ones with their reader and
 setter.
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. List
+built from the tree; also covers `TEST_ENV` and the other `bin/` overrides,
+`VITE_API_PROXY_URL`, and the libpq variables pgx falls back to.
 
 ### C022 — `doc/904` says what Python the tree actually uses
 
@@ -346,7 +383,9 @@ PEP8, psycopg".
 description, so an agent in a derived app does not pull in polars for a
 ten-line script.
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. CLAUDE.md's
+"(pytest and scripts)" still fits; left as is.
 
 ### C023 — README tree and doc index gaps
 
@@ -358,7 +397,10 @@ paste blocks (B051, B075, B086, B090). The remaining gaps:
   - the doc index omits `doc/003-schema-reference.sql`.
 - **Recommend:** pull. Three tree lines and one index row.
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Also
+indexed `doc/700-grc-backport-round-2.md` itself (temporary), the only
+other `doc/` file missing from the index.
 
 ### C024 — Tag a template sync point after this round
 
@@ -369,7 +411,7 @@ which expects a new `template-` tag from PROTO after the carry-back.
 tag is `template-2026-09-21`, so nothing marks round 1's merge (3727be2).
 GRC's lineage block still filters on the template's tickets archive,
 which PROTO removed (B091), so it now returns nothing.
-- **Recommend:** adapt (Brandon's action). Tag `template-2026-10-05`, at
+- **Recommend:** adapt (staff action). Tag `template-2026-10-05`, at
 3727be2 or after this round lands, and push it. Tell GRC to replace its
 lineage block with `DERIVING.md` §8's.
 - **Size:** S
@@ -388,7 +430,10 @@ field, secrets included.
 - **Recommend:** pull. Delete the tags, or tag the secrets `json:"-"` if a
 guard is preferred.
 - **Size:** S
-- **Decision:** \[ \] pull / \[ \] adapt / \[ \] skip
+- **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; tags
+  deleted (no `json:"-"`); a comment above the struct says it is never
+  serialized.
 
 ### C026 — The user list query stops reading `totp_seed`
 
@@ -415,7 +460,7 @@ composition rules. Every route that sets a password calls it.
 change own, change other, invite redeem, `/userSelfCreate`). Four of them
 count bytes. Nothing checks the password against the user name.
 - **Recommend:** adapt. Add the function and its test, and call it at all
-five sites. Brandon's call: take the 15-for-exempt rule, or only 8 plus
+five sites. Staff's call: take the 15-for-exempt rule, or only 8 plus
 not-the-user-name? If 15 is taken, pytest fixtures that create exempt
 logins need 15-character passwords (B097), and the web password
 generator should go to 16.
@@ -611,9 +656,11 @@ Nothing to bring.
 
 - **RG0043 GRC findings:**
   - #54 and #55 were deferred in GRC, so there is no code. CORS 200 on
+
   OPTIONS is still open in both and can be its own item.
   - #57 is the login-layer audit chain (skipped as B067).
   - #58 `/auditRead`, #62, #63, #69 (GRC types and pages split), #77 and
+
   #79 (`use-draft`), #80 and #82 (will not fix), #113-#115 and #117 (GRC
   tickets and plan docs), #121.
   - The requirements text in #118-#120.
@@ -630,9 +677,11 @@ hashes. The reusable shapes are in C007.
 0211d0e, 616434c, 39720b0, 3f251bd, 9b5a45f, 5f179ce, efc7b82):
   - #87 seed `--reset` refused: PROTO's migrate has no seed command.
   - #88 matrix tests: tied to GRC's permission matrix file; PROTO has its
+
   grant tests and the B039 route contract.
   - #92 nightly pass: PROTO has no worker.
   - #93 phone header: GRC's domain header controls; PROTO's header is
+
   burger, title and menu only.
 - **Tracker move:** Radley House items, its skill and procedure, the
 tracker token gitignores, and GRC's Round-N todo layout (PROTO's flat §0
@@ -649,18 +698,20 @@ Done items, moved here in their original order with their original
 numbers. All ten merged to `main` in PR #6 (merge 854e31f). Each keeps its
 Status line.
 
-| Item | Decision | Commit |
-|---|---|---|
-| C001 Runbook paste blocks guard each variable inside the command | done | 4ba97d9 |
-| C002 MFA onboarding drops `/mfaVerify`'s CSRF token | done | b21bec6 |
-| C003 Config refuses a bad JWT secret or TOTP key at load | done | a84ba5c |
-| C004 `/mfaSetup` and `/mfaVerify` accept a temp token only | done | a0be2e4 |
-| C005 A failed tenant-check lookup answers 500, not 403 | done | 4016c17 |
-| C006 An admin cannot delete their own login | done | b634ffd |
-| C007 One list of pending host work; a guarded host-change block | done | ab16fe5 |
-| C008 How a derived app retires the presales path | done | dfea118 |
-| C009 `bin/600` leaves full DB-dump bundles in `dist/` | done | 068fc16 |
-| C010 Release branches advance by merge commit, checked first | done | 3e5bf31 |
+
+| Item                                                             | Decision | Commit  |
+| ---------------------------------------------------------------- | -------- | ------- |
+| C001 Runbook paste blocks guard each variable inside the command | done     | 4ba97d9 |
+| C002 MFA onboarding drops `/mfaVerify`'s CSRF token              | done     | b21bec6 |
+| C003 Config refuses a bad JWT secret or TOTP key at load         | done     | a84ba5c |
+| C004 `/mfaSetup` and `/mfaVerify` accept a temp token only       | done     | a0be2e4 |
+| C005 A failed tenant-check lookup answers 500, not 403           | done     | 4016c17 |
+| C006 An admin cannot delete their own login                      | done     | b634ffd |
+| C007 One list of pending host work; a guarded host-change block  | done     | ab16fe5 |
+| C008 How a derived app retires the presales path                 | done     | dfea118 |
+| C009 `bin/600` leaves full DB-dump bundles in `dist/`            | done     | 068fc16 |
+| C010 Release branches advance by merge commit, checked first     | done     | 3e5bf31 |
+
 
 ### C001 — Runbook paste blocks guard each variable inside the command
 
@@ -684,17 +735,17 @@ reproduced in `bash -i` and `zsh -i`. Where it would damage a host:
   and in the doc/330 Lessons.
 - **Recommend:** pull.
   1. In doc/330, 331, 340 and 350, write every earlier-block variable as
-   `${VAR:?}` inside each destructive or path-building command (`rm`,
-   `mv`, `cp`, `chown`, `chmod`, `mkdir`, `tar -C`, `sed -i`). The top
-   guard line can stay.
+  `${VAR:?}` inside each destructive or path-building command (`rm`,
+  `mv`, `cp`, `chown`, `chmod`, `mkdir`, `tar -C`, `sed -i`). The top
+  guard line can stay.
   2. Correct the two rule statements and say why.
 - **Size:** M
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 - **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
-  Recommend: a guard inside `$(...)` stops only the substitution, so the
-  `{ ...; } | psql` groups (doc/330 A5 and rollback, doc/331, doc/340)
-  open with their own `:` guard, and the 0.2 uuid fetches are assigned
-  first and used as `${NACK_ID:?}` etc. in `git mv`.
+Recommend: a guard inside `$(...)` stops only the substitution, so the
+`{ ...; } | psql` groups (doc/330 A5 and rollback, doc/331, doc/340)
+open with their own `:` guard, and the 0.2 uuid fetches are assigned
+first and used as `${NACK_ID:?}` etc. in `git mv`.
 
 ### C002 — MFA onboarding drops `/mfaVerify`'s CSRF token
 
@@ -731,13 +782,13 @@ MFA on the post-sales UAT e2e harness would fail.
   1. Add the two checks.
   2. Give the e2e file a 64-hex key.
   3. `TestLoadConfig_RepoEnvFiles` loads the redacted SERVERONLY copies
-   and the `__TOTP_KEY__` template too, so exempt those placeholders or
-   assert them separately.
+  and the `__TOTP_KEY__` template too, so exempt those placeholders or
+  assert them separately.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
 - **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
-  repo-file test asserts the redacted copies and the template hold
-  placeholders, then appends stand-ins; harness files load as written.
+repo-file test asserts the redacted copies and the template hold
+placeholders, then appends stand-ins; harness files load as written.
 
 ### C004 — `/mfaSetup` and `/mfaVerify` accept a temp token only
 
@@ -759,8 +810,8 @@ without a temp token. In the same commit:
 - **Size:** S
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
 - **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
-  GRC: the checks now run before the body is read (the body no
-  longer picks a path), and B094's block subtests became 401 cases.
+GRC: the checks now run before the body is read (the body no
+longer picks a path), and B094's block subtests became 401 cases.
 
 ### C005 — A failed tenant-check lookup answers 500, not 403
 
@@ -793,8 +844,8 @@ the user's own row in the web app.
 - **Size:** S
 - **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
 - **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
-  optional web change was taken: Delete is hidden on the caller's own
-  login (list row and edit page), matched by user name as Block is.
+optional web change was taken: Delete is hidden on the caller's own
+login (list row and edit page), matched by user name as Block is.
 
 ### C007 — One list of pending host work; a guarded host-change block
 
@@ -803,7 +854,7 @@ more); GRC CLAUDE.md rule.
 - **GRC did:**
   - **One list.** All server work not yet done lives in one list. Each line
   gives the host, the command, the check that proves it, and the
-  rollback. Agents add lines but never run or tick them; only Brandon's
+  rollback. Agents add lines but never run or tick them; only staff's
   report ticks one.
   - **It caught a real miss.** A read-only re-check found that a UAT nginx
   step from the first release had never been run.
@@ -820,28 +871,28 @@ more); GRC CLAUDE.md rule.
   - `infra/README.md` has the release checklist and the hash-checked file
   move (B082). It has no `hostname` line, no host-SQL variant, no config
   pre-check and no host-work rule.
-  - `tasks/todo.md` §0 mixes Brandon's decisions with host env edits
+  - `tasks/todo.md` §0 mixes staff decisions with host env edits
   (`LOG_LEVEL`, `SERVER_BIND_ADDRESS`, `INVITE_TTL_HOURS`,
   `ALLOW_MFA_EXEMPT_VIA_API`) that have no check or rollback. A promote
   with any of them missing installs an API that refuses to start.
 - **Recommend:** adapt.
   1. Add a `## Host work` section to `tasks/todo.md` (host, change,
-   command, check, rollback) and move the host steps out of §0.
+  command, check, rollback) and move the host steps out of §0.
   2. Add a CLAUDE.md Conventions bullet: a change that needs a hand step on
-   a host adds a line there; agents never run or tick it.
+  a host adds a line there; agents never run or tick it.
   3. In the `infra/README.md` Release checklist, add:
      - a pre-flight item: a new or tightened required key means check each
-      host's env file first, printing lengths only;
+     host's env file first, printing lengths only;
      - `hostname` first;
      - the host-SQL block (backup, stop, apply, verify, rollback);
      - `sleep 2` after a reload.
 - **Size:** S
 - **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
 - **Status:** done 2026-10-05 on feature/grc-backport-round-2. Host work
-  in `tasks/todo.md` (H1-H12) gives each step a host, command, check and
-  rollback, plus the C003 e2e env-file step; the host-SQL block in
-  `infra/README.md` splits backup and apply into two pastes, so a failed
-  backup stops the paste rather than relying on a comment.
+in `tasks/todo.md` (H1-H12) gives each step a host, command, check and
+rollback, plus the C003 e2e env-file step; the host-SQL block in
+`infra/README.md` splits backup and apply into two pastes, so a failed
+backup stops the paste rather than relying on a comment.
 
 ### C008 — How a derived app retires the presales path
 
@@ -876,9 +927,9 @@ drops the presales DB. Deleting by hand has traps:
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
 - **Status:** done 2026-10-05 on feature/grc-backport-round-2. Also
-  lists two traps found in the tree: the Go env-file test counts the
-  template (fails at 5), and `bin/110-build-web-app` becomes optional dead
-  weight.
+lists two traps found in the tree: the Go env-file test counts the
+template (fails at 5), and `bin/110-build-web-app` becomes optional dead
+weight.
 
 ### C009 — `bin/600` leaves full DB-dump bundles in `dist/`
 
@@ -896,9 +947,9 @@ exact case.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
 - **Status:** done 2026-10-05 on feature/grc-backport-round-2. Beyond
-  Recommend: a failed scp keeps the bundle and prints the retry; a failed
-  build removes its staging dir (EXIT trap); the earlier-bundle list
-  prints on every run, not only `--no-scp`.
+Recommend: a failed scp keeps the bundle and prints the retry; a failed
+build removes its staging dir (EXIT trap); the earlier-bundle list
+prints on every run, not only `--no-scp`.
 
 ### C010 — Release branches advance by merge commit, checked first
 
@@ -919,5 +970,6 @@ build hook's branch and `BRANCH_TO_CHECKOUT` agree.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
 - **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
-  branch/hook grep went into `infra/README.md` one-time setup step 7
-  (where the hook branch is set), with the prod promote-hook variant.
+branch/hook grep went into `infra/README.md` one-time setup step 7
+(where the hook branch is set), with the prod promote-hook variant.
+

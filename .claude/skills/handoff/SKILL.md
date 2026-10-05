@@ -44,12 +44,16 @@ normal conflict, not a surprise. Resolve by **keeping both**, in date order.
 
 **Re-verify after the merge if `main` moved.** A branch that passed before the
 merge is not evidence about the merge. If nothing you depend on changed, say so
-and show it (`git diff --stat <base> origin/main -- src/ sql/ tests/`).
+and show it:
+
+```bash
+git diff --stat <base> origin/main -- src/ bin/ scripts/ infra/ tests/
+```
 
 **On `main`** — just `git pull`. There is nothing to merge.
 
-**Do not merge the branch into `main`.** Only Brandon advances `main`, and
-landing a branch needs his approval as a separate act. A hand-off leaves the
+**Do not merge the branch into `main`.** Only staff advance `main`, and
+landing a branch needs their approval as a separate act. A hand-off leaves the
 branch on `origin`, ready; it does not land it.
 
 ## 2. Write down what is outstanding
@@ -59,7 +63,7 @@ Everything left goes in **`tasks/todo.md`**:
 | The work | Goes in |
 |---|---|
 | Engineering work still to do | `tasks/todo.md`, as a queue item |
-| A decision only Brandon can take | `tasks/todo.md` §0 |
+| A decision only staff can take | `tasks/todo.md` §0 |
 | What happened, with evidence | the commit message, or the doc the work touched |
 
 **Never append a dated session log to `tasks/todo.md`.** A queue buried in
@@ -74,6 +78,13 @@ Each outstanding item needs three things or it is not written down:
 - **The next physical action.** A file to open, a query to run, a person to ask.
 
 **Verify before you write it.** If it takes a query or a test run to know, run it.
+
+**Then prune §0.** Re-read `tasks/todo.md` §0 whole, not only the lines you
+added. An entry that is now true (the migration ran, the decision was made)
+gets checked off with the reason and the date (`**Closed <date>:** <why>`,
+e.g. "applied on dev, `bin/205-migrate-db` clean"). An entry marked
+unverified, or one you cannot tell is still true, gets verified now or
+struck — never carried forward unchanged for the next session to trip over.
 
 ## 3. Commit everything and push
 
@@ -101,8 +112,9 @@ Four questions, each of which costs a session when skipped:
 - **Is a branch being left mid-work by a session that is ending?** If the work
   is stopping rather than continuing, say so in the prompt so the next agent
   knows the branch is theirs to take, not to work around.
-- **Is anything waiting on Brandon?** A merge approval, a UAT deploy
-  (`bin/600-bundle-uat`, `bin/610-deploy-uat`), a decision. Name it; it is
+- **Is anything waiting on staff?** Name the act, not just "review": a pull
+  request into `main` to approve and merge, a check on UAT, a deploy or
+  release, a host step (`tasks/todo.md` **Host work**), or a decision. It is
   the thing that will otherwise sit for days.
 - **Is anything waiting on the customer?** A question written down in
   `tasks/todo.md` but never actually asked.
@@ -122,7 +134,8 @@ copy that goes stale.
 
 **Branch:** `feature/...` (pushed, at <sha>) — or `main`
 **Read first:** `tasks/todo.md` <section>
-**State:** merged with origin/main at <sha>; <what is verified vs claimed>
+**State:** merged with origin/main at <sha>; deployed to UAT: <sha or no>;
+<what is verified vs claimed>
 
 ### What is done
 - ... with the numbers, and how each was verified
@@ -134,7 +147,7 @@ copy that goes stale.
 - The traps specific to this work, not the ones in CLAUDE.md
 
 ### Do not
-- Merge to main without asking Brandon — several branches may be in flight
+- Merge to main without asking staff — several branches may be in flight
 - <anything else specific to this work>
 ```
 ````
@@ -151,7 +164,7 @@ down where the next agent will find it, and nothing in the prompt is a guess.
 this when a real fork was hit and answering it wrong would waste the next
 session: work that cannot be verified from this machine, an item that could
 belong to two different branches, a branch that may be someone else's, a
-decision only Brandon can take. **Do not use it to ask permission to do the
+decision only staff can take. **Do not use it to ask permission to do the
 hand-off.**
 
 Prefer the honest one. A hand-off that says *ready* while something is unpushed
@@ -163,6 +176,6 @@ or unverified is the failure this whole skill exists to prevent.
   pasted into other sessions and other machines.
 - **Deploy steps to run.** What a deploy needs (binary, web build, which
   `src/api-srv/sql/migrations/` files) goes in `tasks/todo.md`; the prompt
-  says only that it is waiting for Brandon.
+  says only that it is waiting on staff.
 - **Anything you did not verify.** Write `unknown`. The next agent can act on
   unknown; it cannot act on a confident wrong number.

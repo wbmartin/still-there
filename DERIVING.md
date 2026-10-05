@@ -49,6 +49,8 @@ spreadsheets, import sets) and anything derived from it, including mock
 data built from real records, lives in a directory outside the repository,
 named by a key in the app's env file. The key is the derived app's to add;
 ProtoStack has no import path. Fixtures, seeds and mock data are synthetic.
+The customer's people count too: `tasks/`, docs and commit messages name
+them by person id or role, never by name.
 Deleting a committed file does not remove it: the first derived app
 committed a tenant's export and needed a new repository, new webhooks, a
 new deploy key and a re-clone of every checkout to get it out of history
@@ -92,6 +94,8 @@ every miss 404.
   sections carry over as they are.
 - `CLAUDE.md`: add a "Template lineage" section (the block in §8) before
   `DERIVING.md` goes; it is the only record of where the app came from.
+- An external tracker's URL, project ids and token live in a user-level
+  skill or a gitignored root env file, never in the repo.
 - `README.md`: title, first paragraph, and drop this file's mention if you
   do not want derivation instructions in the derived app. `DERIVING.md`
   itself can go.

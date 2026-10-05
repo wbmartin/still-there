@@ -6,8 +6,8 @@ React 19 / TypeScript / Vite / Mantine frontend.
 
 ```bash
 bin/220-run-web-app   # from the repo root; vite dev server on :5173,
-                       # proxying /api to VITE_API_PROXY_URL (default
-                       # http://localhost:8080)
+                       # proxying /api to VITE_API_PROXY_URL
+                       # (.env.development: the dev API, :8080)
 ```
 
 or, from `src/web-app`:
@@ -26,11 +26,14 @@ npm run build:prod   # production build
 
 ## API Proxy
 
-The Vite dev server proxies `/api/*` to `VITE_API_PROXY_URL` (default
-`http://localhost:8080`; see `vite.config.ts`), stripping the `/api`
-prefix before forwarding. Set `VITE_API_PROXY_URL` in `.env.development`
-/ `.env.production`; any `VITE_*`-prefixed variable is available in the
-browser.
+The Vite dev server proxies `/api/*` to `VITE_API_PROXY_URL`, stripping
+the `/api` prefix before forwarding. `.env.development` sets it to the dev
+API (`SERVER_PORT` in `etc/loc-api-srv.env`); `playwright.config.ts`
+passes the e2e API's instead. There is no default: `vite.config.ts` fails
+`vite serve` without it, so `npm run dev:prod` needs it in the
+environment. A build never uses it, and `.env.production` sets nothing:
+nginx serves the bundle and proxies `/api` on the same origin. Any
+`VITE_*`-prefixed variable is available in the browser.
 
 ## Project Structure
 

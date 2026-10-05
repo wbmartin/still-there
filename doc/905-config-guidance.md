@@ -64,7 +64,46 @@
   really were part of the secret, double them: `JWT_SECRET=""abc""` parses
   as `"abc"`) or accept the re-key. `APP_NAME` is the one quoted value in
   `etc/loc-api-srv.env`, and losing its quotes is the point of the change
-- the only environment variable the Go code reads is `TEST_DATABASE_URL`, and
-  only the database-backed Go tests read it: they skip without it so that
-  running `go test` never writes to a database the config file happened to
-  name (`bin/300-run-tests go` sets it)
+- **no shipped binary reads an environment variable.** Nothing in
+  `cmd/server`, `cmd/migrate` or the `internal/` packages they import calls
+  `os.Getenv`, `os.LookupEnv` or `os.Environ`; every value comes from the
+  config file or a flag. Two libraries underneath do read their own, and
+  neither is app configuration: pgx fills a connection setting the URL
+  leaves out from the libpq variables (`PGHOST`, `PGUSER`, `PGPASSWORD`,
+  `PGPASSFILE`, `PGSSLMODE` and the rest; a value in the URL always wins),
+  and the Go runtime reads `GOMAXPROCS`, `GODEBUG` and `TZ`. So write every
+  connection setting the API relies on, `sslmode` included, into
+  `DATABASE_URL` rather than leave it to the service's environment
+- every variable the tests and harnesses read, with its reader and who sets
+  it. None is set on a server running the API:
+
+  | Variable | Read by | Set by |
+  | --- | --- | --- |
+  | `TEST_DATABASE_URL` | the database-backed Go tests: `internal/repository/testdb_test.go`, `internal/migrate/migrate_test.go`, `sql/export_scrub_test.go`, `cmd/migrate/invite_test.go`. Without it they skip, so a bare `go test` never writes to a database a config file happened to name | `etc/loc-test.env` (a host: its own `TEST_ENV` file); `bin/300-run-tests go` passes it to `go test` |
+  | `TEST_API_ENV` | `tests/conftest.py`: the private API's config file, read for its limits and checked to name a scratch database | `bin/300-run-tests py` (the copy of `etc/e2e-api-srv.env` it writes to the log directory) |
+  | `TEST_BASE_URL` | `tests/conftest.py` and the `tests/test_*.py` modules | `bin/300-run-tests py`, from the `TEST_BASE_URL` key in that config file |
+  | `E2E_API_ENV` | `src/web-app/playwright.config.ts` (default `etc/e2e-api-srv.env`); `bin/230-run-web-app-e2e`, `bin/300-run-tests`, `bin/330-test-load` | `etc/loc-test.env`; bin/230 and bin/300 make it absolute and export it |
+  | `E2E_USER_NAME`, `E2E_PASSWORD` | `src/web-app/playwright.config.ts`, for global setup and the specs | nothing in the tree. The defaults, `admin` / `admin123!`, are the synthetic fixture login from `sql/fixtures/test-seed.sql` (`DERIVING.md`), not a secret; a host whose fixtures differ sets both |
+  | `E2E_DB_SEEDED` | `src/web-app/tests/e2e/global-setup.ts`: set means skip the reseed | `bin/300-run-tests e2e`, which has just rebuilt the database |
+  | `CI` | `src/web-app/playwright.config.ts`: forbid `.only`, two retries, never reuse a running server, list reporter | `infra/uat/etc/uat-proto-test.env` (the UAT build host's `TEST_ENV` file); unset on a laptop |
+  | `<SERVICE>_LIVE` | a live test (`TestLive<Service>...`, `test_live_<service>_...`); the template has none | by hand only (`tests/README.md`, "Writing tests"); nothing in the gate or on a host sets one |
+
+- the `bin/` scripts take a few overrides from the caller's environment;
+  all but the last two default from a file, so a plain run needs none:
+
+  | Variable | Read by | Set by |
+  | --- | --- | --- |
+  | `TEST_ENV` | `bin/300-run-tests`, `bin/330-test-load`: which harness file to source | default `etc/loc-test.env`; `infra/uat/bin/uat-proto-run-tests` on the UAT host |
+  | `TEST_PG_URL_BASE`, `PGPASSWORD`, `PG_CONTAINER`, `PSQL` | `bin/205-migrate-db`, `bin/510-reset-test-db`, `bin/515-reseed-db` (each sources `etc/loc-test.env` only when `TEST_PG_URL_BASE` is unset) | `etc/loc-test.env`, which also exports `PGUSER`, `PGHOST`, `PGPORT` for psql; `PSQL` by hand |
+  | `TEST_DB`, `E2E_DB`, `TEST_LOG_DIR` | `bin/300-run-tests`, `bin/330-test-load`, `bin/515-reseed-db` | `etc/loc-test.env` |
+  | `SCHEMA_REFERENCE_FILE` | `bin/510-reset-test-db` (default `doc/003-schema-reference.sql`) | `bin/300-run-tests`, to a file in its log directory |
+  | `PRESALES_ENV` | `bin/600-bundle-uat` (default `etc/uat-deploy.env`) | by hand |
+  | `FORCE` | `bin/400-make-local-dev-certs`: `FORCE=1` overwrites the pair | by hand |
+
+- the web app: `src/web-app/vite.config.ts` reads `VITE_API_PROXY_URL`
+  through `loadEnv`, and only for `vite serve` (the `/api` proxy target).
+  `src/web-app/.env.development` sets it for the dev server and
+  `src/web-app/playwright.config.ts` passes its own for the e2e stack.
+  No `VITE_*` variable reaches the bundle: nothing under `src/web-app`
+  reads import.meta.env, so `vite build` bakes no environment value into
+  the browser code

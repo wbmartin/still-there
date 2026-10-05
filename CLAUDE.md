@@ -95,10 +95,13 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
   variable lookups.
 - A change that needs a hand step on a host adds an entry to
   `tasks/todo.md` Host work (host, command, check, rollback). Agents never
-  run or tick it; only Brandon's report ticks one.
+  run or tick it; only a staff member's report ticks one.
 - Customer data never in git: source exports and anything derived from
   them live outside the repo; fixtures and mock data are synthetic
-  (`DERIVING.md` section 2). A leak costs a new repository.
+  (`DERIVING.md` section 2). That includes the customer's people:
+  `tasks/`, docs and commit messages name them by person id or role,
+  never by name. A leak costs a new repository; a committed name stays
+  in history until a reset (`doc/350-repository-reset.md`).
 - Show only what the code verified: a count counts confirmed results, a
   metric is measured or absent, a missing value stays missing. Nothing
   fabricated reaches a screen, report or log.
@@ -107,6 +110,6 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
 ## Branches
 
 `main` is the default branch. Feature branches are `feature/<slug>`;
-pull requests target `main`, and only Brandon advances `main` — agents
-never merge into it without his approval, and touch only `main` and
+pull requests target `main`, and only staff advance `main` — agents
+never merge into it without staff approval, and touch only `main` and
 their own branch.

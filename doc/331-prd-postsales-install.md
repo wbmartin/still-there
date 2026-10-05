@@ -358,7 +358,7 @@ Same root shell (or paste A's variables block again).
 
 On the monitoring host; only now, since before A8 both would page. As
 `doc/330` B2 with `prd-proto-api` / `prd-proto-web`: stage the files in
-`/tmp` (`cp "$I"/shrmpl-etc/pulsecheck-endpoints/prd-proto-*.env /tmp/` on
+`/tmp` (`cp "${I:?}"/shrmpl-etc/pulsecheck-endpoints/prd-proto-*.env /tmp/` on
 prod if it is the monitoring host, else `scp` them from local), then on
 the monitoring host, with `SITE` set to prod's `SITE_NAME`:
 

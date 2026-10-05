@@ -7,7 +7,7 @@ Skipped: B002, B005, B015, B049, B050, B057, B067, B068, B079, B084,
 B092. B092 is a live bug left as is: a wrong old password on "change my
 password" answers 401, so the web signs the user out.
 
-## 0. Waiting on Brandon
+## 0. Waiting on staff
 
 - **Dev DB:** run `bin/205-migrate-db` to apply 0004/0005 (B034, B035)
   before the next `bin/215-run-api-srv` or `bin/600-bundle-uat`; the API
@@ -20,15 +20,18 @@ password" answers 401, so the web signs the user out.
 - **Attribution note:** commits 8dd505f..388c0ae (B085-B090) say "Claude
   Opus 5.5" but were written by Sonnet; not rewritten (pushed).
 - **Host steps** moved to Host work below (C007).
-- **2026-10-03:** Brandon agreed with every recommendation: B046 rename
+- **2026-10-03:** Staff agreed with every recommendation: B046 rename
   and B058 no-override confirmed; B054 one-way, B062 15 default, B066
   DENIED, B069 no zod bump kept; B063 StickyFilters removed; B093-B099
   done.
 - **Follow-up:** the switcher context-switch pytest still mutates the seeded
   `switcher` user (B043).
-- **Unknown file `radley-uat-builder-token`** appeared untracked in the repo
-  root during the B033 test run and then vanished. Never committed
-  (`git log --all -- radley-uat-builder-token` is empty). Check what wrote it.
+- **Closed (C013): unknown file `radley-uat-builder-token`**, seen
+  untracked in the repo root during the B033 run, then gone. Never
+  committed. Its name matches the radley-grc tracker's ("Radley House")
+  builder-agent token file, which GRC gitignored in d364daa/d202ac6, so
+  that tooling most likely wrote it while running in this checkout.
+  `.gitignore` now ignores `/*-token` at the root.
 
 ## Host work
 
@@ -38,7 +41,7 @@ a post-sales host installed before the change named (a host installed
 from doc/330 or doc/331 at the current `main` already has it).
 
 Each entry: host and change, command, check, rollback. Agents add
-entries and never run or tick them; only Brandon's report ticks one.
+entries and never run or tick them; only a staff member's report ticks one.
 Commands run as root on the host named, `hostname` first; a variable set
 in an earlier block is written `${VAR:?}` inside each command. Checks
 print presence and lengths, never a secret value.

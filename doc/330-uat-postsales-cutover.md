@@ -6,7 +6,7 @@ The runbook that moves the UAT host from the presales bundle
 migrator pipeline in `infra/uat/` (`infra/README.md`). The host is
 reloaded from your **local** database, as a credential-scrubbed export
 (0.4), and `doc/331-prd-postsales-install.md` loads prod from the same
-export the same day, so prod runs nothing UAT has not (Brandon,
+export the same day, so prod runs nothing UAT has not (staff,
 2026-10-02: "we setup UAT and Prod with whatever we've been working on
 our locals").
 
@@ -724,8 +724,8 @@ comment names `bin/610` too.
 | `scripts/doc-paths-allow.txt` | the seven lines for doc/320 and their group comment; any doc/330, doc/340 or infra/README.md line whose token the rewording removed (the docs gate reports it STALE) |
 | `scripts/check-doc-paths.sh` | the header comment's example, "a file inside the presales bundle" |
 | `etc/app.env`, `etc/loc-api-srv.env` | comments naming the presales service and the template |
-| `.claude/skills/handoff/SKILL.md` | "Is anything waiting on Brandon?": a UAT deploy is a merge to the hook's `BRANCH_TO_CHECKOUT`, not 600/610 |
-| `tasks/todo.md` | "Waiting on Brandon" (the dev DB line names 600); Host work: the intro, the "Presales UAT" heading and H1-H4 (presales hosts only, none left: delete them); H5 applies to every deployed host, so move it under post-sales if still open |
+| `.claude/skills/handoff/SKILL.md` | "Is anything waiting on staff?": a UAT deploy is a merge to the hook's `BRANCH_TO_CHECKOUT`, not 600/610 |
+| `tasks/todo.md` | "Waiting on staff" (the dev DB line names 600); Host work: the intro, the "Presales UAT" heading and H1-H4 (presales hosts only, none left: delete them); H5 applies to every deployed host, so move it under post-sales if still open |
 
 `infra/sql/proto-host-db.sql` and doc/340's other lines describe how a
 presales database is renamed aside; they stay true as history.
