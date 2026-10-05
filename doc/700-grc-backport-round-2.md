@@ -2,7 +2,7 @@
 
 A decision list of generic improvements made in radley-grc (GRC) since the
 last backport that ProtoStack (PROTO) lacks. Nothing here is applied. It is
-not a plan: Brandon marks each **Decision**, and the work comes out of that.
+not a plan: staff mark each **Decision**, and the work comes out of that.
 
 - **PROTO:** `main` @ 3727be2 (round 1, B001-B099, merged and closed).
 - **GRC:** branch uat @ 4ffa9e9. Range reviewed: bedf958..uat, 102 commits,
@@ -75,7 +75,7 @@ C001-C010 are done (PR #6, merged 2026-10-05) and sit under
 
 
 C034 and C035 were skipped in round 1. GRC has fixed both since, so they are
-listed in case Brandon wants to reopen them.
+listed in case staff want to reopen them.
 
 # P2: infra and operations
 
@@ -167,7 +167,7 @@ laptop's etc/crt directory. `bin/400-make-local-dev-certs` already makes local
 TLS (self-signed, mode 600), and the hosts renew their own
 (`infra/uat/bin/uat-proto-renew-web-certs`). PROTO's TLS keys in
 `etc/loc-api-srv.env` are live (bin/400 writes those paths), so they stay.
-- **Recommend:** adapt (Brandon's call). Delete doc/310 and point the four
+- **Recommend:** adapt (staff's call). Delete doc/310 and point the four
 references (CLAUDE.md, README, bin/400 header, doc/902) at bin/400 for
 local TLS and at the host renew scripts. A real host key on a workstation
 is not a practice to hand the next app.
@@ -219,7 +219,7 @@ KV has no batch, so both checks share `rateWindow.incrementAndCount`
 - **GRC source:** RG0043 header and section 11 preamble; abc1d8e, d951ec0,
 9120ee0, db21a8e, 150274d, 0b4d056.
 - **GRC did:** Ran its 124-finding review as six fix rounds. Each round
-was a PR, then the gate, then Brandon's UAT check, then the items moved
+was a PR, then the gate, then the staff UAT check, then the items moved
 to Settled with a Status line (disposition, who ruled, date, commit).
 The bookkeeping is where it broke:
   - the sections were renumbered after every round, so "(r2)" means two
@@ -240,7 +240,7 @@ no Settled list and no rule for fix rounds.
   2. After triage, write the findings to one committed file. Each gets a
   Status line, and settled items move to `## Settled` in id order.
   3. One defect per item; a sweep becomes F041a, F041b.
-  4. One settle gate for every round: merged, gate green, Brandon's check.
+  4. One settle gate for every round: merged, gate green, staff check.
   5. A long-lived review branch takes merge commits, or each round gets a
   fresh branch.
   6. Keep a frozen at-review severity table and a live open count, updated
@@ -248,7 +248,7 @@ no Settled list and no rule for fix rounds.
 - **Size:** M
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
 - **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; "staff"
-  for the human who triages and checks (not Brandon); the Report section
+  for the human who triages and checks; the Report section
   now numbers findings and gives an area × severity table, and
   `tasks/todo.md` points at the review file instead of holding findings.
 
@@ -329,8 +329,8 @@ lines below.
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
 - **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. "Host
   work" is the `tasks/todo.md` section name. Other skills have no
-  "Brandon"; CLAUDE.md (2) and `tasks/todo.md` (3, incl. the §0 heading)
-  still do, left for a decision.
+  "Brandon"; CLAUDE.md, `tasks/todo.md`, doc/330 and an app_helper.go
+  comment did, and say "staff" too since (staff ruling: throughout).
 
 ### C020 — The customer's people by id, never by name
 
@@ -411,7 +411,7 @@ which expects a new `template-` tag from PROTO after the carry-back.
 tag is `template-2026-09-21`, so nothing marks round 1's merge (3727be2).
 GRC's lineage block still filters on the template's tickets archive,
 which PROTO removed (B091), so it now returns nothing.
-- **Recommend:** adapt (Brandon's action). Tag `template-2026-10-05`, at
+- **Recommend:** adapt (staff action). Tag `template-2026-10-05`, at
 3727be2 or after this round lands, and push it. Tell GRC to replace its
 lineage block with `DERIVING.md` §8's.
 - **Size:** S
@@ -460,7 +460,7 @@ composition rules. Every route that sets a password calls it.
 change own, change other, invite redeem, `/userSelfCreate`). Four of them
 count bytes. Nothing checks the password against the user name.
 - **Recommend:** adapt. Add the function and its test, and call it at all
-five sites. Brandon's call: take the 15-for-exempt rule, or only 8 plus
+five sites. Staff's call: take the 15-for-exempt rule, or only 8 plus
 not-the-user-name? If 15 is taken, pytest fixtures that create exempt
 logins need 15-character passwords (B097), and the web password
 generator should go to 16.
@@ -854,7 +854,7 @@ more); GRC CLAUDE.md rule.
 - **GRC did:**
   - **One list.** All server work not yet done lives in one list. Each line
   gives the host, the command, the check that proves it, and the
-  rollback. Agents add lines but never run or tick them; only Brandon's
+  rollback. Agents add lines but never run or tick them; only staff's
   report ticks one.
   - **It caught a real miss.** A read-only re-check found that a UAT nginx
   step from the first release had never been run.
@@ -871,7 +871,7 @@ more); GRC CLAUDE.md rule.
   - `infra/README.md` has the release checklist and the hash-checked file
   move (B082). It has no `hostname` line, no host-SQL variant, no config
   pre-check and no host-work rule.
-  - `tasks/todo.md` §0 mixes Brandon's decisions with host env edits
+  - `tasks/todo.md` §0 mixes staff decisions with host env edits
   (`LOG_LEVEL`, `SERVER_BIND_ADDRESS`, `INVITE_TTL_HOURS`,
   `ALLOW_MFA_EXEMPT_VIA_API`) that have no check or rollback. A promote
   with any of them missing installs an API that refuses to start.

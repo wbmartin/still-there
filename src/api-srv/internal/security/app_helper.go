@@ -28,7 +28,7 @@ import (
 // An endpoint that needs less writes the difference with Skip* calls in the
 // same place, so an auditor reads the whole policy in the handler. This is
 // deliberate and not to be replaced by middleware or a route wrapper
-// (Brandon; doc/105 "Security checks"). CheckAllChecksComplete
+// (a staff decision; doc/105 "Security checks"). CheckAllChecksComplete
 // refuses to proceed unless all five were either checked or skipped.
 
 // contextKey is a custom type for context keys to avoid collisions

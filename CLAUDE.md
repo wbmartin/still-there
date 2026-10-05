@@ -95,7 +95,7 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
   variable lookups.
 - A change that needs a hand step on a host adds an entry to
   `tasks/todo.md` Host work (host, command, check, rollback). Agents never
-  run or tick it; only Brandon's report ticks one.
+  run or tick it; only a staff member's report ticks one.
 - Customer data never in git: source exports and anything derived from
   them live outside the repo; fixtures and mock data are synthetic
   (`DERIVING.md` section 2). That includes the customer's people:
@@ -110,6 +110,6 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
 ## Branches
 
 `main` is the default branch. Feature branches are `feature/<slug>`;
-pull requests target `main`, and only Brandon advances `main` — agents
-never merge into it without his approval, and touch only `main` and
+pull requests target `main`, and only staff advance `main` — agents
+never merge into it without staff approval, and touch only `main` and
 their own branch.
