@@ -199,7 +199,7 @@ floor is current, the list it walks is complete).
   or struck.
 - [ ] A plan doc's status matches the code, and every branch it cites
   exists on origin (`git ls-remote --heads origin <branch>`).
-- [ ] The customer's people appear by person id, never by name, in
+- [ ] The customer's people appear by person id or role, never by name, in
   `tasks/`, docs and commit messages (`git log --all --format=%B`).
 
 ## Report

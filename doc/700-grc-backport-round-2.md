@@ -345,6 +345,10 @@ people: `tasks/`, docs and commit messages refer to them by person id".
 Add the line to the review checklist (C018).
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; "by
+  person id or role", matching clause in `DERIVING.md` §2; review
+  checklist line aligned. No customer names found in `tasks/`, `doc/`
+  or the last 200 commit messages.
 
 ### C021 — `doc/905` lists every environment variable anything reads
 

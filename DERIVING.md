@@ -49,6 +49,8 @@ spreadsheets, import sets) and anything derived from it, including mock
 data built from real records, lives in a directory outside the repository,
 named by a key in the app's env file. The key is the derived app's to add;
 ProtoStack has no import path. Fixtures, seeds and mock data are synthetic.
+The customer's people count too: `tasks/`, docs and commit messages name
+them by person id or role, never by name.
 Deleting a committed file does not remove it: the first derived app
 committed a tenant's export and needed a new repository, new webhooks, a
 new deploy key and a re-clone of every checkout to get it out of history
