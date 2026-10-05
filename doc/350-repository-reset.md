@@ -163,7 +163,7 @@ sudo -u shrmpl-hook -H git clone "${REPO_URL:?}" "${BUILD_STG:?}"
 sudo -u shrmpl-hook -H git -C "${BUILD_STG:?}" rev-list --all --count
 ```
 
-Expect `1`, then `rm -rf "$BUILD_STG.old"`.
+Expect `1`, then `rm -rf "${BUILD_STG:?}.old"`.
 
 **Every laptop and other machine:** a fresh clone beside the old one.
 Carry uncommitted work across as files; never push from the old clone or

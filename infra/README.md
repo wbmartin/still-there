@@ -307,7 +307,7 @@ The hash matches the local one and `diff` shows only the intended change.
 `cp` onto the existing file keeps its owner and mode. A unit then needs
 `systemctl daemon-reload` (a changed API unit takes effect at the next
 `systemctl restart prd-proto-api`). If it goes wrong,
-`cp -p "/root/$N.before" "$T"` and reload again. Three files do not move
+`cp -p "/root/${N:?}.before" "${T:?}"` and reload again. Three files do not move
 this way: an env file (a new key is added to the host's file by hand),
 the nginx site (rendered with the real site name, `doc/331` Every later
 release, then `nginx -t` before the reload) and `jail.local` (merged with
