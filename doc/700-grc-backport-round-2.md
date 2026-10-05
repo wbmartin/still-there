@@ -188,6 +188,9 @@ match PROTO's nginx. This matters most where a derived app runs without
 nginx.
 - **Size:** S
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. Fields
+set in a new `newHTTPServer` so a test checks them and that
+`WriteTimeout` equals nginx's `proxy_read_timeout`.
 
 ### C016 — Sliding-window rate limit
 

@@ -408,6 +408,25 @@ On servers nginx's `client_max_body_size` (20M in
 the API sees the request; the per-route caps above are the inner bound, and
 the only one when the API is reached without nginx (local dev).
 
+### Server Timeouts
+`newHTTPServer` in `cmd/server/main.go` sets the `http.Server` timeouts,
+so a client that trickles headers or a body cannot hold a connection
+forever, with or without nginx in front:
+
+| Field | Value | Bounds |
+|---|---|---|
+| `ReadHeaderTimeout` | 10 s | the request headers |
+| `ReadTimeout` | 2 min | the whole request, body included (20M on a slow link) |
+| `WriteTimeout` | 5 min | the response; equals nginx's `proxy_read_timeout` 300s |
+| `IdleTimeout` | 2 min | a keep-alive connection between requests |
+
+They are constants, not config keys. `WriteTimeout` and the nginx
+`proxy_read_timeout` in `infra/*/etc/nginx_*` move together
+(`TestNewHTTPServer_WriteTimeoutMatchesNginx`). The template has no
+upload, export or streaming route; a derived app whose route needs longer
+extends that route's deadline with `http.ResponseController`, not the
+server's.
+
 ### Authorization (RBAC)
 - **Grants**: Context-specific permissions in JWT (only current context's grants)
 - **User Groups**: Collections of grants assigned to users per security context

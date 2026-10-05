@@ -241,15 +241,14 @@ func main() {
 	// Client error reports (signed-in callers only)
 	mux.HandleFunc("POST /error-report", errorReportHandler.HandleErrorReport)
 
-	// Create server
-	server := &http.Server{
-		// JoinHostPort brackets an IPv6 bind ("[::1]:8080"). The address
-		// is never empty: LoadConfig requires SERVER_BIND_ADDRESS.
-		Addr: net.JoinHostPort(
+	// Create server. JoinHostPort brackets an IPv6 bind ("[::1]:8080"). The
+	// address is never empty: LoadConfig requires SERVER_BIND_ADDRESS.
+	server := newHTTPServer(
+		net.JoinHostPort(
 			config.ServerBindAddress, strconv.Itoa(config.ServerPort),
 		),
-		Handler: securedMux,
-	}
+		securedMux,
+	)
 
 	// Start server in goroutine
 	go func() {
@@ -311,4 +310,24 @@ func main() {
 	}
 
 	logger.Info("SERVER_STOP", "Server stopped", "username", "app-root")
+}
+
+// newHTTPServer builds the server with its timeouts (GRC RG0043, C015).
+// Without them a client that trickles headers or a body holds a connection
+// open forever, and nginx was the only guard (none in local dev, or where a
+// derived app runs without it). The header has 10 s; the whole request
+// (nginx's 20M client_max_body_size on a slow link) 2 min; the response
+// 5 min, nginx's proxy_read_timeout in infra/*/etc/nginx_*, so a long
+// download or render is cut by neither side first; an idle keep-alive
+// 2 min. A route that needs longer raises its own deadline with
+// http.ResponseController.
+func newHTTPServer(bindAddress string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              bindAddress,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       2 * time.Minute,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+	}
 }
