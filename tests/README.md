@@ -115,8 +115,10 @@ and tells the lockout 429 from the rate limiter's by the `error` message.
 
 The rate-limit case runs as a throwaway login (the admin is exempt). It
 reads `MAX_USER_REQ_PER_MIN`, waits for the next clock minute only when
-under 20 s of it remain (the limiter buckets per login per minute), then
-expects exactly that many 200s and one 429. It is the one known flaky
+under 20 s of it remain, then expects exactly that many 200s and one 429.
+The limiter counts a sliding 60 s window (this minute's bucket plus the
+last minute's, weighted); a new login has no last-minute bucket, and a
+burst inside one minute is counted exactly. It is the one known flaky
 test; rerun once if it alone fails.
 
 ## Writing tests

@@ -180,11 +180,14 @@ class TestErrorScenarios:
         minute, then 429 (admin is exempt).
 
         The limit is read from the config the test API runs on, so raising
-        the dev value cannot break the test. The limiter counts per login
-        per clock minute (RPM*<user>*<minute>), so the burst starts with
-        enough of the minute left to finish in one bucket, sends with no
-        sleep, and runs as a throwaway login: its bucket starts empty and
-        nothing is left throttled when it is deleted.
+        the dev value cannot break the test. The limiter counts a sliding
+        60 s window: this minute's bucket (RPM*<user>*<minute>) plus the
+        last minute's, weighted by overlap. A throwaway login has no last-
+        minute bucket, so a burst that stays inside one minute is counted
+        exactly; one that crossed a boundary would see its first bucket
+        decay and let a few extra through. So the burst starts with enough
+        of the minute left to finish in one bucket, sends with no sleep,
+        and nothing is left throttled when the login is deleted.
         """
         limit = int(api_env()["MAX_USER_REQ_PER_MIN"])
         client, created = create_throwaway_login(test_client, "ratelimit")

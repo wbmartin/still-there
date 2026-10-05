@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -383,6 +384,68 @@ func parseHostIP(value string) string {
 	return ip.String()
 }
 
+// rateWindow is the sliding window the rate limit counts in: this clock
+// minute's bucket plus the previous minute's, weighted by how much of that
+// minute still lies inside the last 60 seconds. Fixed per-minute buckets
+// let a client spend its whole allowance at 12:00:59 and a fresh one at
+// 12:01:00 -- twice the limit inside a second. Buckets are keyed by
+// absolute minute (Unix()/60), so a key never comes round again.
+type rateWindow struct {
+	currentKey     string
+	previousKey    string
+	previousWeight float64
+}
+
+// rateBucketTTL keeps a bucket alive through the minute after its own, when
+// it is the previous one.
+const rateBucketTTL = "2min"
+
+// newRateWindow is the window for identifier (a user name, or
+// anonRateIdentifier) at now. now is a parameter so the test can stand on
+// a minute boundary.
+func newRateWindow(identifier string, now time.Time) rateWindow {
+	minute := now.Unix() / 60
+	elapsed := float64(now.Unix()%60) + float64(now.Nanosecond())/1e9
+	return rateWindow{
+		currentKey:     fmt.Sprintf("RPM*%s*%d", identifier, minute),
+		previousKey:    fmt.Sprintf("RPM*%s*%d", identifier, minute-1),
+		previousWeight: 1 - elapsed/60,
+	}
+}
+
+// count is the window's estimate of requests in the last 60 seconds: the
+// current bucket (just incremented) plus the previous one, weighted.
+// previous is that bucket's stored value, "" when it is absent. A value
+// that is not a count is an error, and the caller fails closed.
+func (rw rateWindow) count(current int, previous string) (int, error) {
+	if previous == "" {
+		return current, nil
+	}
+	previousCount, err := strconv.Atoi(previous)
+	if err != nil {
+		return 0, fmt.Errorf("bucket %s holds %q, not a count",
+			rw.previousKey, previous)
+	}
+	return current + int(float64(previousCount)*rw.previousWeight), nil
+}
+
+// incrementAndCount adds this request to the current bucket and returns
+// the window's count. Any KV error is returned for the caller to fail
+// closed on.
+func (rw rateWindow) incrementAndCount(appServices *app.Services) (
+	int, error,
+) {
+	current, err := appServices.KV.Incr(rw.currentKey, rateBucketTTL)
+	if err != nil {
+		return 0, err
+	}
+	previous, err := appServices.KV.Get(rw.previousKey)
+	if err != nil {
+		return 0, err
+	}
+	return rw.count(current, previous)
+}
+
 // CheckRateLimit checks request rate limits
 func (sh *AppHelper) CheckRateLimit() *AppHelper {
 	sh.rateChecked = true
@@ -424,13 +487,14 @@ func (sh *AppHelper) CheckRateLimit() *AppHelper {
 		)
 	}
 
-	currentMinute := time.Now().Minute()
-	rateKey := fmt.Sprintf("RPM*%s*%d", keyIdentifier, currentMinute)
+	window := newRateWindow(keyIdentifier, time.Now())
+	rateKey := window.currentKey
 
-	count, err := sh.appServices.KV.Incr(rateKey, "1min")
+	count, err := window.incrementAndCount(sh.appServices)
 	if err != nil {
 		// The store is in-process: an error here is a bug (closed store,
-		// oversized key), not an outage. Fail closed.
+		// oversized key, a bucket that is not a count), not an outage.
+		// Fail closed.
 		sh.appServices.Logger.Error("RATE_LIMIT_FAIL",
 			"Rate limit check failed ("+rateKey+"): "+err.Error())
 		sh.failAndRespond(http.StatusInternalServerError, "Rate limit check failed")
@@ -465,22 +529,22 @@ func (sh *AppHelper) CheckRateLimitAndUserBlock() *AppHelper {
 		return sh
 	}
 
-	currentMinute := time.Now().Minute()
-
-	var rateKey string
+	var keyIdentifier string
 	var limit int
 	if sh.claims != nil {
-		rateKey = fmt.Sprintf("RPM*%s*%d", sh.claims.Subject, currentMinute)
+		keyIdentifier = sh.claims.Subject
 		limit = sh.appServices.Config.MaxUserReqPerMin
 	} else {
-		anonIdentifier := anonRateIdentifier(
+		keyIdentifier = anonRateIdentifier(
 			sh.r, sh.appServices.Config.TrustedProxyCount,
 		)
-		rateKey = fmt.Sprintf("RPM*%s*%d", anonIdentifier, currentMinute)
 		limit = sh.appServices.Config.MaxUnauthReqPerMin
 	}
 
-	rateCount, err := sh.appServices.KV.Incr(rateKey, "1min")
+	window := newRateWindow(keyIdentifier, time.Now())
+	rateKey := window.currentKey
+
+	rateCount, err := window.incrementAndCount(sh.appServices)
 	if err != nil {
 		// In-process store: an error is a bug, not an outage. Fail closed.
 		sh.appServices.Logger.Error("RATE_LIMIT_FAIL",

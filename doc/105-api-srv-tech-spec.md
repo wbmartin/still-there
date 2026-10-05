@@ -86,8 +86,8 @@ is added without a row and proves each row's checks answer before any
 repository call; change the two together. Grants are the short codes of
 `internal/model/grants.go` (id in brackets).
 
-Columns: **JWT** `CheckJWT` (a session cookie). **Rate** the per-minute
-limit: *user+block* is `CheckRateLimitAndUserBlock` (per user name, plus
+Columns: **JWT** `CheckJWT` (a session cookie). **Rate** the sliding
+60-second limit: *user+block* is `CheckRateLimitAndUserBlock` (per user name, plus
 the `BLOCKED*` flag); *address* is the anonymous, per-IP limit; *lockout*
 is the login lockout instead. **CSRF** `CheckCSRF` (never on GET).
 **Grant** `CheckAuthorization`. A dash is a check the handler skips with a
@@ -436,13 +436,22 @@ server's.
 1. **JWT Validation** (`CheckJWT`): the `auth` cookie's signature and
    claims, then session revocation (see Session Revocation). No cookie or
    a bad token is 401
-2. **Rate Limiting**: a fixed per-minute window counted in the KV
+2. **Rate Limiting**: a sliding 60-second window counted in the KV
+   (`rateWindow`). Each request increments this minute's bucket; the count
+   is that bucket plus the previous minute's, weighted by the share of the
+   previous minute still inside the last 60 s. Fixed per-minute buckets
+   let a client spend the limit at 12:00:59 and again at 12:01:00
+   (`TestRateWindowCatchesTheMinuteBoundaryBurst`)
    - Signed in: `MAX_USER_REQ_PER_MIN` per user name; key
      `RPM*<user name>*<minute>`
    - Anonymous: `MAX_UNAUTH_REQ_PER_MIN` per address; key
      `RPM*ip:<client IP>*<minute>` (`anonRateIdentifier`). The `ip:`
      prefix keeps anonymous buckets apart from user names, so a user named
      like an address never shares that address's bucket
+   - `<minute>` is the absolute minute (Unix time / 60), so a key never
+     comes round again; a bucket lives 2 minutes, through the minute in
+     which it is the previous one. A KV error, or a previous bucket that
+     is not a count, fails closed (500)
    - Over the limit is 429 "Rate limit exceeded"
    - "IP" here and in the login lockout is `security.ClientIP`. With
      `TRUSTED_PROXY_COUNT=0` (local dev) it is `RemoteAddr` and
@@ -688,7 +697,7 @@ limits and the lockout thresholds above.
   malformed request; 409 when the request is fine and the record says no
 - **413**: Request body over the route's cap (see Request Body Limits)
 - **417**: Expectation Failed (a bulk update whose rows did not all match)
-- **429**: Too Many Requests: the per-minute rate limit, or a login
+- **429**: Too Many Requests: the sliding 60-second rate limit, or a login
   lockout (`/auth`, `/mfaVerify`, `/inviteCheck`, `/inviteRedeem`) with
   its own message
 - **500**: Internal Server Error, including every fail-closed refusal (an

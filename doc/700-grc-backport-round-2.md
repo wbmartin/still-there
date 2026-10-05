@@ -208,6 +208,9 @@ PROTO's `ip:` anonymous key (B059). Low risk, since the lockout is the
 real brake on guessing; the change makes the key mean what it says.
 - **Size:** S
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. PROTO's
+KV has no batch, so both checks share `rateWindow.incrementAndCount`
+(INCR then GET); PROTO's `Get` answers "" for an absent key.
 
 # P2: docs and process
 
