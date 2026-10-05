@@ -152,6 +152,7 @@ resync hides it).
 vitest case asserting the next write carries `X-CSRF-Token`.
 - **Size:** S
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2
 
 ### C003 — Config refuses a bad JWT secret or TOTP key at load
 
