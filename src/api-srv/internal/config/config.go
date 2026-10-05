@@ -13,29 +13,32 @@ import (
 	"github.com/wbmartin/starter-api/internal/logging"
 )
 
-// Config holds the application configuration
+// Config holds the application configuration. It is loaded from a flat
+// KEY=VALUE file (doc/905-config-guidance.md) and is never serialized, so
+// its fields carry no json tags. Never marshal, log or print it whole:
+// JWTSecret and TOTPEncryptionKey are secrets.
 type Config struct {
-	DatabaseURL                      string     `json:"database_url"`
-	JWTSecret                        string     `json:"jwt_secret"`
-	JWTSessionExpireHours            int        `json:"jwt_session_expire_hours"`
-	MaxUserReqPerMin                 int        `json:"max_user_req_per_min"`
-	MaxUnauthReqPerMin               int        `json:"max_unauth_req_per_min"`
-	ServerName                       string     `json:"server_name"`
-	AppName                          string     `json:"app_name"`
-	ServerPort                       int        `json:"server_port"`
-	ServerBindAddress                string     `json:"server_bind_address"`
-	EnableTLS                        bool       `json:"enable_tls"`
-	TLSCertPath                      string     `json:"tls_cert_path"`
-	TLSKeyPath                       string     `json:"tls_key_path"`
-	TOTPEncryptionKey                string     `json:"totp_encryption_key"`
-	FailedLoginAttemptThreshold      int        `json:"failed_login_attempt_threshold"`
-	FailedLoginAttemptWindowDuration string     `json:"failed_login_attempt_window_duration"`
-	FailedLoginLockoutDuration       string     `json:"failed_login_lockout_duration"`
-	CorsAllowedOrigins               []string   `json:"cors_allowed_origins"`
-	TrustedProxyCount                int        `json:"trusted_proxy_count"`
-	LogLevel                         slog.Level `json:"log_level"`
-	InviteTTLHours                   int        `json:"invite_ttl_hours"`
-	AllowMFAExemptViaAPI             bool       `json:"allow_mfa_exempt_via_api"`
+	DatabaseURL                      string
+	JWTSecret                        string
+	JWTSessionExpireHours            int
+	MaxUserReqPerMin                 int
+	MaxUnauthReqPerMin               int
+	ServerName                       string
+	AppName                          string
+	ServerPort                       int
+	ServerBindAddress                string
+	EnableTLS                        bool
+	TLSCertPath                      string
+	TLSKeyPath                       string
+	TOTPEncryptionKey                string
+	FailedLoginAttemptThreshold      int
+	FailedLoginAttemptWindowDuration string
+	FailedLoginLockoutDuration       string
+	CorsAllowedOrigins               []string
+	TrustedProxyCount                int
+	LogLevel                         slog.Level
+	InviteTTLHours                   int
+	AllowMFAExemptViaAPI             bool
 }
 
 // ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,

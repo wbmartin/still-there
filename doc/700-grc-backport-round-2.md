@@ -431,6 +431,9 @@ field, secrets included.
 guard is preferred.
 - **Size:** S
 - **Decision:** \[ X\] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025; tags
+  deleted (no `json:"-"`); a comment above the struct says it is never
+  serialized.
 
 ### C026 — The user list query stops reading `totp_seed`
 
