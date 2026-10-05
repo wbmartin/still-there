@@ -384,6 +384,8 @@ description, so an agent in a derived app does not pull in polars for a
 ten-line script.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-c011-c025. CLAUDE.md's
+"(pytest and scripts)" still fits; left as is.
 
 ### C023 — README tree and doc index gaps
 

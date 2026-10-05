@@ -91,7 +91,7 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 ### Code Style and Conventions
 | File | Description |
 |------|-------------|
-| [doc/904-python-guidance.md](doc/904-python-guidance.md) | Python script conventions (Polars, PEP8, psycopg) |
+| [doc/904-python-guidance.md](doc/904-python-guidance.md) | Python conventions: what the pytest suite uses, PEP8; polars/psycopg when a script needs them |
 
 ### Operations
 | File | Description |
