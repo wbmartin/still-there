@@ -86,7 +86,9 @@ What enforces it:
   `/addUserListToGroup`, `/removeUserListFromGroup`) are read scoped to the
   caller's tenant; any id not found there, foreign or absent alike, is one
   403 `SEC_CTX_VIOLATION`. Same answer both ways, so no oracle, but 403
-  where the rule above says 404.
+  where the rule above says 404. A failed lookup is 500 `SEC_CTX_CHECK`
+  ("Failed to check the security context", cause logged), never a 403
+  that hides the outage.
 - **Test databases hold no tenant 1.** `sql/fixtures/test-tenant-lock.sql`
   adds `CHECK (security_context_id <> 1)` to every table with the column,
   read from the catalog; tests run as tenant 2 and prove isolation against

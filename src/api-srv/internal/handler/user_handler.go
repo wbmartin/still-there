@@ -149,7 +149,9 @@ func (h *UserHandler) validateGroupsSecurityContext(
 
 // groupListInSecurityContext reports whether every group in groupIDs is a
 // live group of expectedSecurityContext. POST /user and POST /userInvite
-// share it.
+// share it. A group that is not is (false, nil), the caller's 403; only a
+// failed lookup is an error, the caller's 500 SEC_CTX_CHECK (a database
+// error used to answer 403).
 func groupListInSecurityContext(
 	ctx context.Context,
 	appUserGroupRepo AppUserGroupRepositoryInterface,
@@ -173,27 +175,20 @@ func groupListInSecurityContext(
 	}
 
 	if len(groups) != len(groupIDs) {
-		return false, fmt.Errorf(
-			"some groups not found: requested %d, found %d",
-			len(groupIDs),
-			len(groups),
-		)
+		return false, nil
 	}
 
 	for _, group := range groups {
 		if group.SecurityContext != expectedSecurityContext {
-			return false, fmt.Errorf(
-				"group %d has invalid security context: expected %d, got %d",
-				group.AppUserGroupID,
-				expectedSecurityContext,
-				group.SecurityContext,
-			)
+			return false, nil
 		}
 	}
 	return true, nil
 }
 
-// validateUsersSecurityContext ensures all users belong to the expected security context
+// validateUsersSecurityContext reports whether every user in userIDs is a
+// live user of expectedSecurityContext: a user that is not is (false, nil),
+// the caller's 403; only a failed lookup is an error, the caller's 500.
 func (h *UserHandler) validateUsersSecurityContext(
 	userIDs []int,
 	expectedSecurityContext int,
@@ -217,21 +212,12 @@ func (h *UserHandler) validateUsersSecurityContext(
 	}
 
 	if len(users) != len(userIDs) {
-		return false, fmt.Errorf(
-			"some users not found or inaccessible: requested %d, found %d",
-			len(userIDs),
-			len(users),
-		)
+		return false, nil
 	}
 
 	for _, user := range users {
 		if user.SecurityContext != expectedSecurityContext {
-			return false, fmt.Errorf(
-				"user %d has invalid security context: expected %d, got %d",
-				user.AppUserID,
-				expectedSecurityContext,
-				user.SecurityContext,
-			)
+			return false, nil
 		}
 	}
 	return true, nil
@@ -396,8 +382,15 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate group memberships are in the same security context
-	if valid, err := h.validateGroupsSecurityContext(req.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context()); !valid ||
-		err != nil {
+	valid, err := h.validateGroupsSecurityContext(
+		req.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context(),
+	)
+	if err != nil {
+		appHelper.WriteError(w, http.StatusInternalServerError,
+			"Failed to check the security context", "SEC_CTX_CHECK", err)
+		return
+	}
+	if !valid {
 		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
@@ -531,8 +524,15 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate group memberships are in the same security context
-	if valid, err := h.validateGroupsSecurityContext(user.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context()); !valid ||
-		err != nil {
+	valid, err := h.validateGroupsSecurityContext(
+		user.AppUserGroupMembershipList, jwtClaims.SecurityContext, r.Context(),
+	)
+	if err != nil {
+		appHelper.WriteError(w, http.StatusInternalServerError,
+			"Failed to check the security context", "SEC_CTX_CHECK", err)
+		return
+	}
+	if !valid {
 		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
@@ -755,9 +755,15 @@ func (h *UserHandler) AddUserListToGroupHandler(
 	}
 
 	// Validate group is in the same security context
-	if valid, err := h.validateGroupsSecurityContext(
+	valid, err := h.validateGroupsSecurityContext(
 		[]int{req.AppUserGroupID}, jwtClaims.SecurityContext, r.Context(),
-	); !valid || err != nil {
+	)
+	if err != nil {
+		appHelper.WriteError(w, http.StatusInternalServerError,
+			"Failed to check the security context", "SEC_CTX_CHECK", err)
+		return
+	}
+	if !valid {
 		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
@@ -769,9 +775,15 @@ func (h *UserHandler) AddUserListToGroupHandler(
 	}
 
 	// Validate all users are in the same security context
-	if valid, err := h.validateUsersSecurityContext(
+	valid, err = h.validateUsersSecurityContext(
 		req.UserIDList, jwtClaims.SecurityContext, r.Context(),
-	); !valid || err != nil {
+	)
+	if err != nil {
+		appHelper.WriteError(w, http.StatusInternalServerError,
+			"Failed to check the security context", "SEC_CTX_CHECK", err)
+		return
+	}
+	if !valid {
 		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
@@ -857,9 +869,15 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 	}
 
 	// Validate group is in the same security context
-	if valid, err := h.validateGroupsSecurityContext(
+	valid, err := h.validateGroupsSecurityContext(
 		[]int{req.AppUserGroupID}, jwtClaims.SecurityContext, r.Context(),
-	); !valid || err != nil {
+	)
+	if err != nil {
+		appHelper.WriteError(w, http.StatusInternalServerError,
+			"Failed to check the security context", "SEC_CTX_CHECK", err)
+		return
+	}
+	if !valid {
 		appHelper.WriteError(
 			w,
 			http.StatusForbidden,
@@ -871,9 +889,15 @@ func (h *UserHandler) RemoveUserListFromGroupHandler(
 	}
 
 	// Validate all users are in the same security context
-	if valid, err := h.validateUsersSecurityContext(
+	valid, err = h.validateUsersSecurityContext(
 		req.UserIDList, jwtClaims.SecurityContext, r.Context(),
-	); !valid || err != nil {
+	)
+	if err != nil {
+		appHelper.WriteError(w, http.StatusInternalServerError,
+			"Failed to check the security context", "SEC_CTX_CHECK", err)
+		return
+	}
+	if !valid {
 		appHelper.WriteError(
 			w,
 			http.StatusForbidden,

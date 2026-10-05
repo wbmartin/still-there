@@ -219,6 +219,7 @@ since B006 a 403 no longer signs the user out, so nobody notices.
 tenant check.
 - **Size:** S
 - **Decision:** \[X \] pull / \[ \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2
 
 ### C006 — An admin cannot delete their own login
 
