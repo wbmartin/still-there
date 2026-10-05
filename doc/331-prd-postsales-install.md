@@ -461,6 +461,14 @@ is still building this one; and once UAT has deployed a push but not yet
 passed its tests, promote refuses `:uat` and the hook run fails. Without a hook, every release is the by-hand
 command in **Every later release**.
 
+If the app moves an integration branch (`uat`, say) into its release
+branch (`main`), it does so by a merge commit only, never a squash: one
+squash leaves the two branches conflicting on the next release (GRC needed
+a synthetic release branch with both parents to recover). Before each
+release PR, `git merge-tree --write-tree origin/<release>
+origin/<integration>` must exit 0 (`infra/README.md`, Release checklist,
+P. Pre-flight).
+
 ```bash
 : "${I:?}" "${RELEASE_BRANCH:?}"
 H=/srv/shrmpl/etc/hooks

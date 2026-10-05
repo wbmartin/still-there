@@ -207,6 +207,20 @@ block:
       `cat /srv/<env>-proto/libexec/proto-api.revision`.
 - [ ] Freeze: no other push to `BRANCH_TO_CHECKOUT` (or the prod release
       branch) until R.
+- [ ] Two branches (an integration branch such as `uat` moved into a
+      release branch such as `main`, `doc/331` B6): the release PR is
+      merged with a merge commit, never a squash; one squash leaves the
+      branches conflicting on every later release. Before opening it,
+      locally (it prints a tree id; a conflict lists the files and
+      exits 1):
+
+      ```bash
+      git fetch origin
+      git merge-tree --write-tree origin/<release> origin/<integration>
+      echo "merge-tree exit $?"
+      ```
+
+      Anything but `merge-tree exit 0` stops the release.
 - [ ] A migration ships: a prod backup by hand first
       (`/srv/prd-proto/bin/prd-proto-backup-all` as root, `doc/331` B2);
       `install-api` also dumps to `backup/` before `up`.
@@ -413,7 +427,20 @@ what they do.
    matching one under `/srv/shrmpl/etc/` on the host that mirror belongs
    to, so UAT's monitors land on the monitoring host. Hooks: the real
    `HOOK_SECRET`, and `HOOK_ALLOWED_BRANCHES` must equal
-   `BRANCH_TO_CHECKOUT`. Monitors: rename each `NACKID` to the check-in
+   `BRANCH_TO_CHECKOUT`. Read-only check, as root on UAT; both lines name
+   the same branch:
+
+   ```bash
+   hostname
+   grep -H '^BRANCH_TO_CHECKOUT=\|^HOOK_ALLOWED_BRANCHES=' \
+     /srv/uat-proto/etc/uat-proto-deploy.env \
+     /srv/shrmpl/etc/hooks/build-proto_*.env
+   ```
+
+   On prod, once `doc/331` B6 has installed the promote hook,
+   `grep -H '^HOOK_ALLOWED_BRANCHES='
+   /srv/shrmpl/etc/hooks/prd-promote-proto_*.env` names the release
+   branch. Monitors: rename each `NACKID` to the check-in
    code the monitor is registered under and put
    the matching `https://<nackmon-host>/checkin?code=<nackid>` in
    `HEALTHCHECK_URL` / `CERT_HEALTHCHECK_URL`. Pulsecheck: `PULSE_URL` takes

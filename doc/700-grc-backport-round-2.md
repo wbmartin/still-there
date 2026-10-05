@@ -361,6 +361,9 @@ branch into a release branch, use merge commits only, and run the
 build hook's branch and `BRANCH_TO_CHECKOUT` agree.
 - **Size:** S
 - **Decision:** \[ \] pull / \[ X\] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. The
+  branch/hook grep went into `infra/README.md` one-time setup step 7
+  (where the hook branch is set), with the prod promote-hook variant.
 
 ### C011 — Dev env-file comments and dead keys
 
