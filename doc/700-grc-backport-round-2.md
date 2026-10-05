@@ -280,6 +280,11 @@ more); GRC CLAUDE.md rule.
      - `sleep 2` after a reload.
 - **Size:** S
 - **Decision:** \[ \] pull / \[X \] adapt / \[ \] skip
+- **Status:** done 2026-10-05 on feature/grc-backport-round-2. Host work
+  in `tasks/todo.md` (H1-H12) gives each step a host, command, check and
+  rollback, plus the C003 e2e env-file step; the host-SQL block in
+  `infra/README.md` splits backup and apply into two pastes, so a failed
+  backup stops the paste rather than relying on a comment.
 
 ### C008 — How a derived app retires the presales path
 

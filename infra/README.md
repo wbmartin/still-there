@@ -183,12 +183,19 @@ release that also carries a migration, a host-file change or anything
 else worth a planned rollback gets a written record: copy this skeleton
 to wherever the app tracks the work (the pull request description, say),
 fill it before starting, and tick it as it runs. Every project will be
-different; the letters are the shape, not a fixed list. Host blocks name
-literal paths, or write each variable set in an earlier block as
-`${VAR:?}` inside every command that uses it. A `: "${VAR:?}"` line on
-top is not enough: an interactive shell aborts only the line that fails,
-and the next pasted line runs with the variable empty
-(`"$APP_ROOT/etc"` becomes `/etc`).
+different; the letters are the shape, not a fixed list. Every host
+block:
+
+- opens with `hostname`, so the first line of output names the host the
+  paste landed on;
+- names literal paths, or writes each variable set in an earlier block as
+  `${VAR:?}` inside every command that uses it. A `: "${VAR:?}"` line on
+  top is not enough: an interactive shell aborts only the line that
+  fails, and the next pasted line runs with the variable empty
+  (`"$APP_ROOT/etc"` becomes `/etc`);
+- puts `sleep 2` between `systemctl reload nginx` and a `curl` check: the
+  old workers keep answering until they drain, and a curl in the same
+  paste reads the old site.
 
 **P. Pre-flight**
 
@@ -203,6 +210,24 @@ and the next pasted line runs with the variable empty
 - [ ] A migration ships: a prod backup by hand first
       (`/srv/prd-proto/bin/prd-proto-backup-all` as root, `doc/331` B2);
       `install-api` also dumps to `backup/` before `up`.
+- [ ] A new or tightened required config key ships: env files are never
+      overwritten by a deploy, and the API refuses to start on a missing
+      or malformed key. Check each host's env file first (both API env
+      files, and UAT's `uat-proto-e2e-api.env`), printing presence and
+      lengths, never a value. As root on the host, naming the release's
+      keys:
+
+      ```bash
+      hostname
+      awk '{ k = substr($0, 1, index($0, "=") - 1); v = substr($0, index($0, "=") + 1) }
+        k == "JWT_SECRET" { print k " length " length(v) "  (need >= 32)" }
+        k == "TOTP_ENCRYPTION_KEY" { print k " length " length(v) (v ~ /^[0-9a-fA-F]+$/ ? " hex" : " NOT HEX") "  (need 64 hex)" }
+        k == "NEW_KEY" { print k " present, length " length(v) }
+      ' /srv/prd-proto/etc/prd-proto-api.env
+      ```
+
+      A key that prints nothing is absent: add it to that host's file by
+      hand before the release reaches that host.
 
 **A. Approvals**: who signs off the merge, the UAT look and the promote,
 with the date, recorded beside each step.
@@ -255,6 +280,7 @@ scp "/tmp/${N:?}" "${PRD_SSH:?}:/tmp/" && rm "/tmp/${N:?}"
 On prod as root, with `F` set again:
 
 ```bash
+hostname
 : "${F:?}"
 N=${F##*/}; T=/srv/prd-proto/${F:?}
 sha256sum "/tmp/${N:?}"
@@ -273,6 +299,46 @@ the nginx site (rendered with the real site name, `doc/331` Every later
 release, then `nginx -t` before the reload) and `jail.local` (merged with
 the other apps' jails, step 8, then `fail2ban-client -t`). Each keeps the
 `.before` copy and the test before the reload.
+
+**Running host SQL, hash-checked.** SQL a host runs by hand (roles and
+grants, `infra/sql/proto-host-db.sql`; never a schema change, which is a
+migration) goes over the same way, from a pushed commit, with a backup
+first and a rollback statement written down before it starts. `S` is its
+repo path. Locally:
+
+```bash
+: "${PRD_SSH:?}" "${S:?}"
+N=${S##*/}
+git fetch origin
+git show "origin/main:${S:?}" > "/tmp/${N:?}"
+shasum -a 256 "/tmp/${N:?}"
+scp "/tmp/${N:?}" "${PRD_SSH:?}:/tmp/" && rm "/tmp/${N:?}"
+```
+
+On prod as root, with `N` set again. First the hash and the backup:
+
+```bash
+hostname
+sha256sum "/tmp/${N:?}"
+/srv/prd-proto/bin/prd-proto-backup-all; echo "backup exit $?"
+```
+
+The hash matches the local one and it prints `backup exit 0`. Anything
+else: STOP here, and paste nothing further. Then apply, verify, clean up:
+
+```bash
+hostname
+sudo -u postgres psql -X -v ON_ERROR_STOP=1 -d prd_proto_db < "/tmp/${N:?}"
+sudo -u postgres psql -X -d prd_proto_db -c '<the query that shows the change>'
+rm "/tmp/${N:?}"
+```
+
+`proto-host-db.sql` itself takes its database and passwords as `\set`
+lines on stdin: its apply line is the `doc/340-db-host-setup.md` block,
+with `SQL` set to `/tmp/$N`. The record carries the one statement that
+undoes the change (a `REVOKE` for a `GRANT`, say), run the same way if a
+check after it fails; a change that one statement cannot undo is a
+restore of the backup.
 
 ## Layout on the host
 
