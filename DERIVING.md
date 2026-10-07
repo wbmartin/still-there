@@ -43,6 +43,20 @@ Postgres cluster is the safe default for every derived app.
 | `etc/loc-test.env` | docker `postgres` superuser password | must match the container |
 | `etc/loc-api-srv.env`, `etc/e2e-api-srv.env` | `JWT_SECRET`, `TOTP_ENCRYPTION_KEY` (32 bytes hex) | local-only, but make them yours |
 | `etc/uat-api-srv.env.template`, `infra/*/etc/*-api.env` | `__SECRET__` / `SERVERONLY` placeholders | stay placeholders in git; real values are generated on the host (presales by `610`, post-sales by doc/330 / doc/331) |
+| `etc/.radley-house` | `HOUSE_API_URL`, `HOUSE_PROJECT_ID`, `BUILD_TOKEN`, `API_TOKEN` | the Radley House tracker, per app. **Delete the inherited file and write the new app's own**, or the app files its tickets into the template's project. Gitignored, so a `git clone` never carries it — but a *copy* of the directory does. No tracker until this exists (`.claude/skills/radley-house/SKILL.md`) |
+
+**A copy is not a clone.** `§1` clones, which leaves every gitignored
+file behind. When a new app is made by copying this directory instead —
+the House does it that way — the copy arrives holding ProtoStack's own
+`etc/.radley-house` and the other local env files, and the app silently
+works the template's tracker with the template's token. Check for them
+first:
+
+```bash
+ls -l etc/.radley-house etc/loc-*.env etc/e2e-*.env 2>/dev/null
+```
+
+Delete what came across, then write the app's own.
 
 **Customer data never enters git.** A tenant's source data (exports,
 spreadsheets, import sets) and anything derived from it, including mock

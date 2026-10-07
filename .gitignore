@@ -15,6 +15,9 @@ tests/__pycache__/
 # Tracker token files agent tooling may write to the repo root. Root
 # only, so no tracked file or bin/ script matches; see DERIVING.md §5.
 /*-token
+# Radley House tracker credentials. Local only, never committed: the
+# House's rule is that the repo carries no House URL, project id or token.
+/etc/.radley-house
 # Stray root-level npm install (the web app lives in src/web-app)
 /node_modules/
 .idea/
