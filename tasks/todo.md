@@ -1,11 +1,21 @@
 # To do
 
+**Work items live in the Radley House**, not here (`CLAUDE.md`, Work
+items; `.claude/skills/radley-house/SKILL.md`). This file keeps only the
+Host work list below and the staff notes above it.
+
 The GRC backport (B001-B099) is done and merged to `main` (2026-10-05).
 Its decision log, doc/700-grc-backport-feedback.md, was deleted at the
 merge; read it with `git show e4d50fe:doc/700-grc-backport-feedback.md`.
 Skipped: B002, B005, B015, B049, B050, B057, B067, B068, B079, B084,
-B092. B092 is a live bug left as is: a wrong old password on "change my
-password" answers 401, so the web signs the user out.
+B092. B092 is fixed: a wrong old password now answers 400, so the web no
+longer signs the user out (2026-10-07).
+
+Filed in the House, 2026-10-07: #208 the local test database is
+unbuildable (ready, `needs-human` -- which Postgres is ProtoStack's),
+#209 C035 passwords off argv, #210 C034 narrow `db_writer`, #211 the
+context-switch test should own its user (blocked by #208), #212 doc/350
+after GRC RG0044.
 
 ## 0. Waiting on staff
 
@@ -15,8 +25,6 @@ password" answers 401, so the web signs the user out.
 - **Before a real export (B071):** the export scrub refuses a live login
   named `admin`: rename or delete the seeded dev admin first. (The A9
   first-login link is now `proto-migrate invite`, B099.)
-- **After GRC RG0044 (repo reset) runs:** update doc/350 (B082, marked
-  "Not yet run").
 - **Attribution note:** commits 8dd505f..388c0ae (B085-B090) say "Claude
   Opus 5.5" but were written by Sonnet; not rewritten (pushed).
 - **Host steps** moved to Host work below (C007).
@@ -24,8 +32,6 @@ password" answers 401, so the web signs the user out.
   and B058 no-override confirmed; B054 one-way, B062 15 default, B066
   DENIED, B069 no zod bump kept; B063 StickyFilters removed; B093-B099
   done.
-- **Follow-up:** the switcher context-switch pytest still mutates the seeded
-  `switcher` user (B043).
 - **Closed (C013): unknown file `radley-uat-builder-token`**, seen
   untracked in the repo root during the B033 run, then gone. Never
   committed. Its name matches the radley-grc tracker's ("Radley House")
