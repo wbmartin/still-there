@@ -251,7 +251,7 @@ To load test the API (starts and stops its own private instance, like
   `sql/fixtures/test-tenant-lock.sql` (`CHECK (security_context_id <> 1)`
   on every tenant table). Refuses any name not ending in
   `_test_db` or `_e2e_db`. Uses psql inside the `loc-postgres` container
-  when it is running (`PG_CONTAINER`), a native `psql` otherwise (`PSQL`
+  whatever serves `PGHOST`:`PGPORT`, reached over TCP (`PSQL`
   overrides); the migrator connects with `TEST_PG_URL_BASE`. This also
   covers what used to be the e2e-only reset: `bin/510-reset-test-db
   loc_proto_e2e_db`.

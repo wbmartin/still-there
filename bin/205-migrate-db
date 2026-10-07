@@ -15,9 +15,9 @@ set -euo pipefail
 #
 # Connects as the postgres role etc/loc-test.env describes (PGPASSWORD,
 # TEST_PG_URL_BASE), the same one bin/510 uses: the app role in
-# etc/loc-api-srv.env is DML only and cannot run a migration. psql runs
-# inside the PG_CONTAINER container when it is up, natively otherwise;
-# PSQL overrides both (see bin/510-reset-test-db).
+# etc/loc-api-srv.env is DML only and cannot run a migration. psql and the
+# migrator both reach $PGHOST:$PGPORT over TCP, whatever serves it; PSQL
+# overrides the psql half (see bin/510-reset-test-db).
 #
 # Scratch databases (*_test_db, *_e2e_db) are refused: bin/510 rebuilds
 # those and seeds them as tenants 2 and 3. This script never writes
@@ -56,19 +56,23 @@ if [ -z "${TEST_PG_URL_BASE:-}" ]; then
   exit 1
 fi
 
-# --- where psql runs (as bin/510) ------------------------------------------
-PG_CONTAINER="${PG_CONTAINER:-loc-postgres}"
+# --- where psql runs ---------------------------------------------------------
+# Postgres is whatever listens on $PGHOST:$PGPORT -- a container, a native
+# server, anything. psql reaches it over TCP at that same address the migrator
+# uses, so the two can never land on different servers. PSQL overrides it
+# outright (e.g. PSQL="docker exec -i loc-postgres psql -U postgres").
+for var in PGHOST PGPORT PGUSER; do
+  [ -n "${!var:-}" ] || { echo "[ERROR] $var is not set (etc/loc-test.env sets it)"; exit 1; }
+done
 if [ -z "${PSQL:-}" ]; then
-  if command -v docker >/dev/null 2>&1 \
-     && docker ps --format '{{.Names}}' 2>/dev/null \
-        | grep -qx "$PG_CONTAINER"; then
-    PSQL="docker exec -i $PG_CONTAINER psql -U postgres"
-    echo "[INFO] Using psql inside container $PG_CONTAINER"
-  else
-    PSQL="psql -h 127.0.0.1 -U postgres"
-    echo "[INFO] Using native psql ($PSQL)"
-  fi
+  command -v psql >/dev/null 2>&1 || {
+    echo "[ERROR] psql not found. Install the Postgres client, or set PSQL"
+    echo "        (see etc/loc-test.env)"
+    exit 1
+  }
+  PSQL="psql -h $PGHOST -p $PGPORT -U $PGUSER"
 fi
+echo "[INFO] psql -> $PGHOST:$PGPORT as $PGUSER"
 export PGPASSWORD
 
 CREATED=0

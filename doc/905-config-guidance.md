@@ -94,7 +94,7 @@
   | Variable | Read by | Set by |
   | --- | --- | --- |
   | `TEST_ENV` | `bin/300-run-tests`, `bin/330-test-load`: which harness file to source | default `etc/loc-test.env`; `infra/uat/bin/uat-proto-run-tests` on the UAT host |
-  | `TEST_PG_URL_BASE`, `PGPASSWORD`, `PG_CONTAINER`, `PSQL` | `bin/205-migrate-db`, `bin/510-reset-test-db`, `bin/515-reseed-db` (each sources `etc/loc-test.env` only when `TEST_PG_URL_BASE` is unset) | `etc/loc-test.env`, which also exports `PGUSER`, `PGHOST`, `PGPORT` for psql; `PSQL` by hand |
+  | `TEST_PG_URL_BASE`, `PGPASSWORD`, `PSQL` | `bin/205-migrate-db`, `bin/510-reset-test-db`, `bin/515-reseed-db` (each sources `etc/loc-test.env` only when `TEST_PG_URL_BASE` is unset) | `etc/loc-test.env`, which also exports `PGUSER`, `PGHOST`, `PGPORT` for psql; `PSQL` by hand |
   | `TEST_DB`, `E2E_DB`, `TEST_LOG_DIR` | `bin/300-run-tests`, `bin/330-test-load`, `bin/515-reseed-db` | `etc/loc-test.env` |
   | `SCHEMA_REFERENCE_FILE` | `bin/510-reset-test-db` (default `doc/003-schema-reference.sql`) | `bin/300-run-tests`, to a file in its log directory |
   | `PRESALES_ENV` | `bin/600-bundle-uat` (default `etc/uat-deploy.env`) | by hand |

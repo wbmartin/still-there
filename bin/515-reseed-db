@@ -39,18 +39,23 @@ case "$DB" in
 esac
 FIXTURES_DIR="$PROJECT_ROOT/src/api-srv/sql/fixtures"
 
-# Same psql selection as bin/510: inside the container when it is up, native
-# otherwise, PSQL overriding both.
-PG_CONTAINER="${PG_CONTAINER:-loc-postgres}"
+# Same psql selection as bin/510.
+# Postgres is whatever listens on $PGHOST:$PGPORT -- a container, a native
+# server, anything. psql reaches it over TCP at that same address the migrator
+# uses, so the two can never land on different servers. PSQL overrides it
+# outright (e.g. PSQL="docker exec -i loc-postgres psql -U postgres").
+for var in PGHOST PGPORT PGUSER; do
+  [ -n "${!var:-}" ] || { echo "[ERROR] $var is not set (etc/loc-test.env sets it)"; exit 1; }
+done
 if [ -z "${PSQL:-}" ]; then
-  if command -v docker >/dev/null 2>&1 \
-     && grep -qx "$PG_CONTAINER" \
-        <<< "$(docker ps --format '{{.Names}}' 2>/dev/null || true)"; then
-    PSQL="docker exec -i $PG_CONTAINER psql -U postgres"
-  else
-    PSQL="psql -h 127.0.0.1 -U postgres"
-  fi
+  command -v psql >/dev/null 2>&1 || {
+    echo "[ERROR] psql not found. Install the Postgres client, or set PSQL"
+    echo "        (see etc/loc-test.env)"
+    exit 1
+  }
+  PSQL="psql -h $PGHOST -p $PGPORT -U $PGUSER"
 fi
+echo "[INFO] psql -> $PGHOST:$PGPORT as $PGUSER"
 export PGPASSWORD
 
 # Listed first, not piped: a failed psql must stop the script, not read as

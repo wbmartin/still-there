@@ -25,8 +25,9 @@ Three processes, no nginx:
   fetched by `go` when the local one is older.
 - Node.js 22 (Vite 7 needs 20.19+ or 22.12+) with npm. Once, and after a
   pull that changes `package-lock.json`: `cd src/web-app && npm ci`.
-- Docker, for `loc-postgres`. `psql` on the host is optional: the scripts
-  run it inside the container when it is up.
+- `psql` on the host: `bin/205`, `bin/510` and `bin/515` run it against
+  `PGHOST`:`PGPORT`. Docker too, if `loc-postgres` is how you serve that
+  address.
 - Python 3 with `venv`, for the pytest suite; `bin/300-run-tests` builds
   `tests/.venv` itself. Playwright's Chromium is installed by the same
   script on first use.
@@ -36,8 +37,11 @@ Three processes, no nginx:
 ## Create the database
 
 Requires a Postgres listening on 127.0.0.1:5432 whose `postgres` role can
-create databases: the `loc-postgres` container below, or a native server.
-The schema is applied by the migrator, never by hand.
+create databases, and nothing cares what serves it: the `loc-postgres`
+container below, a native server, anything else. The address and the
+password are `PGHOST`/`PGPORT`/`PGPASSWORD` in `etc/loc-test.env`, and both
+psql and the migrator use them. The schema is applied by the migrator,
+never by hand.
 
 Create the container once (use the `PGPASSWORD` value from
 `etc/loc-test.env`; on later days `docker start loc-postgres`, see
@@ -62,8 +66,8 @@ roles, idempotent), `go run ./cmd/migrate ... up` (the embedded
 `switcher`/`basic123!` (groups in tenants 2 and 3), two example rows) and
 `sql/fixtures/test-tenant-lock.sql`. A scratch database is in tenants 2 and 3
 only and refuses tenant 1 (doc/900), so it is for the test suites, not for
-browsing as a developer. See the header of that script for `PG_CONTAINER` /
-`PSQL` / `PGPASSWORD` / `TEST_PG_URL_BASE`.
+browsing as a developer. See the header of that script for `PGHOST` /
+`PGPORT` / `PSQL` / `PGPASSWORD` / `TEST_PG_URL_BASE`.
 
 Your own database -- the `loc_proto_db` that `etc/loc-api-srv.env`'s
 `DATABASE_URL` points at, or a name you pass -- and, after every pull that
