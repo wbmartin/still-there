@@ -107,6 +107,24 @@ The rules that bite on every change. Long form: `doc/900-database-guidelines.md`
   fabricated reaches a screen, report or log.
 - Git: summarize a PR from `git diff`, not memory, in markdown with headings.
 
+## Work items (Radley House)
+
+Tickets live in the Radley House tracker, not in the repo — a work item
+cited as `#123`, with the number the House assigns. The `radley-house`
+skill (`.claude/skills/radley-house/SKILL.md`) holds the procedure and
+the API calls: read the backlog, file, claim before starting, post
+progress, hand back with `needs-human`, resume on `needs-agent`. Only
+staff close an item `done` or `dropped`.
+
+**The repo carries no House URL, project id or token.** Every per-repo
+value is in `etc/.radley-house`, gitignored and never committed, so the
+skill is inherited by each derived app unchanged and the app supplies its
+own coordinates (`DERIVING.md` section 2). A clone with no
+`etc/.radley-house` has no tracker yet.
+
+`tasks/todo.md` still holds Host work — host, command, check, rollback —
+whether or not the change also has a work item.
+
 ## Branches
 
 `main` is the default branch. Feature branches are `feature/<slug>`;

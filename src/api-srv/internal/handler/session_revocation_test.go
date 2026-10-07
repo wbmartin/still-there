@@ -189,7 +189,9 @@ func TestChangeOwnPassword_WrongOldPasswordRevokesNothing(t *testing.T) {
 		http.MethodPost, "/changeOwnPassword",
 		`{"oldPassword":"wrong-pass","newPassword":"new-pass-2"}`,
 		current, "session-one"))
-	require.Equal(t, http.StatusUnauthorized, w.Code)
+	// 400, not 401: a wrong old password must not read as a dead
+	// session, or the web signs the user out mid-change (B092).
+	require.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Equal(t, http.StatusOK, jwtStatus(t, s, otherDevice))
 }
 
