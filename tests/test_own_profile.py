@@ -103,6 +103,25 @@ class TestOwnProfile:
         assert response.status_code == 401
 
 
+def _restore_switcher(client: TestClient, original: dict) -> None:
+    """Put the seeded switcher row back, from whichever tenant the session
+    is in, reading updateTs fresh so the restore wins.
+
+    The class cannot use a throwaway login the way the rest of this file
+    does: it needs a user homed in TEST_TENANT with a group in
+    OTHER_TENANT, which create_throwaway_login does not build. So the
+    restore has to be unconditional — a failed assert mid-test would
+    otherwise leave switcher edited for every later test (B043).
+    """
+    _switch_context(client, TEST_TENANT)
+    current = client.make_request("GET", "/me")
+    assert current.status_code == 200, current.text
+    response = client.make_request("PUT", "/me", json={
+        **original, "updateTs": current.json()["data"]["updateTs"],
+    })
+    assert response.status_code == 200, response.text
+
+
 def _switch_context(client: TestClient, security_context: int) -> dict:
     """POST /changeSecurityContext and adopt the new cookie and CSRF token.
 
@@ -164,29 +183,38 @@ class TestOwnProfileAfterContextSwitch:
         assert me["securityContext"] == TEST_TENANT  # the row stays home
 
         original = {k: me[k] for k in ("firstName", "lastName", "email")}
-        response = client.make_request("PUT", "/me", json={
-            "firstName": "Switched",
-            "lastName": "Context",
-            "email": "switched@example.com",
-            "preferenceJsonb": {"colorScheme": "dark"},
-            "updateTs": me["updateTs"],
-        })
-        assert response.status_code == 200, response.text
-        saved = response.json()["data"]
-        assert saved["appUserId"] == me["appUserId"]
-        assert saved["securityContext"] == TEST_TENANT
-        assert saved["firstName"] == "Switched"
-        assert saved["preferenceJsonb"] == {"colorScheme": "dark"}
+        put_back = False
+        try:
+            response = client.make_request("PUT", "/me", json={
+                "firstName": "Switched",
+                "lastName": "Context",
+                "email": "switched@example.com",
+                "preferenceJsonb": {"colorScheme": "dark"},
+                "updateTs": me["updateTs"],
+            })
+            assert response.status_code == 200, response.text
+            saved = response.json()["data"]
+            assert saved["appUserId"] == me["appUserId"]
+            assert saved["securityContext"] == TEST_TENANT
+            assert saved["firstName"] == "Switched"
+            assert saved["preferenceJsonb"] == {"colorScheme": "dark"}
 
-        _switch_context(client, TEST_TENANT)
-        response = client.make_request("GET", "/me")
-        assert response.status_code == 200, response.text
-        assert response.json()["data"]["firstName"] == "Switched"
+            _switch_context(client, TEST_TENANT)
+            response = client.make_request("GET", "/me")
+            assert response.status_code == 200, response.text
+            assert response.json()["data"]["firstName"] == "Switched"
 
-        response = client.make_request(
-            "PUT", "/me", json={**original, "updateTs": saved["updateTs"]}
-        )
-        assert response.status_code == 200, response.text
-        restored = response.json()["data"]
-        assert restored["firstName"] == original["firstName"]
-        assert "preferenceJsonb" not in restored
+            response = client.make_request(
+                "PUT", "/me", json={**original, "updateTs": saved["updateTs"]}
+            )
+            assert response.status_code == 200, response.text
+            restored = response.json()["data"]
+            assert restored["firstName"] == original["firstName"]
+            assert "preferenceJsonb" not in restored
+            put_back = True
+        finally:
+            # Only when the restore above did not run: a failed assert
+            # between the edit and the restore must not leave the seeded
+            # switcher edited (B043).
+            if not put_back:
+                _restore_switcher(client, original)

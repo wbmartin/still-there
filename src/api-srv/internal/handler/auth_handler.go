@@ -824,9 +824,13 @@ func ChangeOwnPasswordHandler(
 				"PWD_VFY_FAIL",
 				"Old password verification failed for user: "+jwtClaims.Subject,
 			)
+			// 400, not 401: the caller's session is valid, only the
+			// old password they typed is wrong. A 401 here would trip
+			// the web's global session-expired path (utils/api.ts) and
+			// sign the user out mid-change (B092).
 			appHelper.WriteError(
 				w,
-				http.StatusUnauthorized,
+				http.StatusBadRequest,
 				"Old password is incorrect",
 				"INVALID_CREDS",
 				nil,
