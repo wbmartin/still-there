@@ -108,10 +108,19 @@ def _restore_switcher(client: TestClient, original: dict) -> None:
     is in, reading updateTs fresh so the restore wins.
 
     The class cannot use a throwaway login the way the rest of this file
-    does: it needs a user homed in TEST_TENANT with a group in
-    OTHER_TENANT, which create_throwaway_login does not build. So the
-    restore has to be unconditional — a failed assert mid-test would
-    otherwise leave switcher edited for every later test (B043).
+    does, and no option added to create_throwaway_login would change that.
+    It needs a user homed in TEST_TENANT with a group in OTHER_TENANT, and
+    the API refuses to build one: every path that sets group membership --
+    POST /user, PUT /user, POST /addUserListToGroup, POST /userInvite --
+    requires every group to be in the caller's own tenant (403
+    SEC_CTX_VIOLATION, groupListInSecurityContext in user_handler.go), and
+    PUT /user writes the caller's tenant onto the row besides.
+    test_security_context_isolation.py proves those refusals. A user
+    spanning two tenants can therefore only come from the seed, which is
+    what switcher is.
+
+    So the restore has to be unconditional -- a failed assert mid-test
+    would otherwise leave switcher edited for the rest of the run (B043).
     """
     _switch_context(client, TEST_TENANT)
     current = client.make_request("GET", "/me")
@@ -155,7 +164,11 @@ class TestOwnProfileAfterContextSwitch:
     """A user's row stays in its home tenant when /changeSecurityContext
     moves the session to another; /me still reads and writes that row.
     The fixture user switcher is homed in TEST_TENANT with a group in
-    OTHER_TENANT. Restores the user and switches back at the end."""
+    OTHER_TENANT. Restores the user and switches back at the end.
+
+    This is the one class in the file that edits a seeded user rather than
+    a throwaway login; _restore_switcher says why it has to. Nothing else
+    in any suite signs in as switcher, so the row is this class's alone."""
 
     def test_me_reads_and_writes_the_home_row_after_a_switch(self):
         client = TestClient(os.environ["TEST_BASE_URL"])
