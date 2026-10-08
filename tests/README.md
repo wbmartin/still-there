@@ -67,7 +67,12 @@ tenant by which user it signs in as. Request bodies carry no
 Seeded users (`src/api-srv/sql/fixtures/test-seed.sql`): `admin` /
 `admin123!`; `basic`, `mfa`, `switcher` / `basic123!`. `admin`, `basic` and
 `switcher` are MFA-exempt; `mfa` is not. `switcher` is homed in tenant 2
-with a group in tenant 3.
+with a group in tenant 3, and it exists for
+`TestOwnProfileAfterContextSwitch` alone -- nothing else signs in as it.
+A user spanning two tenants cannot be built through the API (every group
+must be in the caller's tenant), so that class edits a seeded row where
+the rest of the suite uses a throwaway login; it restores the row
+unconditionally.
 
 ## Client and fixtures
 
@@ -170,7 +175,8 @@ pytest collects alphabetically, so the prefixes order the run on purpose:
 - `test_error_reporting.py`: `POST /error-report` takes a signed-in
   caller's report; no session is 401, no CSRF is 403
 - `test_own_profile.py`: GET/PUT `/me` on a throwaway login; the row stays
-  home after `/changeSecurityContext` (uses `switcher`)
+  home after `/changeSecurityContext` (uses `switcher`, the one seeded
+  user the suite edits)
 - `test_security_context_isolation.py`: tenant 2 cannot use or probe
   tenant 3's groups; client-sent tenants are ignored
 - `test_session_revocation.py`: sign-out, an admin password change and a
