@@ -863,9 +863,10 @@ lines below.
   - Put deploy state on the State line.
   - Cleaned stale todo entries by checking each one off with a reason.
 - **PROTO differs:**
-  - `.claude/skills/handoff/SKILL.md` re-verifies with
+  - the handoff skill re-verified with
   `-- src/ sql/ tests/`, but PROTO has no top-level `sql/`, and `bin/`,
-  `scripts/` and `infra/` are not watched.
+  `scripts/` and `infra/` were not watched. The skill has since moved to
+  the user level and is no longer in this repo, so this row is history.
   - The waiting list names only merge, presales deploy and decision.
   - Nothing says to prune §0.
 - **Recommend:** adapt.
