@@ -166,8 +166,8 @@ The one command, on a laptop or a build host:
   gate but a run may not dirty it. `npm run test:coverage` writes
   `src/web-app/coverage/`, which is gitignored. Ends with a summary line,
   e.g. `[INFO] tests passed (all): go=105 unit=42 e2e=3 py=63`.
-- Requires the `loc-postgres` container (doc/060-dev-env-start.md); nothing
-  else -- the e2e API config has `DATABASE_URL` inline.
+- Requires a Postgres at `PGHOST`:`PGPORT` (doc/060-dev-env-start.md);
+  nothing else -- the e2e API config has `DATABASE_URL` inline.
 
 To run the Playwright end-to-end suite directly:
 ```
@@ -250,11 +250,10 @@ To load test the API (starts and stops its own private instance, like
   then `sql/fixtures/test-seed.sql` (tenants 2 and 3) and
   `sql/fixtures/test-tenant-lock.sql` (`CHECK (security_context_id <> 1)`
   on every tenant table). Refuses any name not ending in
-  `_test_db` or `_e2e_db`. Uses psql inside the `loc-postgres` container
-  whatever serves `PGHOST`:`PGPORT`, reached over TCP (`PSQL`
-  overrides); the migrator connects with `TEST_PG_URL_BASE`. This also
-  covers what used to be the e2e-only reset: `bin/510-reset-test-db
-  loc_proto_e2e_db`.
+  `_test_db` or `_e2e_db`. Uses psql against whatever serves
+  `PGHOST`:`PGPORT`, reached over TCP (`PSQL` overrides); the migrator
+  connects with `TEST_PG_URL_BASE`. This also covers what used to be the
+  e2e-only reset: `bin/510-reset-test-db loc_proto_e2e_db`.
 - `510` also rewrites `doc/003-schema-reference.sql` right after `up`,
   before any fixture (`SCHEMA_REFERENCE_FILE` moves it; `bin/300` points
   it at `tmp/test-logs/` and fails the `go` step when the two differ).
@@ -273,10 +272,12 @@ To load test the API (starts and stops its own private instance, like
 ./bin/600-bundle-uat [--no-scp] [--no-db]   # build api + migrator + web, dump local db, scp bundle
 sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside the bundle
 ```
-- Settings come from `etc/uat-deploy.env` (`APP_NAME`, `UAT_HOST`, `PG_CONTAINER`,
+- Settings come from `etc/uat-deploy.env` (`APP_NAME`, `UAT_HOST`,
   `LOCAL_ENV_FILE`, `APP_ROOT`, `SERVICE`, `SVC_USER`, `DB_APP_ROLE`, `DB_NAME`,
   `UAT_DOMAIN`); `PRESALES_ENV=<file>` swaps the file. No inline defaults -- a
-  missing key stops the run.
+  missing key stops the run. The database address comes from
+  `etc/loc-test.env`, as everywhere else: `600` and `620` run `psql`,
+  `pg_dump` and `pg_restore` against `PGHOST`:`PGPORT` over TCP.
 - The first deploy installs the nginx site from `etc/uat-nginx-site.conf.template`
   for `UAT_DOMAIN` and prints the `certbot --nginx` line (doc/320).
 - The bundle holds a full DB dump: a successful scp deletes the local copy;

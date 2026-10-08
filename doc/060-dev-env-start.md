@@ -5,15 +5,12 @@ doc/050-dev-env-init.md. Commands below run from the repo root unless a
 step says otherwise; each section is its own shell.
 
 ## Shell 1: database
+Postgres is whatever listens on `PGHOST`:`PGPORT` (`etc/loc-test.env`): a
+native server is already up, a container needs starting. One server per
+machine serves every app derived from the template -- doc/050-dev-env-init.md.
 ```bash
-docker start loc-postgres        # create it once: doc/050-dev-env-init.md
-docker exec -it loc-postgres /bin/bash
-#inside the container
-su - postgres
-# inside postgres shell
-psql
-# inside postgres
-\c loc_proto_db
+docker start loc-postgres        # only if a container is how you serve it
+psql -h 127.0.0.1 -U postgres -d loc_proto_db
 ```
 
 After a pull that brings a migration (and the first time, if doc/050 was

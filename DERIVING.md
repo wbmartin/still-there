@@ -30,9 +30,17 @@ Portal` (web title, login page, `APP_NAME` in every API env, systemd
 import.
 "ProtoStack" itself is left alone — it is where the app came from.
 
-What it did not change, on purpose: the migrator's advisory-lock key
-(`internal/migrate/migrate.go`, `"PROTO"`) — one migrator at a time per
-Postgres cluster is the safe default for every derived app.
+What it did not change, on purpose:
+
+- the migrator's advisory-lock key (`internal/migrate/migrate.go`,
+  `"PROTO"`) — one migrator at a time per Postgres cluster is the safe
+  default for every derived app;
+- the name of the local Postgres container, `loc-postgres`. One Postgres
+  per machine serves every derived app: the databases and the app role
+  carry the slug, the cluster-wide roles are created idempotently, so there
+  is nothing to separate. A per-app container would need a per-app port and
+  a per-app password, which is configuration this app does not need
+  (doc/050-dev-env-init.md).
 
 ## 2. Secrets and passwords — nothing forces this, so do it now
 
@@ -40,7 +48,7 @@ Postgres cluster is the safe default for every derived app.
 |---|---|---|
 | `src/api-srv/sql/roles.sql` | `reallygoodPSQLpassword` for `acme_app` | also in `etc/e2e-api-srv.env`, `etc/loc-api-srv.env`, `etc/loc-test.env` (×3), `infra/uat/etc/uat-acme-test.env` (×3) — keep them equal |
 | `src/api-srv/sql/fixtures/test-seed.sql`, `local-seed.sql` | `admin` / `admin123!`, `basic` / `basic123!` | the pytest, Playwright and load suites log in with these (test seed, tenant 2; the load test reads `TEST_PERSONA_USER`/`TEST_PERSONA_PASSWORD` from `etc/e2e-api-srv.env`); the dev seed has the same logins in tenant 1; change the suites' fixtures with them, and the fixture-login list `src/api-srv/sql/export-scrub.sql` refuses |
-| `etc/loc-test.env` | docker `postgres` superuser password | must match the container |
+| `etc/loc-test.env` | `postgres` superuser password | must match the Postgres on `PGHOST`:`PGPORT`, which is the machine's, not this app's: every derived app on one machine carries the same one here |
 | `etc/loc-api-srv.env`, `etc/e2e-api-srv.env` | `JWT_SECRET`, `TOTP_ENCRYPTION_KEY` (32 bytes hex) | local-only, but make them yours |
 | `etc/uat-api-srv.env.template`, `infra/*/etc/*-api.env` | `__SECRET__` / `SERVERONLY` placeholders | stay placeholders in git; real values are generated on the host (presales by `610`, post-sales by doc/330 / doc/331) |
 | `etc/.radley-house` | `HOUSE_API_URL`, `HOUSE_PROJECT_ID`, `BUILD_TOKEN`, `API_TOKEN` | the Radley House tracker, per app. **Delete the inherited file and write the new app's own**, or the app files its tickets into the template's project. Gitignored, so a `git clone` never carries it — but a *copy* of the directory does. No tracker until this exists (`.claude/skills/radley-house/SKILL.md`) |
@@ -74,9 +82,11 @@ commit of real data.
 ## 3. Hosts
 
 - **Presales** (`bin/600`/`610`): `etc/uat-deploy.env` — `UAT_HOST` (ssh
-  alias), `PG_CONTAINER`, `UAT_DOMAIN` (the site's hostname; the repo's
-  `example.com` one is a placeholder and installs no nginx site). Service
-  and paths are already derived from the slug. Host prep: `doc/320-presales-uat-deploy.md`.
+  alias), `UAT_DOMAIN` (the site's hostname; the repo's `example.com` one
+  is a placeholder and installs no nginx site). Service and paths are
+  already derived from the slug, and the dev database `600` dumps is at
+  `PGHOST`:`PGPORT` from `etc/loc-test.env`. Host prep:
+  `doc/320-presales-uat-deploy.md`.
 - **Post-sales** (`infra/`): rename `infra/uat/` → `infra/<real-uat-host>/`
   and `infra/prd/` → `infra/<real-prd-host>/`, then fill the `SERVERONLY`
   values on the host per `infra/README.md`. Moving the presales UAT host
@@ -117,7 +127,7 @@ every miss 404.
 ## 6. Local database and first run
 
 ```bash
-docker exec loc-postgres psql -U postgres -c "CREATE DATABASE loc_acme_db"   # dev DB, once (doc/050)
+bin/205-migrate-db                                                         # dev DB loc_acme_db: create, migrate, seed (doc/050)
 bin/510-reset-test-db                                                      # loc_acme_test_db
 bin/300-run-tests all                                                      # go + playwright + pytest, all green
 bin/215-run-api-srv && bin/220-run-web-app                                 # http://localhost:5173

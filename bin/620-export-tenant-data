@@ -25,6 +25,17 @@
 # data. Keep it off shared drives, scp it straight to the host, delete it
 # once loaded. Nobody can sign in to what it loads until an invite link is
 # issued on the host (doc/330 A9).
+#
+# A database bin/205-migrate-db built is refused on purpose, at step 3: the
+# scrub rejects the seeded fixture logins by name and any row in tenant 2,
+# and sql/fixtures/local-seed.sql writes both. The source of an export is a
+# database holding real data, not a dev seed.
+#
+# psql, pg_dump and pg_restore all reach the Postgres etc/loc-test.env
+# describes -- PGHOST, PGPORT, PGUSER, PGPASSWORD -- over TCP, as the
+# `postgres` role: the same address bin/205 and bin/510 use, and the role that
+# can create the throwaway copy. One address for all three, so the copy, the
+# scrub and the dump cannot land on different servers.
 
 set -euo pipefail
 
@@ -37,11 +48,18 @@ if [ $# -lt 1 ] || [ $# -gt 2 ]; then echo "$usage"; exit 2; fi
 
 # shellcheck disable=SC1091
 source etc/app.env
-# PG_CONTAINER and LOCAL_ENV_FILE: the laptop side of the presales file.
+# LOCAL_ENV_FILE: the laptop side of the presales file.
 # shellcheck disable=SC1091
 source etc/uat-deploy.env
-for var in APP_SLUG PG_CONTAINER LOCAL_ENV_FILE; do
+# shellcheck disable=SC1091
+[ -n "${PGHOST:-}" ] || source etc/loc-test.env
+for var in APP_SLUG LOCAL_ENV_FILE PGHOST PGPORT PGUSER; do
     [ -n "${!var:-}" ] || { echo "[ERROR] $var not set"; exit 1; }
+done
+export PGHOST PGPORT PGUSER PGPASSWORD
+for tool in psql pg_dump pg_restore; do
+    command -v "$tool" >/dev/null 2>&1 || { echo "[ERROR] $tool not found:" \
+        "install the Postgres client (doc/050-dev-env-init.md)"; exit 1; }
 done
 SOURCE_ENV="${2:-$LOCAL_ENV_FILE}"
 [ -r "$SOURCE_ENV" ] || { echo "[ERROR] not readable: $SOURCE_ENV"; exit 1; }
@@ -74,18 +92,28 @@ esac
 EXPORT_DB="${SOURCE_DB}_export"
 
 psql_on() {
-    docker exec -i "$PG_CONTAINER" psql -X -q -v ON_ERROR_STOP=1 \
-        -U postgres -d "$1"
+    psql -X -q -v ON_ERROR_STOP=1 -d "$1"
 }
 psql_value() {
-    docker exec "$PG_CONTAINER" psql -X -At -v ON_ERROR_STOP=1 \
-        -U postgres -d "$1" -c "$2"
+    psql -X -At -v ON_ERROR_STOP=1 -d "$1" -c "$2"
 }
 
-echo "[1/5] preflight: $SOURCE_DB against this checkout" \
+echo "[1/5] preflight: $SOURCE_DB at $PGHOST:$PGPORT against this checkout" \
     "($(git rev-parse --short HEAD))"
 psql_value "$SOURCE_DB" 'SELECT 1' >/dev/null \
-    || { echo "[ERROR] cannot reach $SOURCE_DB in $PG_CONTAINER"; exit 1; }
+    || { echo "[ERROR] cannot reach $SOURCE_DB at $PGHOST:$PGPORT as" \
+        "$PGUSER"; exit 1; }
+# pg_dump refuses a server newer than itself; pg_restore ships beside it.
+server_major="$(( $(psql_value "$SOURCE_DB" 'SHOW server_version_num') \
+    / 10000 ))"
+dump_major="$(pg_dump --version \
+    | sed -nE 's/^pg_dump \(PostgreSQL\) ([0-9]+).*/\1/p')"
+[ -n "$dump_major" ] \
+    || { echo "[ERROR] cannot read a version from pg_dump --version"; exit 1; }
+[ "$dump_major" -ge "$server_major" ] \
+    || { echo "[ERROR] pg_dump $dump_major cannot dump the Postgres" \
+        "$server_major server at $PGHOST:$PGPORT; install a client that" \
+        "new"; exit 1; }
 repo_migration_list="$(
     for file in src/api-srv/sql/migrations/[0-9]*.sql; do
         name="${file##*/}"
@@ -117,19 +145,16 @@ drop_export() {
 drop_export
 trap drop_export EXIT
 psql_on postgres <<< "CREATE DATABASE $EXPORT_DB" >/dev/null
-docker exec "$PG_CONTAINER" sh -c \
-    "pg_dump -U postgres -Fc '$SOURCE_DB' \
-     | pg_restore -U postgres --no-owner --exit-on-error -d '$EXPORT_DB'"
+pg_dump -Fc "$SOURCE_DB" \
+    | pg_restore --no-owner --exit-on-error -d "$EXPORT_DB"
 
 echo "[3/5] scrub credentials (src/api-srv/sql/export-scrub.sql)"
-docker exec -i "$PG_CONTAINER" psql -X -q -v ON_ERROR_STOP=1 \
-    --single-transaction -U postgres -d "$EXPORT_DB" \
+psql -X -q -v ON_ERROR_STOP=1 --single-transaction -d "$EXPORT_DB" \
     < src/api-srv/sql/export-scrub.sql
 
 echo "[4/5] dump"
 DUMP="$OUT_DIR/$NAME.dump"
-docker exec "$PG_CONTAINER" pg_dump -U postgres -Fc --no-owner \
-    --no-privileges "$EXPORT_DB" > "$DUMP"
+pg_dump -Fc --no-owner --no-privileges "$EXPORT_DB" > "$DUMP"
 (cd "$OUT_DIR" && shasum -a 256 "$NAME.dump" > "$NAME.dump.sha256")
 
 echo "[5/5] manifest"
@@ -146,7 +171,7 @@ tenant_table_list="$(psql_value "$EXPORT_DB" "
     echo "source_db=$SOURCE_DB"
     echo "git=$COMMIT"
     # a host's pg_restore reads older dumps, never newer ones
-    echo "pg_dump=$(docker exec "$PG_CONTAINER" pg_dump --version \
+    echo "pg_dump=$(pg_dump --version \
         | sed -E 's/^pg_dump \(PostgreSQL\) ([0-9.]+).*/\1/')"
     echo "schema_version=$SCHEMA_VERSION"
     for table in $tenant_table_list; do

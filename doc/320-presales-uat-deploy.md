@@ -57,8 +57,7 @@ written in terms of `$APP_SLUG`:
 |---|---|---|
 | `APP_NAME` | both | `$APP_SLUG` (`proto`); bundle name prefix, unit description |
 | `UAT_HOST` | laptop | ssh alias for the UAT host (scp target) |
-| `PG_CONTAINER` | laptop | docker container whose `pg_dump` produces `db.sql` |
-| `LOCAL_ENV_FILE` | laptop | API env with the inline `DATABASE_URL` to dump |
+| `LOCAL_ENV_FILE` | laptop | API env with the inline `DATABASE_URL` to dump. Which server holds it is not in this file: `600` reads `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD` from **`etc/loc-test.env`** and runs `psql` and `pg_dump` there over TCP, the same address `bin/205` migrated |
 | `APP_ROOT` | server | `/srv/uat-$APP_SLUG` |
 | `SERVICE` | server | `uat-$APP_SLUG-api` |
 | `SVC_USER` | server | `www-data` |

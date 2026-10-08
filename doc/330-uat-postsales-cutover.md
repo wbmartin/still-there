@@ -656,7 +656,7 @@ file. Two scripts that stay also source it:
 
 | Script | Keys it reads | Where they go |
 |---|---|---|
-| `bin/620-export-tenant-data` | `PG_CONTAINER`, `LOCAL_ENV_FILE` (the default for its `[api-env-file]` argument) | a two-line laptop file, e.g. etc/loc-export.env with `PG_CONTAINER=loc-postgres` and `LOCAL_ENV_FILE=etc/loc-api-srv.env`, sourced after `etc/app.env` in place of the presales file. Reword the script's header and the comment above its `source`. GRC wrote the two values inline; the no-inline-defaults rule here says a file. |
+| `bin/620-export-tenant-data` | `LOCAL_ENV_FILE` (the default for its `[api-env-file]` argument) | a one-line laptop file, e.g. etc/loc-export.env with `LOCAL_ENV_FILE=etc/loc-api-srv.env`, sourced after `etc/app.env` in place of the presales file. Reword the script's header and the comment above its `source`. GRC wrote the value inline; the no-inline-defaults rule here says a file. The server address is not in this file either way: `620` takes it from `etc/loc-test.env`. |
 | `bin/605-survey-host` | `SVC_USER`, `DB_NAME` (the presales `www-data` and `uat_<slug>_db`) | nowhere. Post-sales names derive from `APP_SLUG`, and the probe already looks for `svc-<slug>`, `uat_<slug>_db`, `prd_<slug>_db` and `uat_<slug>_db_presales`. Drop the `source`, the two names from the `for var` check and the `NAMES` line, and `"$DB_NAME"` / `"${DB_NAME}_presales"` from the database loop; write `www-data` as a literal in the user loop (nginx still runs as it). Its header then says names come from `etc/app.env` only. |
 
 The other keys (`APP_NAME`, `UAT_HOST`, `APP_ROOT`, `SERVICE`,
