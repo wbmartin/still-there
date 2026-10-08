@@ -7,8 +7,9 @@ part.
 
 Three processes, no nginx:
 
-- Postgres in the `loc-postgres` container on 127.0.0.1:5432 (the name
-  the `bin/` scripts look for).
+- Postgres on 127.0.0.1:5432 -- whatever serves that address (`PGHOST`,
+  `PGPORT` in `etc/loc-test.env`); the `loc-postgres` container below is
+  one way to have one.
 - The Go API, `bin/215-run-api-srv`: plain HTTP on 127.0.0.1:8080
   (`SERVER_BIND_ADDRESS`, `SERVER_PORT`, `ENABLE_TLS=false` in
   `etc/loc-api-srv.env`). Sessions, rate limits, lockouts and user blocks
@@ -25,9 +26,11 @@ Three processes, no nginx:
   fetched by `go` when the local one is older.
 - Node.js 22 (Vite 7 needs 20.19+ or 22.12+) with npm. Once, and after a
   pull that changes `package-lock.json`: `cd src/web-app && npm ci`.
-- `psql` on the host: `bin/205`, `bin/510` and `bin/515` run it against
-  `PGHOST`:`PGPORT`. Docker too, if `loc-postgres` is how you serve that
-  address.
+- The Postgres client on the host: `bin/205`, `bin/510` and `bin/515` run
+  `psql` against `PGHOST`:`PGPORT`, and `bin/600` / `bin/620` run `pg_dump`
+  and `pg_restore` at the same address. Install it even when the server
+  itself is a container -- no `bin/` script reaches a database any other
+  way. Docker only if a container is how you serve that address (below).
 - Python 3 with `venv`, for the pytest suite; `bin/300-run-tests` builds
   `tests/.venv` itself. Playwright's Chromium is installed by the same
   script on first use.
@@ -37,15 +40,24 @@ Three processes, no nginx:
 ## Create the database
 
 Requires a Postgres listening on 127.0.0.1:5432 whose `postgres` role can
-create databases, and nothing cares what serves it: the `loc-postgres`
-container below, a native server, anything else. The address and the
-password are `PGHOST`/`PGPORT`/`PGPASSWORD` in `etc/loc-test.env`, and both
-psql and the migrator use them. The schema is applied by the migrator,
+create databases, and nothing cares what serves it: a native server, the
+`loc-postgres` container below, anything else. The address and the password
+are `PGHOST`/`PGPORT`/`PGPASSWORD` in `etc/loc-test.env`, and every script
+that reaches a database uses them. The schema is applied by the migrator,
 never by hand.
 
-Create the container once (use the `PGPASSWORD` value from
-`etc/loc-test.env`; on later days `docker start loc-postgres`, see
-doc/060-dev-env-start.md):
+**One Postgres per machine, shared by every app derived from this
+template.** Each app's databases and its app role carry the app's slug
+(`loc_acme_db`, `acme_app`), so two apps cannot collide; the cluster-wide
+`db_reader`/`db_writer` roles are created idempotently for exactly that
+reason (`src/api-srv/sql/roles.sql`). So if something already listens on
+127.0.0.1:5432, use it -- there is nothing to install and nothing to
+rename. `loc-postgres` names the machine's server, not this app, which is
+why `bin/000-rebrand` leaves it alone (`DERIVING.md` section 1).
+
+Nothing listening there yet? Create the container once (use the
+`PGPASSWORD` value from `etc/loc-test.env`; on later days
+`docker start loc-postgres`, see doc/060-dev-env-start.md):
 
 ```bash
 docker run -d --name loc-postgres -e POSTGRES_PASSWORD='<PGPASSWORD>' \
@@ -116,9 +128,9 @@ decides then whether dev needs more than the Vite proxy.
 The `bin/` scripts are bash and run unchanged on Linux. Differences from a
 Mac:
 
-- Docker Engine instead of Docker Desktop; add yourself to the `docker`
-  group (or the scripts' `docker exec` fails), then start the container as
-  in doc/060.
+- Docker Engine instead of Docker Desktop, if a container is how you serve
+  Postgres; add yourself to the `docker` group, then start it as in
+  doc/060. No `bin/` script runs `docker` itself.
 - Debian/Ubuntu ship `python3` without `venv`: install `python3-venv`
   before the first `bin/300-run-tests`.
 - Playwright's Chromium needs system libraries the first time:
