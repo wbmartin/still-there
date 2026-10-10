@@ -61,6 +61,15 @@ Optional:
   the header (local dev, Playwright); 1 behind the host's nginx; the pytest
   copy `bin/300-run-tests` builds sets 1
 - `CORS_ALLOWED_ORIGINS` — comma-separated; empty means no CORS
+- `ISSUE_REPORTS_ENABLED` — `true` or `false` (default): the issue-report
+  module (`doc/150-issue-report-module.md`). Off, its routes answer 404
+  and the web app shows no Report button
+- `ISSUE_RELAY_URL`, `ISSUE_RELAY_PROJECT_ID`, `ISSUE_RELAY_TOKEN` — the
+  tracker the module's relay sends reports to: all three or none (one or
+  two set stops start-up); the URL is http(s); the token is a secret, in
+  the host's file only
+- `ISSUE_RELAY_INTERVAL_SECONDS` — how often the relay sends and syncs;
+  default 120, at least 15
 
 `TEST_BASE_URL` is not part of `Config` — the server ignores it. It is read
 by `bin/330-test-load` and exported by the test runners for the pytest

@@ -47,6 +47,14 @@ export const API_ENDPOINTS = {
   // Examples
   EXAMPLE_LIST: "/exampleList",
   EXAMPLE: "/example",
+
+  // In-app issue reports (handler/issue_report_handler.go;
+  // doc/150-issue-report-module.md)
+  ISSUE_REPORT: "/issueReport",
+  ISSUE_REPORT_LIST: "/issueReportList",
+  ISSUE_REPORT_MESSAGE: "/issueReportMessage",
+  ISSUE_REPORT_ACTION: "/issueReportAction",
+  ISSUE_REPORT_ATTACHMENT: "/issueReportAttachment",
 } as const;
 
 export type ApiEndpoint = (typeof API_ENDPOINTS)[keyof typeof API_ENDPOINTS];

@@ -168,7 +168,8 @@ class TestOwnProfileAfterContextSwitch:
 
     This is the one class in the file that edits a seeded user rather than
     a throwaway login; _restore_switcher says why it has to. Nothing else
-    in any suite signs in as switcher, so the row is this class's alone."""
+    in any suite edits switcher (test_issue_report.py only signs in and
+    switches tenant), so the row is this class's alone."""
 
     def test_me_reads_and_writes_the_home_row_after_a_switch(self):
         client = TestClient(os.environ["TEST_BASE_URL"])

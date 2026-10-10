@@ -65,6 +65,9 @@ export interface Profile {
   // The server's ALLOW_MFA_EXEMPT_VIA_API (B097): false means the API
   // refuses setting mfaExempt, so the user edit page hides the checkbox.
   allowMfaExemptViaApi: boolean;
+  // The server's ISSUE_REPORTS_ENABLED: true shows the Report button and
+  // the Issue reports page (doc/150-issue-report-module.md).
+  issueReportsEnabled: boolean;
 }
 
 // PUT /me body: what a user may change about themselves.

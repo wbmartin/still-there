@@ -16,6 +16,7 @@ import (
 	"github.com/wbmartin/starter-api/internal/cache"
 	"github.com/wbmartin/starter-api/internal/config"
 	"github.com/wbmartin/starter-api/internal/handler"
+	"github.com/wbmartin/starter-api/internal/issuerelay"
 	"github.com/wbmartin/starter-api/internal/logging"
 	"github.com/wbmartin/starter-api/internal/repository"
 	"github.com/wbmartin/starter-api/internal/security"
@@ -77,6 +78,7 @@ func main() {
 	appUserGroupRepo := repository.NewAppUserGroupRepository(dbPool)
 	exampleRepo := repository.NewExampleRepository(dbPool)
 	userInviteRepository := repository.NewUserInviteRepository(dbPool)
+	issueReportRepository := repository.NewIssueReportRepository(dbPool)
 
 	// Initialize app dependencies
 	appServices := &app.Services{
@@ -133,6 +135,25 @@ func main() {
 		appServices,
 		appUserGroupRepo,
 		userInviteRepository,
+	)
+	// The issue-report module (doc/150-issue-report-module.md): the routes
+	// answer 404 unless ISSUE_REPORTS_ENABLED=true; the relay runs only
+	// with its three target keys set.
+	var issueRelayClient *issuerelay.Client
+	var issueRelayDownloader handler.IssueRelayDownloader
+	if config.IssueRelayEnabled() {
+		issueRelayClient = issuerelay.NewClient(issuerelay.Config{
+			BaseURL:   config.IssueRelayURL,
+			ProjectID: config.IssueRelayProjectID,
+			Token:     config.IssueRelayToken,
+		}, nil)
+		issueRelayDownloader = issueRelayClient
+	}
+	issueReportHandler := handler.NewIssueReportHandler(
+		appServices,
+		issueReportRepository,
+		userRepo,
+		issueRelayDownloader,
 	)
 	mfaSetupHandler := handler.MFASetupHandler(appServices, userRepo)
 	mfaVerifyHandler := handler.MFAVerifyHandler(appServices, userRepo)
@@ -241,6 +262,20 @@ func main() {
 	// Client error reports (signed-in callers only)
 	mux.HandleFunc("POST /error-report", errorReportHandler.HandleErrorReport)
 
+	// In-app issue reports (issue_report_handler.go): anyone signed in;
+	// the tenant's reports
+	mux.HandleFunc("POST /issueReport", issueReportHandler.CreateIssueReport)
+	mux.HandleFunc("GET /issueReport",
+		issueReportHandler.RetrieveIssueReport)
+	mux.HandleFunc("GET /issueReportList",
+		issueReportHandler.RetrieveIssueReportList)
+	mux.HandleFunc("POST /issueReportMessage",
+		issueReportHandler.CreateIssueReportMessage)
+	mux.HandleFunc("POST /issueReportAction",
+		issueReportHandler.CreateIssueReportAction)
+	mux.HandleFunc("GET /issueReportAttachment",
+		issueReportHandler.RetrieveIssueReportAttachment)
+
 	// Create server. JoinHostPort brackets an IPv6 bind ("[::1]:8080"). The
 	// address is never empty: LoadConfig requires SERVER_BIND_ADDRESS.
 	server := newHTTPServer(
@@ -285,6 +320,34 @@ func main() {
 			}
 		}
 	}()
+
+	// The issue relay: sends stored reports to the tracker and pulls back
+	// status and replies, until shutdown.
+	relayContext, relayCancel := context.WithCancel(context.Background())
+	defer relayCancel()
+	issueModuleState := "off (ISSUE_REPORTS_ENABLED is not true)"
+	if config.IssueReportsEnabled {
+		issueModuleState = "on"
+	}
+	logger.Info("ISSUE_MODULE", "Issue reports "+issueModuleState,
+		"username", "app-root")
+	if issueRelayClient != nil {
+		relay := &issuerelay.Relay{
+			Client: issueRelayClient,
+			Store:  issueReportRepository,
+			Log:    logger,
+		}
+		logger.Info("ISSUE_RELAY_MODE", fmt.Sprintf(
+			"Issue relay on, every %ds", config.IssueRelayIntervalSeconds),
+			"username", "app-root")
+		go relay.Run(relayContext, time.Duration(
+			config.IssueRelayIntervalSeconds)*time.Second)
+	} else {
+		logger.Info("ISSUE_RELAY_MODE", "Issue relay off "+
+			"(ISSUE_RELAY_URL, ISSUE_RELAY_PROJECT_ID and "+
+			"ISSUE_RELAY_TOKEN not set); reports stay in the app",
+			"username", "app-root")
+	}
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)

@@ -9,6 +9,7 @@ import {
   AppShell,
   Burger,
   Group,
+  Loader,
   Menu,
   NavLink,
   Button,
@@ -24,10 +25,11 @@ import { useDisclosure } from '@mantine/hooks'
 import {
   IconChevronDown,
   IconLogout,
+  IconMessageReport,
   IconSettings,
   IconUserCircle,
 } from '@tabler/icons-react'
-import { useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
 import { useProfileStore } from './stores/profile-store'
 import { useApiStatusStore } from './stores/api-status-store'
 import { usePreference } from './hooks/use-preference'
@@ -44,11 +46,22 @@ import AppUserGroupEditPage from './pages/app-user-group-edit-page'
 import UserPreferencesPage from './pages/user-preferences-page'
 import MFAOnboardingPage from './pages/mfa-onboarding-page'
 import InvitePage from './pages/invite-page'
+import { useIssueReportStore } from './stores/issue-report-store'
 
 import { useAuthStore, setRouteNavigator } from './stores/auth-store'
 import { ROUTES } from './constants/routes'
 import { grants } from './constants/grants'
 import { APP_NAME } from './constants/app'
+
+// The issue-report module (doc/150-issue-report-module.md) loads on first
+// use: its markdown renderer and screen capture stay out of the main
+// bundle, and an app with the module off never fetches them.
+const IssueReportListPage = lazy(
+  () => import('./pages/issue-report-list-page'),
+)
+const IssueReportDrawer = lazy(
+  () => import('./components/issue-report-drawer'),
+)
 
 // Simple error page for route errors
 function ErrorPage() {
@@ -189,6 +202,15 @@ const router = createBrowserRouter([
              element: <UserPreferencesPage />,
              errorElement: <ErrorPage />,
            },
+           {
+             path: ROUTES.ISSUE_REPORT_LIST,
+             element: (
+               <Suspense fallback={<Loader />}>
+                 <IssueReportListPage />
+               </Suspense>
+             ),
+             errorElement: <ErrorPage />,
+           },
     ],
   },
 ])
@@ -214,6 +236,14 @@ function AppLayout() {
   const readProfile = useProfileStore((state) => state.readProfile);
   const apiUnreachable = useApiStatusStore((state) => state.unreachable);
   const profileLoaded = useProfileStore((state) => state.profile !== null);
+  // The server's ISSUE_REPORTS_ENABLED, from /me: the Report button, the
+  // drawer and the nav link exist only when it is on.
+  const issueReportsOn = useProfileStore(
+    (state) => state.profile?.issueReportsEnabled === true,
+  );
+  const openIssueReportDrawer = useIssueReportStore(
+    (state) => state.openDrawer,
+  );
   const { colorScheme } = usePreference();
   const { setColorScheme, clearColorScheme } = useMantineColorScheme();
   const wasSignedIn = useRef(false);
@@ -290,36 +320,55 @@ function AppLayout() {
             />
             <Title order={4}>{APP_NAME}</Title>
           </Group>
-          <Menu shadow="md" width={200} position="bottom-end">
-            <Menu.Target>
-              <UnstyledButton aria-label="Account menu">
-                <Group gap={4} wrap="nowrap">
-                  <IconUserCircle size={18} />
-                  <Text size="sm">{userName}</Text>
-                  <IconChevronDown size={14} />
-                </Group>
-              </UnstyledButton>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item
-                component={Link}
-                to={ROUTES.USER_PREFERENCES}
-                leftSection={<IconSettings size={14} />}
-                onClick={closeNav}
+          <Group gap="sm" wrap="nowrap">
+            {issueReportsOn && (
+              <Button
+                variant="light"
+                size="xs"
+                leftSection={<IconMessageReport size={16} />}
+                onClick={openIssueReportDrawer}
+                title="Report a bug, polish or feature request"
+                data-capture-ignore
               >
-                Profile
-              </Menu.Item>
-              <Menu.Divider />
-              <Menu.Item
-                leftSection={<IconLogout size={14} />}
-                onClick={() => void handleLogout()}
-              >
-                Logout
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
+                Report
+              </Button>
+            )}
+            <Menu shadow="md" width={200} position="bottom-end">
+              <Menu.Target>
+                <UnstyledButton aria-label="Account menu">
+                  <Group gap={4} wrap="nowrap">
+                    <IconUserCircle size={18} />
+                    <Text size="sm">{userName}</Text>
+                    <IconChevronDown size={14} />
+                  </Group>
+                </UnstyledButton>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  component={Link}
+                  to={ROUTES.USER_PREFERENCES}
+                  leftSection={<IconSettings size={14} />}
+                  onClick={closeNav}
+                >
+                  Profile
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item
+                  leftSection={<IconLogout size={14} />}
+                  onClick={() => void handleLogout()}
+                >
+                  Logout
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Group>
         </Group>
       </AppShell.Header>
+      {authState === 'YES' && issueReportsOn && (
+        <Suspense fallback={null}>
+          <IssueReportDrawer />
+        </Suspense>
+      )}
       <AppShell.Navbar p="xs">
         <AppShell.Section grow component={ScrollArea} type="auto">
           <Stack gap={2}>
@@ -328,6 +377,8 @@ function AppLayout() {
             {canManageUsers && navLink(ROUTES.APP_USER_LIST, 'User Admin')}
             {canManageUserGroups &&
               navLink(ROUTES.APP_USER_GROUP_LIST, 'User Groups')}
+            {issueReportsOn &&
+              navLink(ROUTES.ISSUE_REPORT_LIST, 'Issue reports')}
             {navLink(ROUTES.USER_PREFERENCES, 'Profile')}
           </Stack>
         </AppShell.Section>

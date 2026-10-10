@@ -20,6 +20,9 @@ export const ROUTES = {
   // An enrolled user's second step: the same page, no QR code and no call
   // to /mfaSetup.
   MFA_VERIFY: "/mfa-verify",
+  // The issue-report module's page: the tenant's reports, `?issueReportId=N`
+  // selects one (doc/150-issue-report-module.md).
+  ISSUE_REPORT_LIST: "/issueReportList",
   // An invite link's landing page: `/invite#<token>` (utils/invite-link.ts).
   INVITE: "/invite",
 } as const;

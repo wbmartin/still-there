@@ -111,6 +111,7 @@ answer not-found), and at the API where a route reaches the table. Today:
 | `app_user_group` | `app_user_group_repository_test.go`; pytest `test_cross_security_context_group_is_404_not_409` | met |
 | `user_invite` | `user_invite_repository_test.go` (reissue and revoke from another tenant) | met |
 | `example` | `example_repository_test.go` `TestCrossTenantIsolation` (list, get, update, delete and the batch writes against a tenant-3 row from tenant 2) | met |
+| `issue_report`, `issue_report_message`, `issue_report_attachment` | `issue_report_repository_test.go` `TestCrossTenantIsolation` (list, get, detail, file and a message with an action against a tenant-3 report from tenant 2); pytest `test_another_tenant_cannot_reach_reports`. No delete exists. The relay's listings cross tenants by design (a system job); each of its writes names the row's tenant beside the id | met |
 
 ## Threats and controls
 

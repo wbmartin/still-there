@@ -42,7 +42,7 @@ after GRC RG0044.
 ## Host work
 
 The one list of hand steps on a host. ProtoStack has no hosts today:
-H1-H5 apply only if a presales UAT deploy is ever done, H6-H12 only to
+H1-H5 apply only if a presales UAT deploy is ever done, H6-H13 only to
 a post-sales host installed before the change named (a host installed
 from doc/330 or doc/331 at the current `main` already has it).
 
@@ -223,3 +223,21 @@ host file, hash-checked". Run in this order.
   more; the next build's e2e step passes. Rollback:
   `cat /root/uat-proto-e2e-api.env.H12.before > "${F:?}"` (with C003
   reverted, or the API will not start).
+- [ ] **H13. UAT build host: the e2e harness turns the issue-report
+  module on** (issue-report module, doc/150). The gate's pytest and
+  Playwright suites now exercise the module, which is off unless the
+  harness API's file says `ISSUE_REPORTS_ENABLED=true`; the repo copy
+  (`infra/uat/etc/uat-proto-e2e-api.env`) says it, the host's file does
+  not until this step. Not a secret, and the harness only: the UAT API's
+  own file stays as it is (the module stays off there).
+  ```bash
+  hostname
+  F=/srv/uat-proto/etc/uat-proto-e2e-api.env
+  cp -p "${F:?}" /root/uat-proto-e2e-api.env.H13.before
+  grep -q '^ISSUE_REPORTS_ENABLED=' "${F:?}" \
+    || printf '\nISSUE_REPORTS_ENABLED=true\n' >> "${F:?}"
+  ```
+  Check: `grep '^ISSUE_REPORTS_ENABLED=' "${F:?}"` prints the line once;
+  the next build's py and e2e steps pass. Rollback:
+  `cat /root/uat-proto-e2e-api.env.H13.before > "${F:?}"` (the issue-report
+  tests then fail with 404 until the change is reverted too).
