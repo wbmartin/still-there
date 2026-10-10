@@ -304,7 +304,8 @@ sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside
   matches the checkout's migrations exactly; copies it to a throwaway
   `<db>_export`; runs `src/api-srv/sql/export-scrub.sql` there (refuses
   tenant-2 rows and the fixture logins; every password, TOTP seed and MFA
-  exemption cleared, live logins `invited`, open invite links revoked);
+  exemption cleared, live logins `invited`, open invite links revoked,
+  issue reports removed);
   writes `<slug>-data-<stamp>.dump` with `.sha256` and `.manifest` to
   `<out-dir>`, which must be outside the checkout. The export is customer
   data. The first sign-in on the host is an invite link issued there

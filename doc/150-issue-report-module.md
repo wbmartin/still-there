@@ -58,6 +58,15 @@ filed while the relay was off stay in the app; reports filed after are
 sent on the next tick, and a failed send is retried up to 20 times (shown
 as "Not delivered yet").
 
+Reports filed while the relay was off (status "Received", relay state
+`local`) are sent when an API starts with the relay on: at start the relay
+queues every live, open `local` report, oldest first, and every `local`
+message on a report it sends (`Issue relay: N local reports and M local
+messages queued` in the log). A message still goes only after its report
+is in the tracker. A report withdrawn while the relay was off stays in
+the app with its messages: sending it would only announce something
+already closed.
+
 No repository env file carries a tracker's address or token
 (`TestLoadConfig_RepoEnvFiles`). Setting the keys on a host is the derived
 app's own step: add them to that host's API env file and restart the API.
@@ -92,6 +101,13 @@ else; a tracker that is down only delays sending (reports wait in the
 app). Staff replies and their files come back the other way; a staff
 file is fetched from the tracker when opened and served under the same
 rules as an uploaded one.
+
+## Export to a host
+
+`bin/620-export-tenant-data` does not carry issue reports: its scrub
+(`src/api-srv/sql/export-scrub.sql`) removes the three tables' rows from
+the copy it dumps. They are the laptop's conversation with a tracker, and
+their tracker ids would be synced against the host's own project.
 
 ## Where the code is
 

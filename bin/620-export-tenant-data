@@ -14,7 +14,8 @@
 #   2. copy it into a throwaway <source>_export (the source is only read)
 #   3. src/api-srv/sql/export-scrub.sql, one transaction: refuses tenant-2
 #      rows and the seeded fixture logins; every credential emptied, every
-#      live login "invited", open invite links revoked
+#      live login "invited", open invite links revoked, the issue-report
+#      module's rows removed (doc/150)
 #   4. pg_dump -Fc --no-owner --no-privileges (the host restores it as its
 #      DDL role, which then owns everything)
 #   5. <name>.dump, <name>.dump.sha256 and <name>.manifest (commit, schema
