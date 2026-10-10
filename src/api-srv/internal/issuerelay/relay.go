@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -14,6 +15,9 @@ import (
 
 // Store is the slice of *repository.IssueReportRepository the relay uses.
 type Store interface {
+	RelayQueueLocalBacklog(
+		ctx context.Context,
+	) (reportCount int, messageCount int, err error)
 	RelayReportListToSend(
 		ctx context.Context, maxAttempts int, limit int,
 	) ([]*repository.IssueRelayReport, error)
@@ -109,8 +113,10 @@ func (r *Relay) workspaceLabel(securityContext int) string {
 	return "tenant " + strconv.Itoa(securityContext)
 }
 
-// Run ticks once at once and then every interval until ctx is done.
+// Run queues what was filed while the relay was off, ticks at once, and
+// then every interval until ctx is done.
 func (r *Relay) Run(ctx context.Context, interval time.Duration) {
+	r.QueueBacklog(ctx)
 	r.Tick(ctx)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -121,6 +127,22 @@ func (r *Relay) Run(ctx context.Context, interval time.Duration) {
 		case <-ticker.C:
 			r.Tick(ctx)
 		}
+	}
+}
+
+// QueueBacklog makes the reports and messages filed while the relay was
+// off (relay_state local) pending, so the ticks send them. A failure is
+// logged and the relay runs on; the next start tries again.
+func (r *Relay) QueueBacklog(ctx context.Context) {
+	reportCount, messageCount, err := r.Store.RelayQueueLocalBacklog(ctx)
+	if err != nil {
+		r.logError("RELAY_BACKLOG", "queueing local reports", err)
+		return
+	}
+	if r.Log != nil {
+		r.Log.Info("RELAY_BACKLOG", fmt.Sprintf(
+			"Issue relay: %d local reports and %d local messages queued",
+			reportCount, messageCount), "username", "issue-relay")
 	}
 }
 

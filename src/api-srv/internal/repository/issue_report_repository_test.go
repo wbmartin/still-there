@@ -324,3 +324,113 @@ func (s *IssueReportRepositoryTestSuite) TestRelayRoundTrip() {
 		reply.AttachmentList[0].IssueReportAttachmentID, testTenant)
 	s.True(errors.Is(err, ErrNotFound))
 }
+
+// relayStateOf reads a row's relay_state straight from the table.
+func (s *IssueReportRepositoryTestSuite) relayStateOf(
+	table string, idColumn string, id int,
+) string {
+	var state string
+	err := s.db.QueryRow(context.Background(),
+		"SELECT relay_state FROM "+table+" WHERE "+idColumn+" = $1", id).
+		Scan(&state)
+	s.Require().NoError(err)
+	return state
+}
+
+// createLocalIn files a report as the handler does with the relay off.
+func (s *IssueReportRepositoryTestSuite) createLocalIn(
+	summary string, securityContext int,
+) int {
+	reportID := s.createIn(summary, securityContext)
+	_, err := s.db.Exec(context.Background(), `
+		UPDATE issue_report SET relay_state = 'local'
+		WHERE issue_report_id = $1`, reportID)
+	s.Require().NoError(err)
+	return reportID
+}
+
+func (s *IssueReportRepositoryTestSuite) localMessage(
+	reportID int, securityContext int, body string,
+) int {
+	message := s.message(reportID, securityContext, body)
+	message.RelayState = model.IssueRelayLocal
+	messageID, err := s.repo.CreateIssueReportMessage(context.Background(),
+		message, nil, nil, nil, securityContext)
+	s.Require().NoError(err)
+	return messageID
+}
+
+// What was filed while the relay was off is queued at relay start: live,
+// open local reports in every tenant and their local messages; a closed
+// (withdrawn) or deleted local report stays local with its messages; a
+// report already in the tracker is untouched, and a local message on it
+// is queued.
+func (s *IssueReportRepositoryTestSuite) TestRelayQueueLocalBacklog() {
+	ctx := context.Background()
+	openID := s.createLocalIn("backlog open", testTenant)
+	openMessageID := s.localMessage(openID, testTenant, "More")
+	otherID := s.createLocalIn("backlog other tenant", otherTenant)
+
+	withdrawnID := s.createLocalIn("backlog withdrawn", testTenant)
+	action := model.IssueActionWithdraw
+	withdraw := s.message(withdrawnID, testTenant, model.IssueWithdrawText)
+	withdraw.Action = &action
+	withdraw.RelayState = model.IssueRelayLocal
+	state, status := model.IssueStateClosed, "Withdrawn"
+	withdrawMessageID, err := s.repo.CreateIssueReportMessage(ctx,
+		withdraw, nil, &state, &status, testTenant)
+	s.Require().NoError(err)
+
+	deletedID := s.createLocalIn("backlog deleted", testTenant)
+	_, err = s.db.Exec(ctx, `
+		UPDATE issue_report SET delete_ts = 1, delete_user_id = 1
+		WHERE issue_report_id = $1`, deletedID)
+	s.Require().NoError(err)
+
+	sentID := s.createIn("backlog sent", testTenant)
+	remoteID := "R-" + model.NewUUID()
+	s.Require().NoError(s.repo.RelayMarkReportSent(ctx, sentID,
+		testTenant, remoteID, "open", "Under review", nil, model.Now()))
+	sentMessageID := s.localMessage(sentID, testTenant, "While off")
+
+	reportCount, messageCount, err := s.repo.RelayQueueLocalBacklog(ctx)
+	s.Require().NoError(err)
+	s.GreaterOrEqual(reportCount, 2)
+	s.GreaterOrEqual(messageCount, 2)
+
+	report := func(id int) string {
+		return s.relayStateOf("issue_report", "issue_report_id", id)
+	}
+	message := func(id int) string {
+		return s.relayStateOf("issue_report_message",
+			"issue_report_message_id", id)
+	}
+	s.Equal(model.IssueRelayPending, report(openID))
+	s.Equal(model.IssueRelayPending, message(openMessageID))
+	s.Equal(model.IssueRelayPending, report(otherID))
+	s.Equal(model.IssueRelayLocal, report(withdrawnID))
+	s.Equal(model.IssueRelayLocal, message(withdrawMessageID))
+	s.Equal(model.IssueRelayLocal, report(deletedID))
+	s.Equal(model.IssueRelaySent, report(sentID))
+	s.Equal(model.IssueRelayPending, message(sentMessageID))
+	sent, err := s.repo.RetrieveIssueReport(ctx, sentID, testTenant)
+	s.Require().NoError(err)
+	s.Equal(remoteID, *sent.RemoteID)
+
+	// The queued report is sent like any other; its message waits for it.
+	s.NotNil(s.relayReport(openID))
+	messageList, err := s.repo.RelayMessageListToSend(ctx, 20, 1000)
+	s.Require().NoError(err)
+	queuedIDList := map[int]bool{}
+	for _, queued := range messageList {
+		queuedIDList[queued.IssueReportMessageID] = true
+	}
+	s.False(queuedIDList[openMessageID], "sent before its report")
+	s.True(queuedIDList[sentMessageID])
+
+	// A second start finds nothing new.
+	reportCount, messageCount, err = s.repo.RelayQueueLocalBacklog(ctx)
+	s.Require().NoError(err)
+	s.Zero(reportCount)
+	s.Zero(messageCount)
+}

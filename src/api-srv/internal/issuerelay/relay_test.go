@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/wbmartin/starter-api/internal/model"
 	"github.com/wbmartin/starter-api/internal/repository"
@@ -15,6 +16,11 @@ import (
 
 // fakeStore records what the relay asks of the repository.
 type fakeStore struct {
+	mutex sync.Mutex
+	// localList is the backlog: reports filed while the relay was off,
+	// handed to reportList by RelayQueueLocalBacklog.
+	localList   []*repository.IssueRelayReport
+	queueCount  int
 	reportList  []*repository.IssueRelayReport
 	messageList []*repository.IssueRelayMessage
 	targetList  []repository.IssueRelaySyncTarget
@@ -35,16 +41,40 @@ func newFakeStore() *fakeStore {
 	}
 }
 
+func (f *fakeStore) RelayQueueLocalBacklog(
+	context.Context,
+) (int, int, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.queueCount++
+	queued := len(f.localList)
+	f.reportList = append(f.reportList, f.localList...)
+	f.localList = nil
+	return queued, 0, nil
+}
+
+// RelayReportListToSend lists what is not yet sent, as the repository
+// does: a sent report leaves the list.
 func (f *fakeStore) RelayReportListToSend(
 	context.Context, int, int,
 ) ([]*repository.IssueRelayReport, error) {
-	return f.reportList, nil
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	var waitingList []*repository.IssueRelayReport
+	for _, report := range f.reportList {
+		if _, sent := f.sentByID[report.IssueReportID]; !sent {
+			waitingList = append(waitingList, report)
+		}
+	}
+	return waitingList, nil
 }
 
 func (f *fakeStore) RelayMarkReportSent(
 	_ context.Context, reportID int, securityContext int, remoteID string,
 	_ string, status string, _ *string, _ float64,
 ) error {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 	f.sentByID[reportID] = remoteID + "|" + status
 	f.tenantList = append(f.tenantList, securityContext)
 	return nil
@@ -367,5 +397,53 @@ func TestParseTime(t *testing.T) {
 	}
 	if got := parseTime("yesterday", 9); got != 9 {
 		t.Errorf("an unreadable time falls back, got %v", got)
+	}
+}
+
+// A report filed while the relay was off is queued when the relay starts
+// and sent by its first tick, once; the backlog is queued only at start.
+func TestRelayRun_SendsTheBacklogAtStart(t *testing.T) {
+	_, server := newFakeHouse(t, "token")
+	store := newFakeStore()
+	store.localList = []*repository.IssueRelayReport{{
+		IssueReportModel: model.IssueReportModel{IssueReportID: 9,
+			SecurityContext: 3, Kind: "bug", Summary: "Save fails",
+			ReporterName: "Ben"},
+		FileList: []repository.IssueRelayFile{{Filename: "shot.png",
+			ContentType: "image/png", Content: []byte("png")}},
+	}}
+	relay := &Relay{
+		Client: NewClient(Config{BaseURL: server.URL, ProjectID: "P1",
+			Token: "token"}, nil),
+		Store: store,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		relay.Run(ctx, time.Hour)
+		close(done)
+	}()
+	deadline := time.After(5 * time.Second)
+	for {
+		store.mutex.Lock()
+		sent := store.sentByID[9]
+		store.mutex.Unlock()
+		if sent != "" {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("the backlog report was not sent after start")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
+	if store.sentByID[9] != "R-1|Under review" {
+		t.Errorf("sent = %q", store.sentByID[9])
+	}
+	if store.queueCount != 1 {
+		t.Errorf("backlog queued %d times, want once at start",
+			store.queueCount)
 	}
 }

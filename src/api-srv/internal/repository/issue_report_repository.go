@@ -444,6 +444,65 @@ type IssueRelayReport struct {
 	FileList []IssueRelayFile
 }
 
+// RelayQueueLocalBacklog hands the relay what was filed while it was off:
+// every live report still `local` (never sent) becomes `pending`, and so
+// does every live `local` message on a live report the relay will send
+// (pending, failed or sent). The relay then sends them oldest first under
+// its usual caps; a message waits until its report is in the tracker, as
+// any message does. A closed `local` report (withdrawn while the relay was
+// off) stays local with its messages: sending it would announce something
+// already closed. Run once when the relay starts. Tenant by tenant, each
+// write naming the tenant; it returns the reports and messages queued.
+func (r *IssueReportRepository) RelayQueueLocalBacklog(
+	ctx context.Context,
+) (reportCount int, messageCount int, err error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT DISTINCT security_context_id
+		FROM issue_report_message
+		WHERE relay_state = 'local' AND delete_user_id IS NULL
+		UNION
+		SELECT DISTINCT security_context_id
+		FROM issue_report
+		WHERE relay_state = 'local' AND delete_user_id IS NULL`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to list local backlog: %w", err)
+	}
+	tenantList, err := pgx.CollectRows(rows, pgx.RowTo[int])
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to read local backlog: %w", err)
+	}
+	for _, securityContext := range tenantList {
+		tag, err := r.db.Exec(ctx, `
+			UPDATE issue_report
+			SET relay_state = 'pending'
+			WHERE security_context_id = $1 AND relay_state = 'local'
+			  AND remote_id IS NULL AND delete_user_id IS NULL
+			  AND state NOT IN ('closed', 'wont_fix')`, securityContext)
+		if err != nil {
+			return reportCount, messageCount,
+				fmt.Errorf("failed to queue local reports: %w", err)
+		}
+		reportCount += int(tag.RowsAffected())
+		tag, err = r.db.Exec(ctx, `
+			UPDATE issue_report_message m
+			SET relay_state = 'pending'
+			WHERE m.security_context_id = $1 AND m.relay_state = 'local'
+			  AND m.delete_user_id IS NULL
+			  AND EXISTS (
+			      SELECT 1 FROM issue_report r
+			      WHERE r.issue_report_id = m.issue_report_id
+			        AND r.security_context_id = m.security_context_id
+			        AND r.delete_user_id IS NULL
+			        AND r.relay_state <> 'local')`, securityContext)
+		if err != nil {
+			return reportCount, messageCount,
+				fmt.Errorf("failed to queue local messages: %w", err)
+		}
+		messageCount += int(tag.RowsAffected())
+	}
+	return reportCount, messageCount, nil
+}
+
 // truncateRelayError fits an error into relay_error.
 func truncateRelayError(message string) string {
 	if len(message) > maxRelayErrorLen {
