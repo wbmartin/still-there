@@ -38,3 +38,8 @@ src/web-app/README.md:stores/widget-store.ts
 src/web-app/README.md:pages/widget-list-page.tsx
 src/web-app/README.md:pages/widget-edit-page.tsx
 src/web-app/README.md:tests/widget-store.test.ts
+
+# Gitignored per clone (CLAUDE.md, Work items): holds the clone's own
+# House coordinates, so a fresh clone or a worktree has none.
+CLAUDE.md:etc/.radley-house
+DERIVING.md:etc/.radley-house
