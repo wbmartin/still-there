@@ -35,6 +35,7 @@ import { grants } from "../constants/grants";
 import { PasswordGenerator } from "../components/password-generator";
 import { MfaExemptField } from "../components/mfa-exempt-field";
 import { reportError } from "../utils/report-error";
+import FieldHelp from "../help/field-help";
 
 
 function UserEditPage() {
@@ -414,6 +415,7 @@ function UserEditPage() {
             Invited
           </Badge>
         )}
+        {(isBlocked || isInvited) && <FieldHelp id="account-status" />}
       </Title>
       <form onSubmit={form.onSubmit(handleSubmit)}>
         <TextInput

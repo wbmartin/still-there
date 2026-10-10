@@ -47,10 +47,12 @@ import UserPreferencesPage from './pages/user-preferences-page'
 import MFAOnboardingPage from './pages/mfa-onboarding-page'
 import InvitePage from './pages/invite-page'
 import { useIssueReportStore } from './stores/issue-report-store'
+import HelpButton from './help/help-button'
+import { useHelpEnabled } from './help/help-preference'
 
 import { useAuthStore, setRouteNavigator } from './stores/auth-store'
 import { ROUTES } from './constants/routes'
-import { grants } from './constants/grants'
+import { navItemListFor } from './constants/nav'
 import { APP_NAME } from './constants/app'
 
 // The issue-report module (doc/150-issue-report-module.md) loads on first
@@ -62,6 +64,12 @@ const IssueReportListPage = lazy(
 const IssueReportDrawer = lazy(
   () => import('./components/issue-report-drawer'),
 )
+
+// The help module (doc/151-help-module.md) loads on first use too: the
+// panel, tours and command palette stay out of the main bundle, and an
+// app with help off never fetches them.
+const HelpShell = lazy(() => import('./help/help-shell'))
+const HelpInsightsPage = lazy(() => import('./pages/help-insights-page'))
 
 // Simple error page for route errors
 function ErrorPage() {
@@ -211,6 +219,15 @@ const router = createBrowserRouter([
              ),
              errorElement: <ErrorPage />,
            },
+           {
+             path: ROUTES.HELP_INSIGHTS,
+             element: (
+               <Suspense fallback={<Loader />}>
+                 <HelpInsightsPage />
+               </Suspense>
+             ),
+             errorElement: <ErrorPage />,
+           },
     ],
   },
 ])
@@ -244,6 +261,9 @@ function AppLayout() {
   const openIssueReportDrawer = useIssueReportStore(
     (state) => state.openDrawer,
   );
+  // The server's HELP_ENABLED, from /me: the Help button, the panel, the ?
+  // key and the command palette exist only when it is on.
+  const helpOn = useHelpEnabled();
   const { colorScheme } = usePreference();
   const { setColorScheme, clearColorScheme } = useMantineColorScheme();
   const wasSignedIn = useRef(false);
@@ -287,14 +307,17 @@ function AppLayout() {
     void navigate(ROUTES.LOGIN);
   };
 
-  // Authorization checks for navigation
-  const canManageUsers = grantList.includes(grants.CREATE_USER);
-  const canManageUserGroups = grantList.includes(grants.CREATE_USER_GROUP);
-
   // Closing on tap (not on route change) also closes the phone drawer when
-  // the tapped link is the page already shown.
+  // the tapped link is the page already shown. The list is
+  // constants/nav.ts, filtered by the session's grants and the modules on.
   const navLink = (to: string, label: string) => (
-    <NavLink component={Link} to={to} label={label} onClick={closeNav} />
+    <NavLink
+      key={to}
+      component={Link}
+      to={to}
+      label={label}
+      onClick={closeNav}
+    />
   );
 
   return (
@@ -333,6 +356,7 @@ function AppLayout() {
                 Report
               </Button>
             )}
+            {helpOn && <HelpButton />}
             <Menu shadow="md" width={200} position="bottom-end">
               <Menu.Target>
                 <UnstyledButton aria-label="Account menu">
@@ -369,17 +393,16 @@ function AppLayout() {
           <IssueReportDrawer />
         </Suspense>
       )}
+      {authState === 'YES' && helpOn && (
+        <Suspense fallback={null}>
+          <HelpShell />
+        </Suspense>
+      )}
       <AppShell.Navbar p="xs">
         <AppShell.Section grow component={ScrollArea} type="auto">
           <Stack gap={2}>
-            {navLink(ROUTES.DASHBOARD, 'Dashboard')}
-            {navLink(ROUTES.EXAMPLE_LIST, 'Examples')}
-            {canManageUsers && navLink(ROUTES.APP_USER_LIST, 'User Admin')}
-            {canManageUserGroups &&
-              navLink(ROUTES.APP_USER_GROUP_LIST, 'User Groups')}
-            {issueReportsOn &&
-              navLink(ROUTES.ISSUE_REPORT_LIST, 'Issue reports')}
-            {navLink(ROUTES.USER_PREFERENCES, 'Profile')}
+            {navItemListFor(grantList, { issueReportsEnabled: issueReportsOn })
+              .map((item) => navLink(item.route, item.label))}
           </Stack>
         </AppShell.Section>
       </AppShell.Navbar>

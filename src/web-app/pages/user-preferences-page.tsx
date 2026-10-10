@@ -21,8 +21,10 @@ import useAuthGuard from "../hooks/use-auth-guard";
 import { grants } from "../constants/grants";
 import { ChangePasswordModal } from "../components/change-password-modal";
 import { LabelWithHelp } from "../components/help-tip";
+import FieldHelp from "../help/field-help";
 import { useProfileStore } from "../stores/profile-store";
 import {
+  carriedPreference,
   defaultPreference,
   isColorScheme,
   isRowsPerPage,
@@ -177,6 +179,8 @@ function UserPreferencesPage() {
         lastName: values.lastName.trim(),
         email: values.email.trim(),
         preferenceJsonb: {
+          // The help module's part of the document rides along unchanged.
+          ...carriedPreference(profile.preferenceJsonb),
           colorScheme: isColorScheme(values.colorScheme)
             ? values.colorScheme
             : defaultPreference.colorScheme,
@@ -221,6 +225,7 @@ function UserPreferencesPage() {
             <Text>{userName}</Text>
             <Text fw={500} ml="lg">Security Context:</Text>
             <Text>{securityContext}</Text>
+            <FieldHelp id="security-context" />
           </Group>
           <Group grow>
             <TextInput label="First name" {...profileForm.getInputProps("firstName")} />

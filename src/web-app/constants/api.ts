@@ -55,6 +55,10 @@ export const API_ENDPOINTS = {
   ISSUE_REPORT_MESSAGE: "/issueReportMessage",
   ISSUE_REPORT_ACTION: "/issueReportAction",
   ISSUE_REPORT_ATTACHMENT: "/issueReportAttachment",
+
+  // In-app help usage (handler/help_handler.go; doc/151-help-module.md)
+  HELP_EVENT: "/helpEvent",
+  HELP_INSIGHTS: "/helpInsights",
 } as const;
 
 export type ApiEndpoint = (typeof API_ENDPOINTS)[keyof typeof API_ENDPOINTS];

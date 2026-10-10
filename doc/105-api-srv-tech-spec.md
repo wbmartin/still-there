@@ -42,6 +42,7 @@ src/api-srv/
 │   │   ├── profile_handler.go      # GET/PUT /me
 │   │   ├── example_handler.go      # /example, /exampleList (the copy-me entity)
 │   │   ├── error_report_handler.go # /error-report
+│   │   ├── help_handler.go         # /helpEvent, /helpInsights (doc/151)
 │   │   ├── health_handler.go       # /health
 │   │   ├── common.go               # Body caps, cookie writer, mapRepoError, query helpers
 │   │   └── route_check_contract_test.go # Every route's checks (see Security Checks)
@@ -141,6 +142,8 @@ is the login lockout instead. **CSRF** `CheckCSRF` (never on GET).
 | POST | /issueReportMessage | Yes | user+block | Yes | LOGON (1) | A reply on a report (multipart, files) |
 | POST | /issueReportAction | Yes | user+block | Yes | LOGON (1) | Withdraw an open report or reopen a closed one (409 otherwise) |
 | GET | /issueReportAttachment | Yes | user+block | (GET) | LOGON (1) | One file's bytes, by Serving user files below |
+| POST | /helpEvent | Yes | user+block | Yes | LOGON (1) | Record a help usage event; 404 while the help module is off (doc/151) |
+| GET | /helpInsights | Yes | user+block | (GET) | READ_USER (9002) | The tenant's help usage counts over `days`; 404 while off |
 
 `ADD_USER_TO_GROUP` (9014) and `REMOVE_USER_FROM_GROUP` (9015) are defined
 in `grants.go` but no route checks them: group membership is checked with
@@ -190,6 +193,7 @@ refused 400 by the field's own validation, not by the decoder:
 | `/admin/blockUser`, `/admin/unblockUser` | `{userName}` |
 | `POST`/`PUT /appUserGroup` | the group row (`groupName`, `userGrantList`; `appUserGroupId` and `updateTs` on PUT) |
 | `/error-report` | any text; the first 2000 characters are logged |
+| `/helpEvent` | `{event, entryId, route, query}` (doc/151) |
 
 The password key is `password` everywhere a password is set
 (`pwHash` is gone, B038); list keys are `fooList`, never plural.
@@ -398,6 +402,7 @@ own text goes to the log only.
 | Cap | Routes |
 |---|---|
 | 4 KiB (`maxAuthBodyBytes`) | `/auth`, `/mfaSetup`, `/mfaVerify`, `/changeSecurityContext`, `/userSelfCreate`, `/inviteCheck`, `/inviteRedeem` (read before or without a session) |
+| 4 KiB (`model.HelpMaxEventBodyBytes`) | `/helpEvent` |
 | 8 KiB (`maxErrorReportBodyBytes`) | `/error-report` (signed-in; logs the first 2000 characters) |
 | 12 KiB (4 KiB + `maxPreferenceBytes`) | `PUT /me` |
 | 64 KiB (`maxLoginLayerBodyBytes`) | `POST`/`PUT /user`, `POST`/`PUT /appUserGroup`, `/addUserListToGroup`, `/removeUserListFromGroup`, `/changeOwnPassword`, `/changeOtherUserPassword`, `/admin/resetUserMFA`, `/admin/blockUser`, `/admin/unblockUser`, `/userInvite`, `/userInviteReissue`, `/userInviteRevoke` |
@@ -657,9 +662,10 @@ local development configurations. The API's keys, required and optional,
 are listed in `src/api-srv/README.md` (Configuration); among them
 `INVITE_TTL_HOURS` (invite link lifetime), `ALLOW_MFA_EXEMPT_VIA_API`
 (Request bodies, above), `TRUSTED_PROXY_COUNT` (`ClientIP`), the rate
-limits and the lockout thresholds above, and the issue-report module's
+limits and the lockout thresholds above, the issue-report module's
 optional `ISSUE_REPORTS_ENABLED` and `ISSUE_RELAY_*` keys
-(`doc/150-issue-report-module.md`).
+(`doc/150-issue-report-module.md`), and the help module's optional
+`HELP_ENABLED` (`doc/151-help-module.md`).
 
 ### Loading
 - Command-line argument specifies config file path

@@ -628,3 +628,43 @@ func TestLoadConfig_IssueReportKeys(t *testing.T) {
 		})
 	}
 }
+
+// HELP_ENABLED is optional (absent or empty is off) and otherwise exactly
+// true or false: a near-miss spelling stops start-up rather than reading
+// as either value.
+func TestLoadConfig_HelpEnabled(t *testing.T) {
+	testCaseList := []struct {
+		name    string
+		line    string
+		want    bool
+		wantErr bool
+	}{
+		{"absent", "", false, false},
+		{"empty", "HELP_ENABLED=\n", false, false},
+		{"true", "HELP_ENABLED=true\n", true, false},
+		{"false", "HELP_ENABLED=false\n", false, false},
+		{"upper case", "HELP_ENABLED=TRUE\n", false, true},
+		{"digit", "HELP_ENABLED=1\n", false, true},
+		{"word", "HELP_ENABLED=yes\n", false, true},
+	}
+	for _, testCase := range testCaseList {
+		t.Run(testCase.name, func(t *testing.T) {
+			config, err := LoadConfig(writeEnv(t,
+				validBase+testCase.line))
+			if testCase.wantErr {
+				if err == nil || !strings.Contains(err.Error(),
+					"HELP_ENABLED must be true or false") {
+					t.Fatalf("err = %v, want the HELP_ENABLED error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.HelpEnabled != testCase.want {
+				t.Errorf("HelpEnabled = %v, want %v",
+					config.HelpEnabled, testCase.want)
+			}
+		})
+	}
+}

@@ -70,6 +70,9 @@ Optional:
   the host's file only
 - `ISSUE_RELAY_INTERVAL_SECONDS` — how often the relay sends and syncs;
   default 120, at least 15
+- `HELP_ENABLED` — `true` or `false` (default): the help module
+  (`doc/151-help-module.md`). Off, `/helpEvent` and `/helpInsights` answer
+  404 and the web app shows no Help button
 
 `TEST_BASE_URL` is not part of `Config` — the server ignores it. It is read
 by `bin/330-test-load` and exported by the test runners for the pytest

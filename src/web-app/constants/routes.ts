@@ -23,6 +23,9 @@ export const ROUTES = {
   // The issue-report module's page: the tenant's reports, `?issueReportId=N`
   // selects one (doc/150-issue-report-module.md).
   ISSUE_REPORT_LIST: "/issueReportList",
+  // The help module's usage counts, for user admins
+  // (doc/151-help-module.md).
+  HELP_INSIGHTS: "/helpInsights",
   // An invite link's landing page: `/invite#<token>` (utils/invite-link.ts).
   INVITE: "/invite",
 } as const;

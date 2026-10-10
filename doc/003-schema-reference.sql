@@ -11,7 +11,7 @@
 -- constraints show as their indexes. schema_migration (the migrator's own
 -- table) is left out.
 --
--- Through migration 0006_issue_report.
+-- Through migration 0007_help_event.
 
 CREATE TABLE app_user (
     app_user_id SERIAL NOT NULL,
@@ -82,6 +82,25 @@ CREATE INDEX idx_example_id_update_ts ON public.example USING btree (example_id,
 CREATE INDEX idx_example_security_context ON public.example USING btree (security_context_id);
 CREATE INDEX idx_example_security_context_update_ts ON public.example USING btree (security_context_id, update_ts);
 CREATE UNIQUE INDEX idx_example_uuid ON public.example USING btree (example_uuid);
+
+CREATE TABLE help_event (
+    help_event_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    app_user_id integer NOT NULL,
+    event varchar(24) NOT NULL,
+    entry_id varchar(64),
+    route varchar(64) NOT NULL,
+    query varchar(200),
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE UNIQUE INDEX help_event_pkey ON public.help_event USING btree (help_event_id);
+CREATE INDEX idx_help_event_sc_app_user_id_create_ts ON public.help_event USING btree (security_context_id, app_user_id, create_ts);
+CREATE INDEX idx_help_event_sc_event_create_ts ON public.help_event USING btree (security_context_id, event, create_ts);
 
 CREATE TABLE issue_report (
     issue_report_id SERIAL NOT NULL,

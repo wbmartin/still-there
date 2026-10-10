@@ -19,6 +19,7 @@ import { ROUTES } from "../constants/routes";
 import { grants } from "../constants/grants";
 import { SortTh } from "../components/sort-th";
 import { reportError } from "../utils/report-error";
+import FieldHelp from "../help/field-help";
 
 function ExampleListPage() {
   const authState = useAuthGuard([grants.READ_EXAMPLE]);
@@ -168,14 +169,18 @@ function ExampleListPage() {
   return (
     <Container size={1280} px={32} py={32} mx="auto">
       <Group justify="space-between" mb="lg">
-        <Title order={1}>Examples</Title>
+        <Group gap={4}>
+          <Title order={1}>Examples</Title>
+          <FieldHelp id="working-with-examples" />
+        </Group>
         <Button
           onClick={() => void navigate(`${ROUTES.EXAMPLE_EDIT}?exampleId=new`)}
+          data-tour="example-add"
         >
           Add Example
         </Button>
       </Group>
-      <Table>
+      <Table data-tour="example-table">
         <Table.Thead>
           <Table.Tr>
             <SortTh
