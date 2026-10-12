@@ -183,11 +183,13 @@ describe("issue report helpers", () => {
     );
   });
 
-  it("captureIssueContext is a JSON object naming the page", () => {
+  it("captureIssueContext names the site first, then the page", () => {
     const context = JSON.parse(captureIssueContext()) as Record<
       string,
       unknown
     >;
+    expect(Object.keys(context)[0]).toBe("site");
+    expect(context.site).toBe(window.location.host);
     expect(typeof context.page_url).toBe("string");
     expect(typeof context.browser).toBe("string");
   });

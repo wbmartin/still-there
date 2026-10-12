@@ -93,7 +93,8 @@ with tenant names sets `Relay.WorkspaceLabel` in `src/api-srv/cmd/server/main.go
 
 With the relay on, each report goes to the tracker with its files (a
 screen capture shows whatever was on the reporter's screen), the
-reporter's name, email and user id, and the browser context. The drawer
+reporter's name, email and user id, and the browser context (the site's
+host first, so a UAT and a production install can share one tracker). The drawer
 says that the page and browser go along and that the workspace sees the
 report. Only the server talks to the tracker, over the configured URL,
 with a token that opens the report routes of that one project and nothing

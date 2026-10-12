@@ -22,9 +22,14 @@ export interface NewIssueReport {
   fileList: File[];
 }
 
-/** Where the report was made from, to help reproduce it. */
+/**
+ * Where the report was made from, to help reproduce it. `site` (the host)
+ * comes first: a UAT and a production install can report to the same
+ * tracker, and it is how triage tells them apart.
+ */
 export const captureIssueContext = (): string =>
   JSON.stringify({
+    site: window.location.host,
     page_url: window.location.pathname + window.location.search,
     browser: navigator.userAgent,
     viewport: `${window.innerWidth}x${window.innerHeight}`,
