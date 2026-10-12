@@ -8,7 +8,7 @@ import { useHelpEnabled } from "./help-preference";
  * A glossary term in running text: a dotted underline; hover or keyboard
  * focus shows its one-line definition, Enter or "Learn more" opens the
  * Help panel on it, Escape closes. With help off it is its text alone.
- * `id` must exist in help/content/glossary.ts (checked by
+ * `id` must name a file in help/content/glossary/ (checked by
  * tests/help-content.test.ts).
  */
 export default function Term({

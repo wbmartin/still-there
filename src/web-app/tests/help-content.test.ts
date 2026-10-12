@@ -3,6 +3,13 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ROUTES } from "../constants/routes";
 import { HELP_AUDIENCE_LIST } from "../help/content/audience";
+import {
+  GLOSSARY_FILE_MAP,
+  PAGE_FILE_MAP,
+  TOPIC_FILE_MAP,
+  WHATS_NEW_FILE_MAP,
+  fileBaseName,
+} from "../help/content-files";
 import { helpLinkIdList, routeLinkList } from "../help/help-markdown";
 import {
   GLOSSARY,
@@ -62,6 +69,13 @@ const bodyList: { from: string; body: string }[] = [
   ...WHATS_NEW.map((news) => ({ from: `news ${news.id}`, body: news.body })),
 ];
 
+// A route's page-help file name: "/appUserList" is "app-user-list".
+const routeFileName = (route: string) =>
+  route
+    .replace(/^\/+/, "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .toLowerCase();
+
 const wordCount = (text: string) => text.trim().split(/\s+/).length;
 
 describe("help content", () => {
@@ -72,6 +86,29 @@ describe("help content", () => {
     expect(sourceMap.size, "UI source scan found no files").toBeGreaterThan(
       10,
     );
+  });
+
+  it("names every content file for its entry", () => {
+    type IdFileMap = Record<string, { default: { id: string } }>;
+    const idFileMapList: [string, IdFileMap][] = [
+      ["glossary", GLOSSARY_FILE_MAP],
+      ["topics", TOPIC_FILE_MAP],
+      ["whats-new", WHATS_NEW_FILE_MAP],
+    ];
+    for (const [kind, fileMap] of idFileMapList) {
+      expect(Object.keys(fileMap).length, `${kind}: no files`)
+        .toBeGreaterThan(0);
+      for (const [path, module] of Object.entries(fileMap)) {
+        expect(fileBaseName(path), `${kind} file ${path}`).toBe(
+          module.default.id,
+        );
+      }
+    }
+    for (const [path, module] of Object.entries(PAGE_FILE_MAP)) {
+      expect(fileBaseName(path), `pages file ${path}`).toBe(
+        routeFileName(module.default.route),
+      );
+    }
   });
 
   it("uses well-formed ids, unique across terms and topics", () => {
@@ -203,9 +240,8 @@ describe("help content", () => {
     }
   });
 
-  it("lists what's new newest first, with well-formed ids", () => {
+  it("gives what's new well-formed, unique, dated ids", () => {
     const idList = WHATS_NEW.map((news) => news.id);
-    expect([...idList].sort().reverse()).toEqual(idList);
     expect(new Set(idList).size).toBe(idList.length);
     for (const news of WHATS_NEW) {
       expect(news.id, news.id).toMatch(/^\d{4}-\d{2}-\d{2}-\d+-[a-z0-9-]+$/);

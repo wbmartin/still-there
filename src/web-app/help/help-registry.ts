@@ -6,14 +6,42 @@ import {
   HELP_AUDIENCE_BY_GRANT,
   type HelpAudience,
 } from "./content/audience";
-import { GLOSSARY } from "./content/glossary";
-import { PAGE_HELP, PAGES_WITHOUT_HELP } from "./content/pages";
-import { TOPICS } from "./content/topics";
+import { PAGES_WITHOUT_HELP } from "./content/pages-without-help";
 import { TOURS } from "./content/tours";
-import { WHATS_NEW } from "./content/whats-new";
-import type { HelpTerm, HelpTopic, PageHelp, Tour } from "./help-types";
+import {
+  GLOSSARY_FILE_MAP,
+  PAGE_FILE_MAP,
+  TOPIC_FILE_MAP,
+  WHATS_NEW_FILE_MAP,
+  entryListOf,
+} from "./content-files";
+import type {
+  HelpTerm,
+  HelpTopic,
+  PageHelp,
+  Tour,
+  WhatsNewEntry,
+} from "./help-types";
 
-export { GLOSSARY, PAGE_HELP, PAGES_WITHOUT_HELP, TOPICS, TOURS, WHATS_NEW };
+// The gathered content in a fixed order: the glossary by term, topics by
+// title, pages by route, What's new newest first (its ids are
+// YYYY-MM-DD-N-slug, so a reverse string sort is newest first).
+export const GLOSSARY: HelpTerm[] = entryListOf(GLOSSARY_FILE_MAP).sort(
+  (a, b) => a.term.localeCompare(b.term),
+);
+export const TOPICS: HelpTopic[] = entryListOf(TOPIC_FILE_MAP).sort(
+  (a, b) => a.title.localeCompare(b.title),
+);
+export const PAGE_HELP: PageHelp[] = entryListOf(PAGE_FILE_MAP).sort(
+  (a, b) => a.route.localeCompare(b.route),
+);
+export const newestFirst = (a: WhatsNewEntry, b: WhatsNewEntry): number =>
+  a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+export const WHATS_NEW: WhatsNewEntry[] = entryListOf(
+  WHATS_NEW_FILE_MAP,
+).sort(newestFirst);
+
+export { PAGES_WITHOUT_HELP, TOURS };
 
 const termById = new Map(GLOSSARY.map((term) => [term.id, term]));
 const topicById = new Map(TOPICS.map((topic) => [topic.id, topic]));

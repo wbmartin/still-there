@@ -70,13 +70,43 @@ change as the feature it explains. **Every new page gets a page entry in
 the same PR**: the content tests fail while a route in
 `src/web-app/constants/routes.ts` has none.
 
+**One file per entry: add a new file, never edit a shared list.** Each
+glossary term, topic, page entry and What's new entry is its own module
+whose default export is the entry, so two changes built side by side
+that each add help never touch the same lines. `src/web-app/help/content-files.ts`
+gathers each directory with Vite's `import.meta.glob` and
+`src/web-app/help/help-registry.ts` exposes the arrays (`GLOSSARY` by
+term, `TOPICS` by title, `PAGE_HELP` by route, `WHATS_NEW` newest first
+by id); nothing else imports a content file.
+
+| Path | One file per | File name | Default export |
+|------|--------------|-----------|----------------|
+| `src/web-app/help/content/pages/` | route | the route in kebab case (`/appUserList` is `app-user-list.ts`) | `{...} satisfies PageHelp` |
+| `src/web-app/help/content/glossary/` | term | its id (`mfa.ts`) | `{...} satisfies HelpTerm` |
+| `src/web-app/help/content/topics/` | topic | its id (`adding-a-user.ts`) | `{...} satisfies HelpTopic` |
+| `src/web-app/help/content/whats-new/` | release note | its id (`2026-10-10-1-help.ts`) | `{...} satisfies WhatsNewEntry` |
+
+A file looks like this (`src/web-app/help/content/glossary/mfa.ts`):
+
+```ts
+import type { HelpTerm } from "../../help-types";
+
+export default {
+  id: "mfa",
+  term: "MFA",
+  short: "...",
+  body: `...`,
+} satisfies HelpTerm;
+```
+
+A page file also imports `ROUTES` (`"../../../constants/routes"`) and
+sets `route: ROUTES.<NAME>`. Three small lists stay single files, since
+they change rarely:
+
 | File | Holds | Exported as |
 |------|-------|-------------|
-| `src/web-app/help/content/pages.ts` | one entry per route | `PAGE_HELP: PageHelp[]`, `PAGES_WITHOUT_HELP: string[]` |
-| `src/web-app/help/content/glossary.ts` | the app's words | `GLOSSARY: HelpTerm[]` |
-| `src/web-app/help/content/topics.ts` | task articles | `TOPICS: HelpTopic[]` |
+| `src/web-app/help/content/pages-without-help.ts` | routes deliberately without page help (empty) | `PAGES_WITHOUT_HELP: string[]` |
 | `src/web-app/help/content/tours.ts` | page tours | `TOURS: Tour[]` |
-| `src/web-app/help/content/whats-new.ts` | release notes, newest first | `WHATS_NEW: WhatsNewEntry[]` |
 | `src/web-app/help/content/audience.ts` | who help is for, by grant | `HELP_AUDIENCE_LIST`, `DEFAULT_HELP_AUDIENCE`, `HELP_AUDIENCE_BY_GRANT` |
 
 The types are in `src/web-app/help/help-types.ts`:
@@ -93,7 +123,7 @@ The types are in `src/web-app/help/help-types.ts`:
   `TourStep`: `target` (the `data-tour` value of the element it points
   at), `title`, `body` (plain text, one or two sentences).
 - `WhatsNewEntry`: `id` (`YYYY-MM-DD-N-slug`, N counting up within a day,
-  so ids sort newest first), `date` (`YYYY-MM-DD`, the id's prefix),
+  so the registry sorts them newest first), `date` (`YYYY-MM-DD`, the id's prefix),
   `title`, `body`, optional `help` (the entry "Learn more" opens).
 
 Ids (terms, topics, tours) are lower-case kebab, at most 64 characters,
@@ -128,6 +158,8 @@ lighter choice.
 `src/web-app/tests/help-content.test.ts` runs in `bin/300-run-tests unit`,
 with the module on or off:
 
+- every content file is named for its entry: a term, topic or What's new
+  file by its id, a page file by its route in kebab case;
 - ids are well formed and unique across terms and topics; tour ids unique;
 - `short` at most 30 words, `summary` at most 35, no empty body;
 - every `related`, `terms`, `topics` and What's new `help` reference
@@ -141,7 +173,8 @@ with the module on or off:
   `help/` and `app.tsx`) exists;
 - every tour's route is a route and each step's target is written as
   `data-tour="..."` somewhere in that source;
-- What's new is newest first, ids well formed and unique;
+- What's new ids are well formed, unique and start with their date (the
+  order is by construction: the registry sorts them);
 - every audience has at least one topic.
 
 `src/web-app/tests/help-markdown.test.tsx` pins the markdown subset and

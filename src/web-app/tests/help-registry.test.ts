@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   GLOSSARY,
   TOPICS,
+  WHATS_NEW,
+  newestFirst,
   audienceFromGrants,
   getEntry,
   latestWhatsNewId,
@@ -60,6 +62,21 @@ describe("help registry", () => {
   it("is the default audience with the template's empty grant map", () => {
     expect(audienceFromGrants([])).toBe(DEFAULT_HELP_AUDIENCE);
     expect(audienceFromGrants([1, 9001])).toBe(DEFAULT_HELP_AUDIENCE);
+  });
+
+  it("orders what's new newest first, whatever the file order", () => {
+    const entryOf = (id: string) => ({ id, date: "", title: "", body: "" });
+    const sorted = [
+      "2026-10-10-1-a",
+      "2026-11-02-1-c",
+      "2026-10-10-2-b",
+    ].map(entryOf).sort(newestFirst);
+    expect(sorted.map((entry) => entry.id)).toEqual([
+      "2026-11-02-1-c",
+      "2026-10-10-2-b",
+      "2026-10-10-1-a",
+    ]);
+    expect(WHATS_NEW.length).toBeGreaterThan(0);
   });
 
   it("finds a page's tour and the newest news", () => {
