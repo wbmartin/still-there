@@ -24,6 +24,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strings"
 	"time"
@@ -194,7 +195,7 @@ func multipartBody(
 		}
 	}
 	for _, file := range fileList {
-		part, err := writer.CreateFormFile("files", file.Filename)
+		part, err := writer.CreatePart(filePartHeader(file))
 		if err != nil {
 			return nil, "", err
 		}
@@ -322,4 +323,22 @@ func (c *Client) Download(
 		return nil, fmt.Errorf("tracker file is over %d bytes", maxBytes)
 	}
 	return content, nil
+}
+
+var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
+
+// filePartHeader names a file part with its real type. CreateFormFile would
+// label every file application/octet-stream, so the tracker could not tell
+// a screenshot from any other file.
+func filePartHeader(file File) textproto.MIMEHeader {
+	contentType := file.ContentType
+	if contentType == "" || contentType == "application/octet-stream" {
+		contentType = http.DetectContentType(file.Content)
+	}
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", fmt.Sprintf(
+		`form-data; name="files"; filename="%s"`,
+		quoteEscaper.Replace(file.Filename)))
+	header.Set("Content-Type", contentType)
+	return header
 }
