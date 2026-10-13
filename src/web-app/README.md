@@ -48,7 +48,12 @@ nginx serves the bundle and proxies `/api` on the same origin. Any
   `create-entity-store.ts` (see below) and `auth-store.ts`
 - `schemas/` — zod form schemas (today only `loginSchema`; edit pages validate inline)
 - `hooks/` — `use-auth-guard.ts` and similar
-- `constants/` — `api.ts` (endpoint paths), `grants.ts`, `routes.ts`
+- `constants/` — `api.ts` (endpoint paths), `grants.ts`, `routes.ts`,
+  `nav.ts` (the navbar's pages, which the command palette lists too)
+- `help/` — the help module (`doc/151-help-module.md`): the framework
+  (panel, search, markdown, tours, palette, inline `Term` / `FieldHelp` /
+  `HelpLink` / `Nudge`) and, in `help/content/`, the help itself: every
+  route needs a page entry there (`tests/help-content.test.ts`)
 - `types/` — TypeScript model types
 - `utils/` — fetch wrapper, cache helpers
 - `tests/e2e/` — Playwright specs (config: `playwright.config.ts`; runs

@@ -31,11 +31,14 @@ type ProfileUpdateRequest struct {
 // refuses turning it on, so the user edit page hides the checkbox.
 // IssueReportsEnabled mirrors ISSUE_REPORTS_ENABLED: the web app shows
 // the Report button and the Issue reports page only when it is true
-// (doc/150-issue-report-module.md).
+// (doc/150-issue-report-module.md). HelpEnabled mirrors HELP_ENABLED: the
+// web app shows the Help button, the ? key and the command palette only
+// when it is true (doc/151-help-module.md).
 type ownProfileResponse struct {
 	model.AppUserOwnProfileModel
 	AllowMFAExemptViaAPI bool `json:"allowMfaExemptViaApi"`
 	IssueReportsEnabled  bool `json:"issueReportsEnabled"`
+	HelpEnabled          bool `json:"helpEnabled"`
 }
 
 // Bound on the preferences document; it is a handful of UI settings.
@@ -188,6 +191,7 @@ func (h *ProfileHandler) ownProfileOf(
 		AppUserOwnProfileModel: user.OwnProfile(),
 		AllowMFAExemptViaAPI:   h.appsrv.Config.AllowMFAExemptViaAPI,
 		IssueReportsEnabled:    h.appsrv.Config.IssueReportsEnabled,
+		HelpEnabled:            h.appsrv.Config.HelpEnabled,
 	}
 }
 

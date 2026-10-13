@@ -104,7 +104,11 @@ Keep it until the first real entity exists, then delete
 `src/api-srv/internal/{model,repository,handler}/example_*`, its routes in
 `cmd/server/main.go`, `src/web-app/pages/example-*`, its store, schema,
 routes and e2e spec, and drop the table in a migration. Do not edit the
-initial migration.
+initial migration. Its help goes with it: the page entries, the
+`example-record` term, the `working-with-examples` topic and the
+`example-list` tour in `src/web-app/help/content/` (the content tests
+name what is left; `doc/151-help-module.md`). Each page the app adds gets
+its page help in the same change.
 
 The template stores no files. The first route that takes or returns a
 user's file follows doc/105, Serving user files: a framing override on that

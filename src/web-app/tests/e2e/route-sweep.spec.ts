@@ -125,6 +125,12 @@ const SWEEP_ROW_LIST: SweepRow[] = [
     path: ROUTES.ISSUE_REPORT_LIST,
     landing: signedIn(at(ROUTES.ISSUE_REPORT_LIST, /^Issue reports$/)),
   },
+  {
+    // The help module is on in the e2e API (etc/e2e-api-srv.env); the
+    // page needs READ_USER, which basic does not hold.
+    path: ROUTES.HELP_INSIGHTS,
+    landing: adminOnly(at(ROUTES.HELP_INSIGHTS, /^Help insights$/)),
+  },
 ];
 
 // What a crash looks like: the router's errorElement (app.tsx) and the

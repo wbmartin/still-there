@@ -49,6 +49,9 @@ type Config struct {
 	IssueRelayProjectID       string
 	IssueRelayToken           string
 	IssueRelayIntervalSeconds int
+	// The in-app help module (doc/151-help-module.md). Optional, off
+	// unless HELP_ENABLED=true.
+	HelpEnabled bool
 }
 
 // The issue relay's interval when ISSUE_RELAY_INTERVAL_SECONDS is unset,
@@ -294,6 +297,21 @@ func LoadConfig(configFilePath string) (*Config, error) {
 
 	if err := loadIssueReportKeys(env, &config); err != nil {
 		return nil, err
+	}
+
+	// Optional: a file written before the help module existed leaves it
+	// off. A value set is exactly true or false, so a typo fails start-up
+	// rather than reading as either.
+	switch env["HELP_ENABLED"] {
+	case "true":
+		config.HelpEnabled = true
+	case "false", "":
+		config.HelpEnabled = false
+	default:
+		return nil, fmt.Errorf(
+			"HELP_ENABLED must be true or false, got %q",
+			env["HELP_ENABLED"],
+		)
 	}
 
 	return &config, nil

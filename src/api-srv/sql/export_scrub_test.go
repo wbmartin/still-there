@@ -179,6 +179,21 @@ func seedIssueReport(t *testing.T, tx pgx.Tx, tenant int) {
 	}
 }
 
+// seedHelpEvent records a help search with no result, as the laptop's
+// Help panel would.
+func seedHelpEvent(t *testing.T, tx pgx.Tx, tenant int) {
+	t.Helper()
+	_, err := tx.Exec(context.Background(), `
+		INSERT INTO help_event (security_context_id, app_user_id, event,
+			route, query, create_ts, create_user_id, update_ts,
+			update_user_id)
+		VALUES ($1, 1, 'search_no_result', '/dashboard', 'laptop search',
+			1, 1, 1, 1)`, tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestExportScrub(t *testing.T) {
 	conn := scrubDatabase(t)
 	script := readScrub(t)
@@ -220,6 +235,12 @@ func TestExportScrub(t *testing.T) {
 				if n := count(t, tx, `SELECT count(*)
 					FROM issue_report`); n != 2 {
 					t.Fatalf("issue reports seeded: %d, want 2", n)
+				}
+				seedHelpEvent(t, tx, 1)
+				seedHelpEvent(t, tx, 3)
+				if n := count(t, tx, `SELECT count(*)
+					FROM help_event`); n != 2 {
+					t.Fatalf("help events seeded: %d, want 2", n)
 				}
 
 				if _, err := tx.Exec(ctx, script); err != nil {
@@ -276,8 +297,10 @@ func TestExportScrub(t *testing.T) {
 				}
 				// The laptop's issue reports and their tracker ids
 				// do not travel.
+				// Nor does the laptop's help usage.
 				for _, table := range []string{"issue_report",
-					"issue_report_message", "issue_report_attachment"} {
+					"issue_report_message", "issue_report_attachment",
+					"help_event"} {
 					if n := count(t, tx,
 						"SELECT count(*) FROM "+table); n != 0 {
 						t.Errorf("%s rows after scrub: %d, want 0",

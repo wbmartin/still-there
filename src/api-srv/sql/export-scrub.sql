@@ -1,8 +1,8 @@
 -- The credential scrub bin/620-export-tenant-data runs, as one transaction,
 -- on its throwaway copy of the local database before dumping it for a
 -- post-sales host (doc/330 0.4). It changes credentials only, never a data
--- row, with one exception below (issue reports), and REFUSES, naming what
--- it found, data it must not carry:
+-- row, with two exceptions below (issue reports, help usage), and REFUSES,
+-- naming what it found, data it must not carry:
 --
 --   * any row in tenant 2, the test tenant (CLAUDE.md): test data is never
 --     a customer's, and no real tenant is numbered 2
@@ -21,11 +21,14 @@
 -- credentials too. Open invite links are revoked: their tokens were shown
 -- on the laptop.
 --
--- The one data it removes: the issue-report module's rows
+-- The data it removes: the issue-report module's rows
 -- (doc/150-issue-report-module.md). They are the laptop's conversation
 -- with a tracker, carrying that tracker's ids (remote_id); on a host the
 -- relay would sync them against the host's own tracker project. Removed
 -- outright, files and messages with them: this runs on a throwaway copy.
+-- And the help module's usage events (help_event, doc/151-help-module.md):
+-- the laptop's own searches and views, which would skew the host's Help
+-- insights, and whose search text is whatever was typed there.
 --
 -- Plain SQL, no psql meta-commands: sql/export_scrub_test.go runs this file
 -- as written against a scratch database.
@@ -91,3 +94,5 @@ SET pw_hash = '',
 DELETE FROM issue_report_attachment;
 DELETE FROM issue_report_message;
 DELETE FROM issue_report;
+
+DELETE FROM help_event;

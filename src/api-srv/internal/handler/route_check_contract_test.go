@@ -67,6 +67,13 @@ func issueReportHandlerOf(appServices *app.Services) *IssueReportHandler {
 		new(MockIssueReportRepository), new(MockProfileRepository), nil)
 }
 
+// helpHandlerOf turns the module on, so a request past the checks reaches
+// the fail-on-contact repository rather than the module-off 404.
+func helpHandlerOf(appServices *app.Services) *HelpHandler {
+	appServices.Config.HelpEnabled = true
+	return NewHelpHandler(appServices, new(MockHelpEventRepository))
+}
+
 // groupHandlerOf passes a nil repository: any call dereferences it.
 func groupHandlerOf(appServices *app.Services) *AppUserGroupHandler {
 	return NewAppUserGroupHandler(appServices, nil)
@@ -291,6 +298,15 @@ var routeContractList = []routeContract{
 	fullChecks("GET /issueReportAttachment", model.GrantLogon,
 		func(s *app.Services) http.HandlerFunc {
 			return issueReportHandlerOf(s).RetrieveIssueReportAttachment
+		}),
+
+	fullChecks("POST /helpEvent", model.GrantLogon,
+		func(s *app.Services) http.HandlerFunc {
+			return helpHandlerOf(s).CreateHelpEvent
+		}),
+	fullChecks("GET /helpInsights", model.GrantUserRead,
+		func(s *app.Services) http.HandlerFunc {
+			return helpHandlerOf(s).RetrieveHelpInsights
 		}),
 }
 

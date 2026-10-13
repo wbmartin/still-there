@@ -68,13 +68,38 @@ export interface Profile {
   // The server's ISSUE_REPORTS_ENABLED: true shows the Report button and
   // the Issue reports page (doc/150-issue-report-module.md).
   issueReportsEnabled: boolean;
+  // The server's HELP_ENABLED: true shows the Help button, the ? key and
+  // the command palette (doc/151-help-module.md).
+  helpEnabled: boolean;
 }
+
+// Keys of the same document that another part of the app owns: the help
+// module keeps what each user has seen and finished under `help`
+// (help/help-preference.ts). PUT /me replaces the whole document, so a
+// writer of the keys above carries these through unchanged.
+const carriedPreferenceKeyList = ["help"] as const;
+
+// The carried keys of a stored document, as stored; empty for anything
+// that is not an object.
+export const carriedPreference = (
+  stored: unknown,
+): Record<string, unknown> => {
+  if (typeof stored !== "object" || stored === null || Array.isArray(stored)) {
+    return {};
+  }
+  const carried: Record<string, unknown> = {};
+  for (const key of carriedPreferenceKeyList) {
+    if (key in stored) carried[key] = (stored as Record<string, unknown>)[key];
+  }
+  return carried;
+};
 
 // PUT /me body: what a user may change about themselves.
 export interface ProfileUpdate {
   firstName: string;
   lastName: string;
   email: string;
-  preferenceJsonb?: Preference;
+  // The whole document: Preference plus the carried keys.
+  preferenceJsonb?: Preference & Record<string, unknown>;
   updateTs: number;
 }

@@ -77,6 +77,7 @@ func main() {
 	userRepo := repository.NewUserRepository(dbPool)
 	appUserGroupRepo := repository.NewAppUserGroupRepository(dbPool)
 	exampleRepo := repository.NewExampleRepository(dbPool)
+	helpEventRepository := repository.NewHelpEventRepository(dbPool)
 	userInviteRepository := repository.NewUserInviteRepository(dbPool)
 	issueReportRepository := repository.NewIssueReportRepository(dbPool)
 
@@ -126,6 +127,9 @@ func main() {
 		appUserGroupRepo,
 	)
 	errorReportHandler := handler.NewErrorReportHandler(appServices)
+	// The help module (doc/151-help-module.md): the routes answer 404
+	// unless HELP_ENABLED=true.
+	helpHandler := handler.NewHelpHandler(appServices, helpEventRepository)
 	profileHandler := handler.NewProfileHandler(appServices, userRepo)
 	userSelfCreateHandler := handler.UserSelfCreateHandler(
 		appServices,
@@ -275,6 +279,10 @@ func main() {
 		issueReportHandler.CreateIssueReportAction)
 	mux.HandleFunc("GET /issueReportAttachment",
 		issueReportHandler.RetrieveIssueReportAttachment)
+	// In-app help usage (help_handler.go): anyone signed in records; a
+	// user admin reads the tenant's counts
+	mux.HandleFunc("POST /helpEvent", helpHandler.CreateHelpEvent)
+	mux.HandleFunc("GET /helpInsights", helpHandler.RetrieveHelpInsights)
 
 	// Create server. JoinHostPort brackets an IPv6 bind ("[::1]:8080"). The
 	// address is never empty: LoadConfig requires SERVER_BIND_ADDRESS.
@@ -348,6 +356,12 @@ func main() {
 			"ISSUE_RELAY_TOKEN not set); reports stay in the app",
 			"username", "app-root")
 	}
+	helpModuleState := "off (HELP_ENABLED is not true)"
+	if config.HelpEnabled {
+		helpModuleState = "on"
+	}
+	logger.Info("HELP_MODULE", "Help "+helpModuleState,
+		"username", "app-root")
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
