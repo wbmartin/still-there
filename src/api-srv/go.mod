@@ -2,7 +2,7 @@ module github.com/wbmartin/starter-api
 
 go 1.25.4
 
-toolchain go1.25.14
+toolchain go1.26.9
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
