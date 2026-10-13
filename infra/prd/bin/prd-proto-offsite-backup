@@ -1,0 +1,62 @@
+#!/bin/bash
+# Off-site copy of the nightly backup to Backblaze B2 with restic. Root,
+# from cron on Sunday and Wednesday, after that day's backup-all; the
+# schedule is NACK_CRON in
+# shrmpl-etc/nack-monitors/prd-proto-offsite-backup_NACKID.env. Checks in
+# with nackmon only on success.
+#
+# Sends the set backup-all wrote today (pg_dump, globals, and the filesystem
+# tar, which carries etc/ secrets) as one restic snapshot, then keeps the
+# last KEEP_LAST snapshots. restic encrypts on this host with
+# RESTIC_PASSWORD before anything is sent: B2 only ever holds ciphertext.
+#
+# Once per repository, by hand as root (doc/331 section B2):
+#   set -a; . /srv/prd-proto/etc/prd-proto-offsite.env; set +a
+#   restic init
+# Restore: infra/README.md, Off-site backup.
+set -euo pipefail
+
+SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# The app root is /srv/<env>-<slug>: the env files and backup names come
+# from it, so this file is the same on every host.
+APP_ENV="$(basename "$SRV_ROOT")"
+for name in backup offsite; do
+    env_file="$SRV_ROOT/etc/$APP_ENV-$name.env"
+    [ -r "$env_file" ] || { echo "[ERROR] $env_file missing or unreadable"; exit 1; }
+    # shellcheck disable=SC1090
+    source "$env_file"
+done
+for var in BACKUP_ROOT DATABASE_NAME RESTIC_REPOSITORY RESTIC_PASSWORD \
+    AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY KEEP_LAST OFFSITE_HEALTHCHECK_URL; do
+    [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by backup.env/offsite.env"; exit 1; }
+done
+export RESTIC_REPOSITORY RESTIC_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+command -v restic > /dev/null || { echo "[ERROR] restic not installed"; exit 1; }
+
+# Today's files, named as prd-proto-backup-all names them.
+BACKUP_DST=$BACKUP_ROOT/$APP_ENV
+BACKUP_ID=$(date +%a)
+HOST_NAME=$(hostname)
+PREFIX="$BACKUP_DST/$(echo "$APP_ENV" | tr "[:lower:]" "[:upper:]")-BACKUP"
+FILE_LIST=(
+    "$PREFIX-PG-$HOST_NAME-$DATABASE_NAME-$BACKUP_ID.dump"
+    "$PREFIX-PG-$HOST_NAME-Globals-$BACKUP_ID.sql.gz"
+    "$PREFIX-FS-$HOST_NAME-$BACKUP_ID.tar.gz"
+)
+# A file from last week's same weekday means today's backup-all did not run:
+# never ship a week-old copy as this run's.
+for f in "${FILE_LIST[@]}"; do
+    [ -n "$(find "$f" -mmin -720 2>/dev/null)" ] \
+        || { echo "[ERROR] $f missing or older than 12 h (did backup-all run today?)"; exit 1; }
+done
+
+echo "[INFO] restic backup -> $RESTIC_REPOSITORY"
+restic backup --host "$HOST_NAME" --tag "$APP_ENV" "${FILE_LIST[@]}"
+echo "[INFO] restic forget --keep-last $KEEP_LAST --prune"
+restic forget --host "$HOST_NAME" --tag "$APP_ENV" \
+    --keep-last "$KEEP_LAST" --prune
+restic check
+restic snapshots --host "$HOST_NAME" --tag "$APP_ENV"
+
+curl -fsS "$OFFSITE_HEALTHCHECK_URL" > /dev/null
+echo "[INFO] Off-site backup complete"

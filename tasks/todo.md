@@ -42,7 +42,7 @@ after GRC RG0044.
 ## Host work
 
 The one list of hand steps on a host. ProtoStack has no hosts today:
-H1-H5 apply only if a presales UAT deploy is ever done, H6-H13 only to
+H1-H5 apply only if a presales UAT deploy is ever done, H6-H14 only to
 a post-sales host installed before the change named (a host installed
 from doc/330 or doc/331 at the current `main` already has it).
 
@@ -241,3 +241,30 @@ host file, hash-checked". Run in this order.
   the next build's py and e2e steps pass. Rollback:
   `cat /root/uat-proto-e2e-api.env.H13.before > "${F:?}"` (the issue-report
   tests then fail with 404 until the change is reverted too).
+- [ ] **H14. Prod (and the monitoring host): off-site backup to B2**
+  (restic, `prd-proto-offsite-backup`). A prod installed before this
+  change has no off-site copy. Staff first make the B2 bucket and key
+  (`infra/README.md`, Off-site backup, step 1) and, locally, rename
+  `prd-proto-offsite-backup_NACKID.env` to a new check-in code, commit and
+  push it, then copy the new script, `etc/prd-proto-offsite.env` and the
+  monitor from that commit's archive (`doc/331` 0.3, A1) into
+  `/root/proto-infra`.
+  ```bash
+  hostname
+  I=/root/proto-infra/infra/prd; A=/srv/prd-proto
+  command -v restic >/dev/null || apt install -y restic
+  install -o shrmpl-hook -g shrmpl-hook -m 0755 "${I:?}/bin/prd-proto-offsite-backup" "${A:?}/bin/"
+  [ -e "${A:?}/etc/prd-proto-offsite.env" ] || install -o root -g root -m 0600 "${I:?}/etc/prd-proto-offsite.env" "${A:?}/etc/"
+  ```
+  Fill the env file as `doc/331` A4 does (`RESTIC_PASSWORD` from
+  `openssl rand -hex 32`, into the password manager too; the B2 values and
+  `OFFSITE_HEALTHCHECK_URL` by hand), install the monitor as `doc/331` A5
+  and restart `shrmpl-nackmon`, run section B2's off-site block (`restic
+  init`, then one run), then add the `30 8 * * 0,3` line from B3 to
+  root's crontab by hand (B3's block skips a crontab that already has
+  `prd-proto-` lines). Check: `grep -c SERVERONLY
+  "${A:?}/etc/prd-proto-offsite.env"` prints 0; the run ends `Off-site
+  backup complete`; `crontab -l | grep -c prd-proto-offsite-backup`
+  prints 1; no nackmon alert after the next Sunday or Wednesday.
+  Rollback: remove the crontab line, the monitor file (restart nackmon),
+  the script and env file; the B2 bucket is staff's to delete.
