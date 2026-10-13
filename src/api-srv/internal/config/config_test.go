@@ -489,6 +489,12 @@ func TestLoadConfig_RepoEnvFiles(t *testing.T) {
 			t.Errorf("%s: ALLOW_MFA_EXEMPT_VIA_API=%v, want %v",
 				relPath, config.AllowMFAExemptViaAPI, isHarness)
 		}
+		// No repository file carries a tracker's address or token: a
+		// host sets them in its own file (doc/150).
+		if config.IssueRelayEnabled() {
+			t.Errorf("%s: the issue relay is configured; its target "+
+				"belongs only in a host's own env file", relPath)
+		}
 	}
 }
 
@@ -541,4 +547,84 @@ func intField(config *Config, key string) int {
 		"FAILED_LOGIN_ATTEMPT_THRESHOLD": config.FailedLoginAttemptThreshold,
 		"INVITE_TTL_HOURS":               config.InviteTTLHours,
 	}[key]
+}
+
+// The issue-report module's keys are optional (a file written before the
+// module stays loadable and the module stays off), and what is set is
+// checked at load: the flag is exactly true or false, the three relay
+// target keys come together or not at all, the URL is http(s), and the
+// interval is at least 15 seconds.
+func TestLoadConfig_IssueReportKeys(t *testing.T) {
+	const relayTarget = "ISSUE_RELAY_URL=https://tracker.example.com\n" +
+		"ISSUE_RELAY_PROJECT_ID=project-1\n" +
+		"ISSUE_RELAY_TOKEN=token-1\n"
+	testCaseList := []struct {
+		name         string
+		lines        string
+		wantEnabled  bool
+		wantRelay    bool
+		wantInterval int
+		wantErr      string
+	}{
+		{"absent: off", "", false, false, 120, ""},
+		{"enabled", "ISSUE_REPORTS_ENABLED=true\n", true, false, 120, ""},
+		{"disabled", "ISSUE_REPORTS_ENABLED=false\n", false, false, 120,
+			""},
+		{"flag misspelt", "ISSUE_REPORTS_ENABLED=yes\n", false, false, 0,
+			"ISSUE_REPORTS_ENABLED must be true or false"},
+		{"relay on", relayTarget, false, true, 120, ""},
+		{"relay interval", relayTarget +
+			"ISSUE_RELAY_INTERVAL_SECONDS=30\n", false, true, 30, ""},
+		{"relay without token",
+			"ISSUE_RELAY_URL=https://tracker.example.com\n" +
+				"ISSUE_RELAY_PROJECT_ID=project-1\n",
+			false, false, 0, "missing ISSUE_RELAY_TOKEN"},
+		{"relay with only a token", "ISSUE_RELAY_TOKEN=token-1\n",
+			false, false, 0,
+			"missing ISSUE_RELAY_URL, ISSUE_RELAY_PROJECT_ID"},
+		{"relay URL not http",
+			"ISSUE_RELAY_URL=ftp://tracker.example.com\n" +
+				"ISSUE_RELAY_PROJECT_ID=project-1\n" +
+				"ISSUE_RELAY_TOKEN=token-1\n",
+			false, false, 0, "ISSUE_RELAY_URL must be an http(s) URL"},
+		{"relay URL without host",
+			"ISSUE_RELAY_URL=tracker.example.com\n" +
+				"ISSUE_RELAY_PROJECT_ID=project-1\n" +
+				"ISSUE_RELAY_TOKEN=token-1\n",
+			false, false, 0, "ISSUE_RELAY_URL must be an http(s) URL"},
+		{"interval too short", "ISSUE_RELAY_INTERVAL_SECONDS=5\n",
+			false, false, 0, "at least 15"},
+		{"interval not a number", "ISSUE_RELAY_INTERVAL_SECONDS=soon\n",
+			false, false, 0, "at least 15"},
+	}
+	for _, testCase := range testCaseList {
+		t.Run(testCase.name, func(t *testing.T) {
+			config, err := LoadConfig(writeEnv(
+				t, validBase+testCase.lines,
+			))
+			if testCase.wantErr != "" {
+				if err == nil ||
+					!strings.Contains(err.Error(), testCase.wantErr) {
+					t.Fatalf("err = %v, want %q", err, testCase.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.IssueReportsEnabled != testCase.wantEnabled {
+				t.Errorf("IssueReportsEnabled = %v, want %v",
+					config.IssueReportsEnabled, testCase.wantEnabled)
+			}
+			if config.IssueRelayEnabled() != testCase.wantRelay {
+				t.Errorf("IssueRelayEnabled() = %v, want %v",
+					config.IssueRelayEnabled(), testCase.wantRelay)
+			}
+			if config.IssueRelayIntervalSeconds != testCase.wantInterval {
+				t.Errorf("IssueRelayIntervalSeconds = %d, want %d",
+					config.IssueRelayIntervalSeconds,
+					testCase.wantInterval)
+			}
+		})
+	}
 }

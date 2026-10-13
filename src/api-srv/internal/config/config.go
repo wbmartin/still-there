@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -39,7 +40,23 @@ type Config struct {
 	LogLevel                         slog.Level
 	InviteTTLHours                   int
 	AllowMFAExemptViaAPI             bool
+	// The issue-report module (doc/150-issue-report-module.md). Off
+	// unless ISSUE_REPORTS_ENABLED=true; the relay runs only when the
+	// three ISSUE_RELAY_* target keys are set. IssueRelayToken is a
+	// secret.
+	IssueReportsEnabled       bool
+	IssueRelayURL             string
+	IssueRelayProjectID       string
+	IssueRelayToken           string
+	IssueRelayIntervalSeconds int
 }
+
+// The issue relay's interval when ISSUE_RELAY_INTERVAL_SECONDS is unset,
+// and the least it may be set to.
+const (
+	defaultIssueRelayIntervalSeconds = 120
+	minIssueRelayIntervalSeconds     = 15
+)
 
 // ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,
 // no interpolation -- into a map. A value wrapped in matching double or
@@ -275,7 +292,81 @@ func LoadConfig(configFilePath string) (*Config, error) {
 		)
 	}
 
+	if err := loadIssueReportKeys(env, &config); err != nil {
+		return nil, err
+	}
+
 	return &config, nil
+}
+
+// loadIssueReportKeys reads the issue-report module's keys, all optional:
+// a file written before the module existed leaves it off. What is set is
+// checked here, so a typo fails start-up rather than leaving the module
+// quietly half on: ISSUE_REPORTS_ENABLED is exactly true or false; the
+// three relay target keys are all set or none (one or two set is an
+// error naming the rest); the URL is http(s) with a host; the interval is
+// a whole number of seconds, at least 15.
+func loadIssueReportKeys(env map[string]string, config *Config) error {
+	switch env["ISSUE_REPORTS_ENABLED"] {
+	case "true":
+		config.IssueReportsEnabled = true
+	case "false", "":
+		config.IssueReportsEnabled = false
+	default:
+		return fmt.Errorf(
+			"ISSUE_REPORTS_ENABLED must be true or false, got %q",
+			env["ISSUE_REPORTS_ENABLED"],
+		)
+	}
+
+	config.IssueRelayURL = env["ISSUE_RELAY_URL"]
+	config.IssueRelayProjectID = env["ISSUE_RELAY_PROJECT_ID"]
+	config.IssueRelayToken = env["ISSUE_RELAY_TOKEN"]
+	var missingList []string
+	for _, key := range []string{
+		"ISSUE_RELAY_URL", "ISSUE_RELAY_PROJECT_ID", "ISSUE_RELAY_TOKEN",
+	} {
+		if env[key] == "" {
+			missingList = append(missingList, key)
+		}
+	}
+	if len(missingList) == 1 || len(missingList) == 2 {
+		return fmt.Errorf(
+			"the issue relay needs ISSUE_RELAY_URL, "+
+				"ISSUE_RELAY_PROJECT_ID and ISSUE_RELAY_TOKEN together; "+
+				"missing %s", strings.Join(missingList, ", "),
+		)
+	}
+	if config.IssueRelayURL != "" {
+		parsed, err := url.Parse(config.IssueRelayURL)
+		if err != nil || parsed.Host == "" ||
+			(parsed.Scheme != "https" && parsed.Scheme != "http") {
+			return fmt.Errorf(
+				"ISSUE_RELAY_URL must be an http(s) URL with a host, "+
+					"got %q", config.IssueRelayURL,
+			)
+		}
+	}
+
+	config.IssueRelayIntervalSeconds = defaultIssueRelayIntervalSeconds
+	if raw := env["ISSUE_RELAY_INTERVAL_SECONDS"]; raw != "" {
+		val, err := strconv.Atoi(raw)
+		if err != nil || val < minIssueRelayIntervalSeconds {
+			return fmt.Errorf(
+				"ISSUE_RELAY_INTERVAL_SECONDS must be a whole number "+
+					"of seconds, at least %d, got %q",
+				minIssueRelayIntervalSeconds, raw,
+			)
+		}
+		config.IssueRelayIntervalSeconds = val
+	}
+	return nil
+}
+
+// IssueRelayEnabled reports whether the relay's target is configured.
+func (c *Config) IssueRelayEnabled() bool {
+	return c.IssueRelayURL != "" && c.IssueRelayProjectID != "" &&
+		c.IssueRelayToken != ""
 }
 
 // requirePositiveInt reads a key that must be a whole number above 0.

@@ -27,7 +27,9 @@
   `JWT_SECRET` is at least 32 characters, and `TOTP_ENCRYPTION_KEY` is
   exactly 64 hex characters (32 bytes, the AES-256 key the MFA seeds are
   encrypted under; `openssl rand -hex 32` makes either). The optional keys
-  (`TRUSTED_PROXY_COUNT`, `CORS_ALLOWED_ORIGINS`) and the whole list are in `src/api-srv/README.md`
+  (`TRUSTED_PROXY_COUNT`, `CORS_ALLOWED_ORIGINS`, and the issue-report
+  module's `ISSUE_REPORTS_ENABLED` and `ISSUE_RELAY_*`,
+  `doc/150-issue-report-module.md`) and the whole list are in `src/api-srv/README.md`
 - a deploy never rewrites a host's env file, so a key that became required
   after the file was written must be added by hand before the new binary
   starts (`doc/320-presales-uat-deploy.md`)

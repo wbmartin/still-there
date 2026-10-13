@@ -135,6 +135,12 @@ is the login lockout instead. **CSRF** `CheckCSRF` (never on GET).
 | PUT | /appUserGroup | Yes | user+block | Yes | UPDATE_USER_GROUP (9012) | Update a group (name, grant list) |
 | DELETE | /appUserGroup | Yes | user+block | Yes | DELETE_USER_GROUP (9013) | Soft delete a group (409 while in use) |
 | POST | /error-report | Yes | user+block | Yes | LOGON (1) | Log a client error report |
+| POST | /issueReport | Yes | user+block | Yes | LOGON (1) | File an issue report (multipart, up to 5 files); 404 while the module is off (doc/150) |
+| GET | /issueReport | Yes | user+block | (GET) | LOGON (1) | One of the tenant's reports with its files and conversation |
+| GET | /issueReportList | Yes | user+block | (GET) | LOGON (1) | The tenant's reports, most recently active first |
+| POST | /issueReportMessage | Yes | user+block | Yes | LOGON (1) | A reply on a report (multipart, files) |
+| POST | /issueReportAction | Yes | user+block | Yes | LOGON (1) | Withdraw an open report or reopen a closed one (409 otherwise) |
+| GET | /issueReportAttachment | Yes | user+block | (GET) | LOGON (1) | One file's bytes, by Serving user files below |
 
 `ADD_USER_TO_GROUP` (9014) and `REMOVE_USER_FROM_GROUP` (9015) are defined
 in `grants.go` but no route checks them: group membership is checked with
@@ -396,6 +402,8 @@ own text goes to the log only.
 | 12 KiB (4 KiB + `maxPreferenceBytes`) | `PUT /me` |
 | 64 KiB (`maxLoginLayerBodyBytes`) | `POST`/`PUT /user`, `POST`/`PUT /appUserGroup`, `/addUserListToGroup`, `/removeUserListFromGroup`, `/changeOwnPassword`, `/changeOtherUserPassword`, `/admin/resetUserMFA`, `/admin/blockUser`, `/admin/unblockUser`, `/userInvite`, `/userInviteReissue`, `/userInviteRevoke` |
 | 1 MiB (`maxEntityBodyBytes`) | `example_handler.go` writes, bulk lists included |
+| 16 KiB (`model.IssueMaxActionBodyBytes`) | `/issueReportAction` |
+| 18 MiB (`model.IssueMaxRequestBytes`) | `POST /issueReport`, `/issueReportMessage` (multipart: 5 files of 10 MB at most each, the whole under nginx's 20M); a declared length over it is 413 before reading |
 
 Deletes take their ids in the query string and read no body. The entity cap
 is per entity: a derived app copies it with the handler and raises it where
@@ -562,9 +570,10 @@ frame, referrer, HSTS) on the web locations only, so each API header
 arrives once. A file route replaces two of them; see Serving user files.
 
 ### Serving user files
-The template has no upload or file route (PS0018 dropped the avatar for
-want of file storage). The first route a derived app adds that stores or
-returns a user's file follows these rules. They come from GRC's evidence
+The issue-report module (doc/150) has the template's one upload and
+file route pair, `POST /issueReport` (and `/issueReportMessage`) and
+`GET /issueReportAttachment`, and follows these rules; any route a
+derived app adds that stores or returns a user's file follows them too. They come from GRC's evidence
 and policy-document routes (RG0023, RG0024, RG0026), which shipped them
 with tests.
 
@@ -648,7 +657,9 @@ local development configurations. The API's keys, required and optional,
 are listed in `src/api-srv/README.md` (Configuration); among them
 `INVITE_TTL_HOURS` (invite link lifetime), `ALLOW_MFA_EXEMPT_VIA_API`
 (Request bodies, above), `TRUSTED_PROXY_COUNT` (`ClientIP`), the rate
-limits and the lockout thresholds above.
+limits and the lockout thresholds above, and the issue-report module's
+optional `ISSUE_REPORTS_ENABLED` and `ISSUE_RELAY_*` keys
+(`doc/150-issue-report-module.md`).
 
 ### Loading
 - Command-line argument specifies config file path

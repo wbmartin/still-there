@@ -59,6 +59,14 @@ func inviteHandlerOf(appServices *app.Services) *UserInviteHandler {
 		new(MockAppUserGroupRepository), &panicInviteRepository{})
 }
 
+// issueReportHandlerOf turns the module on, so a request past the checks
+// reaches the fail-on-contact repository rather than the module-off 404.
+func issueReportHandlerOf(appServices *app.Services) *IssueReportHandler {
+	appServices.Config.IssueReportsEnabled = true
+	return NewIssueReportHandler(appServices,
+		new(MockIssueReportRepository), new(MockProfileRepository), nil)
+}
+
 // groupHandlerOf passes a nil repository: any call dereferences it.
 func groupHandlerOf(appServices *app.Services) *AppUserGroupHandler {
 	return NewAppUserGroupHandler(appServices, nil)
@@ -258,6 +266,31 @@ var routeContractList = []routeContract{
 	fullChecks("POST /error-report", model.GrantLogon,
 		func(s *app.Services) http.HandlerFunc {
 			return NewErrorReportHandler(s).HandleErrorReport
+		}),
+
+	fullChecks("POST /issueReport", model.GrantLogon,
+		func(s *app.Services) http.HandlerFunc {
+			return issueReportHandlerOf(s).CreateIssueReport
+		}),
+	fullChecks("GET /issueReport", model.GrantLogon,
+		func(s *app.Services) http.HandlerFunc {
+			return issueReportHandlerOf(s).RetrieveIssueReport
+		}),
+	fullChecks("GET /issueReportList", model.GrantLogon,
+		func(s *app.Services) http.HandlerFunc {
+			return issueReportHandlerOf(s).RetrieveIssueReportList
+		}),
+	fullChecks("POST /issueReportMessage", model.GrantLogon,
+		func(s *app.Services) http.HandlerFunc {
+			return issueReportHandlerOf(s).CreateIssueReportMessage
+		}),
+	fullChecks("POST /issueReportAction", model.GrantLogon,
+		func(s *app.Services) http.HandlerFunc {
+			return issueReportHandlerOf(s).CreateIssueReportAction
+		}),
+	fullChecks("GET /issueReportAttachment", model.GrantLogon,
+		func(s *app.Services) http.HandlerFunc {
+			return issueReportHandlerOf(s).RetrieveIssueReportAttachment
 		}),
 }
 

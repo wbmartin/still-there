@@ -120,6 +120,11 @@ const SWEEP_ROW_LIST: SweepRow[] = [
     path: ROUTES.USER_PREFERENCES,
     landing: signedIn(at(ROUTES.USER_PREFERENCES, /^Profile$/)),
   },
+  {
+    // The issue-report module is on in the e2e API (etc/e2e-api-srv.env).
+    path: ROUTES.ISSUE_REPORT_LIST,
+    landing: signedIn(at(ROUTES.ISSUE_REPORT_LIST, /^Issue reports$/)),
+  },
 ];
 
 // What a crash looks like: the router's errorElement (app.tsx) and the

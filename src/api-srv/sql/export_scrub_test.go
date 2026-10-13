@@ -2,6 +2,7 @@ package sqlfiles_test
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"strings"
@@ -138,6 +139,46 @@ func seedExample(t *testing.T, tx pgx.Tx, text string, tenant int) {
 	}
 }
 
+// seedIssueReport files a report with a message and a file, as if the
+// relay had sent it to a tracker (remote ids set).
+func seedIssueReport(t *testing.T, tx pgx.Tx, tenant int) {
+	t.Helper()
+	ctx := context.Background()
+	var reportID int
+	err := tx.QueryRow(ctx, `
+		INSERT INTO issue_report (security_context_id, kind, summary,
+			state, status, reporter_name, reporter_email, remote_id,
+			relay_state, relay_attempts, last_activity_ts, create_ts,
+			create_user_id, update_ts, update_user_id)
+		VALUES ($1, 'bug', 'laptop report', 'open', 'Under review',
+			'Alice', 'alice@example.com', $2, 'sent',
+			1, 1, 1, 1, 1, 1)
+		RETURNING issue_report_id`, tenant,
+		fmt.Sprintf("R-laptop-%d", tenant)).Scan(&reportID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO issue_report_message (security_context_id,
+			issue_report_id, author_kind, body, remote_id, relay_state,
+			relay_attempts, create_ts, create_user_id, update_ts,
+			update_user_id)
+		VALUES ($1, $2, 'staff', 'On it', 'M-laptop', 'none', 0, 1, 0, 1,
+			0)`, tenant, reportID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO issue_report_attachment (security_context_id,
+			issue_report_id, filename, content_type, size_bytes, content,
+			create_ts, create_user_id, update_ts, update_user_id)
+		VALUES ($1, $2, 'shot.png', 'image/png', 3, 'png', 1, 1, 1, 1)`,
+		tenant, reportID)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestExportScrub(t *testing.T) {
 	conn := scrubDatabase(t)
 	script := readScrub(t)
@@ -174,6 +215,12 @@ func TestExportScrub(t *testing.T) {
 				seedInvite(t, tx, aliceID, 1, "redeemed-hash", true)
 				seedExample(t, tx, "customer row one", 1)
 				seedExample(t, tx, "customer row two", 3)
+				seedIssueReport(t, tx, 1)
+				seedIssueReport(t, tx, 3)
+				if n := count(t, tx, `SELECT count(*)
+					FROM issue_report`); n != 2 {
+					t.Fatalf("issue reports seeded: %d, want 2", n)
+				}
 
 				if _, err := tx.Exec(ctx, script); err != nil {
 					t.Fatalf("scrub refused clean data: %v", err)
@@ -226,6 +273,16 @@ func TestExportScrub(t *testing.T) {
 				if n := count(t, tx, `SELECT count(*) FROM example
 					WHERE example_text LIKE 'customer row %'`); n != 2 {
 					t.Errorf("example rows after scrub: %d, want 2", n)
+				}
+				// The laptop's issue reports and their tracker ids
+				// do not travel.
+				for _, table := range []string{"issue_report",
+					"issue_report_message", "issue_report_attachment"} {
+					if n := count(t, tx,
+						"SELECT count(*) FROM "+table); n != 0 {
+						t.Errorf("%s rows after scrub: %d, want 0",
+							table, n)
+					}
 				}
 			})
 		})

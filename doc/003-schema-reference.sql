@@ -11,7 +11,7 @@
 -- constraints show as their indexes. schema_migration (the migrator's own
 -- table) is left out.
 --
--- Through migration 0005_user_invite.
+-- Through migration 0006_issue_report.
 
 CREATE TABLE app_user (
     app_user_id SERIAL NOT NULL,
@@ -82,6 +82,82 @@ CREATE INDEX idx_example_id_update_ts ON public.example USING btree (example_id,
 CREATE INDEX idx_example_security_context ON public.example USING btree (security_context_id);
 CREATE INDEX idx_example_security_context_update_ts ON public.example USING btree (security_context_id, update_ts);
 CREATE UNIQUE INDEX idx_example_uuid ON public.example USING btree (example_uuid);
+
+CREATE TABLE issue_report (
+    issue_report_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    kind varchar(16) NOT NULL,
+    summary varchar(500) NOT NULL,
+    detail text,
+    page_url varchar(1000),
+    context_jsonb jsonb,
+    state varchar(16) NOT NULL,
+    status varchar(120) NOT NULL,
+    status_note text,
+    reporter_name varchar(200) NOT NULL,
+    reporter_email varchar(200) NOT NULL,
+    remote_id varchar(64),
+    relay_state varchar(16) NOT NULL,
+    relay_error varchar(500),
+    relay_attempts integer NOT NULL,
+    last_synced_ts numeric(17,7),
+    last_activity_ts numeric(17,7) NOT NULL,
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE INDEX idx_issue_report_relay_state ON public.issue_report USING btree (relay_state);
+CREATE UNIQUE INDEX idx_issue_report_remote_id ON public.issue_report USING btree (remote_id) WHERE (remote_id IS NOT NULL);
+CREATE INDEX idx_issue_report_sc_last_activity_ts ON public.issue_report USING btree (security_context_id, last_activity_ts);
+CREATE UNIQUE INDEX issue_report_pkey ON public.issue_report USING btree (issue_report_id);
+
+CREATE TABLE issue_report_attachment (
+    issue_report_attachment_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    issue_report_id integer NOT NULL,
+    issue_report_message_id integer,
+    filename varchar(255) NOT NULL,
+    content_type varchar(100) NOT NULL,
+    size_bytes integer NOT NULL,
+    content bytea,
+    remote_id varchar(64),
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE UNIQUE INDEX idx_issue_report_attachment_remote_id ON public.issue_report_attachment USING btree (issue_report_id, remote_id) WHERE (remote_id IS NOT NULL);
+CREATE INDEX idx_issue_report_attachment_sc_report ON public.issue_report_attachment USING btree (security_context_id, issue_report_id);
+CREATE UNIQUE INDEX issue_report_attachment_pkey ON public.issue_report_attachment USING btree (issue_report_attachment_id);
+
+CREATE TABLE issue_report_message (
+    issue_report_message_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    issue_report_id integer NOT NULL,
+    author_kind varchar(16) NOT NULL,
+    author_name varchar(200),
+    body text NOT NULL,
+    action varchar(16),
+    remote_id varchar(64),
+    relay_state varchar(16) NOT NULL,
+    relay_error varchar(500),
+    relay_attempts integer NOT NULL,
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE INDEX idx_issue_report_message_relay_state ON public.issue_report_message USING btree (relay_state);
+CREATE UNIQUE INDEX idx_issue_report_message_remote_id ON public.issue_report_message USING btree (issue_report_id, remote_id) WHERE (remote_id IS NOT NULL);
+CREATE INDEX idx_issue_report_message_sc_report ON public.issue_report_message USING btree (security_context_id, issue_report_id);
+CREATE UNIQUE INDEX issue_report_message_pkey ON public.issue_report_message USING btree (issue_report_message_id);
 
 CREATE TABLE user_invite (
     user_invite_id SERIAL NOT NULL,

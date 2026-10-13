@@ -29,9 +29,13 @@ type ProfileUpdateRequest struct {
 // AllowMFAExemptViaAPI mirrors the config key of that name (B097): when
 // false, POST /user and /userInvite refuse mfaExempt true and PUT /user
 // refuses turning it on, so the user edit page hides the checkbox.
+// IssueReportsEnabled mirrors ISSUE_REPORTS_ENABLED: the web app shows
+// the Report button and the Issue reports page only when it is true
+// (doc/150-issue-report-module.md).
 type ownProfileResponse struct {
 	model.AppUserOwnProfileModel
 	AllowMFAExemptViaAPI bool `json:"allowMfaExemptViaApi"`
+	IssueReportsEnabled  bool `json:"issueReportsEnabled"`
 }
 
 // Bound on the preferences document; it is a handful of UI settings.
@@ -183,6 +187,7 @@ func (h *ProfileHandler) ownProfileOf(
 	return ownProfileResponse{
 		AppUserOwnProfileModel: user.OwnProfile(),
 		AllowMFAExemptViaAPI:   h.appsrv.Config.AllowMFAExemptViaAPI,
+		IssueReportsEnabled:    h.appsrv.Config.IssueReportsEnabled,
 	}
 }
 
