@@ -1,5 +1,23 @@
+import { execSync } from "node:child_process";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+
+// Which build is running in a browser tab: the commit, stamped in at build
+// time. The host build passes VITE_APP_VERSION (its GIT_SHA); otherwise the
+// checkout's own commit; otherwise "unknown". Issue reports carry it, so a
+// report from a tab opened before the last deploy is easy to spot.
+const appVersion = (env: Record<string, string>): string => {
+  if (env.VITE_APP_VERSION) return env.VITE_APP_VERSION;
+  try {
+    return execSync("git rev-parse --short=12 HEAD", {
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return "unknown";
+  }
+};
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -20,6 +38,12 @@ export default defineConfig(({ command, mode }) => {
   return {
     root: ".",
     plugins: [react()],
+    define: {
+      "import.meta.env.VITE_APP_VERSION": JSON.stringify(appVersion(env)),
+      "import.meta.env.VITE_APP_BUILT_AT": JSON.stringify(
+        new Date().toISOString(),
+      ),
+    },
     build: {
       chunkSizeWarningLimit: 3145728, // 3MB
     },

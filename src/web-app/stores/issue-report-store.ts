@@ -22,19 +22,42 @@ export interface NewIssueReport {
   fileList: File[];
 }
 
+// When this tab loaded the app. The whole app loads once per tab, so a tab
+// left open for days keeps running the build it loaded while the server
+// moves on: `app_version` + `tab_age_minutes` show that at a glance.
+const TAB_LOADED_AT = Date.now();
+
+// Browser zoom, estimated: outer/inner width is ~1 at 100%. Rough (a side
+// panel or devtools skews it), so it is reported as an estimate, with the
+// display scaling (devicePixelRatio) beside it.
+const zoomEstimate = (): number | null =>
+  window.outerWidth > 0 && window.innerWidth > 0
+    ? Math.round((window.outerWidth / window.innerWidth) * 100)
+    : null;
+
 /**
  * Where the report was made from, to help reproduce it. `site` (the host)
  * comes first: a UAT and a production install can report to the same
- * tracker, and it is how triage tells them apart.
+ * tracker, and it is how triage tells them apart. The rest says what the
+ * reporter's screen and tab looked like: browser, window and screen size,
+ * zoom and display scaling, touch, and which build the tab is running.
  */
-export const captureIssueContext = (): string =>
+export const captureIssueContext = (now: number = Date.now()): string =>
   JSON.stringify({
     site: window.location.host,
     page_url: window.location.pathname + window.location.search,
     browser: navigator.userAgent,
     viewport: `${window.innerWidth}x${window.innerHeight}`,
+    screen: `${window.screen.width}x${window.screen.height}`,
+    zoom_estimate_pct: zoomEstimate(),
+    device_pixel_ratio: window.devicePixelRatio,
+    touch: navigator.maxTouchPoints > 0,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     language: navigator.language,
+    app_version: import.meta.env.VITE_APP_VERSION ?? "dev",
+    app_built_at: import.meta.env.VITE_APP_BUILT_AT ?? null,
+    tab_loaded_at: new Date(TAB_LOADED_AT).toISOString(),
+    tab_age_minutes: Math.round((now - TAB_LOADED_AT) / 60000),
   });
 
 /**

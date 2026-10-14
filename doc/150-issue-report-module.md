@@ -13,7 +13,12 @@ turns it on.
   adds a PNG of the current page (`html-to-image`: only this tab, no
   browser prompt; the drawer and notifications are left out, and so is
   anything marked `data-capture-ignore`). The page's address, the browser
-  and the viewport go along to help reproduce it.
+  and the viewport go along to help reproduce it, with the screen size,
+  an estimated browser zoom, the display scaling, whether it's a touch
+  device, and which build the tab is running: `app_version` (the commit,
+  stamped in by `vite.config.ts`; the host build passes `VITE_APP_VERSION`)
+  and `tab_age_minutes`. The app loads once per tab, so a tab left open
+  across deploys keeps running an old build; those two show it at a glance.
 - **Issue reports** (`/issueReportList`, in the nav) lists the tenant's
   reports, open / closed / all, and shows one with its files and its
   conversation. A reporter replies with markdown and files, **withdraws** a

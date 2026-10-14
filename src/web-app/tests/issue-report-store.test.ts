@@ -228,3 +228,35 @@ describe("issue report helpers", () => {
     );
   });
 });
+
+describe("captureIssueContext", () => {
+  it("says what the reporter's screen and tab looked like", () => {
+    const context = JSON.parse(captureIssueContext()) as Record<
+      string,
+      unknown
+    >;
+    for (const key of [
+      "screen",
+      "zoom_estimate_pct",
+      "device_pixel_ratio",
+      "touch",
+      "app_version",
+      "app_built_at",
+      "tab_loaded_at",
+      "tab_age_minutes",
+    ]) {
+      expect(context).toHaveProperty(key);
+    }
+    expect(typeof context.app_version).toBe("string");
+  });
+
+  it("reports how long ago the tab loaded the app", () => {
+    // A tab left open for three days.
+    const later = Date.now() + 3 * 24 * 60 * 60 * 1000;
+    const context = JSON.parse(captureIssueContext(later)) as {
+      tab_age_minutes: number;
+    };
+    expect(context.tab_age_minutes).toBeGreaterThanOrEqual(3 * 24 * 60);
+  });
+});
+
