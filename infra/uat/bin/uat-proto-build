@@ -161,7 +161,7 @@ echo "[INFO] Building web client"
 STEP="web build"
 pushd "$BUILD_STG/src/web-app" > /dev/null
 npm ci
-npm run build
+VITE_APP_VERSION="$GIT_SHA" npm run build   # stamps the commit into the bundle (issue reports carry it)
 popd > /dev/null
 
 if [ ! -d "$BUILD_STG/src/web-app/dist" ]; then
