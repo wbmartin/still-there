@@ -29,10 +29,10 @@ what surprised you to **Lessons** at the bottom (and to `doc/330`'s).
 | Binaries | built locally | UAT's registry digests retagged `:prd`; `libexec/api-srv`, `proto-migrate` (+ `.prev`), `proto-api.revision`, shrmpl-hook-owned |
 | Host files | — | a `git archive` of `infra/prd` + `infra/sql` (no checkout) |
 | Deploy | — | `prd-proto-promote-uat-and-deploy`: by hand, or from a prod webhook (B6) |
-| Env | `etc/loc-api-srv.env` | `etc/prd-proto-{api,migrate,deploy,backup}.env` |
+| Env | `etc/loc-api-srv.env` | `etc/prd-proto-{api,migrate,deploy,backup,offsite}.env` |
 | DB | `postgres` owns it | owned by `proto_ddl`; the API is `proto_app` (DML); no CI role |
-| Backups | none | nightly `prd-proto-backup-all` → `REMOTE_SERVER`, plus `install-api`'s pre-migrate dump |
-| Monitoring | none | nackmon (backup, cert renewal), pulsecheck (api, web), the `[prd-proto]` jail |
+| Backups | none | nightly `prd-proto-backup-all` → `REMOTE_SERVER`; Sunday and Wednesday `prd-proto-offsite-backup` → a B2 bucket (restic, encrypted on prod); plus `install-api`'s pre-migrate dump |
+| Monitoring | none | nackmon (backup, off-site backup, cert renewal), pulsecheck (api, web), the `[prd-proto]` jail |
 
 `infra/prd` is the template's name for this host's mirror; a derived app
 has renamed it — use that name wherever this runbook says `infra/prd`.
@@ -60,17 +60,21 @@ terminal; **host blocks** run in bash as root.
 - The registry login (UAT's), the Slack webhook URL, the certbot e-mail,
   and the backup destination: an ssh alias in root's `~/.ssh/config` on
   prod (`REMOTE_SERVER`) and a directory there (`REMOTE_DIR`).
+- The off-site destination, made by staff in Backblaze B2: a private
+  bucket with lifecycle "keep only the last version" (so restic's prune
+  frees space), its S3 endpoint, and an application key restricted to
+  that bucket, read and write (keyID and applicationKey).
 - The tools, on prod (prints nothing when all are there; no go, no node —
-  prod never builds):
+  prod never builds; `apt install restic` if it is missing):
 
 ```bash
-for t in git oras jq curl psql pg_dump pg_restore certbot nginx fail2ban-client openssl; do command -v "$t" >/dev/null || echo "missing: $t"; done
+for t in git oras jq curl psql pg_dump pg_restore certbot nginx fail2ban-client openssl restic; do command -v "$t" >/dev/null || echo "missing: $t"; done
 id shrmpl-hook >/dev/null || echo "missing: the shrmpl-hook user"
 ```
 
-**0.2 Local: the ids.** Two nackmon check-in codes (certs, backup) and the
-promote hook's id, generated on prod and named into the repo first, so the
-archive says what the host will have:
+**0.2 Local: the ids.** Three nackmon check-in codes (certs, backup,
+off-site backup) and the promote hook's id, generated on prod and named
+into the repo first, so the archive says what the host will have:
 
 ```bash
 : "${PRD_SSH:?}"
@@ -78,9 +82,11 @@ N=infra/prd/shrmpl-etc/nack-monitors
 H=infra/prd/shrmpl-etc/hooks
 CERTS_NACK_ID=$(ssh "${PRD_SSH:?}" cat /proc/sys/kernel/random/uuid)
 BACKUP_NACK_ID=$(ssh "${PRD_SSH:?}" cat /proc/sys/kernel/random/uuid)
+OFFSITE_NACK_ID=$(ssh "${PRD_SSH:?}" cat /proc/sys/kernel/random/uuid)
 HOOK_ID=$(ssh "${PRD_SSH:?}" cat /proc/sys/kernel/random/uuid)
 git mv "${N:?}/prd-proto-renew-web-certs_NACKID.env" "${N:?}/prd-proto-renew-web-certs_${CERTS_NACK_ID:?}.env"
 git mv "${N:?}/prd-proto-backup-all_NACKID.env" "${N:?}/prd-proto-backup-all_${BACKUP_NACK_ID:?}.env"
+git mv "${N:?}/prd-proto-offsite-backup_NACKID.env" "${N:?}/prd-proto-offsite-backup_${OFFSITE_NACK_ID:?}.env"
 git mv "${H:?}/prd-promote-proto_HOOKID.env" "${H:?}/prd-promote-proto_${HOOK_ID:?}.env"
 ls ${N:?} ${H:?}
 git commit -m "prd-proto: nackmon check-in ids and the promote hook id"
@@ -129,10 +135,10 @@ And check they are the commit you meant:
 : "${G:?}"
 mkdir -p "${G:?}" && tar -xzf /tmp/proto-infra-prd.tgz -C "${G:?}"
 gzip -dc /tmp/proto-infra-prd.tgz | git get-tar-commit-id
-idof nack-monitors prd-proto-renew-web-certs; idof nack-monitors prd-proto-backup-all; idof hooks prd-promote-proto
+idof nack-monitors prd-proto-renew-web-certs; idof nack-monitors prd-proto-backup-all; idof nack-monitors prd-proto-offsite-backup; idof hooks prd-promote-proto
 ```
 
-Expect 0.3's commit and three uuids (0.2), not `NACKID` / `HOOKID`.
+Expect 0.3's commit and four uuids (0.2), not `NACKID` / `HOOKID`.
 
 ### A2. The service user
 
@@ -157,7 +163,7 @@ cp "${I:?}/etc/prd-proto-api.service" "${I:?}/etc/prd-proto-restart.path" "${I:?
 for f in "${I:?}"/etc/prd-proto-*.env; do [ -e "${APP_ROOT:?}/etc/${f##*/}" ] || cp "$f" "${APP_ROOT:?}/etc/"; done
 chown root:svc-proto "${APP_ROOT:?}/etc/prd-proto-api.env" && chmod 0640 "${APP_ROOT:?}/etc/prd-proto-api.env"
 for f in deploy migrate; do chown root:shrmpl-hook "${APP_ROOT:?}/etc/prd-proto-$f.env" && chmod 0640 "${APP_ROOT:?}/etc/prd-proto-$f.env"; done
-chown root:root "${APP_ROOT:?}/etc/prd-proto-backup.env" && chmod 0600 "${APP_ROOT:?}/etc/prd-proto-backup.env"
+for f in backup offsite; do chown root:root "${APP_ROOT:?}/etc/prd-proto-$f.env" && chmod 0600 "${APP_ROOT:?}/etc/prd-proto-$f.env"; done
 stat -c '%U:%G %a' "${APP_ROOT:?}"
 ```
 
@@ -175,7 +181,8 @@ fillpw "${E:?}/prd-proto-api.env" proto_app "$(openssl rand -hex 32)"
 fillpw "${E:?}/prd-proto-migrate.env" proto_ddl "$(openssl rand -hex 32)"
 fill "${E:?}/prd-proto-api.env" JWT_SECRET "$(openssl rand -hex 32)"
 fill "${E:?}/prd-proto-api.env" TOTP_ENCRYPTION_KEY "$(openssl rand -hex 32)"
-echo "nackmon ids: certs $(idof nack-monitors prd-proto-renew-web-certs), backup $(idof nack-monitors prd-proto-backup-all)"
+fill "${E:?}/prd-proto-offsite.env" RESTIC_PASSWORD "$(openssl rand -hex 32)"
+echo "nackmon ids: certs $(idof nack-monitors prd-proto-renew-web-certs), backup $(idof nack-monitors prd-proto-backup-all), offsite $(idof nack-monitors prd-proto-offsite-backup)"
 grep -n '^[^#].*SERVERONLY' "${E:?}"/prd-proto-*.env
 ```
 
@@ -183,11 +190,18 @@ What the grep lists is filled by hand: in `prd-proto-deploy.env` the three
 `CONTAINER_REGISTRY_*` (UAT's), `SLACK_WEBHOOK` (the whole URL),
 `CERTBOT_EMAIL`, and `CERT_HEALTHCHECK_URL` (nackmon's check-in URL ending
 `?code=` and the certs id); in `prd-proto-backup.env` `REMOTE_SERVER`,
-`REMOTE_DIR` and `HEALTHCHECK_URL` (the backup id):
+`REMOTE_DIR` and `HEALTHCHECK_URL` (the backup id); in
+`prd-proto-offsite.env` `RESTIC_REPOSITORY` (the bucket's S3 endpoint and
+name), the B2 key as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`, and
+`OFFSITE_HEALTHCHECK_URL` (the offsite id):
 
 ```bash
-vi /srv/prd-proto/etc/prd-proto-deploy.env /srv/prd-proto/etc/prd-proto-backup.env
+vi /srv/prd-proto/etc/prd-proto-deploy.env /srv/prd-proto/etc/prd-proto-backup.env /srv/prd-proto/etc/prd-proto-offsite.env
 ```
+
+Put `RESTIC_PASSWORD` (generated above) and the B2 key in the password
+manager as well: a lost password is a lost off-site copy, since B2 holds
+only what restic encrypted with it.
 
 ```bash
 : "${APP_ROOT:?}"
@@ -202,7 +216,7 @@ enrolments were encrypted under the local key.
 ### A5. Nackmon monitors
 
 On the monitoring host, before anything checks in (A8's certificate and
-B2's backup both end by calling their check-in URL). If prod runs nackmon
+B2's backups all end by calling their check-in URL). If prod runs nackmon
 itself, stage the files from the archive: `cp
 "$I"/shrmpl-etc/nack-monitors/prd-proto-*.env /tmp/`. Otherwise, locally:
 
@@ -212,7 +226,7 @@ scp infra/prd/shrmpl-etc/nack-monitors/prd-proto-*.env "${MON_SSH:?}:/tmp/"
 ```
 
 On the monitoring host, as root (`REF` as in `doc/330` 0.3). The block
-ends in `vi`: set `NACK_SLACK_WEBHOOK` in both files:
+ends in `vi`: set `NACK_SLACK_WEBHOOK` in each file:
 
 ```bash
 M=/srv/shrmpl/etc/nack-monitors
@@ -380,7 +394,7 @@ journalctl -u shrmpl-pulsecheck --since "-5 min" | grep prd-proto
 A monitor changes in the repo first, then is copied in the same way
 (`doc/330` B2).
 
-### B2. Backup, once by hand
+### B2. Backups, once by hand
 
 Then confirm what it wrote and shipped. The dump is listed by `pg_restore
 --list` (as root: the backup directory is root-only 0700):
@@ -400,17 +414,35 @@ Expect `Backup complete`; three files here and on `REMOTE_SERVER`:
 listing that names the tables. The FS tarball carries `etc/`, the TOTP key
 the database is useless without, so the destination holds prod secrets.
 
+Then the off-site copy of that set: the restic repository is made once (a
+re-run finds it and skips `init`), and the first run sends the files just
+written (it refuses files older than 12 h):
+
+```bash
+: "${APP_ROOT:?}"
+( set -a; . "${APP_ROOT:?}/etc/prd-proto-offsite.env"; set +a
+  restic cat config >/dev/null 2>&1 && echo "restic repository exists" || restic init )
+"${APP_ROOT:?}/bin/prd-proto-offsite-backup"
+```
+
+Expect `created restic repository` (or `exists`), then one snapshot
+listed and `Off-site backup complete`. The repository's B2 objects are
+ciphertext; reading them needs `RESTIC_PASSWORD`. Restore:
+`infra/README.md`, Off-site backup.
+
 ### B3. Cron (root)
 
-Matching each monitor's `NACK_CRON` (`30 7 * * *` backup, `30 3 3 * *`
-certs in the template; move them clear of the other apps' jobs on the
-host, in the repo first). Appends only if absent:
+Matching each monitor's `NACK_CRON` (`30 7 * * *` backup, `30 8 * * 0,3`
+off-site, `30 3 3 * *` certs in the template; the off-site run comes after
+that day's backup; move them clear of the other apps' jobs on the host, in
+the repo first). Appends only if absent:
 
 ```bash
 mkdir -p /var/log/srv
 if crontab -l 2>/dev/null | grep -q prd-proto-; then echo "prd-proto lines already in root's crontab"; else
   { crontab -l 2>/dev/null; cat <<'CRON'
 30 7 * * * /srv/prd-proto/bin/prd-proto-backup-all > /var/log/srv/prd-proto-backup-all-`date +\%Y-\%m-\%dT\%H\%M\%S`.log 2>&1
+30 8 * * 0,3 /srv/prd-proto/bin/prd-proto-offsite-backup > /var/log/srv/prd-proto-offsite-backup-`date +\%Y-\%m-\%dT\%H\%M\%S`.log 2>&1
 30 3 3 * * /srv/prd-proto/bin/prd-proto-renew-web-certs > /var/log/srv/prd-proto-renew-web-certs-`date +\%Y-\%m-\%dT\%H\%M\%S`.log 2>&1
 CRON
   } | crontab -
@@ -446,7 +478,8 @@ fix the stanza in the repo first.
 
 The local database is now a development copy that goes stale. **Never load
 a local dump over prod**: this runbook only ever creates the database.
-Prod is restored from its own backups.
+Prod is restored from its own backups (the off-site copy:
+`infra/README.md`, Off-site backup).
 
 ### B6. The prod webhook, if you want one — last
 
@@ -494,7 +527,8 @@ first real run is the next push to `RELEASE_BRANCH`.
 ## C. A day later
 
 - The nightly backup ran and checked in (`ls /var/log/srv/ | grep
-  prd-proto`, no nackmon alert).
+  prd-proto`, no nackmon alert); after the next Sunday or Wednesday, the
+  off-site backup too.
 - Clean up: the dump is customer data.
 
 ```bash

@@ -68,8 +68,8 @@ only on the host.**
   `*-publish-web-client`, `*-promote-uat` and `*-promote-uat-and-deploy`
   re-exec themselves with `sudo -u shrmpl-hook -H` when started as anyone
   else, so an operator's `sudo .../uat-proto-install-api <tag>` writes
-  files the next webhook run can replace. `*-renew-web-certs` and
-  `*-backup-all` run as root from cron.
+  files the next webhook run can replace. `*-renew-web-certs`,
+  `*-backup-all` and `*-offsite-backup` run as root from cron.
 - `etc/*.env` holds everything per-host or secret. The repo copy is
   **redacted**: every real value is spelled `SERVERONLY`, hostnames are
   `example.com`. After a PR that touches `infra/<host>/etc/`, diff the
@@ -95,6 +95,7 @@ only on the host.**
 
   The check-in URL is never hard-coded here: the job reads it from its own
   env file (`HEALTHCHECK_URL` in `etc/prd-proto-backup.env`,
+  `OFFSITE_HEALTHCHECK_URL` in `etc/prd-proto-offsite.env`,
   `CERT_HEALTHCHECK_URL` in `etc/<env>-proto-deploy.env`), so the code
   appears only in a filename. `NACK_CRON` must match the crontab entry that
   runs the job; the grace, escalation and interval values committed here are
@@ -132,6 +133,7 @@ only on the host.**
 | `*-renew-web-certs` (root cron) | `etc/<env>-proto-deploy.env` | `SITE_NAME`, `CERTBOT_EMAIL`, `CERT_HEALTHCHECK_URL` |
 | `prd-proto-promote-uat`, `-promote-uat-and-deploy`, `-install-api`, `-publish-web-client` | `etc/prd-proto-deploy.env` | registry server + credentials, `SERVICE`, `HEALTH_URL`, `DEPLOY_TAG`, `PROMOTE_FROM_TAG`, `SLACK_WEBHOOK` |
 | `prd-proto-backup-all` (root cron) | `etc/prd-proto-backup.env` (root:root 0600) | `BACKUP_ROOT`, `REMOTE_SERVER`, `REMOTE_DIR`, `DATABASE_NAME`, `HEALTHCHECK_URL` |
+| `prd-proto-offsite-backup` (root cron, Sun and Wed) | `etc/prd-proto-backup.env`, `etc/prd-proto-offsite.env` (both root:root 0600) | `BACKUP_ROOT`, `DATABASE_NAME`; `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `KEEP_LAST`, `OFFSITE_HEALTHCHECK_URL` |
 
 `*-start` / `*-stop` are operator tools that call `systemctl` directly; run
 them as root. The build never uses them.
@@ -443,7 +445,7 @@ what they do.
    branch. Monitors: rename each `NACKID` to the check-in
    code the monitor is registered under and put
    the matching `https://<nackmon-host>/checkin?code=<nackid>` in
-   `HEALTHCHECK_URL` / `CERT_HEALTHCHECK_URL`. Pulsecheck: `PULSE_URL` takes
+   `HEALTHCHECK_URL` / `OFFSITE_HEALTHCHECK_URL` / `CERT_HEALTHCHECK_URL`. Pulsecheck: `PULSE_URL` takes
    the real `SITE_NAME`. The webhooks and the build checkout's deploy key
    belong to the GitHub repository: a new repository needs them again
    (`doc/350-repository-reset.md`).
@@ -463,7 +465,61 @@ what they do.
    alias in root's `~/.ssh/config` and `REMOTE_DIR` must exist there. The
    script keeps `BACKUP_ROOT/prd-proto` root-only 0700 (the tarball holds
    `etc/`). Run it once by hand; `pg_restore --list <file>.dump` must list
-   the schema.
+   the schema. Then the off-site copy, below: `restic` installed,
+   `etc/prd-proto-offsite.env` (root:root 0600) filled, `restic init` once,
+   `prd-proto-offsite-backup` from root's cron an hour after `backup-all`
+   on Sunday and Wednesday.
+
+## Off-site backup (prod)
+
+`prd-proto-backup-all` keeps seven daily sets on prod and on
+`REMOTE_SERVER`. Twice a week `prd-proto-offsite-backup` sends that day's
+set (the `pg_dump`, the globals and the filesystem tar, which carries
+`etc/`) to a Backblaze B2 bucket with restic, and keeps the last
+`KEEP_LAST` (2) snapshots. restic encrypts on prod with `RESTIC_PASSWORD`
+before sending; B2 holds only ciphertext, and the B2 key cannot read it.
+The script refuses a set older than 12 h (a missed `backup-all` would
+otherwise ship last week's), and checks in with nackmon only on success.
+
+Set up once (staff; `doc/331` 0.1, A4 and section B2 carry the commands):
+
+1. B2: a private bucket, lifecycle "keep only the last version" (so
+   restic's prune frees space), and an application key restricted to that
+   bucket, read and write. Note the bucket's S3 endpoint.
+2. Prod, as root: `apt install restic`; fill
+   `/srv/prd-proto/etc/prd-proto-offsite.env` (root:root 0600) from the
+   repo copy, with `RESTIC_PASSWORD=$(openssl rand -hex 32)`. Put the
+   password and the B2 key in the password manager as well: a lost
+   password is a lost off-site copy.
+3. `set -a; . /srv/prd-proto/etc/prd-proto-offsite.env; set +a`, then
+   `restic init`.
+4. nackmon monitor `shrmpl-etc/nack-monitors/prd-proto-offsite-backup_NACKID.env`,
+   renamed to its check-in code and installed like the others; the same
+   code goes in `OFFSITE_HEALTHCHECK_URL`. Restart `shrmpl-nackmon`: it
+   reads monitor files only at start.
+5. Root crontab, an hour after `backup-all`, matching the monitor's
+   `NACK_CRON`:
+
+   ```
+   30 8 * * 0,3 /srv/prd-proto/bin/prd-proto-offsite-backup > /var/log/srv/prd-proto-offsite-backup-`date +\%Y-\%m-\%dT\%H\%M\%S`.log 2>&1
+   ```
+
+6. Run it once by hand on a day `backup-all` has run.
+
+Restore, from any machine with restic and the env file's values:
+
+```
+restic snapshots
+restic restore latest:/backup/prd-proto --target /root/offsite-restore
+```
+
+`latest:<dir>` puts that directory's files (`BACKUP_ROOT/prd-proto`)
+straight into the target; a plain `latest` recreates the full original
+path under it. The target holds prod secrets: keep it root-only and
+delete it after use. The dump restores with `pg_restore` into a scratch
+database (`< file` from root's shell; check it on UAT, never over a live
+one); the tar has the app root as it was. A run killed mid-way can leave
+a stale lock: `restic unlock`.
 
 ## Deriving an app from this
 
