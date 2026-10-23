@@ -127,7 +127,9 @@ whether or not the change also has a work item.
 
 ## Branches
 
-`main` is the default branch. Feature branches are `feature/<slug>`;
-pull requests target `main`, and only staff advance `main` — agents
-never merge into it without staff approval, and touch only `main` and
-their own branch.
+`main` is the default branch. Feature branches are `feature/<slug>`,
+cut from `dev` and merged into `dev`, the local integration branch.
+`dev` goes to `uat` when it deploys to a server; run the full gate
+(`bin/300-run-tests all`) on `dev` before opening that pull request.
+Only staff advance `uat` and `main` — agents never merge into them
+without staff approval.
