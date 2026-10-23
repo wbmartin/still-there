@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/auth"
-	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
-	"github.com/wbmartin/starter-api/internal/security"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/auth"
+	"stillthere-api/internal/model"
+	"stillthere-api/internal/repository"
+	"stillthere-api/internal/security"
 )
 
 // B034: POST /admin/blockUser and /admin/unblockUser. Logins live in the

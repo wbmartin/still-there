@@ -7,9 +7,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/security"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/model"
+	"stillthere-api/internal/security"
 )
 
 // The help module (doc/151-help-module.md). The help content itself lives

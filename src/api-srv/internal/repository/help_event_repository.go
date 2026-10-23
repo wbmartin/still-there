@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/wbmartin/starter-api/internal/model"
+	"stillthere-api/internal/model"
 )
 
 // HelpEventRepository stores and counts the help module's usage events

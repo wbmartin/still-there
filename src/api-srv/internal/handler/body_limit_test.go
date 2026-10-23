@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/security"
+	"stillthere-api/internal/model"
+	"stillthere-api/internal/security"
 )
 
 // bodyOfSize is a JSON object of exactly size bytes: one long string field.

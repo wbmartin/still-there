@@ -35,7 +35,7 @@ set -euo pipefail
 #                    host points it at its own copy with a CI role.
 #
 # Passing here is what lets a build reach prod (on the UAT host, the
-# sha-<commit>-passed tag prd-proto-promote-uat requires), which is why
+# sha-<commit>-passed tag prd-stillthere-promote-uat requires), which is why
 # no suite may skip: on a laptop the Go integration suites skip when
 # Postgres is down, and a green run with tests missing is worse than a red
 # one. A skipped test fails its step; only a live test (tests/README.md

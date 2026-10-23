@@ -29,7 +29,7 @@
 #                  the tree.
 #
 # After `up`, and before any fixture, the migrated schema is written out as
-# CREATE TABLE/INDEX text (`proto-migrate schema-reference`). The database
+# CREATE TABLE/INDEX text (`stillthere-migrate schema-reference`). The database
 # holds only what the migrations made, so the file is the same on every
 # machine; a migration that changes it lands with the regenerated file.
 #

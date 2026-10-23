@@ -15,7 +15,7 @@ here.
   turn this template into a new app.
 - `etc/` — environment files. `uat-deploy.env` drives the presales
   `bin/600`/`610` pair (no inline defaults in the scripts).
-- `infra/<host>/` — mirror of `/srv/<env>-proto/{bin,etc}` on a server.
+- `infra/<host>/` — mirror of `/srv/<env>-stillthere/{bin,etc}` on a server.
   Scripts deploy verbatim (no secrets, no per-host values); every value
   comes from `etc/*.env`, whose repo copies are redacted `SERVERONLY`.
   Names derive from the app root's basename, so a job on both hosts is

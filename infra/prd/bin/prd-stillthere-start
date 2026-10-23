@@ -1,0 +1,3 @@
+#!/bin/sh
+systemctl start prd-stillthere-api
+systemctl status prd-stillthere-api --no-pager

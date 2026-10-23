@@ -10,9 +10,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/wbmartin/starter-api/internal/auth"
-	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
+	"stillthere-api/internal/auth"
+	"stillthere-api/internal/model"
+	"stillthere-api/internal/repository"
 )
 
 // `invite` issues the first sign-in link on a host whose logins are all

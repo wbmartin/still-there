@@ -9,8 +9,8 @@
 -- bin/510-reset-test-db runs it before `migrate up` on a scratch database.
 -- The service account below is the local default and is NOT what any
 -- deployed environment connects as; it exists so a fresh local database has
--- a DML role to hand. The DDL owner role (proto_ddl) and the CI role
--- (proto_ci) are host setup, not a local default: see doc/340-db-host-setup.md.
+-- a DML role to hand. The DDL owner role (stillthere_ddl) and the CI role
+-- (stillthere_ci) are host setup, not a local default: see doc/340-db-host-setup.md.
 
 -- Roles are CLUSTER-WIDE in Postgres, not per-database. On a shared local
 -- server db_reader/db_writer may already exist from another app, so create
@@ -31,9 +31,9 @@ $$;
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM pg_roles WHERE rolname = 'proto_app'
+        SELECT 1 FROM pg_roles WHERE rolname = 'stillthere_app'
     ) THEN
-        CREATE USER proto_app
+        CREATE USER stillthere_app
             WITH PASSWORD 'reallygoodPSQLpassword';
     END IF;
 END
@@ -44,11 +44,11 @@ $$;
 -- for a membership that already exists).
 DO $$
 BEGIN
-    IF NOT pg_has_role('proto_app', 'db_reader', 'MEMBER') THEN
-        GRANT db_reader TO proto_app;
+    IF NOT pg_has_role('stillthere_app', 'db_reader', 'MEMBER') THEN
+        GRANT db_reader TO stillthere_app;
     END IF;
-    IF NOT pg_has_role('proto_app', 'db_writer', 'MEMBER') THEN
-        GRANT db_writer TO proto_app;
+    IF NOT pg_has_role('stillthere_app', 'db_writer', 'MEMBER') THEN
+        GRANT db_writer TO stillthere_app;
     END IF;
 END
 $$;

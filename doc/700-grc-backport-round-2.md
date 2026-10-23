@@ -73,7 +73,7 @@ listed in case staff want to reopen them.
 its procedure still copies a UAT host's Let's Encrypt privkey.pem to the
 laptop's etc/crt directory. `bin/400-make-local-dev-certs` already makes local
 TLS (self-signed, mode 600), and the hosts renew their own
-(`infra/uat/bin/uat-proto-renew-web-certs`). PROTO's TLS keys in
+(`infra/uat/bin/uat-stillthere-renew-web-certs`). PROTO's TLS keys in
 `etc/loc-api-srv.env` are live (bin/400 writes those paths), so they stay.
 - **Recommend:** adapt (staff's call). Delete doc/310 and point the four
 references (CLAUDE.md, README, bin/400 header, doc/902) at bin/400 for
@@ -259,7 +259,7 @@ one-row grant summary. doc/340 gained a "convert an existing host"
 section with a check and a rollback. It is applied on UAT and prod.
 - **PROTO differs:** It was skipped in B050, when GRC had no fix. PROTO
 grants `ALL` to `db_writer` in two places:
-  - in `infra/sql/proto-host-db.sql`;
+  - in `infra/sql/stillthere-host-db.sql`;
   - in the migrations themselves (`0001_initial_schema.sql`,
   `0005_user_invite.sql`).
 
@@ -283,7 +283,7 @@ postgres URL into `PG*` variables, so `pg_dump` and `psql` take no URL
 argument. Runbooks pass passwords through `PGPASSWORD` or a mode-600
 file on stdin.
 - **PROTO differs:** Skipped in B050. Still open:
-  - both `*-proto-install-api` scripts run `pg_dump` with a password URL;
+  - both `*-stillthere-install-api` scripts run `pg_dump` with a password URL;
   - on UAT, every build's `bin/510-reset-test-db` puts the CI role's
   password in argv through `TEST_PG_URL_BASE`.
 
@@ -452,7 +452,7 @@ characters and a `TOTP_ENCRYPTION_KEY` that is not 64 hex characters
 (`src/api-srv/internal/config/config.go`, around lines 239-248), while
 `internal/auth/totp.go` hex-decodes the key for `aes.NewCipher`. A bad
 key loads, then answers 500 at the first enrolment or login. It is live
-in `infra/uat/etc/uat-proto-e2e-api.env`:
+in `infra/uat/etc/uat-stillthere-e2e-api.env`:
 `TOTP_ENCRYPTION_KEY=e2e-only-totp-key-not-for-deployment` (not hex), so
 MFA on the post-sales UAT e2e harness would fail.
 - **Recommend:** adapt.

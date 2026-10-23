@@ -11,7 +11,7 @@ import (
 func TestGenerateValidateJWT_RoundTrip(t *testing.T) {
 	grants := []int{1001, 1002}
 	tokenString, err := GenerateJWT(
-		"proto-app", "alice", 42, "sess-1", 7, grants, "s3cret", 1,
+		"stillthere-app", "alice", 42, "sess-1", 7, grants, "s3cret", 1,
 	)
 	if err != nil {
 		t.Fatalf("GenerateJWT: %v", err)
@@ -22,8 +22,8 @@ func TestGenerateValidateJWT_RoundTrip(t *testing.T) {
 		t.Fatalf("ValidateJWT: %v", err)
 	}
 
-	if claims.Issuer != "proto-app" {
-		t.Errorf("Issuer = %q, want %q", claims.Issuer, "proto-app")
+	if claims.Issuer != "stillthere-app" {
+		t.Errorf("Issuer = %q, want %q", claims.Issuer, "stillthere-app")
 	}
 	if claims.Subject != "alice" {
 		t.Errorf("Subject = %q, want %q", claims.Subject, "alice")
@@ -44,7 +44,7 @@ func TestGenerateValidateJWT_RoundTrip(t *testing.T) {
 
 func TestValidateJWT_WrongSecretFails(t *testing.T) {
 	tokenString, err := GenerateJWT(
-		"proto-app", "alice", 1, "sess", 1, nil, "right-secret", 1,
+		"stillthere-app", "alice", 1, "sess", 1, nil, "right-secret", 1,
 	)
 	if err != nil {
 		t.Fatalf("GenerateJWT: %v", err)
@@ -57,7 +57,7 @@ func TestValidateJWT_WrongSecretFails(t *testing.T) {
 
 func TestValidateJWT_TamperedTokenFails(t *testing.T) {
 	tokenString, err := GenerateJWT(
-		"proto-app", "alice", 1, "sess", 1, nil, "s3cret", 1,
+		"stillthere-app", "alice", 1, "sess", 1, nil, "s3cret", 1,
 	)
 	if err != nil {
 		t.Fatalf("GenerateJWT: %v", err)
@@ -91,7 +91,7 @@ func TestValidateJWT_ExpiredTokenFails(t *testing.T) {
 	// expireHours of 0 sets ExpiresAt to time.Now(), which is already in
 	// the past by the time ValidateJWT parses it.
 	tokenString, err := GenerateJWT(
-		"proto-app", "alice", 1, "sess", 1, nil, "s3cret", 0,
+		"stillthere-app", "alice", 1, "sess", 1, nil, "s3cret", 0,
 	)
 	if err != nil {
 		t.Fatalf("GenerateJWT: %v", err)
@@ -109,7 +109,7 @@ func TestValidateJWT_ExpiredTokenFails(t *testing.T) {
 func TestValidateJWT_RejectsNonHMACMethod(t *testing.T) {
 	claims := &Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "proto-app",
+			Issuer:    "stillthere-app",
 			Subject:   "alice",
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 		},

@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/wbmartin/starter-api/internal/repository"
-	"github.com/wbmartin/starter-api/internal/security"
+	"stillthere-api/internal/repository"
+	"stillthere-api/internal/security"
 )
 
 // answerRepoError runs mapRepoError and returns the status and the client

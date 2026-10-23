@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/wbmartin/starter-api/internal/logging"
-	"github.com/wbmartin/starter-api/internal/model"
+	"stillthere-api/internal/logging"
+	"stillthere-api/internal/model"
 )
 
 // TestErrorReport_RequiresASession: only a signed-in caller with LOGON can

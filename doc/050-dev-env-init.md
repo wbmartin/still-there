@@ -67,8 +67,8 @@ docker run -d --name loc-postgres -e POSTGRES_PASSWORD='<PGPASSWORD>' \
 Fastest path -- a scratch database, rebuilt from nothing every time:
 
 ```bash
-bin/510-reset-test-db                    # -> loc_proto_test_db
-bin/510-reset-test-db loc_proto_e2e_db # any *_test_db / *_e2e_db name
+bin/510-reset-test-db                    # -> loc_stillthere_test_db
+bin/510-reset-test-db loc_stillthere_e2e_db # any *_test_db / *_e2e_db name
 ```
 
 That runs, in order: `CREATE DATABASE`, `src/api-srv/sql/roles.sql` (cluster
@@ -81,12 +81,12 @@ only and refuses tenant 1 (doc/900), so it is for the test suites, not for
 browsing as a developer. See the header of that script for `PGHOST` /
 `PGPORT` / `PSQL` / `PGPASSWORD` / `TEST_PG_URL_BASE`.
 
-Your own database -- the `loc_proto_db` that `etc/loc-api-srv.env`'s
+Your own database -- the `loc_stillthere_db` that `etc/loc-api-srv.env`'s
 `DATABASE_URL` points at, or a name you pass -- and, after every pull that
 brings a migration, the same command again:
 
 ```bash
-bin/205-migrate-db                       # -> loc_proto_db
+bin/205-migrate-db                       # -> loc_stillthere_db
 ```
 
 It creates the database if missing, runs `roles.sql` and `migrate up`, and
@@ -96,14 +96,14 @@ same logins, in tenant 1).
 Manual path, the same steps by hand:
 
 ```bash
-psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE loc_proto_db;"
+psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE loc_stillthere_db;"
 psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -f src/api-srv/sql/roles.sql
 cd src/api-srv
-go run ./cmd/migrate -url "postgres://postgres:<pw>@127.0.0.1:5432/loc_proto_db" up
+go run ./cmd/migrate -url "postgres://postgres:<pw>@127.0.0.1:5432/loc_stillthere_db" up
 #   or, when the env file carries DATABASE_URL for a role that owns the schema:
 #   go run ./cmd/migrate -config ../../etc/loc-api-srv.env up
-psql -h 127.0.0.1 -U postgres -d loc_proto_db -v ON_ERROR_STOP=1 -f sql/fixtures/local-seed.sql
-go run ./cmd/migrate -url "postgres://postgres:<pw>@127.0.0.1:5432/loc_proto_db" status
+psql -h 127.0.0.1 -U postgres -d loc_stillthere_db -v ON_ERROR_STOP=1 -f sql/fixtures/local-seed.sql
+go run ./cmd/migrate -url "postgres://postgres:<pw>@127.0.0.1:5432/loc_stillthere_db" status
 #   expect: one "applied" line per file in sql/migrations/
 ```
 

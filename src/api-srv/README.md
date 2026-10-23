@@ -50,7 +50,7 @@ Required:
   `POST /user`, `/userInvite` and a `PUT /user` that turns the flag on
   answer 403 to `mfaExempt: true`; clearing it, or saving a login already
   exempt, still works. `true` only in the test harness
-  (`etc/e2e-api-srv.env`, `infra/uat/etc/uat-proto-e2e-api.env`), whose
+  (`etc/e2e-api-srv.env`, `infra/uat/etc/uat-stillthere-e2e-api.env`), whose
   suites create password-only logins; dev and every server say `false`
 
 Optional:

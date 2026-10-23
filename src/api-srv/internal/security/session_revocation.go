@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/auth"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/auth"
 )
 
 // Session revocation. A JWT carries its grants and is valid until it

@@ -3,8 +3,8 @@ package auth
 import (
 	"fmt"
 
-	"github.com/wbmartin/starter-api/internal/logging"
-	"github.com/wbmartin/starter-api/internal/model"
+	"stillthere-api/internal/logging"
+	"stillthere-api/internal/model"
 )
 
 // RBACManager handles role-based access control operations

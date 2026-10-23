@@ -13,7 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	sqlfiles "github.com/wbmartin/starter-api/sql"
+	sqlfiles "stillthere-api/sql"
 )
 
 func fsWith(names ...string) fstest.MapFS {
@@ -88,7 +88,7 @@ func scratchDatabase(t *testing.T) *pgx.Conn {
 	if err != nil {
 		t.Skipf("skipping integration tests: bad DATABASE_URL (%v)", err)
 	}
-	name := "loc_proto_migrate_test_db"
+	name := "loc_stillthere_migrate_test_db"
 	if !strings.HasSuffix(strings.TrimPrefix(parsed.Path, "/"), "_test_db") {
 		t.Fatalf("refusing to run against %s: not a _test_db", parsed.Path)
 	}

@@ -1,0 +1,10 @@
+# /srv/prd-stillthere/etc/prd-stillthere-restart.service, symlinked from
+# /etc/systemd/system/ (infra/README.md). Runs as root: the hook user
+# only touches stg/restart.request.
+[Unit]
+Description=Restart stillthere-api on request
+
+[Service]
+Type=oneshot
+ExecStart=/bin/rm -f /srv/prd-stillthere/stg/restart.request
+ExecStart=/bin/systemctl restart prd-stillthere-api

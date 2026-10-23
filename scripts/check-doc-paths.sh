@@ -8,7 +8,7 @@
 #     `doc/105` -> doc/105-api-srv-tech-spec.md)
 #   - a package-relative name resolves against a package root (BASE_LIST:
 #     `internal/auth/jwt.go` -> src/api-srv/internal/auth/jwt.go,
-#     `bin/uat-proto-build` -> infra/uat/bin/uat-proto-build)
+#     `bin/uat-stillthere-build` -> infra/uat/bin/uat-stillthere-build)
 #   - a bare basename resolves anywhere in the tree (`conftest.py`)
 # Anything else is reported with the file and line that names it.
 #

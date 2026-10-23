@@ -10,12 +10,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/auth"
-	"github.com/wbmartin/starter-api/internal/cache"
-	"github.com/wbmartin/starter-api/internal/config"
-	"github.com/wbmartin/starter-api/internal/logging"
-	"github.com/wbmartin/starter-api/internal/model"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/auth"
+	"stillthere-api/internal/cache"
+	"stillthere-api/internal/config"
+	"stillthere-api/internal/logging"
+	"stillthere-api/internal/model"
 )
 
 // MockExampleRepository satisfies ExampleRepositoryInterface. Tests set

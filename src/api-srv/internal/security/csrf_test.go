@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/wbmartin/starter-api/internal/logging"
+	"stillthere-api/internal/logging"
 )
 
 // checkCSRF runs CheckJWT then CheckCSRF on a POST carrying csrfToken.

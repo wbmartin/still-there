@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/wbmartin/starter-api/internal/logging"
-	"github.com/wbmartin/starter-api/internal/model"
+	"stillthere-api/internal/logging"
+	"stillthere-api/internal/model"
 )
 
 func newTestRBACManager() *RBACManager {

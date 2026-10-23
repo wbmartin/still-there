@@ -10,7 +10,7 @@ native server is already up, a container needs starting. One server per
 machine serves every app derived from the template -- doc/050-dev-env-init.md.
 ```bash
 docker start loc-postgres        # only if a container is how you serve it
-psql -h 127.0.0.1 -U postgres -d loc_proto_db
+psql -h 127.0.0.1 -U postgres -d loc_stillthere_db
 ```
 
 After a pull that brings a migration (and the first time, if doc/050 was

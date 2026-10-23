@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/auth"
-	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/security"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/auth"
+	"stillthere-api/internal/model"
+	"stillthere-api/internal/security"
 )
 
 // UserRepositoryInterface defines the methods needed by UserHandler

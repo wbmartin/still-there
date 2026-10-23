@@ -9,9 +9,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/security"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/model"
+	"stillthere-api/internal/security"
 )
 
 // The profile a user may change about themselves. User name, groups and MFA

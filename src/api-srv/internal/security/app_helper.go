@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/auth"
-	"github.com/wbmartin/starter-api/internal/logging"
-	"github.com/wbmartin/starter-api/internal/model"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/auth"
+	"stillthere-api/internal/logging"
+	"stillthere-api/internal/model"
 )
 
 // Every handler runs its own security checks, explicitly, in its own body:

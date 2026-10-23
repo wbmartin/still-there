@@ -268,7 +268,7 @@ it is `false` (and keeps it on an already-exempt login, only to clear it).
 4. **JWT Structure**:
    ```json
    {
-     "iss": "Proto App",
+     "iss": "Still There",
      "sub": "username",
      "exp": 1678886400,
      "nbf": 1678882800,
@@ -688,7 +688,7 @@ optional `ISSUE_REPORTS_ENABLED` and `ISSUE_RELAY_*` keys
   DEBUG, so deployed hosts (`info`) skip them; local dev runs `debug`.
 - **Context**: Username, user ID, request details passed as key/value pairs
 - **Code**: the `code` argument is emitted as a `code=` attribute on every
-  line, e.g. `level=INFO source=example_handler.go:88 msg="..." code=EX_CR_START service=proto-api username=alice`
+  line, e.g. `level=INFO source=example_handler.go:88 msg="..." code=EX_CR_START service=stillthere-api username=alice`
 
 ### Log Codes
 - 12-character codes for consistent categorization, uniqueness

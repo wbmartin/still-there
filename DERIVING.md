@@ -2,7 +2,7 @@
 
 ProtoStack is a template. A new app starts as a copy of it, gets its own
 name and its own secrets, and from then on has no
-reason to say "proto" anywhere. This is the ordered list; `bin/000-rebrand`
+reason to say "stillthere" anywhere. This is the ordered list; `bin/000-rebrand`
 does the mechanical half.
 
 Identity lives in **`etc/app.env`** (`APP_SLUG`, `APP_DISPLAY_NAME`). Every
@@ -21,11 +21,11 @@ git commit -am "Derive acme from ProtoStack"
 git rev-parse --short HEAD~1                                # the template commit this app derives from; keep it (§8)
 ```
 
-What it changed: `etc/app.env`; `proto-api`/`proto-migrate` → `acme-*`;
-`loc_proto_*`, `uat_proto_db`, `proto_app`, `proto_ddl`,
-`proto_ci`, `proto_app` → `acme` equivalents; `Proto App` → `Acme
+What it changed: `etc/app.env`; `stillthere-api`/`stillthere-migrate` → `acme-*`;
+`loc_stillthere_*`, `uat_stillthere_db`, `stillthere_app`, `stillthere_ddl`,
+`stillthere_ci`, `stillthere_app` → `acme` equivalents; `Still There` → `Acme
 Portal` (web title, login page, `APP_NAME` in every API env, systemd
-`Description`); `uat-proto`/`prd-proto` file names and contents under
+`Description`); `uat-stillthere`/`prd-stillthere` file names and contents under
 `infra/`; nginx upstream and site file names; the Go module path and every
 import.
 "ProtoStack" itself is left alone — it is where the app came from.

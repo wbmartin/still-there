@@ -31,10 +31,10 @@ row says so.
     nginx (host)  -- serves web-pub/, proxies /api/ --
       | HTTP, 127.0.0.1:8088, X-Forwarded-For appended
       v
-    api-srv  (systemd unit, user svc-proto, sandboxed)
-      | pgx, 127.0.0.1:5432, role proto_app (DML only)
+    api-srv  (systemd unit, user svc-stillthere, sandboxed)
+      | pgx, 127.0.0.1:5432, role stillthere_app (DML only)
       v
-    Postgres  (schema owned by proto_ddl, used only by the migrator)
+    Postgres  (schema owned by stillthere_ddl, used only by the migrator)
 
     operations: deploy hooks as shrmpl-hook; root cron for certs and the
     nightly backup, which pushes to REMOTE_SERVER by scp, and the
@@ -62,7 +62,7 @@ does not have. A derived app that adds one adds its boundary and rows here.
 `security_context_id` is the tenant (`CLAUDE.md`,
 `doc/900-database-guidelines.md`). Isolation is enforced **in application
 code only**. There is no Postgres row-level security and no per-tenant
-role: `proto_app` can read and write every tenant's rows, so a query that
+role: `stillthere_app` can read and write every tenant's rows, so a query that
 omits the tenant predicate returns or changes another tenant's data and
 nothing behind it notices.
 
@@ -144,20 +144,20 @@ test that shows it; the mechanics are in doc/105.
 | # | Threat | Control | Status |
 |---|---|---|---|
 | 2.1 | Missing tenant predicate | See Tenant isolation: app-layer only, `scoped_query.go`, write predicates, test tenant lock, per-table tests (`example_repository_test.go`) | met |
-| 2.2 | API used to change the schema | `proto_app` is `db_reader` + `db_writer`, owns nothing; migrations run as `proto_ddl` (`src/api-srv/cmd/migrate`), the only path for DDL | met |
+| 2.2 | API used to change the schema | `stillthere_app` is `db_reader` + `db_writer`, owns nothing; migrations run as `stillthere_ddl` (`src/api-srv/cmd/migrate`), the only path for DDL | met |
 | 2.3 | Credentials read from a dump or a response | Passwords Argon2id; TOTP seeds AES-GCM under `TOTP_ENCRYPTION_KEY`; invite tokens SHA-256 only; `PwHash` and `TOTPSeed` are `json:"-"`. `RetrieveUserList` still selects `totp_seed` it never sends | met |
 | 2.4 | Database reached off the host | `DATABASE_URL` names `127.0.0.1:5432` in every server env file | met |
-| 2.5 | Repo password on a database role | `src/api-srv/sql/roles.sql` creates `proto_app` with the local dev password; presales `bin/610-deploy-uat` then sets it from the host env file on every run, post-sales `infra/sql/proto-host-db.sql` takes it from psql variables | met |
+| 2.5 | Repo password on a database role | `src/api-srv/sql/roles.sql` creates `stillthere_app` with the local dev password; presales `bin/610-deploy-uat` then sets it from the host env file on every run, post-sales `infra/sql/stillthere-host-db.sql` takes it from psql variables | met |
 
 ### B3: operations
 
 | # | Threat | Control | Status |
 |---|---|---|---|
-| 3.1 | Compromised API process reaches the host | Post-sales units (`infra/prd/etc/prd-proto-api.service`, UAT the same) run as `svc-proto` with a read-only filesystem (`ProtectSystem=strict`, no write path), empty `CapabilityBoundingSet`, `SystemCallFilter=@system-service`, `MemoryDenyWriteExecute` and the rest of the kernel and namespace protections. The presales unit `bin/610-deploy-uat` writes is lighter: `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, `ProtectHome`, `ReadWritePaths` on `log/` | partial |
-| 3.2 | Secrets leak from the repo | Server env files are redacted copies (`SERVERONLY`, `example.com`); each secret is generated on its host; the API env file is `root:svc-proto 0640` | met |
+| 3.1 | Compromised API process reaches the host | Post-sales units (`infra/prd/etc/prd-stillthere-api.service`, UAT the same) run as `svc-stillthere` with a read-only filesystem (`ProtectSystem=strict`, no write path), empty `CapabilityBoundingSet`, `SystemCallFilter=@system-service`, `MemoryDenyWriteExecute` and the rest of the kernel and namespace protections. The presales unit `bin/610-deploy-uat` writes is lighter: `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, `ProtectHome`, `ReadWritePaths` on `log/` | partial |
+| 3.2 | Secrets leak from the repo | Server env files are redacted copies (`SERVERONLY`, `example.com`); each secret is generated on its host; the API env file is `root:svc-stillthere 0640` | met |
 | 3.3 | Losing the TOTP key with the data | Every API env header says to keep `TOTP_ENCRYPTION_KEY` with every backup and restore the two together; the nightly tarball carries `etc/`, so it holds the key | met |
-| 3.4 | Backups destroyed or read from the primary | `infra/prd/bin/prd-proto-backup-all` pushes dumps and the `etc/` tarball to `REMOTE_SERVER` by `scp`, so the primary holds credentials that can overwrite its own off-host copies, and the copies hold every secret. `prd-proto-offsite-backup` adds a B2 copy that restic encrypts on prod (`RESTIC_PASSWORD`), so B2 holds only ciphertext; it is a push too: the B2 key on prod can delete those snapshots. **Target: pull** — the backup host fetches with a key the primary never holds | open |
-| 3.5 | Laptop credentials or test data reach a customer host | `bin/620-export-tenant-data` copies the database, runs `src/api-srv/sql/export-scrub.sql` (refuses tenant-2 rows and the fixture logins; empties every password, seed and `mfa_exempt`; every live login becomes `invited`; open invites revoked; issue reports, with their tracker ids, and help usage events removed) and dumps the copy; the host's first sign-in is a link from `proto-migrate invite` (doc/330 A9: the migrator's DDL credentials, so host root only; refuses tenant 2 and any login not `invited`; `src/api-srv/cmd/migrate/invite_test.go`). Presales `bin/600-bundle-uat` still ships the laptop dump unscrubbed (presales only, by decision), seeded exempt logins included; a host's API cannot add new ones (`ALLOW_MFA_EXEMPT_VIA_API=false`, B097) | partial |
+| 3.4 | Backups destroyed or read from the primary | `infra/prd/bin/prd-stillthere-backup-all` pushes dumps and the `etc/` tarball to `REMOTE_SERVER` by `scp`, so the primary holds credentials that can overwrite its own off-host copies, and the copies hold every secret. `prd-stillthere-offsite-backup` adds a B2 copy that restic encrypts on prod (`RESTIC_PASSWORD`), so B2 holds only ciphertext; it is a push too: the B2 key on prod can delete those snapshots. **Target: pull** — the backup host fetches with a key the primary never holds | open |
+| 3.5 | Laptop credentials or test data reach a customer host | `bin/620-export-tenant-data` copies the database, runs `src/api-srv/sql/export-scrub.sql` (refuses tenant-2 rows and the fixture logins; empties every password, seed and `mfa_exempt`; every live login becomes `invited`; open invites revoked; issue reports, with their tracker ids, and help usage events removed) and dumps the copy; the host's first sign-in is a link from `stillthere-migrate invite` (doc/330 A9: the migrator's DDL credentials, so host root only; refuses tenant 2 and any login not `invited`; `src/api-srv/cmd/migrate/invite_test.go`). Presales `bin/600-bundle-uat` still ships the laptop dump unscrubbed (presales only, by decision), seeded exempt logins included; a host's API cannot add new ones (`ALLOW_MFA_EXEMPT_VIA_API=false`, B097) | partial |
 | 3.6 | Monitoring silenced by the host it watches | Nackmon and pulsecheck files for UAT live under `infra/prd/shrmpl-etc/`; prod's own stay on prod for want of a third host (`infra/README.md`) | partial |
 | 3.7 | Scanning the web root | fail2ban jail per app on nginx 404s, ignoring `/api/` so a user's 4xx never bans them (`infra/prd/fail2ban/etc/jail.local`) | met |
 | 3.8 | Operator access unrecorded | Nothing in the template logs SSH, console or database-superuser sessions off the host | open |

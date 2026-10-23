@@ -4,7 +4,7 @@
 #
 # Convention: ONE JAIL PER APP, named after the app's /srv/<app> directory
 # and pointed at that app's own nginx access log. This repo owns the
-# [prd-proto] jail at the bottom. On a shared host the live file is the
+# [prd-stillthere] jail at the bottom. On a shared host the live file is the
 # union of the jails each app's repo owns -- when another app is added,
 # its lines come from its repo, not from here, and this copy gains them
 # too so the mirror stays honest.
@@ -48,7 +48,7 @@ banaction = ufw
 [sshd]
 enabled = true
 
-[prd-proto]
+[prd-stillthere]
 enabled = true
 port    = http,https
 filter  = nginx-404
@@ -57,4 +57,4 @@ filter  = nginx-404
 # whole office behind one NAT address. Auth brute force is the API's
 # job: it rate-limits and locks out failed logins itself.
 ignoreregex = "(GET|POST|HEAD) /api/
-logpath = /srv/prd-proto/log/nginx_access.log
+logpath = /srv/prd-stillthere/log/nginx_access.log

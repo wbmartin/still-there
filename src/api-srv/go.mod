@@ -1,4 +1,4 @@
-module github.com/wbmartin/starter-api
+module stillthere-api
 
 go 1.25.4
 

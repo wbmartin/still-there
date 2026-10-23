@@ -1,0 +1,81 @@
+#!/bin/bash
+set -euo pipefail
+
+# Run by hand as root, it re-runs as the hook user, so the files it writes
+# stay writable by the next webhook run.
+TARGET_USER="shrmpl-hook"
+if [ "$(id -un)" != "$TARGET_USER" ]; then
+    exec sudo -u "$TARGET_USER" -H "$0" "$@"
+fi
+
+SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# The app root is /srv/<env>-<slug>: every env, unit and script name comes
+# from it, so this file is the same on every host.
+APP_ENV="$(basename "$SRV_ROOT")"
+DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"
+[ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
+# shellcheck disable=SC1090
+source "$DEPLOY_ENV"
+for var in CONTAINER_REGISTRY_SERVER CONTAINER_REGISTRY_USER CONTAINER_REGISTRY_PASSWORD DEPLOY_TAG PROMOTE_FROM_TAG; do
+    [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $DEPLOY_ENV"; exit 1; }
+done
+API_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/stillthere-api"
+WEB_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/stillthere-web"
+
+SOURCE_TAG="${1:+sha-$1}"
+SOURCE_TAG="${SOURCE_TAG:-$PROMOTE_FROM_TAG}"
+TARGET_TAG="$DEPLOY_TAG"
+
+echo "[INFO] Logging in to $CONTAINER_REGISTRY_SERVER"
+echo "$CONTAINER_REGISTRY_PASSWORD" | oras login -u "$CONTAINER_REGISTRY_USER" --password-stdin "$CONTAINER_REGISTRY_SERVER"
+
+revision_of() { oras manifest fetch "$1:$2" | jq -r '.annotations["org.opencontainers.image.revision"] // ""'; }
+digest_of()   { oras manifest fetch --descriptor "$1:$2" | jq -r .digest; }
+
+API_REV=$(revision_of "$API_BLOB" "$SOURCE_TAG")
+WEB_REV=$(revision_of "$WEB_BLOB" "$SOURCE_TAG")
+
+[ -n "$API_REV" ] || { echo "[ERROR] $API_BLOB:$SOURCE_TAG carries no revision annotation"; exit 1; }
+
+if [ "$API_REV" != "$WEB_REV" ]; then
+    echo "[ERROR] $SOURCE_TAG is not a coherent build:"
+    echo "          api -> $API_REV"
+    echo "          web -> $WEB_REV"
+    echo "        Promote by explicit sha, or rebuild so both tags agree."
+    exit 1
+fi
+
+API_DIGEST=$(digest_of "$API_BLOB" "$SOURCE_TAG")
+WEB_DIGEST=$(digest_of "$WEB_BLOB" "$SOURCE_TAG")
+
+# UAT deploys a commit before testing it (uat-stillthere-build), so :uat can be
+# a red build. Its tests passing is the tag sha-<commit>-passed on these
+# same digests; a rebuild of the commit that has not passed moves
+# sha-<commit> off the digests that did.
+PASSED_TAG="sha-$API_REV-passed"
+PASSED_API=$(digest_of "$API_BLOB" "$PASSED_TAG" 2>/dev/null || echo "none")
+PASSED_WEB=$(digest_of "$WEB_BLOB" "$PASSED_TAG" 2>/dev/null || echo "none")
+if [ "$PASSED_API" != "$API_DIGEST" ] \
+        || [ "$PASSED_WEB" != "$WEB_DIGEST" ]; then
+    echo "[ERROR] $SOURCE_TAG ($API_REV) has not passed its UAT tests:"
+    echo "          $PASSED_TAG api -> $PASSED_API (want $API_DIGEST)"
+    echo "          $PASSED_TAG web -> $PASSED_WEB (want $WEB_DIGEST)"
+    echo "        See the UAT build's Slack result. Promote a commit whose"
+    echo "        tests passed (by full sha), or fix it and push again."
+    exit 1
+fi
+
+PREV_API=$(digest_of "$API_BLOB" "$TARGET_TAG" 2>/dev/null || echo "none")
+PREV_WEB=$(digest_of "$WEB_BLOB" "$TARGET_TAG" 2>/dev/null || echo "none")
+echo "[INFO] $TARGET_TAG currently: api=$PREV_API web=$PREV_WEB"
+
+echo "[INFO] Promoting $SOURCE_TAG ($API_REV) to $TARGET_TAG"
+# Tag by digest, not by tag name: the source tag could move between resolve and tag.
+oras tag "$API_BLOB@$API_DIGEST" "$TARGET_TAG"
+oras tag "$WEB_BLOB@$WEB_DIGEST" "$TARGET_TAG"
+
+echo "[INFO] $TARGET_TAG now: api=$API_DIGEST web=$WEB_DIGEST"
+echo "[INFO] commit: $API_REV"
+echo "[INFO] Promoted. Install with:"
+echo "         $SRV_ROOT/bin/$APP_ENV-install-api $TARGET_TAG"
+echo "         $SRV_ROOT/bin/$APP_ENV-publish-web-client --pull $TARGET_TAG"

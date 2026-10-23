@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wbmartin/starter-api/internal/cache"
-	"github.com/wbmartin/starter-api/internal/logging"
+	"stillthere-api/internal/cache"
+	"stillthere-api/internal/logging"
 )
 
 // Config holds the application configuration. It is loaded from a flat
@@ -63,8 +63,8 @@ const (
 
 // ReadEnvFile parses a KEY=VALUE file -- blank lines and # comments ignored,
 // no interpolation -- into a map. A value wrapped in matching double or
-// single quotes has the quotes removed (so APP_NAME="Proto App" is
-// Proto App, not "Proto App"); anything else is taken verbatim after
+// single quotes has the quotes removed (so APP_NAME="Still There" is
+// Still There, not "Still There"); anything else is taken verbatim after
 // trimming whitespace. Shared by LoadConfig and by cmd/migrate, which needs
 // only DATABASE_URL from a file of the same shape.
 func ReadEnvFile(path string) (map[string]string, error) {

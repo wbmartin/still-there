@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/security"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/model"
+	"stillthere-api/internal/security"
 )
 
 // maxEntityBodyBytes caps every example write, bulk lists included. A

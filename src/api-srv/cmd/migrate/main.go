@@ -1,13 +1,13 @@
-// proto-migrate applies the embedded schema migrations to a database.
+// stillthere-migrate applies the embedded schema migrations to a database.
 //
-//	proto-migrate -config <env file> status          what is applied, pending, drifted
-//	proto-migrate -config <env file> pending         print the number of pending migrations (for scripts)
-//	proto-migrate -config <env file> verify          fail if the database disagrees with the files
-//	proto-migrate -config <env file> up              apply every pending migration, in order
-//	proto-migrate -config <env file> stamp <version> record up to <version> as applied without running
-//	proto-migrate -config <env file> schema-reference print the schema as CREATE TABLE/INDEX text (doc/003)
-//	proto-migrate new <name>                        create sql/migrations/NNNN_<name>.sql (next free NNNN); no database
-//	proto-migrate -config <env file> -base-url <origin> [-invite-ttl-hours N] invite <userName>
+//	stillthere-migrate -config <env file> status          what is applied, pending, drifted
+//	stillthere-migrate -config <env file> pending         print the number of pending migrations (for scripts)
+//	stillthere-migrate -config <env file> verify          fail if the database disagrees with the files
+//	stillthere-migrate -config <env file> up              apply every pending migration, in order
+//	stillthere-migrate -config <env file> stamp <version> record up to <version> as applied without running
+//	stillthere-migrate -config <env file> schema-reference print the schema as CREATE TABLE/INDEX text (doc/003)
+//	stillthere-migrate new <name>                        create sql/migrations/NNNN_<name>.sql (next free NNNN); no database
+//	stillthere-migrate -config <env file> -base-url <origin> [-invite-ttl-hours N] invite <userName>
 //	                                                print a first sign-in link for an invited login (invite.go)
 //
 // -config is a KEY=VALUE file of which only DATABASE_URL is read -- the
@@ -32,9 +32,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/wbmartin/starter-api/internal/config"
-	"github.com/wbmartin/starter-api/internal/migrate"
-	sqlfiles "github.com/wbmartin/starter-api/sql"
+	"stillthere-api/internal/config"
+	"stillthere-api/internal/migrate"
+	sqlfiles "stillthere-api/sql"
 )
 
 func main() {
@@ -46,9 +46,9 @@ func main() {
 	inviteTTLHours := flag.Int("invite-ttl-hours", 72,
 		"hours the `invite` link lives (pass the API's INVITE_TTL_HOURS)")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: proto-migrate (-config <file> | -url <url>) status|pending|verify|up|stamp <version>|schema-reference\n")
-		fmt.Fprintf(os.Stderr, "       proto-migrate (-config <file> | -url <url>) -base-url <origin> [-invite-ttl-hours N] invite <userName>\n")
-		fmt.Fprintf(os.Stderr, "       proto-migrate [-dir sql/migrations] new <name>\n")
+		fmt.Fprintf(os.Stderr, "usage: stillthere-migrate (-config <file> | -url <url>) status|pending|verify|up|stamp <version>|schema-reference\n")
+		fmt.Fprintf(os.Stderr, "       stillthere-migrate (-config <file> | -url <url>) -base-url <origin> [-invite-ttl-hours N] invite <userName>\n")
+		fmt.Fprintf(os.Stderr, "       stillthere-migrate [-dir sql/migrations] new <name>\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()

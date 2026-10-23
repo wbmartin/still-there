@@ -11,8 +11,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/wbmartin/starter-api/internal/migrate"
-	sqlfiles "github.com/wbmartin/starter-api/sql"
+	"stillthere-api/internal/migrate"
+	sqlfiles "stillthere-api/sql"
 )
 
 // export-scrub.sql is what bin/620-export-tenant-data runs on its copy of

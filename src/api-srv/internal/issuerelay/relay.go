@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
+	"stillthere-api/internal/model"
+	"stillthere-api/internal/repository"
 )
 
 // Store is the slice of *repository.IssueReportRepository the relay uses.

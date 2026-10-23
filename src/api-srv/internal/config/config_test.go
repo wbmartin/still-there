@@ -13,7 +13,7 @@ func TestReadEnvFile_QuotesAndEdges(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.env")
 	content := `# comment
-APP_NAME="Proto App"
+APP_NAME="Still There"
 SINGLE='single quoted'
 PLAIN=plain value
 URL=postgres://u:p@h:5432/db?sslmode=disable
@@ -31,7 +31,7 @@ SPACED   =   padded
 		t.Fatal(err)
 	}
 	want := map[string]string{
-		"APP_NAME":    "Proto App",
+		"APP_NAME":    "Still There",
 		"SINGLE":      "single quoted",
 		"PLAIN":       "plain value",
 		"URL":         "postgres://u:p@h:5432/db?sslmode=disable",

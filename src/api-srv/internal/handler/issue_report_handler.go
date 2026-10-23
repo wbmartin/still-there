@@ -14,10 +14,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
-	"github.com/wbmartin/starter-api/internal/security"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/model"
+	"stillthere-api/internal/repository"
+	"stillthere-api/internal/security"
 )
 
 // The issue-report module (doc/150-issue-report-module.md). Anyone signed

@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/wbmartin/starter-api/internal/auth"
-	"github.com/wbmartin/starter-api/internal/model"
+	"stillthere-api/internal/auth"
+	"stillthere-api/internal/model"
 )
 
 // POST /user reads the raw password from "password" and stores only its

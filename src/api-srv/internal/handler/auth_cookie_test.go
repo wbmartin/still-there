@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/wbmartin/starter-api/internal/auth"
-	"github.com/wbmartin/starter-api/internal/model"
+	"stillthere-api/internal/auth"
+	"stillthere-api/internal/model"
 )
 
 // authSetCookie returns the raw Set-Cookie header that writes the auth

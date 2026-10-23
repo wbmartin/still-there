@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/wbmartin/starter-api/internal/model"
+	"stillthere-api/internal/model"
 )
 
 func TestIssueReportRepository(t *testing.T) {

@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/auth"
-	"github.com/wbmartin/starter-api/internal/model"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/auth"
+	"stillthere-api/internal/model"
 )
 
 // A 32-byte AES key as hex, the shape TOTP_ENCRYPTION_KEY takes.

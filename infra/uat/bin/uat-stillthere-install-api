@@ -1,0 +1,123 @@
+#!/bin/bash
+# Installs one build from the registry:
+#
+#   pull stillthere-api:<tag> -> stillthere-migrate verify -> pg_dump if pending
+#   -> stillthere-migrate up -> swap api-srv + stillthere-migrate (old kept as .prev)
+#   -> restart through the root-owned path unit -> MainPID change -> /health
+#
+#   <env>-stillthere-install-api [tag]      tag defaults to DEPLOY_TAG
+#
+# The schema step runs the INCOMING stillthere-migrate from the pull dir, before
+# anything in libexec/ changes: a refused verify or a failed up leaves every
+# installed binary as it was. verify refuses an older tag once the database
+# is past it, so rolling code back across a migration is a restore from
+# backup/, not a reinstall.
+set -euo pipefail
+
+# Run by hand as root, it re-runs as the hook user, so the files it writes
+# stay writable by the next webhook build.
+TARGET_USER="shrmpl-hook"
+if [ "$(id -un)" != "$TARGET_USER" ]; then
+    exec sudo -u "$TARGET_USER" -H "$0" "$@"
+fi
+
+SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# The app root is /srv/<env>-<slug>: every env, unit and script name comes
+# from it, so this file is the same on every host.
+APP_ENV="$(basename "$SRV_ROOT")"
+DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"
+[ -r "$DEPLOY_ENV" ] || { echo "[ERROR] $DEPLOY_ENV missing or unreadable"; exit 1; }
+# shellcheck disable=SC1090
+source "$DEPLOY_ENV"
+for var in CONTAINER_REGISTRY_SERVER CONTAINER_REGISTRY_USER CONTAINER_REGISTRY_PASSWORD SERVICE HEALTH_URL DEPLOY_TAG; do
+    [ -n "${!var:-}" ] || { echo "[ERROR] $var not set by $DEPLOY_ENV"; exit 1; }
+done
+API_BLOB="$CONTAINER_REGISTRY_SERVER/deploy/blobs/stillthere-api"
+
+TAG="${1:-$DEPLOY_TAG}"
+
+RESTART_TRIGGER="$SRV_ROOT/stg/restart.request"
+MIGRATE_ENV="$SRV_ROOT/etc/$APP_ENV-migrate.env"
+[ -r "$MIGRATE_ENV" ] || { echo "[ERROR] $MIGRATE_ENV missing or unreadable"; exit 1; }
+LIBEXEC="$SRV_ROOT/libexec"
+BINARY_LIST=(api-srv stillthere-migrate)
+
+PULL_DIR="$SRV_ROOT/stg/pull.$$"
+mkdir -p "$PULL_DIR" "$LIBEXEC" "$SRV_ROOT/backup"
+trap 'rm -rf "$PULL_DIR"' EXIT
+
+echo "[INFO] Pulling $API_BLOB:$TAG"
+echo "$CONTAINER_REGISTRY_PASSWORD" | oras login -u "$CONTAINER_REGISTRY_USER" --password-stdin "$CONTAINER_REGISTRY_SERVER"
+oras pull "$API_BLOB:$TAG" --output "$PULL_DIR"
+for binary in "${BINARY_LIST[@]}"; do
+    [ -s "$PULL_DIR/$binary" ] || { echo "[ERROR] $TAG contains no $binary"; exit 1; }
+    chmod 0755 "$PULL_DIR/$binary"   # oras drops the exec bit
+done
+
+# Schema first, with the incoming migrator; libexec/ is untouched until it
+# succeeds.
+MIGRATE=("$PULL_DIR/stillthere-migrate" -config "$MIGRATE_ENV")
+echo "[INFO] migrate verify"
+"${MIGRATE[@]}" verify
+PENDING=$("${MIGRATE[@]}" pending)
+if [ "$PENDING" != "0" ]; then
+    DUMP="$SRV_ROOT/backup/pre-migrate-$(date -u +%Y%m%dT%H%M%SZ).dump"
+    echo "[INFO] $PENDING migration(s) pending; dumping to $DUMP first"
+    pg_dump -Fc "$(sed -n 's/^DATABASE_URL=//p' "$MIGRATE_ENV")" > "$DUMP"
+    echo "[INFO] migrate up"
+    "${MIGRATE[@]}" up
+else
+    echo "[INFO] migrate: nothing pending"
+fi
+
+echo "[INFO] Installing $TAG"
+# Keep the running binary as .prev; install+mv keeps each swap atomic.
+for binary in "${BINARY_LIST[@]}"; do
+    if [ -f "$LIBEXEC/$binary" ]; then
+        cp -p "$LIBEXEC/$binary" "$LIBEXEC/$binary.prev"
+    fi
+    install -m 0755 "$PULL_DIR/$binary" "$LIBEXEC/$binary.new"
+    mv -f "$LIBEXEC/$binary.new" "$LIBEXEC/$binary"
+done
+{
+    [ -f "$PULL_DIR/stillthere-api.revision" ] && cat "$PULL_DIR/stillthere-api.revision"
+    printf 'installed_tag=%s\ninstalled_at=%s\n' "$TAG" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$LIBEXEC/stillthere-api.revision"
+
+echo "[INFO] Requesting restart of $SERVICE"
+pid_before=$(systemctl show -p MainPID --value "$SERVICE" 2>/dev/null || echo "")
+# The restart.path unit restarts the service when this file appears.
+: > "$RESTART_TRIGGER"
+
+restarted=""
+for _ in $(seq 1 30); do
+    pid_now=$(systemctl show -p MainPID --value "$SERVICE" 2>/dev/null || echo "")
+    if [ -n "$pid_now" ] && [ "$pid_now" != "0" ] && [ "$pid_now" != "$pid_before" ]; then
+        restarted=yes
+        break
+    fi
+    sleep 1
+done
+
+if [ -z "$restarted" ]; then
+    echo "[ERROR] $SERVICE did not restart within 30s."
+    echo "        The trigger file is still at $RESTART_TRIGGER, which means the"
+    echo "        path unit is not running. Check:"
+    echo "          systemctl status $APP_ENV-restart.path"
+    exit 1
+fi
+
+for _ in $(seq 1 15); do
+    if curl -fsS --max-time 2 "$HEALTH_URL" 2>/dev/null | grep -q '"status":"ok"'; then
+        echo "[INFO] $SERVICE healthy"
+        cat "$LIBEXEC/stillthere-api.revision"
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "[ERROR] $SERVICE restarted but did not report healthy within 15s."
+echo "        journalctl -u $SERVICE -n 40 --no-pager"
+echo "        Roll back the binaries (the schema stays) and restart:"
+echo "          for b in ${BINARY_LIST[*]}; do mv -f $LIBEXEC/\$b.prev $LIBEXEC/\$b; done; : > $RESTART_TRIGGER"
+exit 1

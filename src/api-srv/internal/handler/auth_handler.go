@@ -8,13 +8,13 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/auth"
-	"github.com/wbmartin/starter-api/internal/cache"
-	"github.com/wbmartin/starter-api/internal/config"
-	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
-	"github.com/wbmartin/starter-api/internal/security"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/auth"
+	"stillthere-api/internal/cache"
+	"stillthere-api/internal/config"
+	"stillthere-api/internal/model"
+	"stillthere-api/internal/repository"
+	"stillthere-api/internal/security"
 )
 
 // maxUserNameLen matches app_user.user_name VARCHAR(50).

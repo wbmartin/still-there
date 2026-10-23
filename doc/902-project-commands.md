@@ -9,7 +9,7 @@ database, `6xx` deploy. Details follow in the sections below.
 | `bin/000-rebrand <slug> "<Name>"` | Rename the app when deriving from this template (`DERIVING.md`) |
 | `bin/100-build-api-server` | Build the API and migrator binaries into `dist/` |
 | `bin/110-build-web-app` | `vite build` and a timestamped tar.gz in `dist/` |
-| `bin/205-migrate-db [dbname]` | Create/migrate the developer database (`loc_proto_db`) |
+| `bin/205-migrate-db [dbname]` | Create/migrate the developer database (`loc_stillthere_db`) |
 | `bin/215-run-api-srv` | Build and run the API on :8080 (foreground or background) |
 | `bin/216-stop-local-stack` | Stop this checkout's API and Vite |
 | `bin/220-run-web-app` | Vite dev server on :5173, proxying `/api` to :8080 |
@@ -115,7 +115,7 @@ The one command, on a laptop or a build host:
   `CLAUDE.md`, `DERIVING.md`, the READMEs and `doc/*.md`, keeps the
   ones that look like repo paths, and resolves each by prefix
   (`bin/215`), against a package root (`internal/...`,
-  `bin/uat-proto-build` under `infra/uat/`) or by basename.
+  `bin/uat-stillthere-build` under `infra/uat/`) or by basename.
   A miss prints `MISS <doc>:<line> <token>` and fails the run;
   so does an entry in `scripts/doc-paths-allow.txt` its document no longer
   names. Skips URLs, absolute paths, `<placeholder>`s and gitignored
@@ -129,7 +129,7 @@ The one command, on a laptop or a build host:
   (`STATICCHECK_VERSION` in the script) and installed once into
   `tmp/tools/bin/` (needs proxy.golang.org the first time; v0.8.1 builds
   with Go 1.26, which `go install` fetches unless `GOTOOLCHAIN=local`).
-  Then rebuilds `loc_proto_test_db` via `bin/510` and runs
+  Then rebuilds `loc_stillthere_test_db` via `bin/510` and runs
   `go test -v ./...` in each module with `TEST_DATABASE_URL` exported
   (one `go-test.log`; the `go=` count covers both), with
   `-coverprofile`: per module `tmp/test-reports/go-coverage-<module>.out`
@@ -150,9 +150,9 @@ The one command, on a laptop or a build host:
 - `unit`: `npx eslint . --max-warnings 0` in `src/web-app` (same as
   `npm run lint`; check only, any error or warning fails; log
   `eslint.log`), then `vitest run` against `src/web-app/tests`.
-- `e2e`: rebuilds `loc_proto_e2e_db` via `bin/510`, installs Chromium if
+- `e2e`: rebuilds `loc_stillthere_e2e_db` via `bin/510`, installs Chromium if
   needed, runs `bin/230-run-web-app-e2e`.
-- `py`: rebuilds `loc_proto_e2e_db`, builds the API and starts it on
+- `py`: rebuilds `loc_stillthere_e2e_db`, builds the API and starts it on
   `127.0.0.1:8082` from a copy of `etc/e2e-api-srv.env` with the developer
   rate limits (the pytest suite asserts a 429), bootstraps the pytest venv
   at `tests/.venv` itself, runs the suite, stops the API.
@@ -192,7 +192,7 @@ To load test the API (starts and stops its own private instance, like
 ./bin/330-test-load                                   # 60s, 100 workers
 ./bin/330-test-load --iterations 1 --concurrency 1    # smoke run
 ```
-- Rebuilds `loc_proto_e2e_db`, starts the Go API on `127.0.0.1:8082` from
+- Rebuilds `loc_stillthere_e2e_db`, starts the Go API on `127.0.0.1:8082` from
   `etc/e2e-api-srv.env`, and refuses to start if something already
   answers there. Builds `src/load-test` (its own Go module) and the API
   into `tmp/test-logs/`; the report goes to `tmp/test-reports/`.
@@ -231,7 +231,7 @@ To load test the API (starts and stops its own private instance, like
 ## Developer Database
 
 ```
-./bin/205-migrate-db [dbname]      # default: the database etc/loc-api-srv.env names (loc_proto_db)
+./bin/205-migrate-db [dbname]      # default: the database etc/loc-api-srv.env names (loc_stillthere_db)
 ```
 - Creates the database if missing, `sql/roles.sql`, `cmd/migrate up`,
   then `status`. A database it creates also gets
@@ -243,8 +243,8 @@ To load test the API (starts and stops its own private instance, like
 ## Scratch Databases
 
 ```
-./bin/510-reset-test-db [dbname]   # default loc_proto_test_db; DROP + rebuild
-./bin/515-reseed-db [dbname]       # default loc_proto_e2e_db; TRUNCATE + re-seed without dropping
+./bin/510-reset-test-db [dbname]   # default loc_stillthere_test_db; DROP + rebuild
+./bin/515-reseed-db [dbname]       # default loc_stillthere_e2e_db; TRUNCATE + re-seed without dropping
 ```
 - `510`: DROP + CREATE, `sql/roles.sql`, schema through `cmd/migrate up`,
   then `sql/fixtures/test-seed.sql` (tenants 2 and 3) and
@@ -253,7 +253,7 @@ To load test the API (starts and stops its own private instance, like
   `_test_db` or `_e2e_db`. Uses psql against whatever serves
   `PGHOST`:`PGPORT`, reached over TCP (`PSQL` overrides); the migrator
   connects with `TEST_PG_URL_BASE`. This also covers what used to be the
-  e2e-only reset: `bin/510-reset-test-db loc_proto_e2e_db`.
+  e2e-only reset: `bin/510-reset-test-db loc_stillthere_e2e_db`.
 - `510` also rewrites `doc/003-schema-reference.sql` right after `up`,
   before any fixture (`SCHEMA_REFERENCE_FILE` moves it; `bin/300` points
   it at `tmp/test-logs/` and fails the `go` step when the two differ).
@@ -293,7 +293,7 @@ sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside
 ./bin/620-export-tenant-data <out-dir> [api-env]    # scrubbed local db dump, outside the repo
 ```
 - `605` runs one probe on the host under sudo (the password once):
-  users, tools, `/srv/{uat,prd}-proto`, units, Postgres roles, databases
+  users, tools, `/srv/{uat,prd}-stillthere`, units, Postgres roles, databases
   and owners, nginx, fail2ban, cron, ports. Env files as key names only;
   units, nginx sites and crontab pass a best-effort secret mask. Changes
   nothing. Names from `etc/app.env` and `etc/uat-deploy.env`. Run before
@@ -309,4 +309,4 @@ sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside
   writes `<slug>-data-<stamp>.dump` with `.sha256` and `.manifest` to
   `<out-dir>`, which must be outside the checkout. The export is customer
   data. The first sign-in on the host is an invite link issued there
-  by `proto-migrate invite <userName>` (doc/330 A9, doc/900).
+  by `stillthere-migrate invite <userName>` (doc/330 A9, doc/900).

@@ -9,11 +9,11 @@ Two scripts do the work; this skill is the procedure around them.
 
 | | |
 |---|---|
-| `bin/600-bundle-uat` | local: build `api-srv` (static linux/amd64) + `proto-migrate` (if `src/api-srv/cmd/migrate` exists) + `web-pub.tar.gz` + `db.sql` (`pg_dump` of the local database over TCP) + `deploy.env` + `api-srv.env.template` (names filled, no secrets) → `dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz` → scp to `$UAT_HOST:/tmp/` → delete the local tarball (kept if the scp fails) |
-| `bin/610-deploy-uat` | server, shipped in the bundle as `deploy.sh`: refuse a post-sales host → first run only, write `etc/api-srv.env` with secrets generated on the host, the systemd unit, and the nginx site for `UAT_DOMAIN` (`nginx -t` + reload; prints the `certbot --nginx` line) → stop `$SERVICE` → drop/recreate the UAT DB from `db.sql` → set the role password from `api-srv.env` → replace `$APP_ROOT/libexec/api-srv` (+ `proto-migrate`) → replace `$APP_ROOT/web-pub` → start → poll `/health` |
+| `bin/600-bundle-uat` | local: build `api-srv` (static linux/amd64) + `stillthere-migrate` (if `src/api-srv/cmd/migrate` exists) + `web-pub.tar.gz` + `db.sql` (`pg_dump` of the local database over TCP) + `deploy.env` + `api-srv.env.template` (names filled, no secrets) → `dist/${APP_NAME}_bundle_YYYYMMDD_hhmm.tar.gz` → scp to `$UAT_HOST:/tmp/` → delete the local tarball (kept if the scp fails) |
+| `bin/610-deploy-uat` | server, shipped in the bundle as `deploy.sh`: refuse a post-sales host → first run only, write `etc/api-srv.env` with secrets generated on the host, the systemd unit, and the nginx site for `UAT_DOMAIN` (`nginx -t` + reload; prints the `certbot --nginx` line) → stop `$SERVICE` → drop/recreate the UAT DB from `db.sql` → set the role password from `api-srv.env` → replace `$APP_ROOT/libexec/api-srv` (+ `stillthere-migrate`) → replace `$APP_ROOT/web-pub` → start → poll `/health` |
 
 **All settings come from `etc/uat-deploy.env`** (committed, no secrets), with the
-app's identity from `etc/app.env` (`APP_SLUG=proto`, sourced first): `APP_NAME=$APP_SLUG`,
+app's identity from `etc/app.env` (`APP_SLUG=stillthere`, sourced first): `APP_NAME=$APP_SLUG`,
 `UAT_HOST=uat-server` (ssh alias),
 `LOCAL_ENV_FILE=etc/loc-api-srv.env` (the database to dump; the server that
 holds it is `PGHOST`:`PGPORT` from `etc/loc-test.env`), and the server-side `APP_ROOT=/srv/uat-$APP_SLUG`,
@@ -78,14 +78,14 @@ to the UI (no typing passwords) — the UI eyeball is the operator's.
 
 ## Server facts
 
-- App root `$APP_ROOT` (`/srv/uat-${APP_NAME}`) — `libexec/api-srv` (+ `libexec/proto-migrate`
+- App root `$APP_ROOT` (`/srv/uat-${APP_NAME}`) — `libexec/api-srv` (+ `libexec/stillthere-migrate`
   if built), `web-pub/` (owned by `$SVC_USER`), `etc/api-srv.env` (DB URL, `SERVER_PORT`,
   secrets; root:`$SVC_USER` 0640; written once by the first deploy from the bundle's
   template with secrets from `/dev/urandom`, **never overwritten by deploy**, never in a
   bundle), `etc/uat-${APP_NAME}-api.service` (symlinked into
   `/etc/systemd/system`), `log/` (nginx only; API logs to journald —
   `sudo journalctl -u uat-${APP_NAME}-api -f`).
-- DB role `$DB_APP_ROLE` (`proto_app`) owns the database; `db_reader`/`db_writer`
+- DB role `$DB_APP_ROLE` (`stillthere_app`) owns the database; `db_reader`/`db_writer`
   grant roles. `000-roles.sql` in the bundle is the repo's `src/api-srv/sql/roles.sql`
   verbatim (idempotent); `600` refuses to bundle if it is missing or does not name
   `$DB_APP_ROLE`. Every deploy then sets the role's password to the one in
@@ -96,11 +96,11 @@ to the UI (no typing passwords) — the UI eyeball is the operator's.
   (`$APP_ROOT/etc/*-${APP_NAME}-deploy.env` exists) — see
   doc/330-uat-postsales-cutover.md. If the operator reports that, stop: `UAT_HOST`
   points at a post-sales host.
-- Previous binaries/web kept as `.prev` (`api-srv.prev`, `proto-migrate.prev`,
+- Previous binaries/web kept as `.prev` (`api-srv.prev`, `stillthere-migrate.prev`,
   `web-pub.prev`) for a quick manual rollback — see doc/320-presales-uat-deploy.md.
 - A normal deploy restores the whole local dump, so `schema_migration` (if present)
   travels with it — no migrate-apply step runs. `--no-db` runs
-  `proto-migrate -config api-srv.env verify` instead, as a sanity check only.
+  `stillthere-migrate -config api-srv.env verify` instead, as a sanity check only.
 
 ## Known gotchas
 

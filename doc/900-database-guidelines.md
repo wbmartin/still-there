@@ -64,7 +64,7 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA appcore TO group_global_writer;
 # Schema changes
 
 The schema lives in `src/api-srv/sql/migrations/NNNN_name.sql`, embedded into
-the `proto-migrate` binary (`cmd/migrate`) and applied in ascending version
+the `stillthere-migrate` binary (`cmd/migrate`) and applied in ascending version
 order, forward only. The migrator records each file's SHA-256 in
 `schema_migration` in the same transaction as the file itself.
 
@@ -78,20 +78,20 @@ order, forward only. The migrator records each file's SHA-256 in
 - Seed/test data is a fixture (`sql/fixtures/`), not a migration.
 - `bin/510-reset-test-db` runs `migrate up` on an empty database, so every
   reset proves the full chain applies cleanly. It then writes
-  `doc/003-schema-reference.sql` (`proto-migrate schema-reference`) from
+  `doc/003-schema-reference.sql` (`stillthere-migrate schema-reference`) from
   that database, and `bin/300-run-tests go` fails when the committed copy
   differs: a migration lands with its regenerated reference.
 - A developer's own database: `bin/205-migrate-db` (creates it and seeds
   tenant 1 the first time, migrations only after that).
 
 ```
-proto-migrate (-config <env file> | -url <url>) status     applied / pending / drifted / orphaned, per version
-proto-migrate ... pending                                  count of pending files, for scripts
-proto-migrate ... verify                                   fail if the database disagrees with the files
-proto-migrate ... up                                       apply every pending file, in order
-proto-migrate ... stamp <version>                          record up to <version> as applied WITHOUT running
-proto-migrate ... schema-reference                         print the schema as CREATE TABLE/INDEX text (doc/003)
-proto-migrate ... -base-url <origin> [-invite-ttl-hours N] invite <userName>
+stillthere-migrate (-config <env file> | -url <url>) status     applied / pending / drifted / orphaned, per version
+stillthere-migrate ... pending                                  count of pending files, for scripts
+stillthere-migrate ... verify                                   fail if the database disagrees with the files
+stillthere-migrate ... up                                       apply every pending file, in order
+stillthere-migrate ... stamp <version>                          record up to <version> as applied WITHOUT running
+stillthere-migrate ... schema-reference                         print the schema as CREATE TABLE/INDEX text (doc/003)
+stillthere-migrate ... -base-url <origin> [-invite-ttl-hours N] invite <userName>
                                                            first sign-in link for an invited login (doc/330 A9)
 ```
 

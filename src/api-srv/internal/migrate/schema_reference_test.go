@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	sqlfiles "github.com/wbmartin/starter-api/sql"
+	sqlfiles "stillthere-api/sql"
 )
 
 // The reference is what bin/510 writes to doc/003 from an empty database

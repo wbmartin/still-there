@@ -26,13 +26,13 @@ none of them.
 | Thing | Set up in | After the reset |
 |---|---|---|
 | UAT build checkout's read-only deploy key | `doc/330` A3 | add the same public key to the new repository |
-| UAT build webhook (push → `uat-proto-build`) | `doc/330` B1 | re-create: same payload URL, same `HOOK_SECRET` |
+| UAT build webhook (push → `uat-stillthere-build`) | `doc/330` B1 | re-create: same payload URL, same `HOOK_SECRET` |
 | Prod promote webhook, if there is one | `doc/331` B6 | re-create the same way |
 | Collaborators, team access, branch protection, Actions secrets | GitHub settings | re-create by hand from the record in 0 |
 | Every clone: UAT's `BUILD_STG`, each laptop | — | cloned again; an old clone holds the old objects |
 
 Unchanged when the new repository keeps the old owner and name:
-`REPO_URL` in `etc/uat-proto-deploy.env`, the `github-proto` ssh alias,
+`REPO_URL` in `etc/uat-stillthere-deploy.env`, the `github-stillthere` ssh alias,
 the hook files under `/srv/shrmpl/etc/hooks/` and every doc path. Prod has
 no checkout (`doc/331`), so nothing on prod is cloned. Commit shas quoted
 in docs resolve only in the old repository; leave them, they are history.
@@ -55,14 +55,14 @@ hold it too and are removed on the registry's side.
   fingerprint on UAT, to compare:
 
 ```bash
-ssh-keygen -lf ~shrmpl-hook/.ssh/proto-deploy.pub
+ssh-keygen -lf ~shrmpl-hook/.ssh/stillthere-deploy.pub
 ```
 
 - **What each host runs now**, the rollback reference. On UAT and on
   prod:
 
 ```bash
-cat /srv/*-proto/libexec/proto-api.revision
+cat /srv/*-stillthere/libexec/stillthere-api.revision
 ```
 
 ## 1. The root commit (local)
@@ -91,18 +91,18 @@ Expect `same tree` and `1`.
    empty (no README, licence or `.gitignore`).
 3. Before the first push, re-create on it:
    - **Deploy key**, read-only: the public key from UAT
-     (`cat ~shrmpl-hook/.ssh/proto-deploy.pub`); its fingerprint matches
+     (`cat ~shrmpl-hook/.ssh/stillthere-deploy.pub`); its fingerprint matches
      0.
    - **UAT webhook**: payload URL as recorded in 0, content type
      `application/json`, *just the push event*, and the secret from the
      host file. On UAT:
 
 ```bash
-sed -n 's/^HOOK_SECRET=//p' /srv/shrmpl/etc/hooks/build-proto_*.env
+sed -n 's/^HOOK_SECRET=//p' /srv/shrmpl/etc/hooks/build-stillthere_*.env
 ```
 
    - **Prod webhook**, if prod had one: the same, with
-     `/srv/shrmpl/etc/hooks/prd-promote-proto_*.env` on prod.
+     `/srv/shrmpl/etc/hooks/prd-promote-stillthere_*.env` on prod.
    - Collaborators, team access, branch protection and Actions secrets
      from the record in 0.
 4. The deploy key reaches the new repository. On UAT (an empty
@@ -110,7 +110,7 @@ sed -n 's/^HOOK_SECRET=//p' /srv/shrmpl/etc/hooks/build-proto_*.env
    `Permission denied (publickey)`):
 
 ```bash
-REPO_URL=$(sed -n 's/^REPO_URL=//p' /srv/uat-proto/etc/uat-proto-deploy.env)
+REPO_URL=$(sed -n 's/^REPO_URL=//p' /srv/uat-stillthere/etc/uat-stillthere-deploy.env)
 : "${REPO_URL:?}"
 sudo -u shrmpl-hook -H git ls-remote "${REPO_URL:?}"; echo "exit $?"
 ```
@@ -139,7 +139,7 @@ sha `git rev-parse fresh` printed:
 
 ```bash
 : "${ROOT_SHA:?}"
-sudo -u shrmpl-hook -H /srv/prd-proto/bin/prd-proto-promote-uat-and-deploy "${ROOT_SHA:?}"
+sudo -u shrmpl-hook -H /srv/prd-stillthere/bin/prd-stillthere-promote-uat-and-deploy "${ROOT_SHA:?}"
 ```
 
 If the prod webhook is on `main` too, the push above fired it while UAT
@@ -154,7 +154,7 @@ build lock). The old checkout is deleted only after the new one checks
 out, because until then it is the only copy on the host:
 
 ```bash
-E=/srv/uat-proto/etc/uat-proto-deploy.env
+E=/srv/uat-stillthere/etc/uat-stillthere-deploy.env
 BUILD_STG=$(sed -n 's/^BUILD_STG=//p' "${E:?}"); REPO_URL=$(sed -n 's/^REPO_URL=//p' "${E:?}")
 : "${BUILD_STG:?}" "${REPO_URL:?}"
 mv "${BUILD_STG:?}" "${BUILD_STG:?}.old"
@@ -176,7 +176,7 @@ through git.
 
 - GitHub's delivery log shows each webhook answering 3's pushes; Slack
   shows UAT *tests passed* and prod deployed for the root commit.
-- `cat /srv/*-proto/libexec/proto-api.revision` on each host names the
+- `cat /srv/*-stillthere/libexec/stillthere-api.revision` on each host names the
   root commit.
 - In a fresh clone, `git rev-list --all --count` is `1` plus any commits
   since, and `git log --all --oneline -- <the leaked path>` prints

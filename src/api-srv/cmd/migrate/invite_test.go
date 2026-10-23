@@ -18,14 +18,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/wbmartin/starter-api/internal/app"
-	"github.com/wbmartin/starter-api/internal/auth"
-	"github.com/wbmartin/starter-api/internal/cache"
-	"github.com/wbmartin/starter-api/internal/config"
-	"github.com/wbmartin/starter-api/internal/handler"
-	"github.com/wbmartin/starter-api/internal/logging"
-	"github.com/wbmartin/starter-api/internal/model"
-	"github.com/wbmartin/starter-api/internal/repository"
+	"stillthere-api/internal/app"
+	"stillthere-api/internal/auth"
+	"stillthere-api/internal/cache"
+	"stillthere-api/internal/config"
+	"stillthere-api/internal/handler"
+	"stillthere-api/internal/logging"
+	"stillthere-api/internal/model"
+	"stillthere-api/internal/repository"
 )
 
 // B099: `invite` against the scratch database bin/300-run-tests names in

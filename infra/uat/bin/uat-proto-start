@@ -1,3 +1,0 @@
-#!/bin/sh
-systemctl start uat-proto-api
-systemctl status uat-proto-api --no-pager
