@@ -113,6 +113,13 @@ Commits on `feature/server-checkin`, each passing `bin/300-run-tests all`:
 - [ ] Admin config change reaches the Pi within one check-in.
 - [ ] Security doc written before `dev` -> `main`.
 
+## Known issues
+
+- [ ] e2e flake (2026-10-24): twice in five runs the e2e API on :8082
+      stopped answering about a minute in (ECONNREFUSED from Vite's
+      proxy, no panic in the Playwright log), failing most of the suite;
+      a rerun passed all 111. Cause not found yet.
+
 ## Host work
 
 The one list of hand steps on a host.
