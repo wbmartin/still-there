@@ -39,3 +39,6 @@ logs/
 **/playwright-report/
 **/test-results/
 **/tests/e2e/.auth/
+
+# Agent worktrees (Claude Code)
+/.claude/worktrees/
