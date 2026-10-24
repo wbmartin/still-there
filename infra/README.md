@@ -19,14 +19,15 @@ app's root `/srv/prd-stillthere`, user `svc-stillthere`, group
 | Repo dir | Host path | What |
 |---|---|---|
 | `infra/prd-wbm/bin/`, `etc/` | `/srv/prd-stillthere/bin/`, `/srv/prd-stillthere/etc/` | install and rollback scripts; env files, unit, the two nginx sites, the ACME bootstrap site, the fail2ban jail and filter |
-| `infra/sql/` | — | `stillthere-host-db.sql`: the Postgres roles and the database (`doc/340-db-host-setup.md`) |
+| `infra/prd-wbm/etc/prd-smsrelay*` | `/srv/prd-smsrelay/etc/` | the SMS relay's unit and two env files (`src/sms-relay`; doc/320, SMS relay) |
+| `infra/sql/` | — | `stillthere-host-db.sql`: the Postgres roles and the database (`doc/340-db-host-setup.md`); `smsrelay-host-db.sql`: the relay's |
 
 The two sites, so they can be separated later:
 
 | Site file | Name | Serves |
 |---|---|---|
 | `nginx_stillthere.teamtaggle.com` | `stillthere.teamtaggle.com` | the web app, and `/api/` proxied to `127.0.0.1:8090` |
-| `nginx_webhook.teamtaggle.com` | `webhook.teamtaggle.com` | only `POST /telnyx-inbound`, proxied to the API's `/smsInbound` (64k body cap); everything else 404 |
+| `nginx_webhook.teamtaggle.com` | `webhook.teamtaggle.com` | only `POST /telnyx-inbound` and `/telnyx-inbound/<queue>`, proxied to the SMS relay on `127.0.0.1:8095` (64k body cap); everything else 404 |
 
 `acme_stillthere-bootstrap.conf` is a port-80-only site enabled once, for
 the first certificates, and removed (doc/320, step 12).
