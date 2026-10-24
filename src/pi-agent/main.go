@@ -56,7 +56,7 @@ func main() {
 			BeaconList:    stateList,
 		}
 		for _, b := range stateList {
-			log.Info("beacon", "address", b.Address, "label", b.Label, "present", b.Present, "rssi", derefInt(b.RSSI))
+			log.Info("beacon", "reason", reason, "address", b.Address, "label", b.Label, "present", b.Present, "rssi", derefInt(b.RSSI))
 		}
 		if cfg.ServerURL == "" {
 			return
