@@ -46,13 +46,19 @@ import AppUserGroupEditPage from './pages/app-user-group-edit-page'
 import UserPreferencesPage from './pages/user-preferences-page'
 import MFAOnboardingPage from './pages/mfa-onboarding-page'
 import InvitePage from './pages/invite-page'
+import DeviceListPage from './pages/device-list-page'
+import DeviceEditPage from './pages/device-edit-page'
+import BeaconEditPage from './pages/beacon-edit-page'
+import ContactEditPage from './pages/contact-edit-page'
+import AlertListPage from './pages/alert-list-page'
+import TenantSettingPage from './pages/tenant-setting-page'
 import { useIssueReportStore } from './stores/issue-report-store'
 import HelpButton from './help/help-button'
 import { useHelpEnabled } from './help/help-preference'
 
 import { useAuthStore, setRouteNavigator } from './stores/auth-store'
 import { ROUTES } from './constants/routes'
-import { navItemListFor } from './constants/nav'
+import { navItemListFor, type NavItem } from './constants/nav'
 import { APP_NAME } from './constants/app'
 
 // The issue-report module (doc/150-issue-report-module.md) loads on first
@@ -206,6 +212,36 @@ const router = createBrowserRouter([
              errorElement: <ErrorPage />,
            },
            {
+             path: ROUTES.DEVICE_LIST,
+             element: <DeviceListPage />,
+             errorElement: <ErrorPage />,
+           },
+           {
+             path: ROUTES.DEVICE_EDIT,
+             element: <DeviceEditPage />,
+             errorElement: <ErrorPage />,
+           },
+           {
+             path: ROUTES.BEACON_EDIT,
+             element: <BeaconEditPage />,
+             errorElement: <ErrorPage />,
+           },
+           {
+             path: ROUTES.CONTACT_EDIT,
+             element: <ContactEditPage />,
+             errorElement: <ErrorPage />,
+           },
+           {
+             path: ROUTES.ALERT_LIST,
+             element: <AlertListPage />,
+             errorElement: <ErrorPage />,
+           },
+           {
+             path: ROUTES.TENANT_SETTING,
+             element: <TenantSettingPage />,
+             errorElement: <ErrorPage />,
+           },
+           {
              path: ROUTES.USER_PREFERENCES,
              element: <UserPreferencesPage />,
              errorElement: <ErrorPage />,
@@ -235,6 +271,11 @@ const router = createBrowserRouter([
 setRouteNavigator((path) => void router.navigate(path))
 
 const HEADER_HEIGHT = 56;
+
+// One navbar row: a page, or a group heading over its pages.
+type NavEntry =
+  | { group?: undefined; item: NavItem }
+  | { group: string; itemList: NavItem[] }
 
 // Fixed header, a navbar whose link list scrolls on its own (a long list or
 // a short window never pushes it off screen), and the routed page in main,
@@ -320,6 +361,21 @@ function AppLayout() {
     />
   );
 
+  // A grouped item is drawn under its group's heading, which takes the
+  // place of the group's first item.
+  const navEntryList: NavEntry[] = []
+  for (const item of navItemListFor(grantList, {
+    issueReportsEnabled: issueReportsOn,
+  })) {
+    const groupEntry = navEntryList.find(
+      (entry) => entry.group !== undefined && entry.group === item.group,
+    )
+    if (groupEntry?.group !== undefined) groupEntry.itemList.push(item)
+    else if (item.group !== undefined)
+      navEntryList.push({ group: item.group, itemList: [item] })
+    else navEntryList.push({ item })
+  }
+
   return (
     <AppShell
       header={{ height: HEADER_HEIGHT }}
@@ -401,8 +457,22 @@ function AppLayout() {
       <AppShell.Navbar p="xs">
         <AppShell.Section grow component={ScrollArea} type="auto">
           <Stack gap={2}>
-            {navItemListFor(grantList, { issueReportsEnabled: issueReportsOn })
-              .map((item) => navLink(item.route, item.label))}
+            {navEntryList.map((entry) =>
+              entry.group === undefined ? (
+                navLink(entry.item.route, entry.item.label)
+              ) : (
+                <NavLink
+                  key={entry.group}
+                  label={entry.group}
+                  defaultOpened
+                  childrenOffset={16}
+                >
+                  {entry.itemList.map((item) =>
+                    navLink(item.route, item.label),
+                  )}
+                </NavLink>
+              ),
+            )}
           </Stack>
         </AppShell.Section>
       </AppShell.Navbar>
