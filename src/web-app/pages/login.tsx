@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { APP_NAME } from "../constants/app";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "@mantine/form";
-import { zodResolver } from "mantine-form-zod-resolver";
+import { zod4Resolver } from "mantine-form-zod-resolver";
 import { loginSchema } from "../schemas/form-schemas";
 import {
   TextInput,
@@ -28,7 +28,7 @@ function Login() {
       username: '',
       password: '',
     },
-    validate: zodResolver(loginSchema),
+    validate: zod4Resolver(loginSchema),
   });
    const {
      authenticateWithUsernamePassword,
