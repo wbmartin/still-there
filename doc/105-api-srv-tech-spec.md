@@ -6,7 +6,7 @@ This document specifies the ProtoStack-ReactGo API server, a production-ready Go
 
 ### Architecture
 
-- **Language**: Go 1.25.4 minimum (`go` line); built with go1.26.9
+- **Language**: Go 1.25.4 minimum (`go` line); built with go1.26.10
   (`toolchain` line, fetched by `GOTOOLCHAIN=auto`)
 - **Framework**: Standard library with pgx for PostgreSQL
 - **Architecture**: n-tier
@@ -43,6 +43,9 @@ src/api-srv/
 │   │   ├── example_handler.go      # /example, /exampleList (the copy-me entity)
 │   │   ├── error_report_handler.go # /error-report
 │   │   ├── help_handler.go         # /helpEvent, /helpInsights (doc/151)
+│   │   ├── device_handler.go       # /device*, /deviceToken, /deviceCheckin (the Pi)
+│   │   ├── beacon_handler.go, contact_handler.go, alert_handler.go,
+│   │   │   tenant_setting_handler.go # a device's bands, contacts, alarms; reminder settings
 │   │   ├── health_handler.go       # /health
 │   │   ├── common.go               # Body caps, cookie writer, mapRepoError, query helpers
 │   │   └── route_check_contract_test.go # Every route's checks (see Security Checks)
@@ -144,6 +147,27 @@ is the login lockout instead. **CSRF** `CheckCSRF` (never on GET).
 | GET | /issueReportAttachment | Yes | user+block | (GET) | LOGON (1) | One file's bytes, by Serving user files below |
 | POST | /helpEvent | Yes | user+block | Yes | LOGON (1) | Record a help usage event; 404 while the help module is off (doc/151) |
 | GET | /helpInsights | Yes | user+block | (GET) | READ_USER (9002) | The tenant's help usage counts over `days`; 404 while off |
+| GET | /deviceList | Yes | user+block | (GET) | READ_DEVICE (1010) | The tenant's Pi base stations: all, by `deviceIdList`, or changed since a time |
+| POST | /device | Yes | user+block | Yes | CREATE_DEVICE (1011) | Create; config version 1, no token |
+| PUT | /device | Yes | user+block | Yes | UPDATE_DEVICE (1012) | Name and alarm settings, optimistic lock; a settings change bumps `configVersion` |
+| DELETE | /device | Yes | user+block | Yes | DELETE_DEVICE (1013) | Soft delete; its token stops working, its bands and contacts are hidden |
+| POST | /deviceToken | Yes | user+block | Yes | ISSUE_DEVICE_TOKEN (1014) | New device token, answered once; the previous one stops working |
+| POST | /deviceCheckin | Bearer device token | address | - | - | The Pi's check-in (see Exceptions); answers `{"data":{"configVersion":N}}` |
+| POST | /smsInbound | Telnyx Ed25519 signature | address | - | - | Telnyx webhook, `SMS_PROVIDER=telnyx` only (404 otherwise); a `message.received` text is handled as a reply (Y, OK, STOP, START, HELP), other events dropped (see Exceptions) |
+| POST | /smsSimulateInbound | Yes | user+block | Yes | UPDATE_ALERT (1042) | `{fromPhone, body}` as if that number texted us, `SMS_PROVIDER=log` only (404 otherwise); acts on the caller's tenant's contacts only; answers `{"data":{"reply":"..."}}` |
+| GET | /beaconList | Yes | user+block | (GET) | READ_BEACON (1020) | Bands, by `deviceId`, `beaconIdList` or since a time |
+| POST | /beacon | Yes | user+block | Yes | CREATE_BEACON (1021) | Add a band to a device; bumps the device's `configVersion` |
+| PUT | /beacon | Yes | user+block | Yes | UPDATE_BEACON (1022) | Address and label, optimistic lock; bumps `configVersion` |
+| DELETE | /beacon | Yes | user+block | Yes | DELETE_BEACON (1023) | Soft delete; bumps `configVersion` |
+| GET | /contactList | Yes | user+block | (GET) | READ_CONTACT (1030) | People texted about a device, by `deviceId`, `contactIdList` or since a time |
+| POST | /contact | Yes | user+block | Yes | CREATE_CONTACT (1031) | Add an invited contact (the watchdog texts the invite) |
+| PUT | /contact | Yes | user+block | Yes | UPDATE_CONTACT (1032) | Name, number, events; a contact who replied keeps their number (409) |
+| DELETE | /contact | Yes | user+block | Yes | DELETE_CONTACT (1033) | Soft delete |
+| GET | /alertList | Yes | user+block | (GET) | READ_ALERT (1040) | Open alarms, then those resolved in the last week; optional `deviceId` |
+| POST | /alertAcknowledge | Yes | user+block | Yes | UPDATE_ALERT (1042) | Raised → acknowledged, queues the "acknowledged" text; 409 from any other state |
+| POST | /alertTurnOff | Yes | user+block | Yes | UPDATE_ALERT (1042) | Raised or acknowledged → turned off, queues the "turned off" text; 409 otherwise |
+| GET | /tenantSetting | Yes | user+block | (GET) | READ_TENANT_SETTING (1050) | The tenant's reminder settings; 404 before the first save |
+| PUT | /tenantSetting | Yes | user+block | Yes | UPDATE_TENANT_SETTING (1052) | Save them (the first save creates the row), optimistic lock |
 
 `ADD_USER_TO_GROUP` (9014) and `REMOVE_USER_FROM_GROUP` (9015) are defined
 in `grants.go` but no route checks them: group membership is checked with
@@ -194,6 +218,13 @@ refused 400 by the field's own validation, not by the decoder:
 | `POST`/`PUT /appUserGroup` | the group row (`groupName`, `userGrantList`; `appUserGroupId` and `updateTs` on PUT) |
 | `/error-report` | any text; the first 2000 characters are logged |
 | `/helpEvent` | `{event, entryId, route, query}` (doc/151) |
+| `POST`/`PUT /device` | `{deviceName, checkinIntervalSec (>= 10), missedCheckinBeforeAlarm (>= 1), absentAfterSec (>= 10)}`; `deviceId` and `updateTs` on PUT. Runtime fields (`lastCheckin*`, `tokenIssuedTs`, `configVersion`) are ignored |
+| `/deviceToken` | `{deviceId, updateTs}` |
+| `/deviceCheckin` | what `src/pi-agent/checkin.go` sends: `{agentVersion, sentAt (RFC 3339), uptimeSec, configVersion, reason, beaconList: [{address, label, present, lastSeen, rssi}]}`; `reason` is required |
+| `POST`/`PUT /beacon` | `{deviceId, address (MAC, stored upper case), label}`; `beaconId` and `updateTs` on PUT (the device is fixed at create) |
+| `POST`/`PUT /contact` | `{deviceId, contactName, phoneE164 (^\+[1-9][0-9]{7,14}$), notifyEventList}`: events from raised, reminder, acknowledged, turned_off, reactivated, daily_reminder; absent means all six on POST and unchanged on PUT; `contactId` and `updateTs` on PUT. `contactStatus` and the invite / opt timestamps are never taken |
+| `/alertAcknowledge`, `/alertTurnOff` | `{alertId, updateTs}` |
+| `PUT /tenantSetting` | `{timeZone (IANA), remindIntervalMin (1-1440), dailyReminderTime (HH:MM), updateTs}` |
 
 The password key is `password` everywhere a password is set
 (`pwHash` is gone, B038); list keys are `fooList`, never plural.
@@ -408,6 +439,9 @@ own text goes to the log only.
 | 64 KiB (`maxLoginLayerBodyBytes`) | `POST`/`PUT /user`, `POST`/`PUT /appUserGroup`, `/addUserListToGroup`, `/removeUserListFromGroup`, `/changeOwnPassword`, `/changeOtherUserPassword`, `/admin/resetUserMFA`, `/admin/blockUser`, `/admin/unblockUser`, `/userInvite`, `/userInviteReissue`, `/userInviteRevoke` |
 | 1 MiB (`maxEntityBodyBytes`) | `example_handler.go` writes, bulk lists included |
 | 16 KiB (`model.IssueMaxActionBodyBytes`) | `/issueReportAction` |
+| 16 KiB (`maxDeviceBodyBytes`) | `POST`/`PUT /device`, `/deviceToken`, `POST`/`PUT /beacon`, `POST`/`PUT /contact`, `/alertAcknowledge`, `/alertTurnOff`, `PUT /tenantSetting` |
+| 16 KiB (`model.DeviceCheckinMaxBodyBytes`) | `/deviceCheckin` (read after the token check; a Pi's report is well under 1 KiB) |
+| 64 KiB (`smsWebhookMaxBodyBytes`) | `/smsInbound`, `/smsSimulateInbound` |
 | 18 MiB (`model.IssueMaxRequestBytes`) | `POST /issueReport`, `/issueReportMessage` (multipart: 5 files of 10 MB at most each, the whole under nginx's 20M); a declared length over it is 413 before reading |
 
 Deletes take their ids in the query string and read no body. The entity cap
@@ -540,6 +574,8 @@ anything not here runs all five.
 | `UserSelfCreateHandler` (`/userSelfCreate`) | JWT, block, CSRF, grant | Public self-registration, per-address rate limit only. It creates a tenant-1 login in group 3 and answers 409 "Username already taken" for a name in use (a name probe). Kept beside invite links (GRC backport B002 skipped; invites are B035); a derived app keeps or removes it |
 | `MFASetupHandler`, `MFAVerifyHandler` (`/mfaSetup`, `/mfaVerify`) | JWT, block, CSRF, grant | The temp token from the password step is the only credential: it stands in for the session, so there is no JWT to check and no session id to derive a CSRF token from, and holding it is the grant. `CheckRateLimit` (per address) runs; `SkipUserBlock`, since the token comes from `/auth`, which refuses a blocked login. The 4 KiB body is read after the gate; no temp token is 401 `tempToken is required`, a session cookie or not. The session path both handlers had (`CheckJWT` + `CheckRateLimitAndUserBlock`, GRC backport B094) was used by nothing and skipped CSRF on a signed-in write, so it was removed (GRC backport C004) |
 | `UserInviteHandler.CheckInvite`, `.RedeemInvite` (`/inviteCheck`, `/inviteRedeem`) | JWT, block, CSRF, grant | Public; the token is the credential. Per-address rate limit, then the `/auth` lockout per address plus per token (see Invite Links) |
+| `DeviceHandler.DeviceCheckin` (`/deviceCheckin`) | JWT, block, CSRF, grant | A Pi has no login: `Authorization: Bearer <64 hex>` is the credential. Per-address rate limit; then the token's shape, its SHA-256 looked up across tenants (`RetrieveDeviceByTokenHash`, the third unscoped lookup, like `RetrieveLiveInvite`), and every failure (no header, other scheme, malformed, unknown, reissued, device deleted) is one 401 "Invalid device token". The device row's tenant scopes the write; audit user 0. No cookie authorizes it, so there is no forgery for CSRF to stop. No lockout: the token is 256 random bits |
+| `SMSHandler.SMSInbound` (`/smsInbound`) | JWT, block, CSRF, grant | Telnyx has no login: the `telnyx-signature-ed25519` header, an Ed25519 signature over `<telnyx-timestamp>\|<body>` by `TELNYX_PUBLIC_KEY`, within 5 minutes, is the credential (`sms.VerifyTelnyxWebhook`); a bad one is 401. Per-address rate limit. The sender's number finds its contacts across tenants (`ContactListByPhone`), since a text names no tenant |
 
 #### What proves it
 
@@ -766,10 +802,12 @@ self-signup name check) use `errors.Is`, never the error's text.
   clause, and so does the check that explains a zero-row write. An id that
   lives in another tenant therefore answers 404, never 409: a 409 would
   tell the caller the row exists. For the login-layer tables this is
-  `zeroRowOutcome` (`internal/repository/scope.go`). Two lookups are
-  unscoped by design: `RetrieveUserByUserName` (login has no tenant yet)
-  and `GetGrantsForGroups` (a login may hold another tenant's group; that
-  is how it gets a second security context).
+  `zeroRowOutcome` (`internal/repository/scope.go`). Lookups unscoped by
+  design: `RetrieveUserByUserName` (login has no tenant yet),
+  `GetGrantsForGroups` (a login may hold another tenant's group; that is
+  how it gets a second security context), and the two a token is the only
+  key to, `RetrieveLiveInvite` and `RetrieveDeviceByTokenHash` (the Pi's
+  check-in; the device row's tenant scopes everything after it).
 
 ### Database Resilience
 - **No application retry**: a repository calls pgx once and returns its

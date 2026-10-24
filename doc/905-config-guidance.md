@@ -26,7 +26,9 @@
   exactly `true` or `false` (`true` only in the test harness file),
   `JWT_SECRET` is at least 32 characters, and `TOTP_ENCRYPTION_KEY` is
   exactly 64 hex characters (32 bytes, the AES-256 key the MFA seeds are
-  encrypted under; `openssl rand -hex 32` makes either). The optional keys
+  encrypted under; `openssl rand -hex 32` makes either), `SMS_PROVIDER` is
+  `log` or `telnyx` (with its four `TELNYX_*` keys) and
+  `WATCHDOG_TICK_SECONDS` is at least 5. The optional keys
   (`TRUSTED_PROXY_COUNT`, `CORS_ALLOWED_ORIGINS`, the issue-report
   module's `ISSUE_REPORTS_ENABLED` and `ISSUE_RELAY_*`,
   `doc/150-issue-report-module.md`, and the help module's `HELP_ENABLED`,

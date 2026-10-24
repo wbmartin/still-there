@@ -77,6 +77,8 @@ FAILED_LOGIN_LOCKOUT_DURATION=5min
 LOG_LEVEL=info
 INVITE_TTL_HOURS=72
 ALLOW_MFA_EXEMPT_VIA_API=false
+SMS_PROVIDER=log
+WATCHDOG_TICK_SECONDS=30
 `
 
 // withoutKey returns validBase minus the line that sets key.
@@ -664,6 +666,41 @@ func TestLoadConfig_HelpEnabled(t *testing.T) {
 			if config.HelpEnabled != testCase.want {
 				t.Errorf("HelpEnabled = %v, want %v",
 					config.HelpEnabled, testCase.want)
+			}
+		})
+	}
+}
+
+// The monitoring keys are required; telnyx needs its four keys together.
+func TestLoadConfig_MonitoringKeys(t *testing.T) {
+	telnyx := withoutKey("SMS_PROVIDER") + "SMS_PROVIDER=telnyx\n"
+	full := telnyx + "TELNYX_API_KEY=k\nTELNYX_FROM_NUMBER=+18005550100\n" +
+		"TELNYX_MESSAGING_PROFILE_ID=p\nTELNYX_PUBLIC_KEY=pk\n"
+	testCaseList := []struct {
+		name    string
+		content string
+		wantErr string
+	}{
+		{"log", validBase, ""},
+		{"provider absent", withoutKey("SMS_PROVIDER"), "SMS_PROVIDER must be log or telnyx"},
+		{"provider typo", withoutKey("SMS_PROVIDER") + "SMS_PROVIDER=twilio\n", "SMS_PROVIDER must be log or telnyx"},
+		{"telnyx without keys", telnyx, "needs TELNYX_API_KEY, TELNYX_FROM_NUMBER, TELNYX_MESSAGING_PROFILE_ID, TELNYX_PUBLIC_KEY"},
+		{"telnyx complete", full, ""},
+		{"telnyx bad from", strings.Replace(full, "+18005550100", "8005550100", 1), "TELNYX_FROM_NUMBER must be E.164"},
+		{"tick absent", withoutKey("WATCHDOG_TICK_SECONDS"), "WATCHDOG_TICK_SECONDS is required"},
+		{"tick too fast", withoutKey("WATCHDOG_TICK_SECONDS") + "WATCHDOG_TICK_SECONDS=1\n", "at least 5"},
+	}
+	for _, tc := range testCaseList {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadConfig(writeEnv(t, tc.content))
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("err = %v, want %q", err, tc.wantErr)
 			}
 		})
 	}

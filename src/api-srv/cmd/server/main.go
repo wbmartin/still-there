@@ -20,6 +20,8 @@ import (
 	"stillthere-api/internal/logging"
 	"stillthere-api/internal/repository"
 	"stillthere-api/internal/security"
+	"stillthere-api/internal/sms"
+	"stillthere-api/internal/watchdog"
 )
 
 func main() {
@@ -80,6 +82,11 @@ func main() {
 	helpEventRepository := repository.NewHelpEventRepository(dbPool)
 	userInviteRepository := repository.NewUserInviteRepository(dbPool)
 	issueReportRepository := repository.NewIssueReportRepository(dbPool)
+	deviceRepository := repository.NewDeviceRepository(dbPool)
+	beaconRepository := repository.NewBeaconRepository(dbPool)
+	contactRepository := repository.NewContactRepository(dbPool)
+	alertRepository := repository.NewAlertRepository(dbPool)
+	tenantSettingRepository := repository.NewTenantSettingRepository(dbPool)
 
 	// Initialize app dependencies
 	appServices := &app.Services{
@@ -159,6 +166,29 @@ func main() {
 		userRepo,
 		issueRelayDownloader,
 	)
+	// Device monitoring (tasks/todo.md, Server)
+	deviceHandler := handler.NewDeviceHandler(appServices, deviceRepository)
+	beaconHandler := handler.NewBeaconHandler(appServices, beaconRepository)
+	contactHandler := handler.NewContactHandler(
+		appServices, contactRepository)
+	alertHandler := handler.NewAlertHandler(
+		appServices, alertRepository, userRepo)
+	tenantSettingHandler := handler.NewTenantSettingHandler(
+		appServices, tenantSettingRepository)
+	// Texts: SMS_PROVIDER picks the sender; the watchdog (started below)
+	// and inbound replies share it.
+	var smsSender sms.Sender = sms.LogSender{Log: logger}
+	if config.SMSProvider == "telnyx" {
+		smsSender = sms.TelnyxSender{
+			APIKey:             config.TelnyxAPIKey,
+			FromNumber:         config.TelnyxFromNumber,
+			MessagingProfileID: config.TelnyxMessagingProfileID,
+		}
+	}
+	watchdogRepository := repository.NewWatchdogRepository(dbPool)
+	smsHandler := handler.NewSMSHandler(appServices, &watchdog.Inbound{
+		Store: watchdogRepository, Sender: smsSender, Log: logger,
+	})
 	mfaSetupHandler := handler.MFASetupHandler(appServices, userRepo)
 	mfaVerifyHandler := handler.MFAVerifyHandler(appServices, userRepo)
 
@@ -284,6 +314,36 @@ func main() {
 	mux.HandleFunc("POST /helpEvent", helpHandler.CreateHelpEvent)
 	mux.HandleFunc("GET /helpInsights", helpHandler.RetrieveHelpInsights)
 
+	// Device monitoring: the Pi (device), its bands (beacon), the people
+	// texted about it (contact), its alarms and the tenant's reminder
+	// settings (device_handler.go and its neighbours)
+	mux.HandleFunc("GET /deviceList", deviceHandler.RetrieveDeviceList)
+	mux.HandleFunc("POST /device", deviceHandler.CreateDevice)
+	mux.HandleFunc("PUT /device", deviceHandler.UpdateDevice)
+	mux.HandleFunc("DELETE /device", deviceHandler.DeleteDevice)
+	mux.HandleFunc("POST /deviceToken", deviceHandler.IssueDeviceToken)
+	// The Pi's check-in: no session, the device token is the credential
+	mux.HandleFunc("POST /deviceCheckin", deviceHandler.DeviceCheckin)
+	mux.HandleFunc("GET /beaconList", beaconHandler.RetrieveBeaconList)
+	mux.HandleFunc("POST /beacon", beaconHandler.CreateBeacon)
+	mux.HandleFunc("PUT /beacon", beaconHandler.UpdateBeacon)
+	mux.HandleFunc("DELETE /beacon", beaconHandler.DeleteBeacon)
+	mux.HandleFunc("GET /contactList", contactHandler.RetrieveContactList)
+	mux.HandleFunc("POST /contact", contactHandler.CreateContact)
+	mux.HandleFunc("PUT /contact", contactHandler.UpdateContact)
+	mux.HandleFunc("DELETE /contact", contactHandler.DeleteContact)
+	mux.HandleFunc("GET /alertList", alertHandler.RetrieveAlertList)
+	mux.HandleFunc("POST /alertAcknowledge", alertHandler.AcknowledgeAlert)
+	mux.HandleFunc("POST /alertTurnOff", alertHandler.TurnOffAlert)
+	mux.HandleFunc("GET /tenantSetting",
+		tenantSettingHandler.RetrieveTenantSetting)
+	mux.HandleFunc("PUT /tenantSetting",
+		tenantSettingHandler.UpdateTenantSetting)
+	// Texts people send us: the Telnyx webhook (signature is the
+	// credential) and, under SMS_PROVIDER=log, an admin's simulated text
+	mux.HandleFunc("POST /smsInbound", smsHandler.SMSInbound)
+	mux.HandleFunc("POST /smsSimulateInbound", smsHandler.SMSSimulateInbound)
+
 	// Create server. JoinHostPort brackets an IPv6 bind ("[::1]:8080"). The
 	// address is never empty: LoadConfig requires SERVER_BIND_ADDRESS.
 	server := newHTTPServer(
@@ -356,6 +416,19 @@ func main() {
 			"ISSUE_RELAY_TOKEN not set); reports stay in the app",
 			"username", "app-root")
 	}
+	// The watchdog: alarms, reminders, invites and alert texts, until
+	// shutdown. Joined before the pool closes, so a text in flight is
+	// recorded.
+	watchdogContext, watchdogCancel := context.WithCancel(context.Background())
+	defer watchdogCancel()
+	watchdogDone := make(chan struct{})
+	go func() {
+		defer close(watchdogDone)
+		(&watchdog.Watchdog{Store: watchdogRepository, Sender: smsSender, Log: logger}).
+			Run(watchdogContext, time.Duration(config.WatchdogTickSeconds)*time.Second)
+	}()
+	logger.Info("WATCHDOG_MODE", fmt.Sprintf("Watchdog on, every %ds, SMS_PROVIDER=%s",
+		config.WatchdogTickSeconds, config.SMSProvider), "username", "app-root")
 	helpModuleState := "off (HELP_ENABLED is not true)"
 	if config.HelpEnabled {
 		helpModuleState = "on"
@@ -386,6 +459,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	watchdogCancel()
+	<-watchdogDone
 	logger.Info("SERVER_STOP", "Server stopped", "username", "app-root")
 }
 

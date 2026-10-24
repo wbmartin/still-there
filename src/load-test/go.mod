@@ -2,4 +2,4 @@ module load-test
 
 go 1.25.4
 
-toolchain go1.26.9
+toolchain go1.26.10

@@ -86,8 +86,8 @@ func TestCheckScratch(t *testing.T) {
 		"postgres://u:p@127.0.0.1:5432/loc_stillthere_db":                      false,
 		"postgres://u:p@127.0.0.1:5432/uat_stillthere_db?sslmode=disable":      false,
 		"postgres://u:p@127.0.0.1:5432/loc_stillthere_test_db_old":             false,
-		"postgres://u:p@127.0.0.1:5432/":                                  false,
-		"://not a url":                                                    false,
+		"postgres://u:p@127.0.0.1:5432/":                                       false,
+		"://not a url":                                                         false,
 	} {
 		if got := checkScratch(databaseURL) == nil; got != accepted {
 			t.Errorf("checkScratch(%q) accepted=%v, want %v",

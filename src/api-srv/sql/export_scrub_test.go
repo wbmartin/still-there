@@ -194,6 +194,21 @@ func seedHelpEvent(t *testing.T, tx pgx.Tx, tenant int) {
 	}
 }
 
+// seedDevice adds a Pi holding a token, as one set up on the laptop.
+func seedDevice(t *testing.T, tx pgx.Tx, tenant int, tokenHash string) {
+	t.Helper()
+	_, err := tx.Exec(context.Background(), `
+		INSERT INTO device (security_context_id, device_name,
+			checkin_interval_sec, missed_checkin_before_alarm,
+			absent_after_sec, config_version, token_hash, token_issued_ts,
+			create_ts, create_user_id, update_ts, update_user_id)
+		VALUES ($1, 'Kitchen Pi', 60, 3, 600, 1, $2, 1, 1, 1, 1, 1)`,
+		tenant, tokenHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestExportScrub(t *testing.T) {
 	conn := scrubDatabase(t)
 	script := readScrub(t)
@@ -238,6 +253,12 @@ func TestExportScrub(t *testing.T) {
 				}
 				seedHelpEvent(t, tx, 1)
 				seedHelpEvent(t, tx, 3)
+				seedDevice(t, tx, 1, "device-hash-one")
+				seedDevice(t, tx, 3, "device-hash-three")
+				if n := count(t, tx, `SELECT count(*) FROM device
+					WHERE token_hash IS NOT NULL`); n != 2 {
+					t.Fatalf("device tokens seeded: %d, want 2", n)
+				}
 				if n := count(t, tx, `SELECT count(*)
 					FROM help_event`); n != 2 {
 					t.Fatalf("help events seeded: %d, want 2", n)
@@ -294,6 +315,16 @@ func TestExportScrub(t *testing.T) {
 				if n := count(t, tx, `SELECT count(*) FROM example
 					WHERE example_text LIKE 'customer row %'`); n != 2 {
 					t.Errorf("example rows after scrub: %d, want 2", n)
+				}
+				// A device token shown on the laptop does not travel;
+				// the device does.
+				if n := count(t, tx, `SELECT count(*) FROM device
+					WHERE token_hash IS NOT NULL`); n != 0 {
+					t.Errorf("%d device token(s) kept", n)
+				}
+				if n := count(t, tx, `SELECT count(*)
+					FROM device`); n != 2 {
+					t.Errorf("devices after scrub: %d, want 2", n)
 				}
 				// The laptop's issue reports and their tracker ids
 				// do not travel.
