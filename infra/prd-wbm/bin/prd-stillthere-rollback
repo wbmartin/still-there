@@ -1,0 +1,102 @@
+#!/bin/bash
+# Swaps the live release and the .prev one: libexec/api-srv,
+# libexec/stillthere-migrate, web-pub/ and the revision file. Then restarts
+# SERVICE and waits for HEALTH_URL. Staff, with sudo, on the host:
+#
+#   sudo /srv/prd-stillthere/bin/prd-stillthere-rollback
+#
+# prd-stillthere-install runs it when a new release is not healthy. It swaps, so
+# a second run puts the newer release back.
+#
+# Migrations are forward-only: this never touches the schema. The older
+# code runs on the schema the newer release migrated to; the older
+# stillthere-migrate's verify (run below, report only) says whether the two
+# disagree. When the older code cannot run on it, restore the pre-migrate
+# dump in backup/ (doc/320, Rollback).
+set -euo pipefail
+umask 022
+
+SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# The app root is /srv/<env>-<slug>: every env file and script name comes
+# from it.
+APP_ENV="$(basename "$SRV_ROOT")"
+# <env>-<slug>: the binary and revision names carry the slug, as
+# bin/600-deploy-prd names them from etc/app.env.
+APP_SLUG="${APP_ENV#*-}"
+MIGRATE_NAME="$APP_SLUG-migrate"
+DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"
+MIGRATE_ENV="$SRV_ROOT/etc/$APP_ENV-migrate.env"
+
+die() { echo "[ERROR] $*" >&2; exit 1; }
+say() { echo "[INFO] $*"; }
+
+[ "$(id -u)" = 0 ] || die "run as root: sudo $0"
+[ "$#" -eq 0 ] || die "usage: sudo $0   (no arguments)"
+[ -r "$DEPLOY_ENV" ] || die "$DEPLOY_ENV missing or unreadable"
+# shellcheck disable=SC1090
+source "$DEPLOY_ENV"
+for var in SERVICE HEALTH_URL HEALTH_WAIT_SECONDS; do
+    [ -n "${!var:-}" ] || die "$var not set by $DEPLOY_ENV"
+done
+[[ "$HEALTH_WAIT_SECONDS" =~ ^[1-9][0-9]*$ ]] \
+    || die "HEALTH_WAIT_SECONDS=$HEALTH_WAIT_SECONDS is not a whole number"
+
+LIBEXEC="$SRV_ROOT/libexec"
+WEB_PUB="$SRV_ROOT/web-pub"
+STAGE_ROOT="$SRV_ROOT/stage"
+REVISION="$LIBEXEC/${APP_SLUG}-api.revision"
+
+mkdir -p "$STAGE_ROOT"
+chmod 0700 "$STAGE_ROOT"
+exec 9> "$STAGE_ROOT/.lock"
+flock -n 9 || die "another install or rollback holds $STAGE_ROOT/.lock"
+[ ! -e "$LIBEXEC/install.pending" ] \
+    || die "an install of $(cat "$LIBEXEC/install.pending") stopped" \
+        "part-way: finish it ($APP_ENV-install) before rolling back"
+
+for path in "$LIBEXEC/api-srv" "$LIBEXEC/${MIGRATE_NAME}" "$REVISION" \
+        "$WEB_PUB"; do
+    [ -e "$path" ] && [ -e "$path.prev" ] \
+        || die "nothing to roll back to: $path or $path.prev is missing"
+done
+
+value_of() { sed -n "s/^$1=//p" "$2"; }
+say "live: $(value_of bundle "$REVISION")" \
+    "-> rolling back to $(value_of bundle "$REVISION.prev")"
+
+# Three renames per entry; each entry is whole at every moment except
+# web-pub, absent for the instant between two renames.
+swap() {
+    local path="$1"
+    [ -e "$path.prev" ] || return 0
+    mv "$path" "$path.swap"
+    mv "$path.prev" "$path"
+    mv "$path.swap" "$path.prev"
+    say "  ${path#"$SRV_ROOT"/} <-> .prev"
+}
+swap "$LIBEXEC/api-srv"
+swap "$LIBEXEC/${MIGRATE_NAME}"
+swap "$WEB_PUB"
+swap "$LIBEXEC/web-pub.sha256"
+swap "$REVISION"
+
+if ! "$LIBEXEC/${MIGRATE_NAME}" -config "$MIGRATE_ENV" verify; then
+    echo "[WARN] the now-live ${MIGRATE_NAME} does not match the schema: the" \
+        "release rolled away from migrated it forward, and the schema" \
+        "stays. If $SERVICE is unhealthy below, restore the pre-migrate" \
+        "dump in $SRV_ROOT/backup/ (doc/320, Rollback)" >&2
+fi
+
+say "restarting $SERVICE"
+systemctl restart "$SERVICE" || true
+for (( attempt = 1; attempt <= HEALTH_WAIT_SECONDS; attempt++ )); do
+    if curl -fsS --max-time 2 "$HEALTH_URL" 2>/dev/null \
+            | grep -q '"status":"ok"'; then
+        say "$SERVICE healthy at $HEALTH_URL; live:"
+        sed 's/^/        /' "$REVISION"
+        exit 0
+    fi
+    sleep 1
+done
+die "$SERVICE is not healthy at $HEALTH_URL after ${HEALTH_WAIT_SECONDS}s" \
+    "(journalctl -u $SERVICE -n 50 --no-pager)"

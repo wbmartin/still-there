@@ -8,8 +8,9 @@ set -euo pipefail
 #                              #      rebuild both scratch DBs, Go checks
 #                              #      + test, govulncheck, eslint,
 #                              #      vitest, playwright, pytest
-#   bin/300-run-tests infra    # infra/<host>/bin: bash -n, shared copies
-#                              #   byte-identical across hosts
+#   bin/300-run-tests infra    # infra/<host>/bin: bash -n, no defaults,
+#                              #   required keys in the env files; the
+#                              #   install/rollback run on a fake root
 #   bin/300-run-tests docs     # scripts/check-doc-paths.sh: every
 #                              #   backticked repo path in the docs exists
 #   bin/300-run-tests go       # gofmt, go vet, staticcheck, schema
@@ -31,11 +32,10 @@ set -euo pipefail
 # Everything environment-specific comes from ONE sourced file, so "it passed
 # for me" and "it passed on the host" mean the same thing:
 #
-#   TEST_ENV   which file; default etc/loc-test.env (a laptop). A build
-#                    host points it at its own copy with a CI role.
+#   TEST_ENV   which file; default etc/loc-test.env (a laptop).
 #
-# Passing here is what lets a build reach prod (on the UAT host, the
-# sha-<commit>-passed tag prd-stillthere-promote-uat requires), which is why
+# Passing here is what lets a build reach prod (doc/320: run it before
+# bin/600-deploy-prd), which is why
 # no suite may skip: on a laptop the Go integration suites skip when
 # Postgres is down, and a green run with tests missing is worse than a red
 # one. A skipped test fails its step; only a live test (tests/README.md
@@ -80,7 +80,7 @@ for tool in go npm; do
     command -v "$tool" >/dev/null 2>&1 || { echo "[ERROR] $tool not on PATH"; exit 1; }
 done
 
-INFRA_COUNT=0; DOCS_COUNT=0; GO_COUNT=0; UNIT_COUNT=0; E2E_COUNT=0; PY_COUNT=0
+INFRA_COUNT=0; INFRA_KEY_COUNT=0; DOCS_COUNT=0; GO_COUNT=0; UNIT_COUNT=0; E2E_COUNT=0; PY_COUNT=0
 SUMMARY=()
 
 # The run's outcome as one line in LOG_DIR (TEST_LOG_DIR), rewritten on
@@ -164,38 +164,58 @@ install_go_tool() {
 
 # ------------------------------------------------------------------------------
 # infra/<host>/bin/<env>-<slug>-<job> ships verbatim to /srv/<env>-<slug>/bin
-# and takes every per-host name from that app root, so a job run on more
-# than one host is one file copied per host dir. A fix typed into one copy
-# and not the other fails here. Offline, no database.
-INFRA_SHARED_JOB_LIST=(install-api publish-web-client renew-web-certs)
+# and takes every per-host value from that app root's etc/ (infra/README.md).
+# Each script must parse, carry no ${VAR:-default} fallback, and every key
+# it requires (its `for var in ...; do` list) must be set in an env file it
+# sources from its own host dir. Then scripts/check-prd-install.sh runs the
+# install and rollback on a fake app root. Offline, no database.
 if [ "$MODE" = all ] || [ "$MODE" = infra ]; then
     STEP="infra"
-    echo "[INFO] infra scripts: bash -n, shared copies identical"
+    echo "[INFO] infra scripts: bash -n, no defaults, required keys set"
     for script in "$PROJECT_ROOT"/infra/*/bin/*; do
         [ -f "$script" ] || continue
+        script_name="${script#"$PROJECT_ROOT"/}"
         bash -n "$script" \
-            || { echo "[ERROR] bash -n: ${script#"$PROJECT_ROOT"/}"; exit 1; }
-        INFRA_COUNT=$((INFRA_COUNT + 1))
-    done
-    for job in "${INFRA_SHARED_JOB_LIST[@]}"; do
-        copy_list=("$PROJECT_ROOT"/infra/*/bin/*-"$APP_SLUG"-"$job")
-        if [ "${#copy_list[@]}" -lt 2 ] || [ ! -f "${copy_list[0]}" ]; then
-            echo "[ERROR] infra/<host>/bin/<env>-$APP_SLUG-$job: expected" \
-                "a copy on each host, found ${#copy_list[@]}"
+            || { echo "[ERROR] bash -n: $script_name"; exit 1; }
+        if grep -nE '\$\{[A-Za-z0-9_]+:-' "$script"; then
+            echo "[ERROR] $script_name: a \${VAR:-default} fallback (above);" \
+                "a missing value must stop the script, naming the key"
             exit 1
         fi
-        for copy in "${copy_list[@]:1}"; do
-            if ! cmp -s "${copy_list[0]}" "$copy"; then
-                echo "[ERROR] shared infra script differs between hosts" \
-                    "(make the copies identical):"
-                diff -u "${copy_list[0]}" "$copy" | head -40
-                exit 1
-            fi
-        done
+        host_dir="$(dirname "$(dirname "$script")")"
+        env_prefix="$(basename "$script" | sed -E "s/^([a-z]+-$APP_SLUG)-.*/\1/")"
+        env_list=()
+        while IFS= read -r suffix; do
+            env_file="$host_dir/etc/$env_prefix-$suffix"
+            [ -f "$env_file" ] || { echo "[ERROR] $script_name sources" \
+                "etc/\$APP_ENV-$suffix, absent from ${host_dir#"$PROJECT_ROOT"/}/etc"; exit 1; }
+            env_list+=("$env_file")
+        done < <(grep -oE 'etc/\$APP_ENV-[a-z-]+\.env' "$script" \
+            | sed 's#^etc/\$APP_ENV-##' | sort -u)
+        while IFS= read -r key; do
+            [ -n "$key" ] || continue
+            found=""
+            for env_file in ${env_list[@]+"${env_list[@]}"}; do
+                grep -q "^$key=" "$env_file" && found=yes
+            done
+            [ -n "$found" ] || { echo "[ERROR] $script_name requires $key," \
+                "set by none of the env files it sources"; exit 1; }
+            INFRA_KEY_COUNT=$((INFRA_KEY_COUNT + 1))
+        done < <(sed -nE 's/^ *for var in (.*); do$/\1/p' "$script" | tr ' ' '\n')
+        INFRA_COUNT=$((INFRA_COUNT + 1))
     done
-    echo "[INFO] infra: $INFRA_COUNT scripts parse;" \
-        "${#INFRA_SHARED_JOB_LIST[@]} shared jobs identical"
-    SUMMARY+=("infra=$INFRA_COUNT")
+    [ "$INFRA_COUNT" -gt 0 ] || { echo "[ERROR] no infra/<host>/bin scripts found"; exit 1; }
+    INFRA_LOG="$LOG_DIR/check-prd-install.log"
+    STEP_LOG="$INFRA_LOG"
+    if ! "$PROJECT_ROOT/scripts/check-prd-install.sh" > "$INFRA_LOG" 2>&1; then
+        echo "[ERROR] install/rollback checks failed -- $INFRA_LOG:"
+        head -40 "$INFRA_LOG"
+        exit 1
+    fi
+    INSTALL_CHECK_COUNT=$(grep -oE '^checked [0-9]+' "$INFRA_LOG" | grep -oE '[0-9]+')
+    echo "[INFO] infra: $INFRA_COUNT scripts parse, $INFRA_KEY_COUNT" \
+        "required keys set; $INSTALL_CHECK_COUNT install/rollback checks pass"
+    SUMMARY+=("infra=$INFRA_COUNT+$INSTALL_CHECK_COUNT")
 fi
 
 # ------------------------------------------------------------------------------

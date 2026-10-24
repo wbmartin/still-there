@@ -6,8 +6,8 @@ a contact list when a check-in is missed, the band is absent, or the band
 looks taken off. This file is the checklist until the app has a Radley
 House tracker (`etc/.radley-house`, DERIVING.md section 2).
 
-Proof of concept first. Branches: `feature/*` -> `dev` -> `uat`
-(CLAUDE.md, Branches).
+Proof of concept first. Branches: `feature/*` -> `dev` -> `main`, and
+`main` deploys to prd-wbm; no UAT (CLAUDE.md, Branches).
 
 ## Decided
 
@@ -111,21 +111,34 @@ Commits on `feature/server-checkin`, each passing `bin/300-run-tests all`:
 - [ ] Pi unplugged -> text within about 3 min.
 - [ ] Band still -> text after the stillness threshold.
 - [ ] Admin config change reaches the Pi within one check-in.
-- [ ] Security doc written before `dev` -> `uat`.
+- [ ] Security doc written before `dev` -> `main`.
 
 ## Host work
 
 The one list of hand steps on a host.
 
-- [ ] **H1. prd-wbm, API env file: add the monitoring keys** before the
-  first deploy that carries the watchdog (the API refuses to start
-  without them): `SMS_PROVIDER=log` and `WATCHDOG_TICK_SECONDS=30`. For
-  live texts, `SMS_PROVIDER=telnyx` plus `TELNYX_API_KEY`,
-  `TELNYX_FROM_NUMBER`, `TELNYX_MESSAGING_PROFILE_ID`, `TELNYX_PUBLIC_KEY`,
-  and the Telnyx messaging profile's webhook URL set to
-  `https://<prd-wbm domain>/api/smsInbound`. Check: the API log shows
-  `WATCHDOG_MODE ... SMS_PROVIDER=<value>`. Rollback: restore the file
-  and the previous binary.
+- [ ] **H1. prd-wbm, API env file: the monitoring keys.** No separate
+  step any more: `SMS_PROVIDER=log` and `WATCHDOG_TICK_SECONDS=30` ship
+  in `infra/prd-wbm/etc/prd-stillthere-api.env`, installed by
+  `doc/320-prd-wbm-deploy.md` step 8 (H2). Live texts (the four
+  `TELNYX_*` keys, set on the host only, and Telnyx's webhook URL
+  `https://webhook.teamtaggle.com/telnyx-inbound`) are doc/320 step 17,
+  with its check and rollback.
+- [ ] **H2. prd-wbm, first install of still-there** beside gsd-notes:
+  `doc/320-prd-wbm-deploy.md`, First install, steps 1-16 (DNS A records
+  for `stillthere.teamtaggle.com` and `webhook.teamtaggle.com`, user
+  `svc-stillthere`, group `stillthere-deploy`, `/srv/prd-stillthere`,
+  database `prd_stillthere_db`, unit, webroot certificates, the two
+  nginx sites, first release, first admin, smoke checks) and 19. Needs
+  H3 first. Check and rollback: each step's own. Optional after it:
+  step 17 (Telnyx) and step 18 (fail2ban jail, once gsd-notes has
+  installed fail2ban).
+- [ ] **H3. prd-wbm, prerequisite (gsd-notes' host work):** gsd's
+  certificate renews by webroot, with no nginx stop hook under
+  `/etc/letsencrypt/renewal-hooks/pre` or `post` and a `deploy` hook
+  that reloads nginx (gsd-notes doc/320, Certificates). Otherwise this
+  app's webroot renewals fail. Check: doc/320 step 4.
+- Backups: not set up yet (gsd-notes doc/380 is the pattern).
 
 Each entry: host and change, command, check, rollback. Agents add
 entries and never run or tick them; only a staff member's report ticks one.

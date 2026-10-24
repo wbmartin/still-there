@@ -8,7 +8,7 @@
 #     `doc/105` -> doc/105-api-srv-tech-spec.md)
 #   - a package-relative name resolves against a package root (BASE_LIST:
 #     `internal/auth/jwt.go` -> src/api-srv/internal/auth/jwt.go,
-#     `bin/uat-stillthere-build` -> infra/uat/bin/uat-stillthere-build)
+#     `bin/prd-stillthere-install` -> infra/prd-wbm/bin/prd-stillthere-install)
 #   - a bare basename resolves anywhere in the tree (`conftest.py`)
 # Anything else is reported with the file and line that names it.
 #
@@ -23,7 +23,7 @@
 #
 # A document that names a deleted file says so in prose, without
 # backticks: the rule is literally "every backticked repo path exists".
-# A name that is real but not in this tree (a file inside the presales
+# A name that is real but not in this tree (a file inside the deploy
 # bundle, a template's copy target) goes in scripts/doc-paths-allow.txt
 # with the reason.
 #
@@ -41,8 +41,7 @@ for doc in CLAUDE.md DERIVING.md README.md doc/*.md infra/README.md \
     DOC_LIST+=("$doc")
 done
 BASE_LIST=(. src src/api-srv src/api-srv/internal src/api-srv/sql
-    src/web-app tests doc bin infra/uat infra/prd
-    infra/uat/fail2ban infra/prd/fail2ban)
+    src/web-app tests doc bin infra/prd-wbm)
 TOPLEVEL_PATTERN='^(doc|src|bin|tests|etc|infra|scripts|tasks)/'
 # Written at run time and gitignored: present on a machine that has run the
 # gate, absent on a fresh clone, so their absence is not a doc bug.

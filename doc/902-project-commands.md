@@ -21,10 +21,7 @@ database, `6xx` deploy. Details follow in the sections below.
 | `bin/400-make-local-dev-certs [host]` | Self-signed cert in `etc/crt/` for testing `ENABLE_TLS=true` |
 | `bin/510-reset-test-db [dbname]` | DROP + rebuild a scratch `_test_db` / `_e2e_db` |
 | `bin/515-reseed-db [dbname]` | TRUNCATE + re-seed a scratch database |
-| `bin/600-bundle-uat` | Presales: build, dump, bundle, scp to UAT, delete the local bundle |
-| `bin/605-survey-host <ssh-host>` | Read-only post-sales host survey |
-| `bin/610-deploy-uat` | Presales: shipped in the bundle, run on the UAT host with sudo |
-| `bin/620-export-tenant-data <out-dir>` | Scrubbed dump of the local database for a host |
+| `bin/600-deploy-prd [--no-upload \| --check]` | Build a release, scp it to `prd-wbm`, print the staff's one sudo command; `--check` reads what is live |
 | `bin/630-deploy-pi-agent <ssh-target> [agent.json]` | Build and install the Pi agent as a systemd service |
 
 ## Setup and Build
@@ -107,10 +104,10 @@ To build and package the web app for deployment:
 
 ## Testing Commands
 
-The one command, on a laptop or a build host:
+The one command, on a laptop:
 ```
 ./bin/300-run-tests            # all: infra + docs + go + govulncheck + unit + e2e + py (load is not part of all)
-./bin/300-run-tests infra      # infra/<host>/bin: bash -n, shared copies identical across hosts
+./bin/300-run-tests infra      # infra/<host>/bin: bash -n, no defaults, required keys set; install/rollback on a fake root
 ./bin/300-run-tests docs       # scripts/check-doc-paths.sh: backticked repo paths in docs exist
 ./bin/300-run-tests go         # gofmt, go vet, staticcheck, doc/003 current, go test (run before every commit)
 ./bin/300-run-tests unit       # eslint, vitest (src/web-app)
@@ -126,7 +123,7 @@ The one command, on a laptop or a build host:
   `CLAUDE.md`, `DERIVING.md`, the READMEs and `doc/*.md`, keeps the
   ones that look like repo paths, and resolves each by prefix
   (`bin/215`), against a package root (`internal/...`,
-  `bin/uat-stillthere-build` under `infra/uat/`) or by basename.
+  `bin/prd-stillthere-install` under `infra/prd-wbm/`) or by basename.
   A miss prints `MISS <doc>:<line> <token>` and fails the run;
   so does an entry in `scripts/doc-paths-allow.txt` its document no longer
   names. Skips URLs, absolute paths, `<placeholder>`s and gitignored
@@ -277,47 +274,28 @@ To load test the API (starts and stops its own private instance, like
   under a running API leaves its pool pointing at nothing.
 - Users after a reset: `admin` / `admin123!`, `basic` / `basic123!`, `mfa` / `basic123!` (the only one that is not MFA-exempt; it enrols a TOTP on first sign-in), and `switcher` / `basic123!` (homed in tenant 2 with a group in 3: the login that tests `/changeSecurityContext`).
 
-## Presales UAT Deploy
+## Deploy to prd
 
 ```
-./bin/600-bundle-uat [--no-scp] [--no-db]   # build api + migrator + web, dump local db, scp bundle
-sudo ./deploy.sh [--no-db] [--no-restart]   # bin/610-deploy-uat, shipped inside the bundle
+./bin/300-run-tests all                  # first, on the commit that ships
+./bin/600-deploy-prd                     # build, bundle, scp to prd-wbm, print the sudo command
+./bin/600-deploy-prd --no-upload         # build and bundle only: dist/<bundle>/
+./bin/600-deploy-prd --check             # read-only: live revision, unit state, /api/health
 ```
-- Settings come from `etc/uat-deploy.env` (`APP_NAME`, `UAT_HOST`,
-  `LOCAL_ENV_FILE`, `APP_ROOT`, `SERVICE`, `SVC_USER`, `DB_APP_ROLE`, `DB_NAME`,
-  `UAT_DOMAIN`); `PRESALES_ENV=<file>` swaps the file. No inline defaults -- a
-  missing key stops the run. The database address comes from
-  `etc/loc-test.env`, as everywhere else: `600` and `620` run `psql`,
-  `pg_dump` and `pg_restore` against `PGHOST`:`PGPORT` over TCP.
-- The first deploy installs the nginx site from `etc/uat-nginx-site.conf.template`
-  for `UAT_DOMAIN` and prints the `certbot --nginx` line (doc/320).
-- The bundle holds a full DB dump: a successful scp deletes the local copy;
-  a failed scp or `--no-scp` keeps it. Earlier bundles left in `dist/` are
-  listed with the `rm` to run, never deleted automatically (doc/320).
-- See doc/320-presales-uat-deploy.md. Run `./bin/300-run-tests` first.
-- Post-sales pipeline placeholders: `infra/{uat,prd}/` (see `infra/README.md`).
-
-## Post-sales Host Survey and Data Export
-
-```
-./bin/605-survey-host <ssh-host>                    # read-only host record -> tmp/survey/
-./bin/620-export-tenant-data <out-dir> [api-env]    # scrubbed local db dump, outside the repo
-```
-- `605` runs one probe on the host under sudo (the password once):
-  users, tools, `/srv/{uat,prd}-stillthere`, units, Postgres roles, databases
-  and owners, nginx, fail2ban, cron, ports. Env files as key names only;
-  units, nginx sites and crontab pass a best-effort secret mask. Changes
-  nothing. Names from `etc/app.env` and `etc/uat-deploy.env`. Run before
-  the first post-sales step on a host and keep the file (doc/330 0.1,
-  doc/331 0.1).
-- `620` reads the database `LOCAL_ENV_FILE` (`etc/uat-deploy.env`) names,
-  or the one in `[api-env]`; refuses it unless its `schema_migration`
-  matches the checkout's migrations exactly; copies it to a throwaway
-  `<db>_export`; runs `src/api-srv/sql/export-scrub.sql` there (refuses
-  tenant-2 rows and the fixture logins; every password, TOTP seed and MFA
-  exemption cleared, live logins `invited`, open invite links revoked,
-  issue reports and help usage events removed);
-  writes `<slug>-data-<stamp>.dump` with `.sha256` and `.manifest` to
-  `<out-dir>`, which must be outside the checkout. The export is customer
-  data. The first sign-in on the host is an invite link issued there
-  by `stillthere-migrate invite <userName>` (doc/330 A9, doc/900).
+- Settings come from `etc/prd-deploy.env` (`PRD_SSH_HOST`, `APP_ROOT`,
+  `SITE_URL`), after `etc/app.env`. No inline defaults: a missing key
+  stops the run.
+- Refuses a dirty tree (`git status --porcelain`, untracked files
+  included), and checks again after the build: the bundle's
+  `stillthere-api.revision` names the commit it was built from.
+- Builds `api-srv` and `stillthere-migrate` (linux/amd64, `CGO_ENABLED=0`,
+  `-trimpath`), the vite bundle as `web-pub.tar.gz`, the revision file
+  and `SHA256SUMS`, in `dist/<YYYYmmddTHHMMSSZ>-<commit>/`; uploads it to
+  `<APP_ROOT>/incoming/<bundle>/` as the staff login (the `stillthere-deploy`
+  group, no sudo), under a `.partial` name renamed when whole; deletes
+  the local copy once uploaded (kept on failure and with `--no-upload`).
+- Prints `ssh -t prd-wbm sudo /srv/prd-stillthere/bin/prd-stillthere-install <bundle>`
+  for the staff member: the host half (`infra/prd-wbm/bin/`, see
+  `infra/README.md`) checks the bundle, migrates, swaps with `.prev`
+  kept, restarts and checks health, rolling itself back when the new
+  release is not healthy. `prd-stillthere-rollback` swaps back by hand.

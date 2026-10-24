@@ -27,8 +27,7 @@ Three processes, no nginx:
 - Node.js 22 (Vite 7 needs 20.19+ or 22.12+) with npm. Once, and after a
   pull that changes `package-lock.json`: `cd src/web-app && npm ci`.
 - The Postgres client on the host: `bin/205`, `bin/510` and `bin/515` run
-  `psql` against `PGHOST`:`PGPORT`, and `bin/600` / `bin/620` run `pg_dump`
-  and `pg_restore` at the same address. Install it even when the server
+  `psql` against `PGHOST`:`PGPORT`. Install it even when the server
   itself is a container -- no `bin/` script reaches a database any other
   way. Docker only if a container is how you serve that address (below).
 - Python 3 with `venv`, for the pytest suite; `bin/300-run-tests` builds
@@ -119,7 +118,7 @@ one-time host step: `doc/340-db-host-setup.md`.
 
 There is no nginx in the dev path: Vite serves the web app and proxies
 `/api`, so the browser sees one origin. nginx exists only on deployed hosts
-(`etc/uat-nginx-site.conf.template`, doc/320-presales-uat-deploy.md). The
+(`infra/prd-wbm/etc/nginx_stillthere.teamtaggle.com`, doc/320). The
 template has no file upload or download; a derived app that adds one
 decides then whether dev needs more than the Vite proxy.
 

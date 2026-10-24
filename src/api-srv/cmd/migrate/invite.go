@@ -15,17 +15,16 @@ import (
 	"stillthere-api/internal/repository"
 )
 
-// `invite` issues the first sign-in link on a host whose logins are all
-// invited (B099; doc/330 A9): the data load is a bin/620 export, which
-// leaves no password anywhere, so nobody can sign in to invite anyone
-// else. It is the API's reissue (POST /userInviteReissue) without a
-// caller: the same token code (auth.NewInviteToken, auth.HashInviteToken)
+// `invite` issues a new sign-in link for an invited login when nobody can
+// sign in to reissue it from the web app (B099): the first admin's link
+// from `bootstrap-admin` expired or was lost, say. It is the API's
+// reissue (POST /userInviteReissue) without a caller: the same token code
+// (auth.NewInviteToken, auth.HashInviteToken)
 // and the same repository write (UserInviteRepository.ReissueInvite), which
 // revokes the login's open links before it stores the new hash.
 
 // inviteTestTenant is the reserved test tenant (CLAUDE.md): no real
-// person's first sign-in happens there, so a link into it is refused, as
-// the export scrub refuses its rows.
+// person's first sign-in happens there, so a link into it is refused.
 const inviteTestTenant = 2
 
 // inviteActorUserID stamps create_user_id/update_user_id on the rows the

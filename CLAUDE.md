@@ -13,29 +13,30 @@ here.
 - `etc/app.env` — the app's identity (`APP_SLUG`, `APP_DISPLAY_NAME`);
   every `bin/` script derives names from it. `DERIVING.md` + `bin/000-rebrand`
   turn this template into a new app.
-- `etc/` — environment files. `uat-deploy.env` drives the presales
-  `bin/600`/`610` pair (no inline defaults in the scripts).
-- `infra/<host>/` — mirror of `/srv/<env>-stillthere/{bin,etc}` on a server.
-  Scripts deploy verbatim (no secrets, no per-host values); every value
-  comes from `etc/*.env`, whose repo copies are redacted `SERVERONLY`.
-  Names derive from the app root's basename, so a job on both hosts is
-  one file copied per host dir (`bin/300-run-tests infra` checks).
-  Placeholder until post-sales; presales uses `bin/600`/`610`.
+- `etc/` — environment files. `prd-deploy.env` drives the laptop half
+  of the deploy, `bin/600-deploy-prd` (no inline defaults in the script).
+- `infra/prd-wbm/` — mirror of `/srv/prd-stillthere/{bin,etc}` on the one
+  host, `prd-wbm` (shared with gsd-notes): the install and rollback
+  scripts, env files, unit, nginx sites, fail2ban jail. Scripts deploy
+  verbatim (no secrets, no per-host values); every value comes from
+  `etc/*.env`, whose repo copies are redacted `SERVERONLY`. Names derive
+  from the app root's basename (`bin/300-run-tests infra` checks the
+  scripts and runs them on a fake root).
 - `src/api-srv/cmd/` — only shipped binaries (`server`, `migrate`); a
   tool or load generator lives outside it (`src/load-test`).
 - `src/api-srv/sql/` — `migrations/NNNN_name.sql`, embedded in
   `cmd/migrate`. This is the **only** way a schema change reaches a
   database; never hand-run DDL. Seed and test data are `fixtures/`,
-  never a migration. Also `roles.sql` and `export-scrub.sql` (`bin/620`).
+  never a migration. Also `roles.sql` (local dev roles).
   Read the resulting schema in `doc/003-schema-reference.sql` (generated
   by `bin/510`; the gate fails when it is stale). Dev database:
   `bin/205-migrate-db`.
-- `doc/` — reference docs. Runbooks: `doc/320-presales-uat-deploy.md`,
-  `doc/330-uat-postsales-cutover.md`, `doc/331-prd-postsales-install.md`,
-  `doc/340-db-host-setup.md`, `doc/350-repository-reset.md`,
-  `doc/310-api-srv-cert-renewal.md`.
+- `doc/` — reference docs. Runbooks: `doc/320-prd-wbm-deploy.md` (first
+  install, every release, rollback), `doc/340-db-host-setup.md`,
+  `doc/350-repository-reset.md`, `doc/310-api-srv-cert-renewal.md`.
 - `scripts/` — repo checks the gate calls: `check-doc-paths.sh` (every
-  backticked repo path in a doc exists; `bin/300-run-tests docs`).
+  backticked repo path in a doc exists; `bin/300-run-tests docs`) and
+  `check-prd-install.sh` (`bin/300-run-tests infra`).
 
 ## Conventions
 
@@ -127,9 +128,11 @@ whether or not the change also has a work item.
 
 ## Branches
 
-`main` is the default branch. Feature branches are `feature/<slug>`,
-cut from `dev` and merged into `dev`, the local integration branch.
-`dev` goes to `uat` when it deploys to a server; run the full gate
-(`bin/300-run-tests all`) on `dev` before opening that pull request.
-Only staff advance `uat` and `main` — agents never merge into them
-without staff approval.
+`main` is the default branch and what deploys to `prd-wbm`
+(`doc/320-prd-wbm-deploy.md`); there is no `uat` branch or UAT host.
+`dev` is the integration branch, shared on `origin`. Feature branches
+are `feature/<slug>`, cut from `dev` and merged back into `dev` when
+their work is done. `dev` reaches `main` by a PR, opened only with staff
+approval after the full gate (`bin/300-run-tests all`) passes on `dev`;
+only staff advance `main`, and agents never merge into it without that
+approval.

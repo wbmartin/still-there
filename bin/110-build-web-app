@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build the web app (vite, production) and pack it for a hand deploy.
 #   Output: dist/<slug>-web_YYYYMMDD_hhmmss.tar.gz  (dist/ is gitignored)
-# The presales deploy (bin/600) does its own build; this is for anyone who
+# bin/600-deploy-prd does its own build; this is for anyone who
 # wants the tarball alone.
 set -euo pipefail
 

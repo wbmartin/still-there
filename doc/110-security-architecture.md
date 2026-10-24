@@ -22,8 +22,7 @@ commit.
 
 ## Shape of a deployment
 
-A post-sales host (`infra/README.md`); the presales host differs where a
-row says so.
+The one host, prd-wbm (`infra/README.md`, doc/320).
 
     browser
       | HTTPS 443 (HTTP 80 answers 301)
@@ -36,9 +35,8 @@ row says so.
       v
     Postgres  (schema owned by stillthere_ddl, used only by the migrator)
 
-    operations: deploy hooks as shrmpl-hook; root cron for certs and the
-    nightly backup, which pushes to REMOTE_SERVER by scp, and the
-    twice-weekly off-site copy, which restic encrypts and pushes to B2
+    operations: a staff member runs the install under sudo from a bundle
+    the laptop uploaded; no backup job exists yet (open, row 3.4)
 
 One API process per host. Rate counters, login lockouts, MFA temp tokens,
 the TOTP last-step key, block flags and session revocations live in that
@@ -51,7 +49,7 @@ needs a shared store first.
 |---|---|---|---|
 | B1 | Internet to API | every browser request | nginx terminates TLS; the API trusts nothing in a request but a valid session cookie, and takes the tenant from it |
 | B2 | API to Postgres | every query | the database trusts the API role completely; tenant isolation is the API's job alone |
-| B3 | Operations | deploys, backups, exports, operators on the host | whoever holds root, the env files or a backup holds every secret |
+| B3 | Operations | deploys, backups, operators on the host | whoever holds root, the env files or a backup holds every secret |
 
 Boundaries a larger app has (a credential vault, a background worker,
 external users, support access, a file store) are features the template
@@ -135,7 +133,7 @@ test that shows it; the mechanics are in doc/105.
 | 1.3 | Password guessing, credential stuffing | Argon2id; unknown names run a dummy hash and get the same counted 401; lockout per address and per name (`FAILED_LOGIN_*`), checked before the password, failing closed on a counter error (`auth_handler_test.go`) | met |
 | 1.4 | Username enumeration | Same 401 and timing for unknown, wrong and non-`active` logins. Exception: public `/userSelfCreate` answers 409 for a taken name | partial |
 | 1.5 | Second factor bypassed or replayed | TOTP for every login not `mfa_exempt`: `/auth` gives a 10-minute single-use temp token and no grants; `/mfaVerify` takes a code once (last-step key, `SetIfGreater`); an enrolled user's secret is never shown again (409) | met |
-| 1.6 | MFA turned off for a person | `mfa_exempt` is one column, set by `POST`/`PUT /user` and `/userInvite` (`ADD_USER`, `CHG_USER`). **Policy: `mfa_exempt` is for test and service logins only, never a human account in production.** Enforced by config (GRC backport B097): unless `ALLOW_MFA_EXEMPT_VIA_API=true`, which only the test harness files set (pinned by `TestLoadConfig_RepoEnvFiles`), the API answers 403 to turning it on (`TestUserHandler_MFAExemptNeedsTheConfigKey`, `TestCreateInvitedUser_MFAExemptNeedsTheConfigKey`). A login already exempt stays so until cleared; the post-sales export clears every one (`src/api-srv/sql/export-scrub.sql`, pinned by `src/api-srv/sql/export_scrub_test.go`), so a post-sales host starts with none. A presales UAT host restored from the laptop dump keeps the seeded exempt logins (row 3.5) | met |
+| 1.6 | MFA turned off for a person | `mfa_exempt` is one column, set by `POST`/`PUT /user` and `/userInvite` (`ADD_USER`, `CHG_USER`). **Policy: `mfa_exempt` is for test and service logins only, never a human account in production.** Enforced by config (GRC backport B097): unless `ALLOW_MFA_EXEMPT_VIA_API=true`, which only the test harness files set (pinned by `TestLoadConfig_RepoEnvFiles`), the API answers 403 to turning it on (`TestUserHandler_MFAExemptNeedsTheConfigKey`, `TestCreateInvitedUser_MFAExemptNeedsTheConfigKey`). A login already exempt stays so until cleared. The host database starts empty (row 3.5), so it holds no seeded exempt login | met |
 | 1.7 | Cross-site request forgery | The defence is the cookie: `SameSite=Strict` stops a cross-site request carrying it and `HttpOnly` keeps script from reading it; CORS answers only `CORS_ALLOWED_ORIGINS`. `X-CSRF-Token` must equal the session id's last 3 hex characters (12 bits) on every unsafe method: a second check, not a secret of real strength. A mismatch is logged without either value (`csrf_test.go`) | met (by SameSite) |
 | 1.8 | Missing or misordered check on a route | Every handler calls JWT, rate limit + block, CSRF, grant and `CheckAllChecksComplete` itself, no middleware; an unrun check is 500 and `WriteJSON` re-runs the gate. `src/api-srv/internal/handler/route_check_contract_test.go` lists every route in `cmd/server/main.go`, requires a reason for each skip and proves each check refuses before any repository call | met |
 | 1.9 | Blocked user keeps acting | Block sets `account_status`, revokes every session and sets `BLOCKED*<name>`, which the server reloads at start; `CheckRateLimitAndUserBlock` answers 403 on every session route, so a pre-block token is refused after a restart that lost its revocation. `/mfaSetup` and `/mfaVerify` take no session at all: only `/auth`'s temp token, which a blocked login never gets; a session without one is 401 (GRC backport C004, `TestMFARoutesRefuseASessionWithoutATempToken`). Open: the `admin` subject skips the flag (row 1.10) | partial |
@@ -153,19 +151,19 @@ test that shows it; the mechanics are in doc/105.
 | 2.2 | API used to change the schema | `stillthere_app` is `db_reader` + `db_writer`, owns nothing; migrations run as `stillthere_ddl` (`src/api-srv/cmd/migrate`), the only path for DDL | met |
 | 2.3 | Credentials read from a dump or a response | Passwords Argon2id; TOTP seeds AES-GCM under `TOTP_ENCRYPTION_KEY`; invite tokens SHA-256 only; `PwHash` and `TOTPSeed` are `json:"-"`. `RetrieveUserList` still selects `totp_seed` it never sends | met |
 | 2.4 | Database reached off the host | `DATABASE_URL` names `127.0.0.1:5432` in every server env file | met |
-| 2.5 | Repo password on a database role | `src/api-srv/sql/roles.sql` creates `stillthere_app` with the local dev password; presales `bin/610-deploy-uat` then sets it from the host env file on every run, post-sales `infra/sql/stillthere-host-db.sql` takes it from psql variables | met |
+| 2.5 | Repo password on a database role | `src/api-srv/sql/roles.sql` creates `stillthere_app` with the local dev password; the host's `infra/sql/stillthere-host-db.sql` sets the `stillthere_app` and `stillthere_ddl` passwords from the env files generated on the host; the `roles.sql` literal is local dev only | met |
 
 ### B3: operations
 
 | # | Threat | Control | Status |
 |---|---|---|---|
-| 3.1 | Compromised API process reaches the host | Post-sales units (`infra/prd/etc/prd-stillthere-api.service`, UAT the same) run as `svc-stillthere` with a read-only filesystem (`ProtectSystem=strict`, no write path), empty `CapabilityBoundingSet`, `SystemCallFilter=@system-service`, `MemoryDenyWriteExecute` and the rest of the kernel and namespace protections. The presales unit `bin/610-deploy-uat` writes is lighter: `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, `ProtectHome`, `ReadWritePaths` on `log/` | partial |
+| 3.1 | Compromised API process reaches the host | The unit (`infra/prd-wbm/etc/prd-stillthere-api.service`) runs as `svc-stillthere` with a read-only filesystem (`ProtectSystem=strict`, no write path), empty `CapabilityBoundingSet`, `SystemCallFilter=@system-service`, `MemoryDenyWriteExecute` and the rest of the kernel and namespace protections | met |
 | 3.2 | Secrets leak from the repo | Server env files are redacted copies (`SERVERONLY`, `example.com`); each secret is generated on its host; the API env file is `root:svc-stillthere 0640` | met |
-| 3.3 | Losing the TOTP key with the data | Every API env header says to keep `TOTP_ENCRYPTION_KEY` with every backup and restore the two together; the nightly tarball carries `etc/`, so it holds the key | met |
-| 3.4 | Backups destroyed or read from the primary | `infra/prd/bin/prd-stillthere-backup-all` pushes dumps and the `etc/` tarball to `REMOTE_SERVER` by `scp`, so the primary holds credentials that can overwrite its own off-host copies, and the copies hold every secret. `prd-stillthere-offsite-backup` adds a B2 copy that restic encrypts on prod (`RESTIC_PASSWORD`), so B2 holds only ciphertext; it is a push too: the B2 key on prod can delete those snapshots. **Target: pull** — the backup host fetches with a key the primary never holds | open |
-| 3.5 | Laptop credentials or test data reach a customer host | `bin/620-export-tenant-data` copies the database, runs `src/api-srv/sql/export-scrub.sql` (refuses tenant-2 rows and the fixture logins; empties every password, seed and `mfa_exempt`; every live login becomes `invited`; open invites revoked; issue reports, with their tracker ids, and help usage events removed) and dumps the copy; the host's first sign-in is a link from `stillthere-migrate invite` (doc/330 A9: the migrator's DDL credentials, so host root only; refuses tenant 2 and any login not `invited`; `src/api-srv/cmd/migrate/invite_test.go`). Presales `bin/600-bundle-uat` still ships the laptop dump unscrubbed (presales only, by decision), seeded exempt logins included; a host's API cannot add new ones (`ALLOW_MFA_EXEMPT_VIA_API=false`, B097) | partial |
-| 3.6 | Monitoring silenced by the host it watches | Nackmon and pulsecheck files for UAT live under `infra/prd/shrmpl-etc/`; prod's own stay on prod for want of a third host (`infra/README.md`) | partial |
-| 3.7 | Scanning the web root | fail2ban jail per app on nginx 404s, ignoring `/api/` so a user's 4xx never bans them (`infra/prd/fail2ban/etc/jail.local`) | met |
+| 3.3 | Losing the TOTP key with the data | Every API env header says to keep `TOTP_ENCRYPTION_KEY` with every backup and restore the two together; any backup that carries `etc/` holds the key | met |
+| 3.4 | Backups destroyed or read from the primary | No backup job exists yet (gsd-notes' restic-to-B2 job, its doc/380, is the pattern to port). The install's pre-migrate `pg_dump` in `/srv/prd-stillthere/backup/` is on the same host, so it protects a bad migration, not the loss of the host. **Target: pull or append-only**, with a key the primary cannot use to delete its own copies | open |
+| 3.5 | Laptop credentials or test data reach a customer host | Nothing copies the laptop database to the host: it starts empty and the first admin is made by `stillthere-migrate bootstrap-admin <userName> <email>` (`src/api-srv/cmd/migrate/bootstrap_admin.go`), whose link `stillthere-migrate invite` reissues (the migrator's DDL credentials, so host root only; refuses tenant 2 and any login not `invited`; `src/api-srv/cmd/migrate/invite_test.go`). Fixtures are synthetic. A host's API cannot add exempt logins (`ALLOW_MFA_EXEMPT_VIA_API=false`, B097) | met |
+| 3.6 | Monitoring silenced by the host it watches | No monitors are in the repo. Off-host monitoring is an open item | open |
+| 3.7 | Scanning the web root | fail2ban jail `prd-stillthere` on nginx 4xx of this app's two sites, ignoring `/api/` and the Telnyx webhook so a user's 4xx never bans them (`infra/prd-wbm/etc/fail2ban-jail_prd-stillthere.conf`, doc/320 step 18; optional, so not yet installed) | partial |
 | 3.8 | Operator access unrecorded | Nothing in the template logs SSH, console or database-superuser sessions off the host | open |
 
 ## Controls a derived app keeps
@@ -189,9 +187,8 @@ Testable statements, each with what proves it today.
    harness files set (GRC backport B097). No breached-password check; the password floor is 8 characters.
 5. **Rate limits per boundary.** Per user, per address, per login name and
    per invite token. The `admin` exemption is open.
-6. **Backups pulled, encrypted, restored on a schedule.** Open: push today;
-   the `REMOTE_SERVER` copy is unencrypted beyond the host's disk (the B2
-   copy is restic-encrypted); no recorded restore test.
+6. **Backups pulled, encrypted, restored on a schedule.** Open: no backup
+   exists yet, no recorded restore test.
 7. **User files judged by their bytes.** A file route caps size (413) and
    takes its type from magic bytes against an allowlist (415), serves
    inline only what cannot run script, relaxes framing on that route alone

@@ -114,7 +114,7 @@ func unquote(v string) string {
 }
 
 // minJWTSecretLength is the shortest JWT_SECRET LoadConfig accepts; every
-// host gets 64 hex characters (bin/610, doc/330, doc/331).
+// host gets 64 hex characters (doc/320).
 const minJWTSecretLength = 32
 
 // totpKeyByteLength is the AES-256 key size TOTP_ENCRYPTION_KEY decodes to

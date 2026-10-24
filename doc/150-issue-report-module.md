@@ -99,7 +99,7 @@ with tenant names sets `Relay.WorkspaceLabel` in `src/api-srv/cmd/server/main.go
 With the relay on, each report goes to the tracker with its files (a
 screen capture shows whatever was on the reporter's screen), the
 reporter's name, email and user id, and the browser context (the site's
-host first, so a UAT and a production install can share one tracker). The drawer
+host first, so a dev and a production install can share one tracker). The drawer
 says that the page and browser go along and that the workspace sees the
 report. Only the server talks to the tracker, over the configured URL,
 with a token that opens the report routes of that one project and nothing
@@ -110,10 +110,10 @@ rules as an uploaded one.
 
 ## Export to a host
 
-`bin/620-export-tenant-data` does not carry issue reports: its scrub
-(`src/api-srv/sql/export-scrub.sql`) removes the three tables' rows from
-the copy it dumps. They are the laptop's conversation with a tracker, and
-their tracker ids would be synced against the host's own project.
+There is no export path: nothing copies the laptop database to the host,
+so issue reports stay on the laptop. They are the laptop's conversation
+with a tracker, and their tracker ids would be synced against the host's
+own project.
 
 ## Where the code is
 

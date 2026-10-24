@@ -92,7 +92,7 @@ stillthere-migrate ... up                                       apply every pend
 stillthere-migrate ... stamp <version>                          record up to <version> as applied WITHOUT running
 stillthere-migrate ... schema-reference                         print the schema as CREATE TABLE/INDEX text (doc/003)
 stillthere-migrate ... -base-url <origin> [-invite-ttl-hours N] invite <userName>
-                                                           first sign-in link for an invited login (doc/330 A9)
+                                                           first sign-in link for an invited login (reissues a lost link)
 stillthere-migrate ... -base-url <origin> [-invite-ttl-hours N] [-tenant N] bootstrap-admin <userName> <email>
                                                            an empty tenant's Admin group (every grant) and
                                                            first invited login; prints its sign-in link

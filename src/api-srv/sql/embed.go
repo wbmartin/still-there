@@ -9,9 +9,9 @@ package sqlfiles
 import "embed"
 
 // Migrations holds migrations/NNNN_name.sql. Version is the leading integer;
-// files apply in ascending order, forward only. roles.sql, fixtures/ and
-// export-scrub.sql are deliberately NOT embedded -- host setup, test data
-// and bin/620's export step respectively, not schema.
+// files apply in ascending order, forward only. roles.sql and fixtures/
+// are deliberately NOT embedded -- local role setup and test data, not
+// schema.
 //
 //go:embed migrations/*.sql
 var Migrations embed.FS

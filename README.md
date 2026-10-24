@@ -19,8 +19,8 @@ ProtoStack-ReactGo/
 │   ├── load-test/        # Load generator for bin/330-test-load (own Go module)
 │   └── web-app/          # React frontend (see src/web-app/README.md)
 ├── bin/                  # Numbered scripts: 1xx build, 2xx run, 3xx test, 5xx db, 6xx deploy
-├── etc/                  # Env files (loc-, e2e-, uat-*.example) and local certs
-├── infra/                # Post-sales host mirrors (placeholder; see infra/README.md)
+├── etc/                  # Env files (loc-, e2e-, prd-deploy.env) and local certs
+├── infra/                # Host mirror for prd-wbm (see infra/README.md)
 ├── tests/                # pytest HTTP suite
 ├── scripts/              # Repo checks the gate calls (check-doc-paths.sh)
 ├── tasks/                # todo.md: outstanding work and pending host steps
@@ -104,11 +104,9 @@ Full command reference: [doc/902-project-commands.md](doc/902-project-commands.m
 | File | Description |
 |------|-------------|
 | [doc/310-api-srv-cert-renewal.md](doc/310-api-srv-cert-renewal.md) | API server TLS certificate renewal steps |
-| [doc/320-presales-uat-deploy.md](doc/320-presales-uat-deploy.md) | Presales UAT deploy (`bin/600`/`610`) |
-| [doc/330-uat-postsales-cutover.md](doc/330-uat-postsales-cutover.md) | UAT cutover: from the presales bundle to the `infra/` pipeline |
-| [doc/331-prd-postsales-install.md](doc/331-prd-postsales-install.md) | Prod install on a fresh host, loaded from the same local dump |
+| [doc/320-prd-wbm-deploy.md](doc/320-prd-wbm-deploy.md) | Deploy to prd-wbm: laptop build + scp, host install, rollback, first install runbook |
 | [doc/340-db-host-setup.md](doc/340-db-host-setup.md) | The three Postgres roles (app, ddl, ci): `infra/sql/stillthere-host-db.sql` |
 | [doc/350-repository-reset.md](doc/350-repository-reset.md) | Repository reset: the tree as one root commit in a new repo, webhooks and deploy key re-created |
-| [infra/README.md](infra/README.md) | Post-sales deploy pipeline (placeholder) |
+| [infra/README.md](infra/README.md) | Host mirror for prd-wbm |
 
 Project history lives in `git log`.

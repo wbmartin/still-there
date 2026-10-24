@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# Build a release on this laptop and upload it to the prd host; the staff
+# member then installs it with one sudo command, which this prints.
+#
+#   bin/600-deploy-prd              build, bundle, upload, print the command
+#   bin/600-deploy-prd --no-upload  build and bundle only (dist/<bundle>/)
+#   bin/600-deploy-prd --check      read-only: what is live, is it healthy
+#
+# The bundle, dist/<YYYYmmddTHHMMSSZ>-<commit>/:
+#   api-srv            cmd/server, linux/amd64, CGO off, -trimpath
+#   <slug>-migrate     cmd/migrate, the same
+#   web-pub.tar.gz     the vite production build
+#   <slug>-api.revision  commit=<full sha>, branch, build time, go and node
+#   SHA256SUMS         of the four above; the host checks it before use
+#
+# It goes to <APP_ROOT>/incoming/<bundle>/ by scp as the staff login, which
+# the deploy group lets write there without sudo (doc/320). The install
+# (infra/prd-wbm/bin/prd-<slug>-install) migrates, swaps with .prev kept,
+# restarts and checks health. Refuses a dirty tree: the revision file must
+# name exactly what was built.
+#
+# Settings: etc/prd-deploy.env (PRD_SSH_HOST, APP_ROOT, SITE_URL). Every key
+# is required; there are no defaults here.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
+
+die() { echo "[ERROR] $*" >&2; exit 1; }
+
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
+DEPLOY_ENV="$PROJECT_ROOT/etc/prd-deploy.env"
+[ -r "$DEPLOY_ENV" ] || die "$DEPLOY_ENV missing or unreadable"
+# shellcheck disable=SC1090
+source "$DEPLOY_ENV"
+for var in APP_SLUG PRD_SSH_HOST APP_ROOT SITE_URL; do
+    [ -n "${!var:-}" ] || die "$var not set by etc/app.env or $DEPLOY_ENV"
+done
+APP_ENV="$(basename "$APP_ROOT")"
+SERVICE="$APP_ENV-api"
+SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 "$PRD_SSH_HOST")
+
+MODE=upload
+[ "$#" -le 1 ] || die "usage: $0 [--no-upload | --check]"
+for arg in "$@"; do
+    case "$arg" in
+        --no-upload) MODE=build ;;
+        --check) MODE=check ;;
+        *) die "usage: $0 [--no-upload | --check]" ;;
+    esac
+done
+
+# --- --check: read-only ----------------------------------------------------
+if [ "$MODE" = check ]; then
+    echo "[INFO] $PRD_SSH_HOST: $APP_ROOT/libexec/$APP_SLUG-api.revision"
+    "${SSH[@]}" "cat $APP_ROOT/libexec/$APP_SLUG-api.revision" \
+        | sed 's/^/        /' \
+        || die "no revision file on $PRD_SSH_HOST (nothing installed yet?)"
+    LIVE_COMMIT="$("${SSH[@]}" \
+        "sed -n 's/^commit=//p' $APP_ROOT/libexec/$APP_SLUG-api.revision")"
+    echo "[INFO] $SERVICE: $("${SSH[@]}" "systemctl is-active $SERVICE" \
+        || true)"
+    HEALTH="$(curl -fsS --max-time 5 "$SITE_URL/api/health" || true)"
+    echo "[INFO] $SITE_URL/api/health: ${HEALTH:-no answer}"
+    HEAD_COMMIT="$(git rev-parse HEAD)"
+    if [ "$LIVE_COMMIT" = "$HEAD_COMMIT" ]; then
+        echo "[INFO] live commit is this checkout's HEAD"
+    else
+        echo "[INFO] live commit $LIVE_COMMIT, HEAD $HEAD_COMMIT"
+    fi
+    case "$HEALTH" in *'"status":"ok"'*) exit 0 ;; esac
+    exit 1
+fi
+
+# --- preflight: everything that can fail before a minute of go + vite ------
+[ -z "$(git status --porcelain)" ] \
+    || die "the tree is dirty (git status): commit or stash first, so the" \
+        "revision file names what was built"
+for tool in go npm tar scp; do
+    command -v "$tool" > /dev/null || die "$tool not on PATH"
+done
+if command -v sha256sum > /dev/null; then
+    SHA256=(sha256sum)
+elif command -v shasum > /dev/null; then
+    SHA256=(shasum -a 256)
+else
+    die "neither sha256sum nor shasum on PATH"
+fi
+INCOMING="$APP_ROOT/incoming"
+if [ "$MODE" = upload ]; then
+    "${SSH[@]}" "test -d $INCOMING && test -w $INCOMING" \
+        || die "$PRD_SSH_HOST:$INCOMING is missing or not writable by" \
+            "this login (doc/320, first install: the deploy group)"
+fi
+
+COMMIT="$(git rev-parse HEAD)"
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+BUNDLE="$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short=12 HEAD)"
+STAGE="$PROJECT_ROOT/dist/$BUNDLE"
+mkdir -p "$STAGE"
+KEEP_STAGE=""
+trap '[ -n "$KEEP_STAGE" ] || rm -rf "$STAGE"' EXIT
+echo "[INFO] $BUNDLE: branch $BRANCH, commit $COMMIT"
+
+# --- build -----------------------------------------------------------------
+echo "[1/3] go build api-srv, $APP_SLUG-migrate (linux/amd64)"
+( cd src/api-srv \
+    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+        -ldflags="-s -w" -o "$STAGE/api-srv" ./cmd/server \
+    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+        -ldflags="-s -w" -o "$STAGE/$APP_SLUG-migrate" ./cmd/migrate )
+
+echo "[2/3] vite build"
+( cd src/web-app && rm -rf dist && npm run build > /dev/null )
+[ -f src/web-app/dist/index.html ] || die "the web build made no index.html"
+COPYFILE_DISABLE=1 tar --no-xattrs -C src/web-app/dist \
+    -czf "$STAGE/web-pub.tar.gz" .
+
+echo "[3/3] revision, SHA256SUMS"
+{
+    echo "commit=$COMMIT"
+    echo "branch=$BRANCH"
+    echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "go=$(cd src/api-srv && go env GOVERSION)"
+    echo "node=$(node --version)"
+} > "$STAGE/$APP_SLUG-api.revision"
+( cd "$STAGE" && "${SHA256[@]}" api-srv "$APP_SLUG-migrate" \
+    web-pub.tar.gz "$APP_SLUG-api.revision" > SHA256SUMS )
+du -sh "$STAGE" | sed 's/^/      /'
+# The tree must still be what HEAD holds: a build step that wrote into it
+# would make the revision file a lie.
+[ -z "$(git status --porcelain)" ] || die "the build changed the tree"
+
+if [ "$MODE" = build ]; then
+    KEEP_STAGE=1
+    echo "[INFO] bundle kept at $STAGE (--no-upload)"
+    exit 0
+fi
+
+# --- upload ----------------------------------------------------------------
+# To a .partial name, renamed when whole, so the install never sees half
+# a bundle.
+echo "[INFO] scp -> $PRD_SSH_HOST:$INCOMING/$BUNDLE"
+if ! scp -q -r "$STAGE" "$PRD_SSH_HOST:$INCOMING/$BUNDLE.partial" \
+        || ! "${SSH[@]}" "mv $INCOMING/$BUNDLE.partial $INCOMING/$BUNDLE"; then
+    KEEP_STAGE=1
+    die "upload failed; the bundle stays at $STAGE. Remove" \
+        "$INCOMING/$BUNDLE.partial on the host, then run this again"
+fi
+echo
+echo "Uploaded. The staff member installs it (sudo asks for their password):"
+echo
+echo "  ssh -t $PRD_SSH_HOST sudo $APP_ROOT/bin/$APP_ENV-install $BUNDLE"
+echo
+echo "Then: bin/600-deploy-prd --check"
