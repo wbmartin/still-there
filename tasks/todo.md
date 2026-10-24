@@ -89,7 +89,7 @@ Commits on `feature/server-checkin`, each passing `bin/300-run-tests all`:
 - [x] 1. Schema and grants (migrations 0008, 0009).
 - [x] 2. Device API: CRUD, `/deviceToken`, `/deviceCheckin`.
 - [x] 3. Watchdog, SMS sender (log), inbound replies, simulate endpoint.
-- [ ] 4. Admin pages: devices, bands, contacts, alerts, tenant settings
+- [x] 4. Admin pages: devices, bands, contacts, alerts, tenant settings
       (with page help).
 - [x] Telnyx sender and signed inbound webhook (code and unit tests;
       not yet live: needs the Telnyx keys and a public URL on prd-wbm).
