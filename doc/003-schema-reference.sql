@@ -11,7 +11,7 @@
 -- constraints show as their indexes. schema_migration (the migrator's own
 -- table) is left out.
 --
--- Through migration 0009_device_grants.
+-- Through migration 0010_sms_relay_message_id.
 
 CREATE TABLE alert (
     alert_id SERIAL NOT NULL,
@@ -329,9 +329,11 @@ CREATE TABLE sms_message (
     update_ts numeric(17,7) NOT NULL,
     update_user_id integer NOT NULL,
     delete_ts numeric(17,7),
-    delete_user_id integer
+    delete_user_id integer,
+    relay_message_id bigint
 );
 CREATE INDEX idx_sms_message_phone_create_ts ON public.sms_message USING btree (phone_e164, create_ts);
+CREATE UNIQUE INDEX idx_sms_message_relay_message_id ON public.sms_message USING btree (relay_message_id) WHERE (relay_message_id IS NOT NULL);
 CREATE INDEX idx_sms_message_sc_create_ts ON public.sms_message USING btree (security_context_id, create_ts);
 CREATE UNIQUE INDEX sms_message_pkey ON public.sms_message USING btree (sms_message_id);
 

@@ -21,6 +21,7 @@ import (
 	"stillthere-api/internal/repository"
 	"stillthere-api/internal/security"
 	"stillthere-api/internal/sms"
+	"stillthere-api/internal/smsrelay"
 	"stillthere-api/internal/watchdog"
 )
 
@@ -186,9 +187,10 @@ func main() {
 		}
 	}
 	watchdogRepository := repository.NewWatchdogRepository(dbPool)
-	smsHandler := handler.NewSMSHandler(appServices, &watchdog.Inbound{
+	inbound := &watchdog.Inbound{
 		Store: watchdogRepository, Sender: smsSender, Log: logger,
-	})
+	}
+	smsHandler := handler.NewSMSHandler(appServices, inbound)
 	mfaSetupHandler := handler.MFASetupHandler(appServices, userRepo)
 	mfaVerifyHandler := handler.MFAVerifyHandler(appServices, userRepo)
 
@@ -429,6 +431,25 @@ func main() {
 	}()
 	logger.Info("WATCHDOG_MODE", fmt.Sprintf("Watchdog on, every %ds, SMS_PROVIDER=%s",
 		config.WatchdogTickSeconds, config.SMSProvider), "username", "app-root")
+	// Inbound texts from the SMS relay's queue, on the watchdog's interval
+	// and context; joined with it at shutdown.
+	smsRelayDone := make(chan struct{})
+	if config.SMSRelayEnabled() {
+		go func() {
+			defer close(smsRelayDone)
+			(&smsrelay.Poller{
+				Client: &smsrelay.Client{BaseURL: config.SMSRelayURL,
+					Token: config.SMSRelayToken, Queue: config.SMSRelayQueue},
+				Handler: inbound, Log: logger,
+			}).Run(watchdogContext, time.Duration(config.WatchdogTickSeconds)*time.Second)
+		}()
+		logger.Info("SMS_RELAY_MODE", "Reading inbound texts from the SMS relay, queue "+
+			config.SMSRelayQueue, "username", "app-root")
+	} else {
+		close(smsRelayDone)
+		logger.Info("SMS_RELAY_MODE", "SMS relay off (SMS_RELAY_URL not set)",
+			"username", "app-root")
+	}
 	helpModuleState := "off (HELP_ENABLED is not true)"
 	if config.HelpEnabled {
 		helpModuleState = "on"
@@ -461,6 +482,7 @@ func main() {
 
 	watchdogCancel()
 	<-watchdogDone
+	<-smsRelayDone
 	logger.Info("SERVER_STOP", "Server stopped", "username", "app-root")
 }
 

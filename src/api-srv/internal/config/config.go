@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -18,7 +19,7 @@ import (
 // Config holds the application configuration. It is loaded from a flat
 // KEY=VALUE file (doc/905-config-guidance.md) and is never serialized, so
 // its fields carry no json tags. Never marshal, log or print it whole:
-// JWTSecret and TOTPEncryptionKey are secrets.
+// JWTSecret, TOTPEncryptionKey and the relay tokens are secrets.
 type Config struct {
 	DatabaseURL                      string
 	JWTSecret                        string
@@ -63,6 +64,12 @@ type Config struct {
 	TelnyxMessagingProfileID string
 	TelnyxPublicKey          string
 	WatchdogTickSeconds      int
+	// The SMS relay's queue (src/sms-relay): optional, all three or none.
+	// When set, inbound texts are read from the relay every watchdog tick.
+	// SMSRelayToken is a secret.
+	SMSRelayURL   string
+	SMSRelayToken string
+	SMSRelayQueue string
 }
 
 // The issue relay's interval when ISSUE_RELAY_INTERVAL_SECONDS is unset,
@@ -312,6 +319,9 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	if err := loadMonitoringKeys(env, &config); err != nil {
 		return nil, err
 	}
+	if err := loadSMSRelayKeys(env, &config); err != nil {
+		return nil, err
+	}
 
 	// Optional: a file written before the help module existed leaves it
 	// off. A value set is exactly true or false, so a typo fails start-up
@@ -447,6 +457,56 @@ func loadMonitoringKeys(env map[string]string, config *Config) error {
 	}
 	config.WatchdogTickSeconds = tick
 	return nil
+}
+
+// smsRelayQueuePattern is the relay's queue name rule.
+var smsRelayQueuePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+
+// loadSMSRelayKeys reads SMS_RELAY_URL, SMS_RELAY_TOKEN and
+// SMS_RELAY_QUEUE: all three or none (one or two set is an error naming
+// the rest), the URL http(s) with a host, the queue a relay queue name.
+func loadSMSRelayKeys(env map[string]string, config *Config) error {
+	config.SMSRelayURL = env["SMS_RELAY_URL"]
+	config.SMSRelayToken = env["SMS_RELAY_TOKEN"]
+	config.SMSRelayQueue = env["SMS_RELAY_QUEUE"]
+	var missingList []string
+	for _, key := range []string{
+		"SMS_RELAY_URL", "SMS_RELAY_TOKEN", "SMS_RELAY_QUEUE",
+	} {
+		if env[key] == "" {
+			missingList = append(missingList, key)
+		}
+	}
+	if len(missingList) == 3 {
+		return nil
+	}
+	if len(missingList) > 0 {
+		return fmt.Errorf(
+			"the SMS relay needs SMS_RELAY_URL, SMS_RELAY_TOKEN and "+
+				"SMS_RELAY_QUEUE together; missing %s",
+			strings.Join(missingList, ", "),
+		)
+	}
+	parsed, err := url.Parse(config.SMSRelayURL)
+	if err != nil || parsed.Host == "" ||
+		(parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return fmt.Errorf(
+			"SMS_RELAY_URL must be an http(s) URL with a host, got %q",
+			config.SMSRelayURL,
+		)
+	}
+	if !smsRelayQueuePattern.MatchString(config.SMSRelayQueue) {
+		return fmt.Errorf(
+			"SMS_RELAY_QUEUE must match %s, got %q",
+			smsRelayQueuePattern, config.SMSRelayQueue,
+		)
+	}
+	return nil
+}
+
+// SMSRelayEnabled reports whether inbound texts come from the SMS relay.
+func (c *Config) SMSRelayEnabled() bool {
+	return c.SMSRelayURL != ""
 }
 
 // IssueRelayEnabled reports whether the relay's target is configured.

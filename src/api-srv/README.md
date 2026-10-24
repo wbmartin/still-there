@@ -77,6 +77,15 @@ Optional:
   webhook signing key)
 - `WATCHDOG_TICK_SECONDS` — required, at least 5: how often the watchdog
   (`internal/watchdog`) evaluates alarms and sends invites and alert texts
+- `SMS_RELAY_URL`, `SMS_RELAY_TOKEN`, `SMS_RELAY_QUEUE` — optional, all
+  three or none: read inbound texts from this app's queue on the SMS relay
+  (`src/sms-relay/README.md`). Every `WATCHDOG_TICK_SECONDS` the API
+  receives up to 25 under a 60-second lease, handles each like a
+  `/smsInbound` text and acks the ones handled; a failed one returns after
+  the lease. A relay id already on an inbound `sms_message` row
+  (`relay_message_id`) is skipped. The URL is http(s) (`http://127.0.0.1:8095`
+  on prd-wbm), the token a secret in the host's file only, the queue
+  `stillthere`
 - `HELP_ENABLED` — `true` or `false` (default): the help module
   (`doc/151-help-module.md`). Off, `/helpEvent` and `/helpInsights` answer
   404 and the web app shows no Help button
@@ -151,7 +160,9 @@ password is always sent as `password`; group membership bodies are
   about a device
 - `POST /smsInbound` — Telnyx's webhook for texts people send us
   (`SMS_PROVIDER=telnyx`); `POST /smsSimulateInbound` stands in for it
-  under `SMS_PROVIDER=log`
+  under `SMS_PROVIDER=log`. On prd-wbm the webhook goes to the SMS relay
+  instead, which the API reads (`SMS_RELAY_*`); `/smsInbound` stays for
+  local testing
 - `GET /alertList`, `POST /alertAcknowledge`, `POST /alertTurnOff`
 - `GET`/`PUT /tenantSetting` — the tenant's reminder settings
 

@@ -2,6 +2,7 @@ package watchdog
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -42,6 +43,15 @@ func (f *fakeInboundStore) AcknowledgeDeviceAlerts(_ context.Context, _ int, dev
 func (f *fakeInboundStore) InsertSMS(_ context.Context, m repository.SMSRecord, _ float64) error {
 	f.smsList = append(f.smsList, m)
 	return nil
+}
+
+func (f *fakeInboundStore) SMSRelayMessageSeen(_ context.Context, relayMessageID int64) (bool, error) {
+	for _, m := range f.smsList {
+		if m.RelayMessageID != nil && *m.RelayMessageID == relayMessageID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func inboundSetup(status string) (*fakeInboundStore, *fakeSender, *Inbound) {
@@ -109,5 +119,46 @@ func TestInboundUnknownNumberGetsNoReply(t *testing.T) {
 	reply, _ := in.Handle(context.Background(), "+15559999999", "OK")
 	if reply != "" || len(sender.sent) != 0 || len(store.smsList) != 1 || store.smsList[0].ContactID != nil {
 		t.Fatalf("unknown number: reply %q sent %v recorded %+v", reply, sender.sent, store.smsList)
+	}
+}
+
+func TestInboundRelayedSkipsAnIDAlreadyHandled(t *testing.T) {
+	store, sender, in := inboundSetup("active")
+	if err := in.HandleRelayed(context.Background(), 41, "+15550000001", "OK"); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.smsList) != 2 || store.smsList[0].RelayMessageID == nil ||
+		*store.smsList[0].RelayMessageID != 41 || store.smsList[1].RelayMessageID != nil {
+		t.Fatalf("want the text in (relay id 41) and the reply out: %+v", store.smsList)
+	}
+	if err := in.HandleRelayed(context.Background(), 41, "+15550000001", "OK"); err != nil {
+		t.Fatal(err)
+	}
+	if len(sender.sent) != 1 || len(store.smsList) != 2 {
+		t.Fatalf("a redelivered id was handled again: sent %v", sender.sent)
+	}
+}
+
+type failingAckStore struct{ *fakeInboundStore }
+
+func (failingAckStore) AcknowledgeDeviceAlerts(context.Context, int, int, string, float64) (int, error) {
+	return 0, errors.New("database down")
+}
+
+// A text whose handling failed leaves no record, so its relay id comes
+// back unseen and is handled on redelivery.
+func TestInboundRelayedFailureRecordsNothing(t *testing.T) {
+	store, sender, in := inboundSetup("active")
+	in.Store = failingAckStore{store}
+	if err := in.HandleRelayed(context.Background(), 42, "+15550000001", "OK"); err == nil {
+		t.Fatal("want the store's error")
+	}
+	if len(store.smsList) != 0 || len(sender.sent) != 0 {
+		t.Fatalf("a failed text was recorded or answered: %+v %v", store.smsList, sender.sent)
+	}
+	in.Store = store
+	if err := in.HandleRelayed(context.Background(), 42, "+15550000001", "OK"); err != nil ||
+		store.acked[1] != "Ann" {
+		t.Fatalf("redelivery: err %v acked %v", err, store.acked)
 	}
 }

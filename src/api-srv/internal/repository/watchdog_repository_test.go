@@ -250,4 +250,21 @@ func (s *WatchdogRepositoryTestSuite) TestInviteAndContactStatus() {
 		SecurityContextID: 2, Direction: "in", PhoneE164: "+15557770002",
 		Body: "Y", ContactID: &contactID, Status: "received",
 	}, wdTS+3))
+
+	// A text read from the SMS relay is recorded once per relay id.
+	relayID := int64(-wdTS) // no real relay id is negative
+	seen, err := s.repo.SMSRelayMessageSeen(ctx, relayID)
+	s.Require().NoError(err)
+	s.False(seen, "an id never recorded reads as seen")
+	relayed := SMSRecord{
+		SecurityContextID: 2, Direction: "in", PhoneE164: "+15557770002",
+		Body: "OK", ContactID: &contactID, Status: "received",
+		RelayMessageID: &relayID,
+	}
+	s.Require().NoError(s.repo.InsertSMS(ctx, relayed, wdTS+4))
+	seen, err = s.repo.SMSRelayMessageSeen(ctx, relayID)
+	s.Require().NoError(err)
+	s.True(seen)
+	s.Error(s.repo.InsertSMS(ctx, relayed, wdTS+5),
+		"a second row for one relay id was accepted")
 }

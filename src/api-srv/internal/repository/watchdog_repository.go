@@ -114,6 +114,8 @@ type SMSRecord struct {
 	ProviderMessageID *string
 	Status            string
 	ErrorText         *string
+	// RelayMessageID is the SMS relay's id of an inbound text read from it.
+	RelayMessageID *int64
 }
 
 // WatchdogDeviceList is every live device with its live beacons and its
@@ -489,14 +491,31 @@ func (r *WatchdogRepository) InsertSMS(ctx context.Context, m SMSRecord, now flo
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO sms_message (security_context_id, direction, phone_e164, body,
 		    contact_id, alert_event_id, provider_message_id, status, error_text,
-		    create_ts, create_user_id, update_ts, update_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $10, $11)`,
+		    relay_message_id, create_ts, create_user_id, update_ts, update_user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $11, $12)`,
 		m.SecurityContextID, m.Direction, m.PhoneE164, m.Body, m.ContactID,
-		m.AlertEventID, m.ProviderMessageID, m.Status, m.ErrorText, now, watchdogUserID)
+		m.AlertEventID, m.ProviderMessageID, m.Status, m.ErrorText,
+		m.RelayMessageID, now, watchdogUserID)
 	if err != nil {
 		return fmt.Errorf("failed to record text: %w", err)
 	}
 	return nil
+}
+
+// SMSRelayMessageSeen reports whether a text with this SMS relay message
+// id is recorded, in any tenant: the relay's ids are its own, and a
+// redelivered text names no tenant either.
+func (r *WatchdogRepository) SMSRelayMessageSeen(ctx context.Context, relayMessageID int64) (bool, error) {
+	var seen bool
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS (
+		    SELECT 1
+		    FROM sms_message
+		    WHERE relay_message_id = $1)`, relayMessageID).Scan(&seen)
+	if err != nil {
+		return false, fmt.Errorf("failed to look up relay message: %w", err)
+	}
+	return seen, nil
 }
 
 func insertAlertEvent(
