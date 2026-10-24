@@ -49,8 +49,8 @@ Proof of concept first. Branches: `feature/*` -> `dev` -> `uat`
 - [x] Verify on the Pi: band on/off shows present/absent in the log
       (2026-10-24: present 09:17:44, absent 09:19:32, present 09:20:52;
       address unchanged across power cycles). Service installed on the
-      Pi by bin/630, running as user stillthere. Not yet checked: a Pi
-      reboot brings it back.
+      Pi by bin/630, running as user stillthere; back by itself after a
+      Pi reboot (2026-10-24 09:26).
 
 ## 2. Server
 
