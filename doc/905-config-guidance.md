@@ -31,8 +31,12 @@
   `WATCHDOG_TICK_SECONDS` is at least 5. The optional keys
   (`TRUSTED_PROXY_COUNT`, `CORS_ALLOWED_ORIGINS`, the issue-report
   module's `ISSUE_REPORTS_ENABLED` and `ISSUE_RELAY_*`,
-  `doc/150-issue-report-module.md`, and the help module's `HELP_ENABLED`,
-  `doc/151-help-module.md`) and the whole list are in `src/api-srv/README.md`
+  `doc/150-issue-report-module.md`, the help module's `HELP_ENABLED`,
+  `doc/151-help-module.md`, and the SMS relay's `SMS_RELAY_URL`,
+  `SMS_RELAY_TOKEN` (a secret) and `SMS_RELAY_QUEUE`, all three or none,
+  `src/sms-relay/README.md`) and the whole list are in `src/api-srv/README.md`.
+  The relay itself (`src/sms-relay`) reads its own file of the same
+  format, every key required
 - the install (`infra/prd-wbm/bin/prd-stillthere-install`) never rewrites a
   host's env file, so a key that became required after the file was
   written must be added by hand before the new binary starts

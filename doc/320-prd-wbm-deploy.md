@@ -165,8 +165,9 @@ else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
 
 Check: the hash is the one step 2 printed on the laptop,
 `stillthere-infra.tar: OK`, then the listing: the two scripts under
-`infra/prd-wbm/bin/`, nine files under `infra/prd-wbm/etc/` and
-`infra/sql/stillthere-host-db.sql`. A failed check unpacks nothing:
+`infra/prd-wbm/bin/`, twelve files under `infra/prd-wbm/etc/` (three
+are the SMS relay's, installed by SMS relay below) and the two files
+under `infra/sql/`. A failed check unpacks nothing:
 run step 2 again.
 
 ### 6. The service user and the deploy group
@@ -373,7 +374,7 @@ else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
 Check: `nginx -t` says `test is successful`; the http call answers
 `301` to `https://stillthere.teamtaggle.com/`; `site 404 0` (no web
 bundle yet, and a verified certificate: `0`); `webhook / 404`;
-`webhook GET 405`; `webhook POST 502` (the API is not running yet);
+`webhook GET 405`; `webhook POST 502` (the SMS relay is not running yet);
 `gsd 200`; among the body caps, `20M` (this site) and `64k` (the
 webhook) beside gsd's own. If `nginx -t` fails, remove the two links
 before anything else reloads nginx. Rollback:
@@ -480,7 +481,9 @@ add a contact and a device.
 
 Until this step the API writes texts to its log (`SMS_PROVIDER=log`).
 Live texts need the Telnyx account, number and toll-free verification
-(`tasks/todo.md`, Waiting on staff).
+(`tasks/todo.md`, Waiting on staff). Replies reach the API only through
+the SMS relay (SMS relay, below): install it first or alongside, with
+the same `TELNYX_PUBLIC_KEY`.
 
 **In the Telnyx portal** (staff, browser):
 
@@ -528,7 +531,7 @@ else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
 Check: the file is still `root svc-stillthere` `-rw-r-----`;
 `SMS_PROVIDER=telnyx` and four `TELNYX_` lines, none `10 chars`
 (`SERVERONLY`); `active`; `WATCHDOG_MODE ... SMS_PROVIDER=telnyx`;
-`webhook POST 401` (an unsigned call: the API refuses its signature, so
+`webhook POST 401` (an unsigned call: the SMS relay refuses its signature, so
 the route reaches it). Then text the number from a phone: the Telnyx
 portal's message log shows the webhook delivered with `200`. An API
 that will not start names the key in `journalctl -u prd-stillthere-api
@@ -590,6 +593,321 @@ if [ "$(hostname -s)" != prd-wbm ] && [ -x bin/600-deploy-prd ]; then
 else echo "WRONG HOST: nothing ran"; fi
 : '#===================================='
 ```
+
+## SMS relay
+
+The relay (`src/sms-relay/README.md`) takes Telnyx's inbound webhook for
+every app on this host and holds each text in its own database until
+the app reads it. Its own user `svc-smsrelay`, root `/srv/prd-smsrelay`,
+database `prd_smsrelay_db` and loopback port 8095; the webhook site
+(`nginx_webhook.teamtaggle.com`, still in this app's `etc/`) proxies
+`/telnyx-inbound` and `/telnyx-inbound/<queue>` to it, and the API reads
+queue `stillthere` with `SMS_RELAY_*`. Once, after First install. The
+relay needs the account's webhook public key, so it goes in with or
+after step 17. Telnyx's URL stays
+`https://webhook.teamtaggle.com/telnyx-inbound` (queue `stillthere`).
+
+Blocks as in How the command blocks work, except that a LAPTOP block
+here checks `uname` is `Darwin` and the script it runs is in the current
+directory, or prints `WRONG HOST: nothing ran`.
+
+### R1. Build and upload (laptop)
+
+From a clean checkout of `main`. The binary and the host files go with
+one SHA-256 file, checked on the host before anything is unpacked.
+
+LAPTOP
+
+```bash
+: '#===================================='
+if [ "$(uname)" = Darwin ] && [ -x bin/140-build-sms-relay ]; then
+  git status --short
+  git log -1 --oneline
+  bin/140-build-sms-relay
+  git archive --format=tar -o dist/smsrelay-infra.tar HEAD infra/prd-wbm infra/sql
+  (cd dist && shasum -a 256 sms-relay smsrelay-infra.tar > smsrelay.sha256 && cat smsrelay.sha256)
+  scp dist/sms-relay dist/smsrelay-infra.tar dist/smsrelay.sha256 prd-wbm:/tmp/
+else echo "WRONG HOST: nothing ran"; fi
+: '#===================================='
+```
+
+Check: `git status` printed nothing, the log line is the commit to
+install, two hashes, and the scp finished silently.
+
+### R2. A root shell on the host
+
+LAPTOP
+
+```bash
+: '#===================================='
+if [ "$(uname)" = Darwin ]; then ssh -t prd-wbm sudo -i; else echo "WRONG HOST: nothing ran"; fi
+: '#===================================='
+```
+
+Every PRD-WBM block below runs in this shell.
+
+### R3. Check, unpack, preflight
+
+PRD-WBM
+
+```bash
+: '#===================================='
+if [ "$(hostname -s)" = prd-wbm ] && [ "$(id -u)" = 0 ]; then
+  cat /tmp/smsrelay.sha256
+  (cd /tmp && sha256sum -c smsrelay.sha256) \
+  && rm -rf /tmp/smsrelay-infra \
+  && mkdir -m 0700 /tmp/smsrelay-infra \
+  && tar -x -C /tmp/smsrelay-infra -f /tmp/smsrelay-infra.tar \
+  && ls /tmp/smsrelay-infra/infra/prd-wbm/etc/prd-smsrelay.service /tmp/smsrelay-infra/infra/prd-wbm/etc/prd-smsrelay.env /tmp/smsrelay-infra/infra/prd-wbm/etc/prd-smsrelay-migrate.env /tmp/smsrelay-infra/infra/sql/smsrelay-host-db.sql
+  echo "--- port 8095 (must print nothing)"; ss -ltn | grep ':8095 '
+  echo "--- user and root (must not exist)"; id svc-smsrelay; ls -ld /srv/prd-smsrelay
+  echo "--- database (must print 0)"; sudo -u postgres psql -XAtc "SELECT count(*) FROM pg_database WHERE datname = 'prd_smsrelay_db'"
+else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
+: '#===================================='
+```
+
+Check: the hashes are R1's, both `OK`, the four files listed; nothing on
+8095, `no such user`, `No such file`, `0`. A failed hash unpacks
+nothing: run R1 again.
+
+### R4. User, directories, files
+
+PRD-WBM
+
+```bash
+: '#===================================='
+if [ "$(hostname -s)" = prd-wbm ] && [ "$(id -u)" = 0 ]; then
+  id svc-smsrelay > /dev/null 2>&1 || useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin svc-smsrelay
+  install -d -o root -g root -m 0755 /srv/prd-smsrelay /srv/prd-smsrelay/etc /srv/prd-smsrelay/libexec
+  install -o root -g root -m 0755 /tmp/sms-relay /srv/prd-smsrelay/libexec/sms-relay
+  install -o root -g root -m 0644 /tmp/smsrelay-infra/infra/prd-wbm/etc/prd-smsrelay.service /srv/prd-smsrelay/etc/prd-smsrelay.service
+  install -o root -g svc-smsrelay -m 0640 /tmp/smsrelay-infra/infra/prd-wbm/etc/prd-smsrelay.env /srv/prd-smsrelay/etc/prd-smsrelay.env
+  install -o root -g root -m 0600 /tmp/smsrelay-infra/infra/prd-wbm/etc/prd-smsrelay-migrate.env /srv/prd-smsrelay/etc/prd-smsrelay-migrate.env
+  id svc-smsrelay
+  ls -l /srv/prd-smsrelay/etc /srv/prd-smsrelay/libexec
+else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
+: '#===================================='
+```
+
+Check: `svc-smsrelay` with its own group; `prd-smsrelay.env`
+`root svc-smsrelay -rw-r-----`, `prd-smsrelay-migrate.env` `root root
+-rw-------`, the unit `-rw-r--r--`, `sms-relay` `-rwxr-xr-x`. First
+install only: it overwrites the env files R5 fills.
+
+### R5. Secrets and the consumer token
+
+Two database passwords and the token Still There reads its queue with,
+each `openssl rand -hex 32` made here and passed through the environment
+of one `awk`, never a command line. The relay's file gets only the
+token's SHA-256; the token itself goes into the API's file as
+`SMS_RELAY_TOKEN`, with `SMS_RELAY_URL` and `SMS_RELAY_QUEUE` (any
+earlier `SMS_RELAY_` lines there are replaced). The API's file is copied
+to `/root` first. A second run changes nothing. The output holds no
+secret.
+
+PRD-WBM
+
+```bash
+: '#===================================='
+if [ "$(hostname -s)" = prd-wbm ] && [ "$(id -u)" = 0 ]; then
+  ( umask 077
+    APP_PW=$(openssl rand -hex 32) awk '/^DATABASE_URL=/ && !a { sub(/SERVERONLY/, ENVIRON["APP_PW"]); a = 1 } { print }' /srv/prd-smsrelay/etc/prd-smsrelay.env > /srv/prd-smsrelay/etc/prd-smsrelay.env.new \
+    && cat /srv/prd-smsrelay/etc/prd-smsrelay.env.new > /srv/prd-smsrelay/etc/prd-smsrelay.env \
+    && rm /srv/prd-smsrelay/etc/prd-smsrelay.env.new
+    DDL_PW=$(openssl rand -hex 32) awk '/^DATABASE_URL=/ && !d { sub(/SERVERONLY/, ENVIRON["DDL_PW"]); d = 1 } { print }' /srv/prd-smsrelay/etc/prd-smsrelay-migrate.env > /srv/prd-smsrelay/etc/prd-smsrelay-migrate.env.new \
+    && cat /srv/prd-smsrelay/etc/prd-smsrelay-migrate.env.new > /srv/prd-smsrelay/etc/prd-smsrelay-migrate.env \
+    && rm /srv/prd-smsrelay/etc/prd-smsrelay-migrate.env.new
+    if grep -q '^CONSUMER_TOKEN_LIST=stillthere:SERVERONLY$' /srv/prd-smsrelay/etc/prd-smsrelay.env; then
+      cp -p /srv/prd-stillthere/etc/prd-stillthere-api.env /root/prd-stillthere-api.env.before-smsrelay
+      TOKEN=$(openssl rand -hex 32)
+      HASH=$(printf %s "$TOKEN" | sha256sum | cut -d' ' -f1)
+      HASH="$HASH" awk '/^CONSUMER_TOKEN_LIST=stillthere:SERVERONLY$/ { sub(/SERVERONLY/, ENVIRON["HASH"]) } { print }' /srv/prd-smsrelay/etc/prd-smsrelay.env > /srv/prd-smsrelay/etc/prd-smsrelay.env.new \
+      && cat /srv/prd-smsrelay/etc/prd-smsrelay.env.new > /srv/prd-smsrelay/etc/prd-smsrelay.env \
+      && rm /srv/prd-smsrelay/etc/prd-smsrelay.env.new
+      TOKEN="$TOKEN" awk '!/^#? ?SMS_RELAY_(URL|TOKEN|QUEUE)=/ { print } END { print "SMS_RELAY_URL=http://127.0.0.1:8095"; print "SMS_RELAY_TOKEN=" ENVIRON["TOKEN"]; print "SMS_RELAY_QUEUE=stillthere" }' /srv/prd-stillthere/etc/prd-stillthere-api.env > /srv/prd-stillthere/etc/prd-stillthere-api.env.new \
+      && cat /srv/prd-stillthere/etc/prd-stillthere-api.env.new > /srv/prd-stillthere/etc/prd-stillthere-api.env \
+      && rm /srv/prd-stillthere/etc/prd-stillthere-api.env.new
+    fi )
+  grep -n '^[^#]*SERVERONLY' /srv/prd-smsrelay/etc/*.env
+  awk -F= '/^(CONSUMER_TOKEN_LIST|SMS_RELAY_[A-Z]+)=/ { print FILENAME, $1, length($2) }' /srv/prd-smsrelay/etc/prd-smsrelay.env /srv/prd-stillthere/etc/prd-stillthere-api.env
+  ls -l /srv/prd-smsrelay/etc/*.env /srv/prd-stillthere/etc/prd-stillthere-api.env
+else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
+: '#===================================='
+```
+
+Check: the only `SERVERONLY` left is `TELNYX_PUBLIC_KEY` (R6);
+`CONSUMER_TOKEN_LIST 75`, `SMS_RELAY_URL 21`, `SMS_RELAY_TOKEN 64`,
+`SMS_RELAY_QUEUE 10`; the modes as in R4, and the API's file still
+`root svc-stillthere -rw-r-----`. Rollback: R4 again, then this step;
+for the API's file,
+`cp -p /root/prd-stillthere-api.env.before-smsrelay /srv/prd-stillthere/etc/prd-stillthere-api.env`.
+
+### R6. The Telnyx public key
+
+The relay checks every webhook with the account's public key and will
+not start without one. Copied from the API's file when step 17 put it
+there:
+
+PRD-WBM
+
+```bash
+: '#===================================='
+if [ "$(hostname -s)" = prd-wbm ] && [ "$(id -u)" = 0 ]; then
+  K=$(sed -n 's/^TELNYX_PUBLIC_KEY=//p' /srv/prd-stillthere/etc/prd-stillthere-api.env | head -1)
+  if [ -n "$K" ] && [ "$K" != SERVERONLY ]; then
+    ( umask 077
+      K="$K" awk '/^TELNYX_PUBLIC_KEY=SERVERONLY$/ { $0 = "TELNYX_PUBLIC_KEY=" ENVIRON["K"] } { print }' /srv/prd-smsrelay/etc/prd-smsrelay.env > /srv/prd-smsrelay/etc/prd-smsrelay.env.new \
+      && cat /srv/prd-smsrelay/etc/prd-smsrelay.env.new > /srv/prd-smsrelay/etc/prd-smsrelay.env \
+      && rm /srv/prd-smsrelay/etc/prd-smsrelay.env.new )
+  else echo "no TELNYX_PUBLIC_KEY in the API file: set it by hand (next block)"; fi
+  awk '/^TELNYX_PUBLIC_KEY=/ { print "TELNYX_PUBLIC_KEY", length($0) - 18 " chars" }' /srv/prd-smsrelay/etc/prd-smsrelay.env
+else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
+: '#===================================='
+```
+
+Check: `TELNYX_PUBLIC_KEY 44 chars`. Only if it printed `no
+TELNYX_PUBLIC_KEY` (or `10 chars`): this block opens the file in `vi`
+and has no closing fence, because `vi` takes the terminal; type the
+portal's key (Keys & Credentials, Public Key) in place of `SERVERONLY`.
+
+PRD-WBM
+
+```bash
+: '#===================================='
+if [ "$(hostname -s)" = prd-wbm ] && [ "$(id -u)" = 0 ]; then vi /srv/prd-smsrelay/etc/prd-smsrelay.env; else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
+```
+
+### R7. Roles, the database, the schema
+
+As doc/340, Run it, for the relay's file: `smsrelay_ddl` owns the
+database, `smsrelay_app` (the relay) has DML only; neither is in
+`db_reader` or `db_writer`. Then the schema, as `smsrelay_ddl`.
+
+PRD-WBM
+
+```bash
+: '#===================================='
+if [ "$(hostname -s)" = prd-wbm ] && [ "$(id -u)" = 0 ]; then
+  urlpw() { sed -n 's#^DATABASE_URL=postgres://[^:]*:\([^@]*\)@.*#\1#p' "$1" | head -1; }
+  urldb() { sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' "$1" | head -1; }
+  { printf '\\set db %s\n'     "$(urldb /srv/prd-smsrelay/etc/prd-smsrelay-migrate.env)"
+    printf '\\set ddl_pw %s\n' "$(urlpw /srv/prd-smsrelay/etc/prd-smsrelay-migrate.env)"
+    printf '\\set app_pw %s\n' "$(urlpw /srv/prd-smsrelay/etc/prd-smsrelay.env)"
+    cat /tmp/smsrelay-infra/infra/sql/smsrelay-host-db.sql
+  } | sudo -u postgres psql -X \
+  && /srv/prd-smsrelay/libexec/sms-relay migrate /srv/prd-smsrelay/etc/prd-smsrelay-migrate.env
+else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
+: '#===================================='
+```
+
+Check: the last row `prd_smsrelay_db | smsrelay_ddl` with `CONNECT`
+(`c`) for `smsrelay_ddl` and `smsrelay_app` only, then `migrate: 1
+applied; schema current`. Rollback:
+`sudo -u postgres psql -X -c 'DROP DATABASE prd_smsrelay_db' -c 'DROP ROLE smsrelay_app' -c 'DROP ROLE smsrelay_ddl'`.
+
+### R8. The unit
+
+PRD-WBM
+
+```bash
+: '#===================================='
+if [ "$(hostname -s)" = prd-wbm ] && [ "$(id -u)" = 0 ]; then
+  ln -s /srv/prd-smsrelay/etc/prd-smsrelay.service /etc/systemd/system/prd-smsrelay.service
+  systemctl daemon-reload
+  systemctl enable --now prd-smsrelay
+  sleep 3
+  systemctl is-active prd-smsrelay
+  curl -sS http://127.0.0.1:8095/health; echo
+  journalctl -u prd-smsrelay --no-pager -n 5
+else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
+: '#===================================='
+```
+
+Check: `active`, `{"status":"ok"}`, a `listening` line with
+`127.0.0.1:8095` and `queueTokenCount 1`. A relay that will not start
+names the key or the pending migration in the journal. Rollback:
+`systemctl disable --now prd-smsrelay; rm /etc/systemd/system/prd-smsrelay.service; systemctl daemon-reload`.
+
+### R9. The webhook site points at the relay
+
+The site file is this app's (`/srv/prd-stillthere/etc/`); the old copy
+goes to `/root` first and comes back if `nginx -t` fails.
+
+PRD-WBM
+
+```bash
+: '#===================================='
+if [ "$(hostname -s)" = prd-wbm ] && [ "$(id -u)" = 0 ]; then
+  cp -p /srv/prd-stillthere/etc/nginx_webhook.teamtaggle.com /root/nginx_webhook.teamtaggle.com.before-smsrelay
+  install -o root -g root -m 0644 /tmp/smsrelay-infra/infra/prd-wbm/etc/nginx_webhook.teamtaggle.com /srv/prd-stillthere/etc/nginx_webhook.teamtaggle.com
+  if nginx -t; then systemctl reload nginx; else cp -p /root/nginx_webhook.teamtaggle.com.before-smsrelay /srv/prd-stillthere/etc/nginx_webhook.teamtaggle.com; echo "nginx -t failed: old site restored, nothing reloaded"; fi
+  sleep 2
+  curl -sS -o /dev/null -w 'GET %{http_code}\n' https://webhook.teamtaggle.com/telnyx-inbound
+  curl -sS -o /dev/null -w 'POST bare %{http_code}\n' -X POST -d '{}' https://webhook.teamtaggle.com/telnyx-inbound
+  curl -sS -o /dev/null -w 'POST queue %{http_code}\n' -X POST -d '{}' https://webhook.teamtaggle.com/telnyx-inbound/stillthere
+  curl -sS -o /dev/null -w 'POST bad queue %{http_code}\n' -X POST -d '{}' https://webhook.teamtaggle.com/telnyx-inbound/Bad_Name
+  curl -sS -o /dev/null -w 'queue API %{http_code}\n' https://webhook.teamtaggle.com/queue/stillthere/peek
+else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
+: '#===================================='
+```
+
+Check: `test is successful`; `GET 405`, `POST bare 401`, `POST queue
+401` (unsigned: the relay refuses them, so both routes reach it),
+`POST bad queue 404` and `queue API 404` (nginx, never the relay).
+Rollback:
+`cp -p /root/nginx_webhook.teamtaggle.com.before-smsrelay /srv/prd-stillthere/etc/nginx_webhook.teamtaggle.com; nginx -t && systemctl reload nginx`
+(texts then go to the API's `/smsInbound` again).
+
+### R10. Still There reads its queue
+
+PRD-WBM
+
+```bash
+: '#===================================='
+if [ "$(hostname -s)" = prd-wbm ] && [ "$(id -u)" = 0 ]; then
+  systemctl restart prd-stillthere-api
+  sleep 3
+  systemctl is-active prd-stillthere-api
+  journalctl -u prd-stillthere-api --no-pager -n 100 | grep -E 'SMS_RELAY_(MODE|RECEIVE)' | tail -3
+else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
+: '#===================================='
+```
+
+Check: `active`; `SMS_RELAY_MODE ... queue stillthere` and no
+`SMS_RELAY_RECEIVE` error. Then text `HELP` to the number from a phone:
+within `WATCHDOG_TICK_SECONDS` the reply arrives, and
+`journalctl -u prd-stillthere-api -n 50` shows `SMS_RELAY_DONE`.
+Rollback: R5's copy of the API's file back, then
+`systemctl restart prd-stillthere-api`.
+
+### R11. Clean up
+
+PRD-WBM
+
+```bash
+: '#===================================='
+if [ "$(hostname -s)" = prd-wbm ] && [ "$(id -u)" = 0 ]; then
+  rm -rf /tmp/smsrelay-infra
+  rm -f /tmp/sms-relay /tmp/smsrelay-infra.tar /tmp/smsrelay.sha256
+  rm -f /root/prd-stillthere-api.env.before-smsrelay /root/nginx_webhook.teamtaggle.com.before-smsrelay
+else echo "WRONG HOST OR NOT ROOT: nothing ran"; fi
+: '#===================================='
+```
+
+LAPTOP
+
+```bash
+: '#===================================='
+if [ "$(uname)" = Darwin ] && [ -x bin/140-build-sms-relay ]; then
+  rm -f dist/smsrelay-infra.tar dist/smsrelay.sha256
+else echo "WRONG HOST: nothing ran"; fi
+: '#===================================='
+```
+
+`/root/prd-stillthere-api.env.before-smsrelay` holds the API's secrets:
+delete it once R10 checks out. A later relay release: R1, R3, then
+`install` the binary as in R4, `sms-relay migrate` as in R7 and
+`systemctl restart prd-smsrelay`; env files are never rewritten.
 
 ## Every later release
 

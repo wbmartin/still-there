@@ -5,6 +5,7 @@ tmp/
 src/api-srv/server
 # A bare `go build` in src/load-test; bin/330 builds to tmp/test-logs/.
 src/load-test/load-test
+src/sms-relay/sms-relay
 tests/.venv/
 tests/__pycache__/
 

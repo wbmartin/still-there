@@ -690,3 +690,44 @@ func TestLoadConfig_MonitoringKeys(t *testing.T) {
 		})
 	}
 }
+
+// The SMS relay keys: all three or none, an http(s) URL, a queue name.
+func TestLoadConfig_SMSRelayKeys(t *testing.T) {
+	const relay = "SMS_RELAY_URL=http://127.0.0.1:8095\n" +
+		"SMS_RELAY_TOKEN=t\nSMS_RELAY_QUEUE=stillthere\n"
+	testCaseList := []struct {
+		name        string
+		lines       string
+		wantEnabled bool
+		wantErr     string
+	}{
+		{"absent: off", "", false, ""},
+		{"all three", relay, true, ""},
+		{"no token", "SMS_RELAY_URL=http://127.0.0.1:8095\n" +
+			"SMS_RELAY_QUEUE=stillthere\n", false, "missing SMS_RELAY_TOKEN"},
+		{"only a token", "SMS_RELAY_TOKEN=t\n", false,
+			"missing SMS_RELAY_URL, SMS_RELAY_QUEUE"},
+		{"bad URL", strings.Replace(relay, "http://", "", 1), false,
+			"SMS_RELAY_URL must be an http(s) URL"},
+		{"bad queue", strings.Replace(relay, "=stillthere", "=Still_There", 1),
+			false, "SMS_RELAY_QUEUE must match"},
+	}
+	for _, tc := range testCaseList {
+		t.Run(tc.name, func(t *testing.T) {
+			config, err := LoadConfig(writeEnv(t, validBase+tc.lines))
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.SMSRelayEnabled() != tc.wantEnabled {
+				t.Errorf("SMSRelayEnabled() = %v, want %v",
+					config.SMSRelayEnabled(), tc.wantEnabled)
+			}
+		})
+	}
+}

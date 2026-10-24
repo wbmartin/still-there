@@ -10,6 +10,7 @@ database, `6xx` deploy. Details follow in the sections below.
 | `bin/100-build-api-server` | Build the API and migrator binaries into `dist/` |
 | `bin/110-build-web-app` | `vite build` and a timestamped tar.gz in `dist/` |
 | `bin/120-build-pi-agent` | Cross-compile the Pi agent into `dist/` |
+| `bin/140-build-sms-relay` | Build the SMS relay (linux/amd64, static) into `dist/sms-relay` |
 | `bin/205-migrate-db [dbname]` | Create/migrate the developer database (`loc_stillthere_db`) |
 | `bin/215-run-api-srv` | Build and run the API on :8080 (foreground or background) |
 | `bin/216-stop-local-stack` | Stop this checkout's API and Vite |
@@ -30,6 +31,7 @@ database, `6xx` deploy. Details follow in the sections below.
 ./bin/000-rebrand <slug> "<Display Name>" [--module <go module path>]
 ./bin/100-build-api-server
 ./bin/120-build-pi-agent                # PI_GOARCH=arm64 for 64-bit Pi OS
+./bin/140-build-sms-relay
 ./bin/630-deploy-pi-agent pi@<pi-host> [agent.json]
 ./bin/400-make-local-dev-certs [host]   # default localhost; FORCE=1 overwrites
 ```
@@ -41,6 +43,8 @@ database, `6xx` deploy. Details follow in the sections below.
   first, so a separate build is only for checking it compiles.
 - `120`: `dist/<slug>-agent`, static, `GOARCH=arm GOARM=7` by default
   (32-bit Raspberry Pi OS).
+- `140`: `dist/sms-relay` for prd-wbm (`src/sms-relay/README.md`;
+  installed by `doc/320-prd-wbm-deploy.md`, SMS relay).
 - `630`: builds with `120`, copies the binary, unit and
   `src/pi-agent/deploy/install.sh` to the Pi and runs the install with
   sudo: user `stillthere` (group `bluetooth`), `/usr/local/bin/stillthere-agent`,

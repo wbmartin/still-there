@@ -114,8 +114,8 @@ the signature once, stores the text in its own Postgres table and answers
 At-least-once; apps de-duplicate by relay message id. Outbound texts stay
 in each app.
 
-- [ ] Relay service, own DB, tests.
-- [ ] Still There reads its queue in the watchdog tick (instead of
+- [x] Relay service, own DB, tests (`feature/sms-relay`).
+- [x] Still There reads its queue in the watchdog tick (instead of
       /smsInbound, which stays for local testing).
 - [ ] prd-wbm: relay service, webhook site points at it.
 
@@ -170,6 +170,15 @@ The one list of hand steps on a host.
   `/etc/letsencrypt/renewal-hooks/pre` or `post` and a `deploy` hook
   that reloads nginx (gsd-notes doc/320, Certificates). Otherwise this
   app's webroot renewals fail. Check: doc/320 step 4.
+- [ ] **H4. prd-wbm, the SMS relay** (`src/sms-relay`): user
+  `svc-smsrelay`, `/srv/prd-smsrelay`, database `prd_smsrelay_db`, unit
+  `prd-smsrelay` on `127.0.0.1:8095`, the webhook site pointed at it, and
+  the API's `SMS_RELAY_*` keys. Command: `doc/320-prd-wbm-deploy.md`, SMS
+  relay, R1-R11. Needs H2 and the Telnyx public key (step 17, or the
+  portal). Check: R8 `{"status":"ok"}`; R9 `POST bare 401`, `POST queue
+  401`, `queue API 404`; R10 a texted `HELP` answered and
+  `SMS_RELAY_DONE` in the API's journal. Rollback: each step's own; R9
+  restores the old webhook site (texts back to `/smsInbound`).
 - Backups: not set up yet (gsd-notes doc/380 is the pattern).
 
 Each entry: host and change, command, check, rollback. Agents add

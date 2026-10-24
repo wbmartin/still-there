@@ -1,0 +1,53 @@
+# /srv/prd-smsrelay/etc/prd-smsrelay.service, symlinked from
+# /etc/systemd/system/. The SMS relay (src/sms-relay): Telnyx's inbound
+# webhook for every app on this host, behind nginx_webhook.teamtaggle.com,
+# and the queue API the apps read on loopback. Its own app root, user and
+# database, so it can move to another host or repository later. Installed
+# by doc/320-prd-wbm-deploy.md, SMS relay; edit the repo copy, then copy
+# it to the host and daemon-reload.
+[Unit]
+Description=SMS relay (Go)
+After=network-online.target postgresql.service
+Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+[Service]
+Type=simple
+User=svc-smsrelay
+Group=svc-smsrelay
+WorkingDirectory=/srv/prd-smsrelay
+ExecStart=/srv/prd-smsrelay/libexec/sms-relay serve /srv/prd-smsrelay/etc/prd-smsrelay.env
+Restart=on-failure
+RestartSec=5
+
+# The relay writes no files: it logs to the journal and keeps its state in
+# Postgres, so the whole filesystem is read-only to it.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=prd-smsrelay
+
+[Install]
+WantedBy=multi-user.target

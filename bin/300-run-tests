@@ -139,7 +139,7 @@ fi
 # Go analysers are pinned and installed once under tmp/ (go install, no
 # go.mod entry), so every machine runs the same version and a later run
 # needs no network. An installed copy of another version is replaced.
-GO_MODULE_DIR_LIST=(src/api-srv src/load-test src/pi-agent)
+GO_MODULE_DIR_LIST=(src/api-srv src/load-test src/pi-agent src/sms-relay)
 STATICCHECK_VERSION=v0.8.1
 GOVULNCHECK_VERSION=v1.7.0
 TOOLS_BIN="$PROJECT_ROOT/tmp/tools/bin"
@@ -297,11 +297,13 @@ if [ "$MODE" = all ] || [ "$MODE" = go ]; then
     STEP_LOG="$GO_LOG"
     : > "$GO_LOG"
     # Coverage rides the same run: a report per module in REPORT_DIR, no
-    # threshold.
+    # threshold. src/sms-relay builds its own scratch database,
+    # loc_smsrelay_test_db, from TEST_PG_URL_BASE.
     for module_dir in "${GO_MODULE_DIR_LIST[@]}"; do
         echo "[INFO] go test $module_dir"
         (cd "$PROJECT_ROOT/$module_dir" \
-            && TEST_DATABASE_URL="$TEST_DATABASE_URL" go test -v \
+            && TEST_DATABASE_URL="$TEST_DATABASE_URL" \
+                TEST_PG_URL_BASE="$TEST_PG_URL_BASE" go test -v \
                 -coverprofile="$REPORT_DIR/go-coverage-${module_dir##*/}.out" \
                 ./...) \
             >> "$GO_LOG" 2>&1 || true

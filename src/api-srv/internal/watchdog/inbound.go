@@ -17,6 +17,7 @@ type InboundStore interface {
 	SetContactStatus(ctx context.Context, contactID int, securityContext int, status string, now float64) error
 	AcknowledgeDeviceAlerts(ctx context.Context, securityContext int, deviceID int, actorName string, now float64) (int, error)
 	InsertSMS(ctx context.Context, m repository.SMSRecord, now float64) error
+	SMSRelayMessageSeen(ctx context.Context, relayMessageID int64) (bool, error)
 }
 
 // Inbound handles a text a person sent us: the keyword decides, the
@@ -69,6 +70,25 @@ func (in *Inbound) Handle(ctx context.Context, from string, body string) (string
 // tenant). The simulate route uses it, so an admin can stand in only for
 // their own tenant's contacts.
 func (in *Inbound) HandleInTenant(ctx context.Context, from string, body string, securityContext int) (string, error) {
+	return in.handle(ctx, from, body, securityContext, nil)
+}
+
+// HandleRelayed is Handle for a text read from the SMS relay, which
+// delivers at least once: an id already recorded on an inbound row was
+// handled and is skipped. The id is recorded only once the text was acted
+// on, so a text whose handling failed is handled again when it returns.
+func (in *Inbound) HandleRelayed(ctx context.Context, relayMessageID int64, from string, body string) error {
+	seen, err := in.Store.SMSRelayMessageSeen(ctx, relayMessageID)
+	if err != nil || seen {
+		return err
+	}
+	_, err = in.handle(ctx, from, body, 0, &relayMessageID)
+	return err
+}
+
+// handle acts on the text, then records it (with its relay id, if any),
+// then sends the reply. A failed step returns before the record.
+func (in *Inbound) handle(ctx context.Context, from string, body string, securityContext int, relayMessageID *int64) (string, error) {
 	now := in.now()
 	contactList, err := in.Store.ContactListByPhone(ctx, from)
 	if err != nil {
@@ -79,8 +99,8 @@ func (in *Inbound) HandleInTenant(ctx context.Context, from string, body string,
 			return c.SecurityContextID != securityContext
 		})
 	}
-	in.record(ctx, contactList, from, body, now)
 	if len(contactList) == 0 {
+		in.record(ctx, contactList, from, body, relayMessageID, now)
 		in.Log.Info("SMS_INBOUND", "text from an unknown number", "from", sms.MaskPhone(from))
 		return "", nil
 	}
@@ -94,6 +114,7 @@ func (in *Inbound) HandleInTenant(ctx context.Context, from string, body string,
 				return "", err
 			}
 		}
+		in.record(ctx, contactList, from, body, relayMessageID, now)
 		return "", nil
 	case oneOf(word, joinWordList), oneOf(word, startWordList):
 		// Y joins an invited contact; START also re-joins an opted-out one.
@@ -133,6 +154,7 @@ func (in *Inbound) HandleInTenant(ctx context.Context, from string, body string,
 		reply = UnknownReplyText()
 	}
 
+	in.record(ctx, contactList, from, body, relayMessageID, now)
 	if target := textable(contactList); target != nil {
 		providerID, status, err := in.Sender.Send(ctx, from, reply)
 		if err != nil {
@@ -161,12 +183,14 @@ func textable(contactList []*repository.WatchContact) *repository.WatchContact {
 	return nil
 }
 
-func (in *Inbound) record(ctx context.Context, contactList []*repository.WatchContact, phone, body string, now float64) {
+func (in *Inbound) record(ctx context.Context, contactList []*repository.WatchContact, phone, body string, relayMessageID *int64, now float64) {
 	var c *repository.WatchContact
 	if len(contactList) > 0 {
 		c = contactList[0]
 	}
-	if err := in.Store.InsertSMS(ctx, smsRecord(c, "in", phone, body, "received"), now); err != nil {
+	rec := smsRecord(c, "in", phone, body, "received")
+	rec.RelayMessageID = relayMessageID
+	if err := in.Store.InsertSMS(ctx, rec, now); err != nil {
 		in.Log.Error("SMS_INBOUND", "recording text", "err", err)
 	}
 }
