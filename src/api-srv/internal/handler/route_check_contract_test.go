@@ -92,6 +92,10 @@ func alertHandlerOf(appServices *app.Services) *AlertHandler {
 	return NewAlertHandler(appServices, nil, nil)
 }
 
+func smsHandlerOf(appServices *app.Services) *SMSHandler {
+	return NewSMSHandler(appServices, nil)
+}
+
 func tenantSettingHandlerOf(appServices *app.Services) *TenantSettingHandler {
 	return NewTenantSettingHandler(appServices, nil)
 }
@@ -402,6 +406,18 @@ var routeContractList = []routeContract{
 	fullChecks("POST /alertTurnOff", model.GrantAlertUpdate,
 		func(s *app.Services) http.HandlerFunc {
 			return alertHandlerOf(s).TurnOffAlert
+		}),
+	{route: "POST /smsInbound",
+		handler: func(s *app.Services) http.HandlerFunc {
+			return smsHandlerOf(s).SMSInbound
+		},
+		rate: true,
+		skip: "Telnyx's webhook, no session: per-address rate limit, " +
+			"then the Ed25519 signature over the body is the credential " +
+			"(TestVerifyTelnyxWebhook)"},
+	fullChecks("POST /smsSimulateInbound", model.GrantAlertUpdate,
+		func(s *app.Services) http.HandlerFunc {
+			return smsHandlerOf(s).SMSSimulateInbound
 		}),
 	fullChecks("GET /tenantSetting", model.GrantTenantSettingRead,
 		func(s *app.Services) http.HandlerFunc {

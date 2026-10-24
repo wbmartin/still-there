@@ -12,6 +12,7 @@ import (
 
 	"stillthere-api/internal/cache"
 	"stillthere-api/internal/logging"
+	"stillthere-api/internal/sms"
 )
 
 // Config holds the application configuration. It is loaded from a flat
@@ -52,6 +53,16 @@ type Config struct {
 	// The in-app help module (doc/151-help-module.md). Optional, off
 	// unless HELP_ENABLED=true.
 	HelpEnabled bool
+	// Monitoring (internal/watchdog, internal/sms). SMSProvider is log
+	// (texts go to the app log) or telnyx, which needs all four TELNYX_*
+	// keys; TelnyxAPIKey is a secret. WatchdogTickSeconds is how often
+	// alarms are evaluated and texts sent.
+	SMSProvider              string
+	TelnyxAPIKey             string
+	TelnyxFromNumber         string
+	TelnyxMessagingProfileID string
+	TelnyxPublicKey          string
+	WatchdogTickSeconds      int
 }
 
 // The issue relay's interval when ISSUE_RELAY_INTERVAL_SECONDS is unset,
@@ -298,6 +309,9 @@ func LoadConfig(configFilePath string) (*Config, error) {
 	if err := loadIssueReportKeys(env, &config); err != nil {
 		return nil, err
 	}
+	if err := loadMonitoringKeys(env, &config); err != nil {
+		return nil, err
+	}
 
 	// Optional: a file written before the help module existed leaves it
 	// off. A value set is exactly true or false, so a typo fails start-up
@@ -378,6 +392,60 @@ func loadIssueReportKeys(env map[string]string, config *Config) error {
 		}
 		config.IssueRelayIntervalSeconds = val
 	}
+	return nil
+}
+
+// minWatchdogTickSeconds keeps the watchdog from hammering the database.
+const minWatchdogTickSeconds = 5
+
+// loadMonitoringKeys reads the watchdog and SMS keys. All required: a
+// server that cannot say how it sends texts must not start and look
+// healthy while sending none.
+func loadMonitoringKeys(env map[string]string, config *Config) error {
+	config.SMSProvider = env["SMS_PROVIDER"]
+	switch config.SMSProvider {
+	case "log":
+	case "telnyx":
+		config.TelnyxAPIKey = env["TELNYX_API_KEY"]
+		config.TelnyxFromNumber = env["TELNYX_FROM_NUMBER"]
+		config.TelnyxMessagingProfileID = env["TELNYX_MESSAGING_PROFILE_ID"]
+		config.TelnyxPublicKey = env["TELNYX_PUBLIC_KEY"]
+		var missingList []string
+		for _, key := range []string{
+			"TELNYX_API_KEY", "TELNYX_FROM_NUMBER",
+			"TELNYX_MESSAGING_PROFILE_ID", "TELNYX_PUBLIC_KEY",
+		} {
+			if env[key] == "" {
+				missingList = append(missingList, key)
+			}
+		}
+		if len(missingList) > 0 {
+			return fmt.Errorf(
+				"SMS_PROVIDER=telnyx needs %s", strings.Join(missingList, ", "),
+			)
+		}
+		if !sms.E164.MatchString(config.TelnyxFromNumber) {
+			return fmt.Errorf(
+				"TELNYX_FROM_NUMBER must be E.164 (+18005550100), got %q",
+				config.TelnyxFromNumber,
+			)
+		}
+	default:
+		return fmt.Errorf(
+			"SMS_PROVIDER must be log or telnyx, got %q", env["SMS_PROVIDER"],
+		)
+	}
+	tick, err := requirePositiveInt(env, "WATCHDOG_TICK_SECONDS")
+	if err != nil {
+		return err
+	}
+	if tick < minWatchdogTickSeconds {
+		return fmt.Errorf(
+			"WATCHDOG_TICK_SECONDS must be at least %d, got %d",
+			minWatchdogTickSeconds, tick,
+		)
+	}
+	config.WatchdogTickSeconds = tick
 	return nil
 }
 

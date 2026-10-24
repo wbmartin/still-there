@@ -70,6 +70,13 @@ Optional:
   the host's file only
 - `ISSUE_RELAY_INTERVAL_SECONDS` — how often the relay sends and syncs;
   default 120, at least 15
+- `SMS_PROVIDER` — required, `log` (texts written to the app log as
+  `SMS_LOG`, none sent; `/smsSimulateInbound` on) or `telnyx`, which also
+  needs `TELNYX_API_KEY` (a secret), `TELNYX_FROM_NUMBER` (E.164),
+  `TELNYX_MESSAGING_PROFILE_ID` and `TELNYX_PUBLIC_KEY` (the portal's
+  webhook signing key)
+- `WATCHDOG_TICK_SECONDS` — required, at least 5: how often the watchdog
+  (`internal/watchdog`) evaluates alarms and sends invites and alert texts
 - `HELP_ENABLED` — `true` or `false` (default): the help module
   (`doc/151-help-module.md`). Off, `/helpEvent` and `/helpInsights` answer
   404 and the web app shows no Help button
@@ -142,6 +149,9 @@ password is always sent as `password`; group membership bodies are
   (`?deviceId=`); every write bumps the device's config version
 - `GET /contactList`, `POST`/`PUT`/`DELETE /contact` — the people texted
   about a device
+- `POST /smsInbound` — Telnyx's webhook for texts people send us
+  (`SMS_PROVIDER=telnyx`); `POST /smsSimulateInbound` stands in for it
+  under `SMS_PROVIDER=log`
 - `GET /alertList`, `POST /alertAcknowledge`, `POST /alertTurnOff`
 - `GET`/`PUT /tenantSetting` — the tenant's reminder settings
 

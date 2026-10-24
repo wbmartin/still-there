@@ -20,6 +20,8 @@ import (
 	"stillthere-api/internal/logging"
 	"stillthere-api/internal/repository"
 	"stillthere-api/internal/security"
+	"stillthere-api/internal/sms"
+	"stillthere-api/internal/watchdog"
 )
 
 func main() {
@@ -173,6 +175,20 @@ func main() {
 		appServices, alertRepository, userRepo)
 	tenantSettingHandler := handler.NewTenantSettingHandler(
 		appServices, tenantSettingRepository)
+	// Texts: SMS_PROVIDER picks the sender; the watchdog (started below)
+	// and inbound replies share it.
+	var smsSender sms.Sender = sms.LogSender{Log: logger}
+	if config.SMSProvider == "telnyx" {
+		smsSender = sms.TelnyxSender{
+			APIKey:             config.TelnyxAPIKey,
+			FromNumber:         config.TelnyxFromNumber,
+			MessagingProfileID: config.TelnyxMessagingProfileID,
+		}
+	}
+	watchdogRepository := repository.NewWatchdogRepository(dbPool)
+	smsHandler := handler.NewSMSHandler(appServices, &watchdog.Inbound{
+		Store: watchdogRepository, Sender: smsSender, Log: logger,
+	})
 	mfaSetupHandler := handler.MFASetupHandler(appServices, userRepo)
 	mfaVerifyHandler := handler.MFAVerifyHandler(appServices, userRepo)
 
@@ -323,6 +339,10 @@ func main() {
 		tenantSettingHandler.RetrieveTenantSetting)
 	mux.HandleFunc("PUT /tenantSetting",
 		tenantSettingHandler.UpdateTenantSetting)
+	// Texts people send us: the Telnyx webhook (signature is the
+	// credential) and, under SMS_PROVIDER=log, an admin's simulated text
+	mux.HandleFunc("POST /smsInbound", smsHandler.SMSInbound)
+	mux.HandleFunc("POST /smsSimulateInbound", smsHandler.SMSSimulateInbound)
 
 	// Create server. JoinHostPort brackets an IPv6 bind ("[::1]:8080"). The
 	// address is never empty: LoadConfig requires SERVER_BIND_ADDRESS.
@@ -396,6 +416,19 @@ func main() {
 			"ISSUE_RELAY_TOKEN not set); reports stay in the app",
 			"username", "app-root")
 	}
+	// The watchdog: alarms, reminders, invites and alert texts, until
+	// shutdown. Joined before the pool closes, so a text in flight is
+	// recorded.
+	watchdogContext, watchdogCancel := context.WithCancel(context.Background())
+	defer watchdogCancel()
+	watchdogDone := make(chan struct{})
+	go func() {
+		defer close(watchdogDone)
+		(&watchdog.Watchdog{Store: watchdogRepository, Sender: smsSender, Log: logger}).
+			Run(watchdogContext, time.Duration(config.WatchdogTickSeconds)*time.Second)
+	}()
+	logger.Info("WATCHDOG_MODE", fmt.Sprintf("Watchdog on, every %ds, SMS_PROVIDER=%s",
+		config.WatchdogTickSeconds, config.SMSProvider), "username", "app-root")
 	helpModuleState := "off (HELP_ENABLED is not true)"
 	if config.HelpEnabled {
 		helpModuleState = "on"
@@ -426,6 +459,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	watchdogCancel()
+	<-watchdogDone
 	logger.Info("SERVER_STOP", "Server stopped", "username", "app-root")
 }
 

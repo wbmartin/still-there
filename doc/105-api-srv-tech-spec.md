@@ -153,6 +153,8 @@ is the login lockout instead. **CSRF** `CheckCSRF` (never on GET).
 | DELETE | /device | Yes | user+block | Yes | DELETE_DEVICE (1013) | Soft delete; its token stops working, its bands and contacts are hidden |
 | POST | /deviceToken | Yes | user+block | Yes | ISSUE_DEVICE_TOKEN (1014) | New device token, answered once; the previous one stops working |
 | POST | /deviceCheckin | Bearer device token | address | - | - | The Pi's check-in (see Exceptions); answers `{"data":{"configVersion":N}}` |
+| POST | /smsInbound | Telnyx Ed25519 signature | address | - | - | Telnyx webhook, `SMS_PROVIDER=telnyx` only (404 otherwise); a `message.received` text is handled as a reply (Y, OK, STOP, START, HELP), other events dropped (see Exceptions) |
+| POST | /smsSimulateInbound | Yes | user+block | Yes | UPDATE_ALERT (1042) | `{fromPhone, body}` as if that number texted us, `SMS_PROVIDER=log` only (404 otherwise); acts on the caller's tenant's contacts only; answers `{"data":{"reply":"..."}}` |
 | GET | /beaconList | Yes | user+block | (GET) | READ_BEACON (1020) | Bands, by `deviceId`, `beaconIdList` or since a time |
 | POST | /beacon | Yes | user+block | Yes | CREATE_BEACON (1021) | Add a band to a device; bumps the device's `configVersion` |
 | PUT | /beacon | Yes | user+block | Yes | UPDATE_BEACON (1022) | Address and label, optimistic lock; bumps `configVersion` |
@@ -439,6 +441,7 @@ own text goes to the log only.
 | 16 KiB (`model.IssueMaxActionBodyBytes`) | `/issueReportAction` |
 | 16 KiB (`maxDeviceBodyBytes`) | `POST`/`PUT /device`, `/deviceToken`, `POST`/`PUT /beacon`, `POST`/`PUT /contact`, `/alertAcknowledge`, `/alertTurnOff`, `PUT /tenantSetting` |
 | 16 KiB (`model.DeviceCheckinMaxBodyBytes`) | `/deviceCheckin` (read after the token check; a Pi's report is well under 1 KiB) |
+| 64 KiB (`smsWebhookMaxBodyBytes`) | `/smsInbound`, `/smsSimulateInbound` |
 | 18 MiB (`model.IssueMaxRequestBytes`) | `POST /issueReport`, `/issueReportMessage` (multipart: 5 files of 10 MB at most each, the whole under nginx's 20M); a declared length over it is 413 before reading |
 
 Deletes take their ids in the query string and read no body. The entity cap
@@ -572,6 +575,7 @@ anything not here runs all five.
 | `MFASetupHandler`, `MFAVerifyHandler` (`/mfaSetup`, `/mfaVerify`) | JWT, block, CSRF, grant | The temp token from the password step is the only credential: it stands in for the session, so there is no JWT to check and no session id to derive a CSRF token from, and holding it is the grant. `CheckRateLimit` (per address) runs; `SkipUserBlock`, since the token comes from `/auth`, which refuses a blocked login. The 4 KiB body is read after the gate; no temp token is 401 `tempToken is required`, a session cookie or not. The session path both handlers had (`CheckJWT` + `CheckRateLimitAndUserBlock`, GRC backport B094) was used by nothing and skipped CSRF on a signed-in write, so it was removed (GRC backport C004) |
 | `UserInviteHandler.CheckInvite`, `.RedeemInvite` (`/inviteCheck`, `/inviteRedeem`) | JWT, block, CSRF, grant | Public; the token is the credential. Per-address rate limit, then the `/auth` lockout per address plus per token (see Invite Links) |
 | `DeviceHandler.DeviceCheckin` (`/deviceCheckin`) | JWT, block, CSRF, grant | A Pi has no login: `Authorization: Bearer <64 hex>` is the credential. Per-address rate limit; then the token's shape, its SHA-256 looked up across tenants (`RetrieveDeviceByTokenHash`, the third unscoped lookup, like `RetrieveLiveInvite`), and every failure (no header, other scheme, malformed, unknown, reissued, device deleted) is one 401 "Invalid device token". The device row's tenant scopes the write; audit user 0. No cookie authorizes it, so there is no forgery for CSRF to stop. No lockout: the token is 256 random bits |
+| `SMSHandler.SMSInbound` (`/smsInbound`) | JWT, block, CSRF, grant | Telnyx has no login: the `telnyx-signature-ed25519` header, an Ed25519 signature over `<telnyx-timestamp>\|<body>` by `TELNYX_PUBLIC_KEY`, within 5 minutes, is the credential (`sms.VerifyTelnyxWebhook`); a bad one is 401. Per-address rate limit. The sender's number finds its contacts across tenants (`ContactListByPhone`), since a text names no tenant |
 
 #### What proves it
 

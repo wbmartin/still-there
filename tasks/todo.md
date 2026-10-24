@@ -86,12 +86,13 @@ Design agreed 2026-10-24 (staff):
 
 Commits on `feature/server-checkin`, each passing `bin/300-run-tests all`:
 
-- [ ] 1. Schema and grants (migration 0008).
-- [ ] 2. Device API: CRUD, `/deviceToken`, `/deviceCheckin`.
-- [ ] 3. Watchdog, SMS sender (log), inbound replies, simulate endpoint.
+- [x] 1. Schema and grants (migrations 0008, 0009).
+- [x] 2. Device API: CRUD, `/deviceToken`, `/deviceCheckin`.
+- [x] 3. Watchdog, SMS sender (log), inbound replies, simulate endpoint.
 - [ ] 4. Admin pages: devices, bands, contacts, alerts, tenant settings
       (with page help).
-- [ ] Telnyx sender and signed inbound webhook.
+- [x] Telnyx sender and signed inbound webhook (code and unit tests;
+      not yet live: needs the Telnyx keys and a public URL on prd-wbm).
 
 ## 3. Config push
 
@@ -114,7 +115,17 @@ Commits on `feature/server-checkin`, each passing `bin/300-run-tests all`:
 
 ## Host work
 
-The one list of hand steps on a host. None yet.
+The one list of hand steps on a host.
+
+- [ ] **H1. prd-wbm, API env file: add the monitoring keys** before the
+  first deploy that carries the watchdog (the API refuses to start
+  without them): `SMS_PROVIDER=log` and `WATCHDOG_TICK_SECONDS=30`. For
+  live texts, `SMS_PROVIDER=telnyx` plus `TELNYX_API_KEY`,
+  `TELNYX_FROM_NUMBER`, `TELNYX_MESSAGING_PROFILE_ID`, `TELNYX_PUBLIC_KEY`,
+  and the Telnyx messaging profile's webhook URL set to
+  `https://<prd-wbm domain>/api/smsInbound`. Check: the API log shows
+  `WATCHDOG_MODE ... SMS_PROVIDER=<value>`. Rollback: restore the file
+  and the previous binary.
 
 Each entry: host and change, command, check, rollback. Agents add
 entries and never run or tick them; only a staff member's report ticks one.

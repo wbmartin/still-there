@@ -2,6 +2,7 @@ package watchdog
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"stillthere-api/internal/model"
@@ -61,10 +62,22 @@ func oneOf(word string, list []string) bool {
 
 // Handle acts on one text and returns the reply it sent ("" for none).
 func (in *Inbound) Handle(ctx context.Context, from string, body string) (string, error) {
+	return in.HandleInTenant(ctx, from, body, 0)
+}
+
+// HandleInTenant is Handle limited to one tenant's contacts (0: every
+// tenant). The simulate route uses it, so an admin can stand in only for
+// their own tenant's contacts.
+func (in *Inbound) HandleInTenant(ctx context.Context, from string, body string, securityContext int) (string, error) {
 	now := in.now()
 	contactList, err := in.Store.ContactListByPhone(ctx, from)
 	if err != nil {
 		return "", err
+	}
+	if securityContext != 0 {
+		contactList = slices.DeleteFunc(contactList, func(c *repository.WatchContact) bool {
+			return c.SecurityContextID != securityContext
+		})
 	}
 	in.record(ctx, contactList, from, body, now)
 	if len(contactList) == 0 {
