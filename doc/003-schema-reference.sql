@@ -11,7 +11,7 @@
 -- constraints show as their indexes. schema_migration (the migrator's own
 -- table) is left out.
 --
--- Through migration 0008_device_monitoring.
+-- Through migration 0009_device_grants.
 
 CREATE TABLE alert (
     alert_id SERIAL NOT NULL,

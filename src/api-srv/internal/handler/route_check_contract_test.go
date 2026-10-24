@@ -74,6 +74,28 @@ func helpHandlerOf(appServices *app.Services) *HelpHandler {
 	return NewHelpHandler(appServices, new(MockHelpEventRepository))
 }
 
+// The device-monitoring handlers get nil repositories: any call
+// dereferences one.
+func deviceHandlerOf(appServices *app.Services) *DeviceHandler {
+	return NewDeviceHandler(appServices, nil)
+}
+
+func beaconHandlerOf(appServices *app.Services) *BeaconHandler {
+	return NewBeaconHandler(appServices, nil)
+}
+
+func contactHandlerOf(appServices *app.Services) *ContactHandler {
+	return NewContactHandler(appServices, nil)
+}
+
+func alertHandlerOf(appServices *app.Services) *AlertHandler {
+	return NewAlertHandler(appServices, nil, nil)
+}
+
+func tenantSettingHandlerOf(appServices *app.Services) *TenantSettingHandler {
+	return NewTenantSettingHandler(appServices, nil)
+}
+
 // groupHandlerOf passes a nil repository: any call dereferences it.
 func groupHandlerOf(appServices *app.Services) *AppUserGroupHandler {
 	return NewAppUserGroupHandler(appServices, nil)
@@ -307,6 +329,87 @@ var routeContractList = []routeContract{
 	fullChecks("GET /helpInsights", model.GrantUserRead,
 		func(s *app.Services) http.HandlerFunc {
 			return helpHandlerOf(s).RetrieveHelpInsights
+		}),
+
+	fullChecks("GET /deviceList", model.GrantDeviceRead,
+		func(s *app.Services) http.HandlerFunc {
+			return deviceHandlerOf(s).RetrieveDeviceList
+		}),
+	fullChecks("POST /device", model.GrantDeviceCreate,
+		func(s *app.Services) http.HandlerFunc {
+			return deviceHandlerOf(s).CreateDevice
+		}),
+	fullChecks("PUT /device", model.GrantDeviceUpdate,
+		func(s *app.Services) http.HandlerFunc {
+			return deviceHandlerOf(s).UpdateDevice
+		}),
+	fullChecks("DELETE /device", model.GrantDeviceDelete,
+		func(s *app.Services) http.HandlerFunc {
+			return deviceHandlerOf(s).DeleteDevice
+		}),
+	fullChecks("POST /deviceToken", model.GrantDeviceIssueToken,
+		func(s *app.Services) http.HandlerFunc {
+			return deviceHandlerOf(s).IssueDeviceToken
+		}),
+	{route: "POST /deviceCheckin",
+		handler: func(s *app.Services) http.HandlerFunc {
+			return deviceHandlerOf(s).DeviceCheckin
+		},
+		rate: true,
+		skip: "a Pi, no session: per-address rate limit, then the " +
+			"Bearer device token is the credential and names the " +
+			"tenant (TestDeviceCheckin_RefusesWithoutALiveToken)"},
+	fullChecks("GET /beaconList", model.GrantBeaconRead,
+		func(s *app.Services) http.HandlerFunc {
+			return beaconHandlerOf(s).RetrieveBeaconList
+		}),
+	fullChecks("POST /beacon", model.GrantBeaconCreate,
+		func(s *app.Services) http.HandlerFunc {
+			return beaconHandlerOf(s).CreateBeacon
+		}),
+	fullChecks("PUT /beacon", model.GrantBeaconUpdate,
+		func(s *app.Services) http.HandlerFunc {
+			return beaconHandlerOf(s).UpdateBeacon
+		}),
+	fullChecks("DELETE /beacon", model.GrantBeaconDelete,
+		func(s *app.Services) http.HandlerFunc {
+			return beaconHandlerOf(s).DeleteBeacon
+		}),
+	fullChecks("GET /contactList", model.GrantContactRead,
+		func(s *app.Services) http.HandlerFunc {
+			return contactHandlerOf(s).RetrieveContactList
+		}),
+	fullChecks("POST /contact", model.GrantContactCreate,
+		func(s *app.Services) http.HandlerFunc {
+			return contactHandlerOf(s).CreateContact
+		}),
+	fullChecks("PUT /contact", model.GrantContactUpdate,
+		func(s *app.Services) http.HandlerFunc {
+			return contactHandlerOf(s).UpdateContact
+		}),
+	fullChecks("DELETE /contact", model.GrantContactDelete,
+		func(s *app.Services) http.HandlerFunc {
+			return contactHandlerOf(s).DeleteContact
+		}),
+	fullChecks("GET /alertList", model.GrantAlertRead,
+		func(s *app.Services) http.HandlerFunc {
+			return alertHandlerOf(s).RetrieveAlertList
+		}),
+	fullChecks("POST /alertAcknowledge", model.GrantAlertUpdate,
+		func(s *app.Services) http.HandlerFunc {
+			return alertHandlerOf(s).AcknowledgeAlert
+		}),
+	fullChecks("POST /alertTurnOff", model.GrantAlertUpdate,
+		func(s *app.Services) http.HandlerFunc {
+			return alertHandlerOf(s).TurnOffAlert
+		}),
+	fullChecks("GET /tenantSetting", model.GrantTenantSettingRead,
+		func(s *app.Services) http.HandlerFunc {
+			return tenantSettingHandlerOf(s).RetrieveTenantSetting
+		}),
+	fullChecks("PUT /tenantSetting", model.GrantTenantSettingUpdate,
+		func(s *app.Services) http.HandlerFunc {
+			return tenantSettingHandlerOf(s).UpdateTenantSetting
 		}),
 }
 

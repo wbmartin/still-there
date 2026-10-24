@@ -80,6 +80,11 @@ func main() {
 	helpEventRepository := repository.NewHelpEventRepository(dbPool)
 	userInviteRepository := repository.NewUserInviteRepository(dbPool)
 	issueReportRepository := repository.NewIssueReportRepository(dbPool)
+	deviceRepository := repository.NewDeviceRepository(dbPool)
+	beaconRepository := repository.NewBeaconRepository(dbPool)
+	contactRepository := repository.NewContactRepository(dbPool)
+	alertRepository := repository.NewAlertRepository(dbPool)
+	tenantSettingRepository := repository.NewTenantSettingRepository(dbPool)
 
 	// Initialize app dependencies
 	appServices := &app.Services{
@@ -159,6 +164,15 @@ func main() {
 		userRepo,
 		issueRelayDownloader,
 	)
+	// Device monitoring (tasks/todo.md, Server)
+	deviceHandler := handler.NewDeviceHandler(appServices, deviceRepository)
+	beaconHandler := handler.NewBeaconHandler(appServices, beaconRepository)
+	contactHandler := handler.NewContactHandler(
+		appServices, contactRepository)
+	alertHandler := handler.NewAlertHandler(
+		appServices, alertRepository, userRepo)
+	tenantSettingHandler := handler.NewTenantSettingHandler(
+		appServices, tenantSettingRepository)
 	mfaSetupHandler := handler.MFASetupHandler(appServices, userRepo)
 	mfaVerifyHandler := handler.MFAVerifyHandler(appServices, userRepo)
 
@@ -283,6 +297,32 @@ func main() {
 	// user admin reads the tenant's counts
 	mux.HandleFunc("POST /helpEvent", helpHandler.CreateHelpEvent)
 	mux.HandleFunc("GET /helpInsights", helpHandler.RetrieveHelpInsights)
+
+	// Device monitoring: the Pi (device), its bands (beacon), the people
+	// texted about it (contact), its alarms and the tenant's reminder
+	// settings (device_handler.go and its neighbours)
+	mux.HandleFunc("GET /deviceList", deviceHandler.RetrieveDeviceList)
+	mux.HandleFunc("POST /device", deviceHandler.CreateDevice)
+	mux.HandleFunc("PUT /device", deviceHandler.UpdateDevice)
+	mux.HandleFunc("DELETE /device", deviceHandler.DeleteDevice)
+	mux.HandleFunc("POST /deviceToken", deviceHandler.IssueDeviceToken)
+	// The Pi's check-in: no session, the device token is the credential
+	mux.HandleFunc("POST /deviceCheckin", deviceHandler.DeviceCheckin)
+	mux.HandleFunc("GET /beaconList", beaconHandler.RetrieveBeaconList)
+	mux.HandleFunc("POST /beacon", beaconHandler.CreateBeacon)
+	mux.HandleFunc("PUT /beacon", beaconHandler.UpdateBeacon)
+	mux.HandleFunc("DELETE /beacon", beaconHandler.DeleteBeacon)
+	mux.HandleFunc("GET /contactList", contactHandler.RetrieveContactList)
+	mux.HandleFunc("POST /contact", contactHandler.CreateContact)
+	mux.HandleFunc("PUT /contact", contactHandler.UpdateContact)
+	mux.HandleFunc("DELETE /contact", contactHandler.DeleteContact)
+	mux.HandleFunc("GET /alertList", alertHandler.RetrieveAlertList)
+	mux.HandleFunc("POST /alertAcknowledge", alertHandler.AcknowledgeAlert)
+	mux.HandleFunc("POST /alertTurnOff", alertHandler.TurnOffAlert)
+	mux.HandleFunc("GET /tenantSetting",
+		tenantSettingHandler.RetrieveTenantSetting)
+	mux.HandleFunc("PUT /tenantSetting",
+		tenantSettingHandler.UpdateTenantSetting)
 
 	// Create server. JoinHostPort brackets an IPv6 bind ("[::1]:8080"). The
 	// address is never empty: LoadConfig requires SERVER_BIND_ADDRESS.

@@ -73,7 +73,15 @@ $PSQL -d "$DB" -q -v ON_ERROR_STOP=1 -c "
 TRUNCATE TABLE
   example,
   app_user,
-  app_user_group
+  app_user_group,
+  tenant_setting,
+  device,
+  beacon,
+  device_checkin,
+  contact,
+  alert,
+  alert_event,
+  sms_message
 RESTART IDENTITY CASCADE;"
 
 $PSQL -d "$DB" -q -v ON_ERROR_STOP=1 < "$FIXTURES_DIR/test-seed.sql"

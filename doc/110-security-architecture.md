@@ -113,6 +113,12 @@ answer not-found), and at the API where a route reaches the table. Today:
 | `user_invite` | `user_invite_repository_test.go` (reissue and revoke from another tenant) | met |
 | `example` | `example_repository_test.go` `TestCrossTenantIsolation` (list, get, update, delete and the batch writes against a tenant-3 row from tenant 2) | met |
 | `issue_report`, `issue_report_message`, `issue_report_attachment` | `issue_report_repository_test.go` `TestCrossTenantIsolation` (list, get, detail, file and a message with an action against a tenant-3 report from tenant 2); pytest `test_another_tenant_cannot_reach_reports`. No delete exists. The relay's listings cross tenants by design (a system job); each of its writes names the row's tenant beside the id | met |
+| `device`, `device_checkin` | `device_repository_test.go` `TestDeviceCrossTenantIsolation` (list, update, token issue, delete and a check-in write against a tenant-3 device from tenant 2; its token still works for its own tenant); pytest `test_another_tenants_admin_cannot_reach_the_device`. `/deviceCheckin` looks the device up by token hash across tenants by design and then writes in that device's tenant | met |
+| `beacon` | `device_repository_test.go` `TestBeaconCrossTenantIsolation` (list by id and by device, create on their device, update, delete; their device's config version unmoved); pytest as above | met |
+| `contact` | `device_repository_test.go` `TestContactCrossTenantIsolation` (list, create on their device, update, delete); pytest as above (create) | met |
+| `alert`, `alert_event` | `device_repository_test.go` `TestAlertCrossTenantIsolation` (list, acknowledge, turn off; no outbox row written) | met |
+| `tenant_setting` | `device_repository_test.go` `TestTenantSettingCrossTenantIsolation` (read; a save with their lock makes tenant 2's own row) | met |
+| `sms_message` | none yet: no route or repository reads it (the watchdog's, to come) | open |
 | `help_event` | `help_event_repository_test.go` `TestCrossTenantIsolation` (tenant 3's events reach neither tenant 2's insights counts nor its per-user cap); pytest `test_another_tenant_cannot_see_the_events`. Insert-only; no read by id, no update or delete | met |
 
 ## Threats and controls

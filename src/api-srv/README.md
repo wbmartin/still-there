@@ -133,6 +133,18 @@ password is always sent as `password`; group membership bodies are
 - `GET /appUserGroupList`
 - `POST /appUserGroup`, `PUT /appUserGroup`, `DELETE /appUserGroup`
 
+### Device monitoring
+- `GET /deviceList`, `POST`/`PUT`/`DELETE /device` — the Pi base
+  stations; `POST /deviceToken` issues a device's token, answered once
+- `POST /deviceCheckin` — the Pi, no session: `Authorization: Bearer
+  <device token>`; answers `{"data":{"configVersion":N}}`
+- `GET /beaconList`, `POST`/`PUT`/`DELETE /beacon` — a device's bands
+  (`?deviceId=`); every write bumps the device's config version
+- `GET /contactList`, `POST`/`PUT`/`DELETE /contact` — the people texted
+  about a device
+- `GET /alertList`, `POST /alertAcknowledge`, `POST /alertTurnOff`
+- `GET`/`PUT /tenantSetting` — the tenant's reminder settings
+
 ### Other
 - `GET /health` — no auth
 - `POST /error-report` — signed-in (LOGON); logs the caller's client error
