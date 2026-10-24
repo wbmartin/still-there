@@ -11,7 +11,55 @@
 -- constraints show as their indexes. schema_migration (the migrator's own
 -- table) is left out.
 --
--- Through migration 0007_help_event.
+-- Through migration 0008_device_monitoring.
+
+CREATE TABLE alert (
+    alert_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    device_id integer NOT NULL,
+    beacon_id integer,
+    alert_kind text NOT NULL,
+    alert_state text NOT NULL,
+    raised_ts numeric(17,7) NOT NULL,
+    last_notified_ts numeric(17,7),
+    notify_count integer NOT NULL,
+    ack_ts numeric(17,7),
+    ack_by text,
+    ack_via text,
+    off_ts numeric(17,7),
+    off_by text,
+    off_via text,
+    resolved_ts numeric(17,7),
+    last_daily_date text,
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE UNIQUE INDEX alert_pkey ON public.alert USING btree (alert_id);
+CREATE UNIQUE INDEX idx_alert_open ON public.alert USING btree (device_id, COALESCE(beacon_id, 0), alert_kind) WHERE ((resolved_ts IS NULL) AND (delete_ts IS NULL));
+CREATE INDEX idx_alert_sc_update_ts ON public.alert USING btree (security_context_id, update_ts);
+
+CREATE TABLE alert_event (
+    alert_event_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    alert_id integer NOT NULL,
+    event_type text NOT NULL,
+    actor_name text,
+    actor_via text,
+    sent_ts numeric(17,7),
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE UNIQUE INDEX alert_event_pkey ON public.alert_event USING btree (alert_event_id);
+CREATE INDEX idx_alert_event_sc_alert ON public.alert_event USING btree (security_context_id, alert_id);
+CREATE INDEX idx_alert_event_unsent ON public.alert_event USING btree (alert_event_id) WHERE (sent_ts IS NULL);
 
 CREATE TABLE app_user (
     app_user_id SERIAL NOT NULL,
@@ -58,6 +106,93 @@ CREATE UNIQUE INDEX app_user_group_pkey ON public.app_user_group USING btree (ap
 CREATE INDEX idx_app_user_group_id_update_ts ON public.app_user_group USING btree (app_user_group_id, update_ts);
 CREATE INDEX idx_app_user_group_security_context ON public.app_user_group USING btree (security_context_id);
 CREATE INDEX idx_app_user_group_security_context_update_ts ON public.app_user_group USING btree (security_context_id, update_ts);
+
+CREATE TABLE beacon (
+    beacon_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    device_id integer NOT NULL,
+    address text NOT NULL,
+    label text NOT NULL,
+    present boolean,
+    last_seen_ts numeric(17,7),
+    last_rssi integer,
+    last_report_ts numeric(17,7),
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE UNIQUE INDEX beacon_pkey ON public.beacon USING btree (beacon_id);
+CREATE UNIQUE INDEX idx_beacon_sc_device_address ON public.beacon USING btree (security_context_id, device_id, address) WHERE (delete_ts IS NULL);
+CREATE INDEX idx_beacon_sc_update_ts ON public.beacon USING btree (security_context_id, update_ts);
+
+CREATE TABLE contact (
+    contact_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    device_id integer NOT NULL,
+    contact_name text NOT NULL,
+    phone_e164 text NOT NULL,
+    contact_status text NOT NULL,
+    notify_event_list text[] NOT NULL,
+    invite_sent_ts numeric(17,7),
+    opted_in_ts numeric(17,7),
+    opted_out_ts numeric(17,7),
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE UNIQUE INDEX contact_pkey ON public.contact USING btree (contact_id);
+CREATE INDEX idx_contact_phone ON public.contact USING btree (phone_e164) WHERE (delete_ts IS NULL);
+CREATE UNIQUE INDEX idx_contact_sc_device_phone ON public.contact USING btree (security_context_id, device_id, phone_e164) WHERE (delete_ts IS NULL);
+CREATE INDEX idx_contact_sc_update_ts ON public.contact USING btree (security_context_id, update_ts);
+
+CREATE TABLE device (
+    device_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    device_name text NOT NULL,
+    checkin_interval_sec integer NOT NULL,
+    missed_checkin_before_alarm integer NOT NULL,
+    absent_after_sec integer NOT NULL,
+    config_version integer NOT NULL,
+    token_hash text,
+    token_issued_ts numeric(17,7),
+    last_checkin_ts numeric(17,7),
+    last_checkin_json jsonb,
+    last_agent_version text,
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE UNIQUE INDEX device_pkey ON public.device USING btree (device_id);
+CREATE INDEX idx_device_sc_update_ts ON public.device USING btree (security_context_id, update_ts);
+CREATE UNIQUE INDEX idx_device_token_hash ON public.device USING btree (token_hash);
+
+CREATE TABLE device_checkin (
+    device_checkin_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    device_id integer NOT NULL,
+    received_ts numeric(17,7) NOT NULL,
+    sent_ts numeric(17,7),
+    reason text NOT NULL,
+    body_json jsonb NOT NULL,
+    source_ip text,
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE UNIQUE INDEX device_checkin_pkey ON public.device_checkin USING btree (device_checkin_id);
+CREATE INDEX idx_device_checkin_sc_device_received ON public.device_checkin USING btree (security_context_id, device_id, received_ts);
 
 CREATE TABLE example (
     example_id SERIAL NOT NULL,
@@ -177,6 +312,44 @@ CREATE INDEX idx_issue_report_message_relay_state ON public.issue_report_message
 CREATE UNIQUE INDEX idx_issue_report_message_remote_id ON public.issue_report_message USING btree (issue_report_id, remote_id) WHERE (remote_id IS NOT NULL);
 CREATE INDEX idx_issue_report_message_sc_report ON public.issue_report_message USING btree (security_context_id, issue_report_id);
 CREATE UNIQUE INDEX issue_report_message_pkey ON public.issue_report_message USING btree (issue_report_message_id);
+
+CREATE TABLE sms_message (
+    sms_message_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    direction text NOT NULL,
+    phone_e164 text NOT NULL,
+    body text NOT NULL,
+    contact_id integer,
+    alert_event_id integer,
+    provider_message_id text,
+    status text NOT NULL,
+    error_text text,
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE INDEX idx_sms_message_phone_create_ts ON public.sms_message USING btree (phone_e164, create_ts);
+CREATE INDEX idx_sms_message_sc_create_ts ON public.sms_message USING btree (security_context_id, create_ts);
+CREATE UNIQUE INDEX sms_message_pkey ON public.sms_message USING btree (sms_message_id);
+
+CREATE TABLE tenant_setting (
+    tenant_setting_id SERIAL NOT NULL,
+    security_context_id integer NOT NULL,
+    time_zone text NOT NULL,
+    remind_interval_min integer NOT NULL,
+    daily_reminder_time text NOT NULL,
+    create_ts numeric(17,7) NOT NULL,
+    create_user_id integer NOT NULL,
+    update_ts numeric(17,7) NOT NULL,
+    update_user_id integer NOT NULL,
+    delete_ts numeric(17,7),
+    delete_user_id integer
+);
+CREATE UNIQUE INDEX idx_tenant_setting_sc ON public.tenant_setting USING btree (security_context_id) WHERE (delete_ts IS NULL);
+CREATE UNIQUE INDEX tenant_setting_pkey ON public.tenant_setting USING btree (tenant_setting_id);
 
 CREATE TABLE user_invite (
     user_invite_id SERIAL NOT NULL,

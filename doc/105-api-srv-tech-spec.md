@@ -6,7 +6,7 @@ This document specifies the ProtoStack-ReactGo API server, a production-ready Go
 
 ### Architecture
 
-- **Language**: Go 1.25.4 minimum (`go` line); built with go1.26.9
+- **Language**: Go 1.25.4 minimum (`go` line); built with go1.26.10
   (`toolchain` line, fetched by `GOTOOLCHAIN=auto`)
 - **Framework**: Standard library with pgx for PostgreSQL
 - **Architecture**: n-tier

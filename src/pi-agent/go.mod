@@ -2,7 +2,7 @@ module pi-agent
 
 go 1.25.4
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 require tinygo.org/x/bluetooth v0.16.0
 

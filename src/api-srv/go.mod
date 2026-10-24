@@ -2,7 +2,7 @@ module stillthere-api
 
 go 1.25.4
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
