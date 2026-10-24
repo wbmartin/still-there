@@ -33,9 +33,10 @@
   module's `ISSUE_REPORTS_ENABLED` and `ISSUE_RELAY_*`,
   `doc/150-issue-report-module.md`, and the help module's `HELP_ENABLED`,
   `doc/151-help-module.md`) and the whole list are in `src/api-srv/README.md`
-- a deploy never rewrites a host's env file, so a key that became required
-  after the file was written must be added by hand before the new binary
-  starts (`doc/320-presales-uat-deploy.md`)
+- the install (`infra/prd-wbm/bin/prd-stillthere-install`) never rewrites a
+  host's env file, so a key that became required after the file was
+  written must be added by hand before the new binary starts
+  (`doc/320-prd-wbm-deploy.md`)
 - **quoting**: the parser (`config.ReadEnvFile`) splits each line on the
   **first** `=`, trims whitespace from the key and the value, and then strips
   **exactly one** matching pair of surrounding quotes, `"…"` or `'…'`. That
@@ -84,13 +85,13 @@
 
   | Variable | Read by | Set by |
   | --- | --- | --- |
-  | `TEST_DATABASE_URL` | the database-backed Go tests: `internal/repository/testdb_test.go`, `internal/migrate/migrate_test.go`, `sql/export_scrub_test.go`, `cmd/migrate/invite_test.go`. Without it they skip, so a bare `go test` never writes to a database a config file happened to name | `etc/loc-test.env` (a host: its own `TEST_ENV` file); `bin/300-run-tests go` passes it to `go test` |
+  | `TEST_DATABASE_URL` | the database-backed Go tests: `internal/repository/testdb_test.go`, `internal/migrate/migrate_test.go`, `cmd/migrate/invite_test.go`, `cmd/migrate/bootstrap_admin_test.go`. Without it they skip, so a bare `go test` never writes to a database a config file happened to name | `etc/loc-test.env` (a host: its own `TEST_ENV` file); `bin/300-run-tests go` passes it to `go test` |
   | `TEST_API_ENV` | `tests/conftest.py`: the private API's config file, read for its limits and checked to name a scratch database | `bin/300-run-tests py` (the copy of `etc/e2e-api-srv.env` it writes to the log directory) |
   | `TEST_BASE_URL` | `tests/conftest.py` and the `tests/test_*.py` modules | `bin/300-run-tests py`, from the `TEST_BASE_URL` key in that config file |
   | `E2E_API_ENV` | `src/web-app/playwright.config.ts` (default `etc/e2e-api-srv.env`); `bin/230-run-web-app-e2e`, `bin/300-run-tests`, `bin/330-test-load` | `etc/loc-test.env`; bin/230 and bin/300 make it absolute and export it |
   | `E2E_USER_NAME`, `E2E_PASSWORD` | `src/web-app/playwright.config.ts`, for global setup and the specs | nothing in the tree. The defaults, `admin` / `admin123!`, are the synthetic fixture login from `sql/fixtures/test-seed.sql` (`DERIVING.md`), not a secret; a host whose fixtures differ sets both |
   | `E2E_DB_SEEDED` | `src/web-app/tests/e2e/global-setup.ts`: set means skip the reseed | `bin/300-run-tests e2e`, which has just rebuilt the database |
-  | `CI` | `src/web-app/playwright.config.ts`: forbid `.only`, two retries, never reuse a running server, list reporter | `infra/uat/etc/uat-stillthere-test.env` (the UAT build host's `TEST_ENV` file); unset on a laptop |
+  | `CI` | `src/web-app/playwright.config.ts`: forbid `.only`, two retries, never reuse a running server, list reporter | set by nothing in the tree; unset on a laptop (playwright reads it if a caller sets it) |
   | `<SERVICE>_LIVE` | a live test (`TestLive<Service>...`, `test_live_<service>_...`); the template has none | by hand only (`tests/README.md`, "Writing tests"); nothing in the gate or on a host sets one |
 
 - the `bin/` scripts take a few overrides from the caller's environment;
@@ -98,11 +99,10 @@
 
   | Variable | Read by | Set by |
   | --- | --- | --- |
-  | `TEST_ENV` | `bin/300-run-tests`, `bin/330-test-load`: which harness file to source | default `etc/loc-test.env`; `infra/uat/bin/uat-stillthere-run-tests` on the UAT host |
+  | `TEST_ENV` | `bin/300-run-tests`, `bin/330-test-load`: which harness file to source | default `etc/loc-test.env` |
   | `TEST_PG_URL_BASE`, `PGPASSWORD`, `PSQL` | `bin/205-migrate-db`, `bin/510-reset-test-db`, `bin/515-reseed-db` (each sources `etc/loc-test.env` only when `TEST_PG_URL_BASE` is unset) | `etc/loc-test.env`, which also exports `PGUSER`, `PGHOST`, `PGPORT` for psql; `PSQL` by hand |
   | `TEST_DB`, `E2E_DB`, `TEST_LOG_DIR` | `bin/300-run-tests`, `bin/330-test-load`, `bin/515-reseed-db` | `etc/loc-test.env` |
   | `SCHEMA_REFERENCE_FILE` | `bin/510-reset-test-db` (default `doc/003-schema-reference.sql`) | `bin/300-run-tests`, to a file in its log directory |
-  | `PRESALES_ENV` | `bin/600-bundle-uat` (default `etc/uat-deploy.env`) | by hand |
   | `FORCE` | `bin/400-make-local-dev-certs`: `FORCE=1` overwrites the pair | by hand |
 
 - the web app: `src/web-app/vite.config.ts` reads `VITE_API_PROXY_URL`

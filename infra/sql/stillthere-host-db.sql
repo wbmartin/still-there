@@ -3,13 +3,14 @@
 -- never as `psql -v` (argv shows in ps). printf is a shell builtin, so the
 -- passwords reach no process's argv:
 --
---   { printf '\\set db %s\n'     uat_stillthere_db
+--   { printf '\\set db %s\n'     prd_stillthere_db
 --     printf '\\set ddl_pw %s\n' "$DDL_PW"
 --     printf '\\set app_pw %s\n' "$APP_PW"
 --     printf '\\set ci_pw %s\n'  "$CI_PW"
 --     cat stillthere-host-db.sql; } | sudo -u postgres psql -X
 --
--- Passwords are hex (openssl rand -hex 32). ci_pw is empty on prod: no CI role.
+-- Passwords are hex (openssl rand -hex 32). ci_pw is empty on prd: no CI
+-- role (prd runs no tests; a build host that did would set it).
 --
 -- Three roles, three jobs:
 --   stillthere_ddl  owns the database, the public schema and every object in it;
@@ -17,14 +18,14 @@
 --              (etc/<env>-stillthere-migrate.env)
 --   stillthere_app  owns nothing; db_reader + db_writer, DML only; the API
 --              (etc/<env>-stillthere-api.env)
---   stillthere_ci   UAT only: CREATEDB for the test run's scratch databases;
---              no CONNECT on the real one (etc/uat-stillthere-test.env)
+--   stillthere_ci   a build host only, never prd: CREATEDB for the test run's
+--              scratch databases; no CONNECT on the real one
 --
 -- Idempotent: a role or database that exists is kept, and each role's
--- password and attributes are set to what this run is given, so a role left
--- by a presales host (stillthere_app) takes the password in the new env file.
+-- password and attributes are set to what this run is given, so a role that
+-- already exists takes the password in the env file.
 -- A database of this name that stillthere_ddl does not own is refused: rename
--- the old one aside first (doc/330). Run it again with the same values and
+-- the old one aside first. Run it again with the same values and
 -- nothing changes. The server logs the passwords only if log_statement is
 -- ddl or all (the default is none).
 \set ON_ERROR_STOP on
@@ -45,14 +46,14 @@ DO $$ BEGIN RAISE EXCEPTION
 \endif
 
 -- Refuse before changing anything if the database exists under another
--- owner (a presales host's): it is renamed aside, never taken over.
+-- owner: it is renamed aside, never taken over.
 SELECT coalesce((SELECT datdba::regrole::text = 'stillthere_ddl'
                    FROM pg_database WHERE datname = :'db'), true) AS owner_ok
 \gset
 \if :owner_ok
 \else
 DO $$ BEGIN RAISE EXCEPTION
-  'database exists, not owned by stillthere_ddl: rename it aside (doc/330)';
+  'database exists, not owned by stillthere_ddl: rename it aside (doc/340)';
 END $$;
 \endif
 

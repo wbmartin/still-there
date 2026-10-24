@@ -84,7 +84,7 @@ func TestCheckScratch(t *testing.T) {
 		"postgres://u:p@127.0.0.1:5432/loc_stillthere_test_db?sslmode=disable": true,
 		"postgres://u:p@127.0.0.1:5432/loc_stillthere_e2e_db":                  true,
 		"postgres://u:p@127.0.0.1:5432/loc_stillthere_db":                      false,
-		"postgres://u:p@127.0.0.1:5432/uat_stillthere_db?sslmode=disable":      false,
+		"postgres://u:p@127.0.0.1:5432/prd_stillthere_db?sslmode=disable":      false,
 		"postgres://u:p@127.0.0.1:5432/loc_stillthere_test_db_old":             false,
 		"postgres://u:p@127.0.0.1:5432/":                                       false,
 		"://not a url":                                                         false,

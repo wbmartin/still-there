@@ -46,11 +46,11 @@ What it did not change, on purpose:
 
 | Where | What | Note |
 |---|---|---|
-| `src/api-srv/sql/roles.sql` | `reallygoodPSQLpassword` for `acme_app` | also in `etc/e2e-api-srv.env`, `etc/loc-api-srv.env`, `etc/loc-test.env` (×3), `infra/uat/etc/uat-acme-test.env` (×3) — keep them equal |
-| `src/api-srv/sql/fixtures/test-seed.sql`, `local-seed.sql` | `admin` / `admin123!`, `basic` / `basic123!` | the pytest, Playwright and load suites log in with these (test seed, tenant 2; the load test reads `TEST_PERSONA_USER`/`TEST_PERSONA_PASSWORD` from `etc/e2e-api-srv.env`); the dev seed has the same logins in tenant 1; change the suites' fixtures with them, and the fixture-login list `src/api-srv/sql/export-scrub.sql` refuses |
+| `src/api-srv/sql/roles.sql` | `reallygoodPSQLpassword` for `acme_app` | also in `etc/e2e-api-srv.env`, `etc/loc-api-srv.env`, `etc/loc-test.env` (×3) — keep them equal |
+| `src/api-srv/sql/fixtures/test-seed.sql`, `local-seed.sql` | `admin` / `admin123!`, `basic` / `basic123!` | the pytest, Playwright and load suites log in with these (test seed, tenant 2; the load test reads `TEST_PERSONA_USER`/`TEST_PERSONA_PASSWORD` from `etc/e2e-api-srv.env`); the dev seed has the same logins in tenant 1; change the suites' fixtures with them |
 | `etc/loc-test.env` | `postgres` superuser password | must match the Postgres on `PGHOST`:`PGPORT`, which is the machine's, not this app's: every derived app on one machine carries the same one here |
 | `etc/loc-api-srv.env`, `etc/e2e-api-srv.env` | `JWT_SECRET`, `TOTP_ENCRYPTION_KEY` (32 bytes hex) | local-only, but make them yours |
-| `etc/uat-api-srv.env.template`, `infra/*/etc/*-api.env` | `__SECRET__` / `SERVERONLY` placeholders | stay placeholders in git; real values are generated on the host (presales by `610`, post-sales by doc/330 / doc/331) |
+| `infra/*/etc/*-api.env` | `SERVERONLY` placeholders | stay placeholders in the repo; real values are generated on the host (`doc/320-prd-wbm-deploy.md`) |
 | `etc/.radley-house` | `HOUSE_API_URL`, `HOUSE_PROJECT_ID`, `BUILD_TOKEN`, `API_TOKEN` | the Radley House tracker, per app. **Delete the inherited file and write the new app's own**, or the app files its tickets into the template's project. Gitignored, so a `git clone` never carries it — but a *copy* of the directory does. No tracker until this exists (`.claude/skills/radley-house/SKILL.md`) |
 
 **A copy is not a clone.** `§1` clones, which leaves every gitignored
@@ -81,21 +81,11 @@ commit of real data.
 
 ## 3. Hosts
 
-- **Presales** (`bin/600`/`610`): `etc/uat-deploy.env` — `UAT_HOST` (ssh
-  alias), `UAT_DOMAIN` (the site's hostname; the repo's `example.com` one
-  is a placeholder and installs no nginx site). Service and paths are
-  already derived from the slug, and the dev database `600` dumps is at
-  `PGHOST`:`PGPORT` from `etc/loc-test.env`. Host prep:
-  `doc/320-presales-uat-deploy.md`.
-- **Post-sales** (`infra/`): rename `infra/uat/` → `infra/<real-uat-host>/`
-  and `infra/prd/` → `infra/<real-prd-host>/`, then fill the `SERVERONLY`
-  values on the host per `infra/README.md`. Moving the presales UAT host
-  onto this path is `doc/330-uat-postsales-cutover.md`; a fresh prod host
-  is `doc/331-prd-postsales-install.md`. Both say `infra/uat` /
-  `infra/prd`: use the renamed directories.
-- **Retiring presales**, once both hosts are post-sales:
-  `doc/330-uat-postsales-cutover.md` section D (what to delete, move and
-  reword).
+- One host per app, no UAT (`doc/320-prd-wbm-deploy.md`): rename
+  `infra/prd-wbm/` to the real host name, set `PRD_SSH_HOST`,
+  `APP_ROOT` and `SITE_URL` in `etc/prd-deploy.env`, and fill the
+  `SERVERONLY` values on the host per `infra/README.md`. Service and
+  paths are already derived from the slug.
 
 ## 4. The example entity
 

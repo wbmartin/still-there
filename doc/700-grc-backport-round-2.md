@@ -33,7 +33,7 @@ shares.
 **How to read.** C-numbers are new; B-numbers refer to round 1. GRC paths
 are written plain (they do not exist here). GRC src/internal/X is PROTO
 src/api-srv/internal/X; GRC infra/uat-unified001 and
-infra/prd-unified002 are PROTO `infra/uat` and `infra/prd`. "RG0043 #n"
+infra/prd-unified002 are PROTO infra/uat and infra/prd. "RG0043 #n"
 is item n of section 11 (Settled) in GRC's review ticket. Sizes: S is under
 an hour, M is a half day.
 
@@ -73,7 +73,7 @@ listed in case staff want to reopen them.
 its procedure still copies a UAT host's Let's Encrypt privkey.pem to the
 laptop's etc/crt directory. `bin/400-make-local-dev-certs` already makes local
 TLS (self-signed, mode 600), and the hosts renew their own
-(`infra/uat/bin/uat-stillthere-renew-web-certs`). PROTO's TLS keys in
+(infra/uat/bin/uat-stillthere-renew-web-certs). PROTO's TLS keys in
 `etc/loc-api-srv.env` are live (bin/400 writes those paths), so they stay.
 - **Recommend:** adapt (staff's call). Delete doc/310 and point the four
 references (CLAUDE.md, README, bin/400 header, doc/902) at bin/400 for
@@ -355,7 +355,7 @@ is better). The generic part is in C013.
 - **Branch flow feature → uat → main:** PROTO stays main-only (B057). The
 release-safety part is in C010.
 - **GRC renames and counts:** the doc/331 rename (PROTO chose
-`doc/331-prd-postsales-install.md`), GRC doc/105 and doc/810 counts, GRC
+doc/331-prd-postsales-install.md), GRC doc/105 and doc/810 counts, GRC
 doc/902 rows, the GRC CLAUDE.md example names, and the R2 and Entra text.
 
 # Settled
@@ -374,7 +374,7 @@ its Status line; a second commit in the table is a follow-up fix.
 | C006 An admin cannot delete their own login | done | b634ffd |
 | C007 One list of pending host work; a guarded host-change block | done | ab16fe5 |
 | C008 How a derived app retires the presales path | done | dfea118 |
-| C009 `bin/600` leaves full DB-dump bundles in `dist/` | done | 068fc16 |
+| C009 bin/600 leaves full DB-dump bundles in `dist/` | done | 068fc16 |
 | C010 Release branches advance by merge commit, checked first | done | 3e5bf31 |
 | C011 Dev env-file comments and dead keys | done | 2b4bae2 |
 | C012 Stopping dev leaves a test run alone; the load test cannot be re-aimed | done | 5746053 |
@@ -400,8 +400,8 @@ a failed `${VAR:?}` aborts only that line, and the next pasted line runs
 with the variable empty.
 - **PROTO differs:** It uses the guard-line form GRC rejected:
 `: "${APP_ROOT:?}"`, then plain `"$APP_ROOT/..."`. There are 51 guard
-lines across `doc/330-uat-postsales-cutover.md`,
-`doc/331-prd-postsales-install.md`, `doc/340-db-host-setup.md`,
+lines across doc/330-uat-postsales-cutover.md,
+doc/331-prd-postsales-install.md, `doc/340-db-host-setup.md`,
 `doc/350-repository-reset.md` and `infra/README.md`. The failure was
 reproduced in `bash -i` and `zsh -i`. Where it would damage a host:
   - doc/330 near line 296: `chown -R ... "$APP_ROOT"/{bin,libexec,...}`
@@ -452,7 +452,7 @@ characters and a `TOTP_ENCRYPTION_KEY` that is not 64 hex characters
 (`src/api-srv/internal/config/config.go`, around lines 239-248), while
 `internal/auth/totp.go` hex-decodes the key for `aes.NewCipher`. A bad
 key loads, then answers 500 at the first enrolment or login. It is live
-in `infra/uat/etc/uat-stillthere-e2e-api.env`:
+in infra/uat/etc/uat-stillthere-e2e-api.env:
 `TOTP_ENCRYPTION_KEY=e2e-only-totp-key-not-for-deployment` (not hex), so
 MFA on the post-sales UAT e2e harness would fail.
 - **Recommend:** adapt.
@@ -575,7 +575,7 @@ backup stops the paste rather than relying on a comment.
 
 - **GRC source:** 4231421, 9400622; RG0043 #85, #86, #90, #91, #98.
 - **GRC did:** After cutover it deleted:
-  - the presales bundle and deploy scripts, the two `etc/uat-*` templates
+  - the presales bundle and deploy scripts, the two etc/uat-* templates
   and the hand-deploy web tarball script;
   - the presales-only skills and their doc/902 rows;
   - the one-time fail2ban migration script, already applied;
@@ -584,10 +584,10 @@ backup stops the paste rather than relying on a comment.
   doc/330's opening line records the retirement.
 - **PROTO differs:** It is a template and keeps presales, which is right,
 but no document says how a derived app retires it. Section B5 of
-`doc/330-uat-postsales-cutover.md` only says 610 now refuses, and C only
+doc/330-uat-postsales-cutover.md only says 610 now refuses, and C only
 drops the presales DB. Deleting by hand has traps:
-  - `bin/620-export-tenant-data` and `bin/605-survey-host` both source
-  `etc/uat-deploy.env`;
+  - bin/620-export-tenant-data and bin/605-survey-host both source
+  etc/uat-deploy.env;
   - `scripts/doc-paths-allow.txt` allows doc/320 paths;
   - `doc/110-security-architecture.md` rows 2.5, 3.1 and 3.5 describe
   presales controls;
@@ -596,7 +596,7 @@ drops the presales DB. Deleting by hand has traps:
 - **Recommend:** adapt, docs only (delete nothing in PROTO). Add section
 "D. Retire the presales path in this app's repo" to doc/330. It lists:
   - the files to delete;
-  - the keys to move out of `etc/uat-deploy.env` first;
+  - the keys to move out of etc/uat-deploy.env first;
   - the docs to reword and the allow lines to drop;
   - deleting `migrate-to-srv-config` once every host has run it.
 
@@ -608,15 +608,15 @@ lists two traps found in the tree: the Go env-file test counts the
 template (fails at 5), and `bin/110-build-web-app` becomes optional dead
 weight.
 
-### C009 — `bin/600` leaves full DB-dump bundles in `dist/`
+### C009 — bin/600 leaves full DB-dump bundles in `dist/`
 
 - **GRC source:** RG0043 #91, #123 (a presales bundle holding an unscrubbed
 real DB sat in the ignored `dist/`).
 - **GRC did:** Deleted the bundles. Its export script names any leftover
 in `dist/` and prints the `rm`.
-- **PROTO differs:** `bin/620-export-tenant-data` already refuses an output
+- **PROTO differs:** bin/620-export-tenant-data already refuses an output
 directory inside the checkout, which is stronger than GRC. But
-`bin/600-bundle-uat` writes a tarball holding a full `pg_dump` to
+bin/600-bundle-uat writes a tarball holding a full `pg_dump` to
 `dist/` and never removes it after the scp, so bundles pile up: GRC's
 exact case.
 - **Recommend:** adapt. Delete the tarball after a successful scp. For a
@@ -637,7 +637,7 @@ with a merge commit, never a squash, and
 One squash left the branches conflicting in 19 files, and fixing it took
 a synthetic release branch with both parents.
 - **PROTO differs:** It is main-only (B057 skipped the two-branch model).
-`doc/331-prd-postsales-install.md` B6 discusses the release-branch choice
+doc/331-prd-postsales-install.md B6 discusses the release-branch choice
 but not how that branch is advanced.
 - **Recommend:** adapt, docs only. Add two sentences to doc/331 B6 and a
 pre-flight item to `infra/README.md`: if an app moves an integration

@@ -1,0 +1,50 @@
+# /srv/prd-stillthere/etc/prd-stillthere-api.service, symlinked from
+# /etc/systemd/system/ (infra/README.md). Edit the repo copy, then copy it
+# to the host and daemon-reload. prd-stillthere-install restarts it; nothing
+# else does.
+[Unit]
+Description=Still There API (Go)
+After=network-online.target postgresql.service
+Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+[Service]
+Type=simple
+User=svc-stillthere
+Group=svc-stillthere
+WorkingDirectory=/srv/prd-stillthere
+ExecStart=/srv/prd-stillthere/libexec/api-srv /srv/prd-stillthere/etc/prd-stillthere-api.env
+Restart=on-failure
+RestartSec=5
+
+# The API writes no files: it logs to the journal and keeps its state in
+# Postgres, so the whole filesystem is read-only to it.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=prd-stillthere-api
+
+[Install]
+WantedBy=multi-user.target

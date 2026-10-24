@@ -9,6 +9,8 @@
 //	stillthere-migrate new <name>                        create sql/migrations/NNNN_<name>.sql (next free NNNN); no database
 //	stillthere-migrate -config <env file> -base-url <origin> [-invite-ttl-hours N] invite <userName>
 //	                                                print a first sign-in link for an invited login (invite.go)
+//	stillthere-migrate -config <env file> -base-url <origin> [-invite-ttl-hours N] [-tenant N] bootstrap-admin <userName> <email>
+//	                                                make an empty tenant's Admin group and first login, print its link (bootstrap_admin.go)
 //
 // -config is a KEY=VALUE file of which only DATABASE_URL is read -- the
 // migrator's own file, with the DDL role's credentials, never the API's.
@@ -45,9 +47,12 @@ func main() {
 		"site origin the `invite` link is built on, e.g. https://app.example.com")
 	inviteTTLHours := flag.Int("invite-ttl-hours", 72,
 		"hours the `invite` link lives (pass the API's INVITE_TTL_HOURS)")
+	tenant := flag.Int("tenant", 1,
+		"tenant `bootstrap-admin` makes the first login of")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: stillthere-migrate (-config <file> | -url <url>) status|pending|verify|up|stamp <version>|schema-reference\n")
 		fmt.Fprintf(os.Stderr, "       stillthere-migrate (-config <file> | -url <url>) -base-url <origin> [-invite-ttl-hours N] invite <userName>\n")
+		fmt.Fprintf(os.Stderr, "       stillthere-migrate (-config <file> | -url <url>) -base-url <origin> [-invite-ttl-hours N] [-tenant N] bootstrap-admin <userName> <email>\n")
 		fmt.Fprintf(os.Stderr, "       stillthere-migrate [-dir sql/migrations] new <name>\n")
 		flag.PrintDefaults()
 	}
@@ -59,17 +64,21 @@ func main() {
 		}
 		return
 	}
-	invite := inviteOptions{baseURL: *baseURL, ttlHours: *inviteTTLHours}
+	invite := inviteOptions{
+		baseURL: *baseURL, ttlHours: *inviteTTLHours, tenant: *tenant,
+	}
 	if err := run(*configPath, *url, invite, flag.Args()); err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] %v\n", err)
 		os.Exit(1)
 	}
 }
 
-// inviteOptions carries the flags only `invite` reads.
+// inviteOptions carries the flags only `invite` and `bootstrap-admin`
+// read; tenant is bootstrap-admin's alone.
 type inviteOptions struct {
 	baseURL  string
 	ttlHours int
+	tenant   int
 }
 
 func run(
@@ -77,7 +86,7 @@ func run(
 ) error {
 	if len(args) == 0 {
 		return fmt.Errorf("a command is required: status, pending, verify, " +
-			"up, stamp, schema-reference, invite, new")
+			"up, stamp, schema-reference, invite, bootstrap-admin, new")
 	}
 	if url == "" {
 		if configPath == "" {
@@ -206,6 +215,42 @@ func run(
 		fmt.Fprintf(os.Stderr, "[INFO] invite: %s (tenant %d), expires "+
 			"%s; any earlier link for it is revoked\n", issued.userName,
 			issued.securityContext,
+			issued.expires.UTC().Format(time.RFC3339))
+		fmt.Println(issued.link)
+		return nil
+	case "bootstrap-admin":
+		if len(args) != 3 {
+			return fmt.Errorf("bootstrap-admin needs a user name and an " +
+				"email address")
+		}
+		// The writes below are this binary's SQL, on the whole schema.
+		if err := m.Verify(ctx); err != nil {
+			return err
+		}
+		list, err := m.Status(ctx)
+		if err != nil {
+			return err
+		}
+		for _, s := range list {
+			if s.Applied == nil {
+				return fmt.Errorf("migration %04d is pending: run up first",
+					s.Version)
+			}
+		}
+		pool, err := pgxpool.New(ctx, url)
+		if err != nil {
+			return fmt.Errorf("failed to connect: %w", err)
+		}
+		defer pool.Close()
+		issued, err := bootstrapAdmin(ctx, pool, invite.tenant, args[1],
+			args[2], invite.baseURL, invite.ttlHours, time.Now())
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "[INFO] bootstrap-admin: %s (tenant %d) "+
+			"in group %s with every grant, invited; the link expires %s\n",
+			issued.userName, issued.securityContext,
+			bootstrapAdminGroupName,
 			issued.expires.UTC().Format(time.RFC3339))
 		fmt.Println(issued.link)
 		return nil

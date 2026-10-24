@@ -204,10 +204,9 @@ The migration is 0007, after the issue-report module's 0006
 
 ## Export to a host
 
-`bin/620-export-tenant-data` does not carry help usage: its scrub
-(`src/api-srv/sql/export-scrub.sql`) removes every `help_event` row from
-the copy it dumps. They are the laptop's own searches and views, which
-would skew the host's Help insights, and search text is whatever was
+There is no export path: nothing copies the laptop database to the host,
+so help usage stays on the laptop. `help_event` rows are the laptop's own
+searches and views, which would skew the host's Help insights, and search text is whatever was
 typed there. The help content itself is code and ships with the build.
 
 ## Where the code is

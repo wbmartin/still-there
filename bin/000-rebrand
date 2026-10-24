@@ -56,8 +56,6 @@ perl -pi -e "
   s/\b(uat|prd|loc)_${OLD}_/\$1_${NEW}_/g;
   s/\b${OLD}_(app|ddl|ci)\b/${NEW}_\$1/g;
   s/_${OLD}_db\b/_${NEW}_db/g;
-  s#/build-stg/${OLD}\b#/build-stg/${NEW}#g;
-  s/\b(build|promote)-${OLD}_/\$1-${NEW}_/g;
   s/vnd\.${OLD}\./vnd.${NEW}./g;
   s/\b${OLD}_api_server\b/${NEW}_api_server/g;
   s/\Q${OLD_NAME}\E/${NEW_NAME}/g;
@@ -89,7 +87,7 @@ echo
 echo "Renamed. Review with: git status && git diff --stat"
 echo "Left for a human — see DERIVING.md:"
 echo "  - rotate the local passwords and secrets (roles.sql, fixtures, etc/*.env)"
-echo "  - rename infra/uat, infra/prd to the real host names"
+echo "  - rename infra/prd-wbm to the real host name"
 echo "  - CLAUDE.md: first paragraph and Layout describe ProtoStack; make them describe $NEW"
 echo "  - CLAUDE.md: add the DERIVING.md §8 Template lineage block; derived from commit $(git rev-parse --short HEAD) on $(git log -1 --format=%cs)"
 echo "  - local Postgres: databases are now loc_${NEW}_*; bin/510 rebuilds the scratch ones"

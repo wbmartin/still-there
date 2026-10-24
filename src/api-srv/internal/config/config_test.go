@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -434,13 +433,9 @@ var secretStandInMap = map[string]string{
 	"TOTP_ENCRYPTION_KEY": validTOTPKey,
 }
 
-// templateTokenPattern is a bin/610 fill-in token such as __TOTP_KEY__.
-var templateTokenPattern = regexp.MustCompile(`^__[A-Z_]+__$`)
-
-// Every API env file the repo ships loads through the real loader. Two
-// kinds hold placeholders for the secrets instead of values: the infra
-// copies of host files (redacted SERVERONLY) and the UAT template
-// (__TOKENS__ bin/610 fills). Those must hold the placeholder -- a real
+// Every API env file the repo ships loads through the real loader. The
+// infra copies of host files hold placeholders for the secrets instead of
+// values (redacted SERVERONLY). Those must hold the placeholder -- a real
 // value there is a leak -- and the test swaps in a well-formed stand-in
 // (a repeated key takes the last value) so the rest of the file still
 // goes through LoadConfig. Every other file, the test harnesses included,
@@ -450,7 +445,6 @@ func TestLoadConfig_RepoEnvFiles(t *testing.T) {
 	var pathList []string
 	for _, pattern := range []string{
 		"etc/*-api-srv.env",
-		"etc/*-api-srv.env.template",
 		"infra/*/etc/*-api.env",
 	} {
 		matchList, err := filepath.Glob(filepath.Join(repoRoot, pattern))
@@ -459,8 +453,8 @@ func TestLoadConfig_RepoEnvFiles(t *testing.T) {
 		}
 		pathList = append(pathList, matchList...)
 	}
-	if len(pathList) < 6 {
-		t.Fatalf("found %d API env files, want at least 6: %v",
+	if len(pathList) < 3 {
+		t.Fatalf("found %d API env files, want at least 3: %v",
 			len(pathList), pathList)
 	}
 	for _, path := range pathList {
@@ -470,15 +464,12 @@ func TestLoadConfig_RepoEnvFiles(t *testing.T) {
 		}
 		relPath = filepath.ToSlash(relPath)
 		// Only the test harness (an e2e file) may turn mfa_exempt on
-		// through the API; dev, the UAT template and every server refuse.
+		// through the API; dev and every server refuse.
 		// Its throwaway secrets are real values, so MFA works there.
 		isHarness := strings.Contains(filepath.Base(path), "e2e")
-		isTemplate := strings.HasSuffix(path, ".template")
 		isHostCopy := strings.HasPrefix(relPath, "infra/") && !isHarness
 
-		loadPath, ok := standInPlaceholders(
-			t, path, relPath, isTemplate, isHostCopy,
-		)
+		loadPath, ok := standInPlaceholders(t, path, relPath, isHostCopy)
 		if !ok {
 			continue
 		}
@@ -500,14 +491,14 @@ func TestLoadConfig_RepoEnvFiles(t *testing.T) {
 	}
 }
 
-// standInPlaceholders checks the secrets of a template or host copy are
-// placeholders and returns a temp copy with stand-ins appended; any other
-// file is returned unchanged. ok is false when a check failed.
+// standInPlaceholders checks the secrets of a host copy are placeholders
+// and returns a temp copy with stand-ins appended; any other file is
+// returned unchanged. ok is false when a check failed.
 func standInPlaceholders(
-	t *testing.T, path, relPath string, isTemplate, isHostCopy bool,
+	t *testing.T, path, relPath string, isHostCopy bool,
 ) (string, bool) {
 	t.Helper()
-	if !isTemplate && !isHostCopy {
+	if !isHostCopy {
 		return path, true
 	}
 	env, err := ReadEnvFile(path)
@@ -522,15 +513,9 @@ func standInPlaceholders(
 	standInText := "\n"
 	for _, key := range []string{"JWT_SECRET", "TOTP_ENCRYPTION_KEY"} {
 		value := env[key]
-		isPlaceholder := value == "SERVERONLY"
-		wantText := "SERVERONLY (a redacted host copy)"
-		if isTemplate {
-			isPlaceholder = templateTokenPattern.MatchString(value)
-			wantText = "a __TOKEN__ bin/610 fills"
-		}
-		if !isPlaceholder {
-			t.Errorf("%s: %s=%q, want %s",
-				relPath, key, value, wantText)
+		if value != "SERVERONLY" {
+			t.Errorf("%s: %s=%q, want SERVERONLY (a redacted host copy)",
+				relPath, key, value)
 			return "", false
 		}
 		standInText += key + "=" + secretStandInMap[key] + "\n"

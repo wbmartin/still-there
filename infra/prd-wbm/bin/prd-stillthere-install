@@ -1,0 +1,227 @@
+#!/bin/bash
+# Installs one bundle that bin/600-deploy-prd uploaded from the laptop.
+# Staff, with sudo, on the host:
+#
+#   sudo /srv/prd-stillthere/bin/prd-stillthere-install <bundle>
+#
+# <bundle> is a directory name under incoming/ (<UTC stamp>-<commit>).
+#
+#   copy the bundle to a root-only stage/ -> sha256sum -c SHA256SUMS
+#   -> the INCOMING stillthere-migrate: verify, then pending; pg_dump to backup/
+#      when anything is pending, then up
+#   -> swap libexec/api-srv, libexec/stillthere-migrate, web-pub/ and the
+#      revision file, the live ones kept as .prev
+#   -> systemctl restart SERVICE -> HEALTH_URL until "status":"ok"
+#   -> not healthy: prd-stillthere-rollback puts the .prev set back
+#
+# Migrations are forward-only. A rollback, here or by hand, puts back the
+# previous binaries and web bundle, never the schema: the older code then
+# runs on the newer schema. When it cannot, the way back is the dump this
+# script wrote to backup/ before `up` (doc/320, Rollback).
+#
+# Re-running the bundle that is live changes nothing. A run interrupted
+# while swapping (install.pending names the bundle) resumes: what was
+# already swapped is not rotated again, so .prev stays the previous release.
+set -euo pipefail
+umask 022
+
+SRV_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# The app root is /srv/<env>-<slug>: every env file and script name comes
+# from it.
+APP_ENV="$(basename "$SRV_ROOT")"
+# <env>-<slug>: the binary and revision names carry the slug, as
+# bin/600-deploy-prd names them from etc/app.env.
+APP_SLUG="${APP_ENV#*-}"
+MIGRATE_NAME="$APP_SLUG-migrate"
+DEPLOY_ENV="$SRV_ROOT/etc/$APP_ENV-deploy.env"
+MIGRATE_ENV="$SRV_ROOT/etc/$APP_ENV-migrate.env"
+
+die() { echo "[ERROR] $*" >&2; exit 1; }
+say() { echo "[INFO] $*"; }
+
+[ "$(id -u)" = 0 ] || die "run as root: sudo $0 $*"
+[ "$#" -eq 1 ] || die "usage: sudo $0 <bundle>   (a directory in $SRV_ROOT/incoming)"
+BUNDLE="$1"
+[[ "$BUNDLE" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{7,40}$ ]] \
+    || die "bundle name $BUNDLE is not <YYYYmmddTHHMMSSZ>-<commit>"
+
+[ -r "$DEPLOY_ENV" ] || die "$DEPLOY_ENV missing or unreadable"
+# shellcheck disable=SC1090
+source "$DEPLOY_ENV"
+for var in SERVICE HEALTH_URL HEALTH_WAIT_SECONDS; do
+    [ -n "${!var:-}" ] || die "$var not set by $DEPLOY_ENV"
+done
+[[ "$HEALTH_WAIT_SECONDS" =~ ^[1-9][0-9]*$ ]] \
+    || die "HEALTH_WAIT_SECONDS=$HEALTH_WAIT_SECONDS is not a whole number"
+[ -r "$MIGRATE_ENV" ] || die "$MIGRATE_ENV missing or unreadable"
+DB_NAME="$(sed -nE 's#^DATABASE_URL=postgres://[^/]+/([^?]+).*#\1#p' \
+    "$MIGRATE_ENV" | head -1)"
+[ -n "$DB_NAME" ] || die "no database name in DATABASE_URL in $MIGRATE_ENV"
+
+INCOMING="$SRV_ROOT/incoming/$BUNDLE"
+LIBEXEC="$SRV_ROOT/libexec"
+WEB_PUB="$SRV_ROOT/web-pub"
+BACKUP="$SRV_ROOT/backup"
+STAGE_ROOT="$SRV_ROOT/stage"
+STAGE="$STAGE_ROOT/$BUNDLE"
+PENDING_MARK="$LIBEXEC/install.pending"
+REVISION="$LIBEXEC/${APP_SLUG}-api.revision"
+BINARY_LIST=(api-srv "$MIGRATE_NAME")
+PAYLOAD_LIST=(api-srv "$MIGRATE_NAME" web-pub.tar.gz "$APP_SLUG-api.revision")
+
+[ -d "$INCOMING" ] || die "no bundle at $INCOMING (upload it with bin/600-deploy-prd)"
+mkdir -p "$LIBEXEC" "$BACKUP" "$STAGE_ROOT"
+chmod 0700 "$BACKUP" "$STAGE_ROOT"
+
+# One install or rollback at a time.
+exec 9> "$STAGE_ROOT/.lock"
+flock -n 9 || die "another install or rollback holds $STAGE_ROOT/.lock"
+
+# --- 1. stage and check --------------------------------------------------
+# incoming/ is writable by the deploy group, so nothing is used from
+# there: the files are copied to root's stage/ first and checked there.
+rm -rf "$STAGE"
+mkdir -m 0700 "$STAGE"
+trap 'rm -rf "$STAGE"' EXIT
+for name in "${PAYLOAD_LIST[@]}" SHA256SUMS; do
+    [ -f "$INCOMING/$name" ] && [ ! -L "$INCOMING/$name" ] \
+        || die "$INCOMING/$name is missing or not a plain file"
+    cp "$INCOMING/$name" "$STAGE/$name"
+done
+LISTED="$(awk '{ sub(/^\*/, "", $2); print $2 }' "$STAGE/SHA256SUMS" | sort | tr '\n' ' ')"
+EXPECTED="$(printf '%s\n' "${PAYLOAD_LIST[@]}" | sort | tr '\n' ' ')"
+[ "$LISTED" = "$EXPECTED" ] \
+    || die "SHA256SUMS lists [$LISTED], expected [$EXPECTED]"
+( cd "$STAGE" && sha256sum -c --strict --quiet SHA256SUMS ) \
+    || die "checksums do not match: the upload is damaged; upload it again"
+COMMIT="$(sed -n 's/^commit=//p' "$STAGE/${APP_SLUG}-api.revision")"
+[[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] \
+    || die "${APP_SLUG}-api.revision names no full commit sha"
+WEB_SHA="$(awk '$2 ~ /web-pub.tar.gz$/ { print $1 }' "$STAGE/SHA256SUMS")"
+say "bundle $BUNDLE: checksums match, commit $COMMIT"
+
+live_value() { [ -f "$REVISION" ] && sed -n "s/^$1=//p" "$REVISION" || true; }
+
+health_ok() {
+    local attempt
+    for (( attempt = 1; attempt <= HEALTH_WAIT_SECONDS; attempt++ )); do
+        if curl -fsS --max-time 2 "$HEALTH_URL" 2>/dev/null \
+                | grep -q '"status":"ok"'; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+RESUME=""
+if [ -e "$PENDING_MARK" ]; then
+    [ "$(cat "$PENDING_MARK")" = "$BUNDLE" ] \
+        || die "an install of $(cat "$PENDING_MARK") stopped part-way:" \
+            "finish it first (sudo $0 $(cat "$PENDING_MARK"))"
+    RESUME=yes
+    say "an install of $BUNDLE stopped part-way: resuming it"
+elif [ "$(live_value bundle)" = "$BUNDLE" ]; then
+    say "$BUNDLE is already live: nothing changed"
+    health_ok || die "$SERVICE is not healthy at $HEALTH_URL" \
+        "(journalctl -u $SERVICE -n 50 --no-pager)"
+    say "$SERVICE healthy at $HEALTH_URL"
+    exit 0
+fi
+
+chmod 0755 "$STAGE/api-srv" "$STAGE/${MIGRATE_NAME}"
+mkdir "$STAGE/web-pub"
+tar --no-same-owner -xzf "$STAGE/web-pub.tar.gz" -C "$STAGE/web-pub"
+[ -f "$STAGE/web-pub/index.html" ] || die "the web bundle has no index.html"
+find "$STAGE/web-pub" -name '._*' -delete
+chmod -R a+rX "$STAGE/web-pub"
+
+# --- 2. schema, with the incoming migrator -------------------------------
+# Nothing live has changed yet: a refused verify or a failed up leaves the
+# running release as it was.
+MIGRATE=("$STAGE/${MIGRATE_NAME}" -config "$MIGRATE_ENV")
+"${MIGRATE[@]}" verify
+PENDING="$("${MIGRATE[@]}" pending)"
+[[ "$PENDING" =~ ^[0-9]+$ ]] || die "${MIGRATE_NAME} pending answered '$PENDING'"
+if [ "$PENDING" -gt 0 ]; then
+    DUMP="$BACKUP/pre-migrate-$BUNDLE.dump"
+    say "$PENDING migration(s) pending: dumping $DB_NAME to $DUMP first"
+    # root opens the file; only pg_dump runs as postgres.
+    runuser -u postgres -- pg_dump -Fc -d "$DB_NAME" > "$DUMP"
+    chmod 0600 "$DUMP"
+    "${MIGRATE[@]}" up
+    say "migrations applied; forward-only: a rollback keeps this schema"
+else
+    say "migrate: nothing pending"
+fi
+
+# --- 3. swap -------------------------------------------------------------
+echo "$BUNDLE" > "$PENDING_MARK"
+
+# A file already holding the incoming bytes was swapped by an interrupted
+# run of this bundle: rotating it again would put the new release in .prev.
+swap_file() {
+    local name="$1" source="$2"
+    if [ -n "$RESUME" ] && [ -f "$LIBEXEC/$name" ] \
+            && cmp -s "$source" "$LIBEXEC/$name"; then
+        say "  $name already swapped"
+        return
+    fi
+    install -m 0755 "$source" "$LIBEXEC/$name.new"
+    if [ -f "$LIBEXEC/$name" ]; then
+        ln -f "$LIBEXEC/$name" "$LIBEXEC/$name.prev"
+    fi
+    mv -f "$LIBEXEC/$name.new" "$LIBEXEC/$name"
+    say "  $name swapped${RESUME:+ (resumed)}"
+}
+
+say "swapping in $BUNDLE (live kept as .prev)"
+for binary in "${BINARY_LIST[@]}"; do
+    swap_file "$binary" "$STAGE/$binary"
+done
+if [ -n "$RESUME" ] && [ -d "$WEB_PUB" ] \
+        && [ "$(cat "$LIBEXEC/web-pub.sha256" 2>/dev/null)" = "$WEB_SHA" ]; then
+    say "  web-pub already swapped"
+else
+    if [ -d "$WEB_PUB" ]; then
+        rm -rf "$WEB_PUB.prev"
+        mv "$WEB_PUB" "$WEB_PUB.prev"
+        [ -f "$LIBEXEC/web-pub.sha256" ] \
+            && mv -f "$LIBEXEC/web-pub.sha256" "$LIBEXEC/web-pub.sha256.prev"
+    fi
+    mv "$STAGE/web-pub" "$WEB_PUB"
+    echo "$WEB_SHA" > "$LIBEXEC/web-pub.sha256"
+    say "  web-pub swapped"
+fi
+if [ -f "$REVISION" ] && [ "$(live_value bundle)" != "$BUNDLE" ]; then
+    mv -f "$REVISION" "$REVISION.prev"
+fi
+{
+    cat "$STAGE/${APP_SLUG}-api.revision"
+    printf 'bundle=%s\ninstalled_at=%s\n' "$BUNDLE" \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$REVISION.new"
+mv -f "$REVISION.new" "$REVISION"
+rm -f "$PENDING_MARK"
+
+# --- 4. restart and health -----------------------------------------------
+say "restarting $SERVICE"
+systemctl restart "$SERVICE" || true
+if health_ok; then
+    say "$SERVICE healthy at $HEALTH_URL; live:"
+    sed 's/^/        /' "$REVISION"
+    exit 0
+fi
+
+echo "[ERROR] $SERVICE is not healthy at $HEALTH_URL after ${HEALTH_WAIT_SECONDS}s" >&2
+echo "        journalctl -u $SERVICE -n 50 --no-pager" >&2
+if [ -f "$LIBEXEC/api-srv.prev" ]; then
+    echo "[ERROR] rolling back to the .prev release (code and web only;" \
+        "the schema stays)" >&2
+    flock -u 9
+    "$SRV_ROOT/bin/$APP_ENV-rollback" \
+        || echo "[ERROR] the rollback failed too: see its output above" >&2
+else
+    echo "[ERROR] first install: there is no .prev to roll back to" >&2
+fi
+exit 1

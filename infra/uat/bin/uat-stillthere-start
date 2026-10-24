@@ -1,3 +1,0 @@
-#!/bin/sh
-systemctl start uat-stillthere-api
-systemctl status uat-stillthere-api --no-pager
