@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# Build the Pi agent and install it on a Pi over ssh
+#
+#   bin/630-deploy-pi-agent <ssh target> [agent.json]
+#
+# ssh target: e.g. pi@192.168.53.103 (needs sudo there). agent.json, when
+# given, replaces the Pi's config; without it the Pi keeps its own, and a
+# first install refuses. Asks for the ssh and sudo passwords if the Pi
+# wants them.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
+
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+    echo "usage: bin/630-deploy-pi-agent <ssh target> [agent.json]" >&2
+    exit 2
+fi
+TARGET="$1"
+CONFIG="${2:-}"
+if [ -n "$CONFIG" ] && ! python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$CONFIG"; then
+    echo "[ERROR] $CONFIG is not valid JSON" >&2
+    exit 1
+fi
+
+"$SCRIPT_DIR/120-build-pi-agent"
+
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
+cp "$PROJECT_ROOT/dist/$APP_SLUG-agent" "$STAGE/stillthere-agent"
+cp "$PROJECT_ROOT/src/pi-agent/deploy/stillthere-agent.service" \
+    "$PROJECT_ROOT/src/pi-agent/deploy/install.sh" "$STAGE/"
+[ -n "$CONFIG" ] && cp "$CONFIG" "$STAGE/agent.json"
+
+REMOTE_DIR=/tmp/stillthere-agent-install
+echo "Copying to $TARGET:$REMOTE_DIR"
+ssh "$TARGET" "rm -rf /tmp/stillthere-agent-install && mkdir -m 0700 /tmp/stillthere-agent-install"
+scp -q "$STAGE"/* "$TARGET:$REMOTE_DIR/"
+ssh -t "$TARGET" "sudo bash /tmp/stillthere-agent-install/install.sh; rm -rf /tmp/stillthere-agent-install"

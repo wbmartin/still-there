@@ -9,6 +9,7 @@ database, `6xx` deploy. Details follow in the sections below.
 | `bin/000-rebrand <slug> "<Name>"` | Rename the app when deriving from this template (`DERIVING.md`) |
 | `bin/100-build-api-server` | Build the API and migrator binaries into `dist/` |
 | `bin/110-build-web-app` | `vite build` and a timestamped tar.gz in `dist/` |
+| `bin/120-build-pi-agent` | Cross-compile the Pi agent into `dist/` |
 | `bin/205-migrate-db [dbname]` | Create/migrate the developer database (`loc_stillthere_db`) |
 | `bin/215-run-api-srv` | Build and run the API on :8080 (foreground or background) |
 | `bin/216-stop-local-stack` | Stop this checkout's API and Vite |
@@ -24,12 +25,15 @@ database, `6xx` deploy. Details follow in the sections below.
 | `bin/605-survey-host <ssh-host>` | Read-only post-sales host survey |
 | `bin/610-deploy-uat` | Presales: shipped in the bundle, run on the UAT host with sudo |
 | `bin/620-export-tenant-data <out-dir>` | Scrubbed dump of the local database for a host |
+| `bin/630-deploy-pi-agent <ssh-target> [agent.json]` | Build and install the Pi agent as a systemd service |
 
 ## Setup and Build
 
 ```
 ./bin/000-rebrand <slug> "<Display Name>" [--module <go module path>]
 ./bin/100-build-api-server
+./bin/120-build-pi-agent                # PI_GOARCH=arm64 for 64-bit Pi OS
+./bin/630-deploy-pi-agent pi@<pi-host> [agent.json]
 ./bin/400-make-local-dev-certs [host]   # default localhost; FORCE=1 overwrites
 ```
 - `000`: the mechanical half of `DERIVING.md`. Reads the current identity
@@ -38,6 +42,13 @@ database, `6xx` deploy. Details follow in the sections below.
   a human. Refuses a dirty tree.
 - `100`: `dist/<slug>-api` and `dist/<slug>-migrate`. `bin/215` runs it
   first, so a separate build is only for checking it compiles.
+- `120`: `dist/<slug>-agent`, static, `GOARCH=arm GOARM=7` by default
+  (32-bit Raspberry Pi OS).
+- `630`: builds with `120`, copies the binary, unit and
+  `src/pi-agent/deploy/install.sh` to the Pi and runs the install with
+  sudo: user `stillthere` (group `bluetooth`), `/usr/local/bin/stillthere-agent`,
+  `/etc/stillthere/agent.json` (0600; replaced only when one is passed),
+  service `stillthere-agent`. Logs: `journalctl -u stillthere-agent`.
 - `400`: writes `etc/crt/api-srv-fullchain.pem` and
   `etc/crt/api-srv-privkey.pem` (gitignored, 365 days); set
   `ENABLE_TLS=true` in `etc/loc-api-srv.env` to use them. Dev is plain

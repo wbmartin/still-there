@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Cross-compile the Pi agent
+# Output: dist/<slug>-agent (slug from etc/app.env)
+# PI_GOARCH / PI_GOARM pick the target: arm/7 for 32-bit Raspberry Pi OS
+# (the default), PI_GOARCH=arm64 for 64-bit.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/etc/app.env"
+BINARY_PATH="$PROJECT_ROOT/dist/$APP_SLUG-agent"
+VERSION="$(git -C "$PROJECT_ROOT" describe --always --dirty --exclude='*' 2>/dev/null || echo dev)"
+
+echo "Building Pi agent ($VERSION)..."
+pushd "$PROJECT_ROOT/src/pi-agent" > /dev/null
+CGO_ENABLED=0 GOOS=linux GOARCH="${PI_GOARCH:-arm}" GOARM="${PI_GOARM:-7}" \
+    go build -ldflags "-X main.agentVersion=$VERSION" -o "$BINARY_PATH" .
+popd > /dev/null
+
+echo "Pi agent built successfully: $BINARY_PATH"

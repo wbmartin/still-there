@@ -1,0 +1,20 @@
+[Unit]
+Description=Still There base-station agent
+Wants=network-online.target bluetooth.service
+After=network-online.target bluetooth.service
+
+[Service]
+User=stillthere
+Group=stillthere
+SupplementaryGroups=bluetooth
+ExecStart=/usr/local/bin/stillthere-agent -config /etc/stillthere/agent.json
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/etc/stillthere
+
+[Install]
+WantedBy=multi-user.target
