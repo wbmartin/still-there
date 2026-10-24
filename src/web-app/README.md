@@ -46,7 +46,8 @@ nginx serves the bundle and proxies `/api` on the same origin. Any
   `description`)
 - `stores/` — Zustand state: one store per entity plus
   `create-entity-store.ts` (see below) and `auth-store.ts`
-- `schemas/` — zod form schemas (today only `loginSchema`; edit pages validate inline)
+- `schemas/` — zod form schemas (`loginSchema` and the monitoring forms;
+  the template's entity edit pages validate inline)
 - `hooks/` — `use-auth-guard.ts` and similar
 - `constants/` — `api.ts` (endpoint paths), `grants.ts`, `routes.ts`,
   `nav.ts` (the navbar's pages, which the command palette lists too)

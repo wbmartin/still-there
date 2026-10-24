@@ -28,8 +28,9 @@ interface Landing {
 }
 
 interface SweepRow {
-  // `{exampleId}` and `{appUserId}` are filled from the fixtures at run
-  // time; the ids depend on the seed's sequences.
+  // `{exampleId}`, `{appUserId}` and the sweep device's `{deviceId}`,
+  // `{beaconId}` and `{contactId}` are filled at run time; the ids depend
+  // on the sequences.
   path: string;
   landing: Record<Visitor, Landing>;
 }
@@ -131,6 +132,43 @@ const SWEEP_ROW_LIST: SweepRow[] = [
     path: ROUTES.HELP_INSIGHTS,
     landing: adminOnly(at(ROUTES.HELP_INSIGHTS, /^Help insights$/)),
   },
+  // Device monitoring: the grants are the admin group's alone.
+  {
+    path: ROUTES.DEVICE_LIST,
+    landing: adminOnly(at(ROUTES.DEVICE_LIST, /^Devices$/)),
+  },
+  {
+    path: `${ROUTES.DEVICE_EDIT}?deviceId=new`,
+    landing: adminOnly(at(ROUTES.DEVICE_EDIT, /^Add Device$/)),
+  },
+  {
+    path: `${ROUTES.DEVICE_EDIT}?deviceId={deviceId}`,
+    landing: adminOnly(at(ROUTES.DEVICE_EDIT, /^Edit Device$/)),
+  },
+  {
+    path: `${ROUTES.BEACON_EDIT}?deviceId={deviceId}`,
+    landing: adminOnly(at(ROUTES.BEACON_EDIT, /^Add Band$/)),
+  },
+  {
+    path: `${ROUTES.BEACON_EDIT}?beaconId={beaconId}`,
+    landing: adminOnly(at(ROUTES.BEACON_EDIT, /^Edit Band$/)),
+  },
+  {
+    path: `${ROUTES.CONTACT_EDIT}?deviceId={deviceId}`,
+    landing: adminOnly(at(ROUTES.CONTACT_EDIT, /^Add Contact$/)),
+  },
+  {
+    path: `${ROUTES.CONTACT_EDIT}?contactId={contactId}`,
+    landing: adminOnly(at(ROUTES.CONTACT_EDIT, /^Edit Contact$/)),
+  },
+  {
+    path: ROUTES.ALERT_LIST,
+    landing: adminOnly(at(ROUTES.ALERT_LIST, /^Alerts$/)),
+  },
+  {
+    path: ROUTES.TENANT_SETTING,
+    landing: adminOnly(at(ROUTES.TENANT_SETTING, /^Settings$/)),
+  },
 ];
 
 // What a crash looks like: the router's errorElement (app.tsx) and the
@@ -146,9 +184,53 @@ const BASIC_PASSWORD = "basic123!";
 interface FixtureIds {
   exampleId: number;
   appUserId: number;
+  deviceId: number;
+  beaconId: number;
+  contactId: number;
 }
 
 let fixtureIds: FixtureIds | null = null;
+
+const SWEEP_DEVICE_NAME = "Sweep device";
+
+// The seed has no devices: the sweep's own device, band and contact, found
+// by name or made through the API on first use.
+const readSweepDeviceIds = async (
+  admin: ApiSession,
+): Promise<Pick<FixtureIds, "deviceId" | "beaconId" | "contactId">> => {
+  const deviceList = await api.get<{ deviceId: number; deviceName: string }[]>(
+    admin,
+    "/deviceList",
+  );
+  const device =
+    deviceList.find((row) => row.deviceName === SWEEP_DEVICE_NAME) ??
+    (await api.post<{ deviceId: number }>(admin, "/device", {
+      deviceName: SWEEP_DEVICE_NAME,
+      checkinIntervalSec: 60,
+      missedCheckinBeforeAlarm: 3,
+      absentAfterSec: 300,
+    }));
+  const query = `?deviceId=${device.deviceId}`;
+  const beacon =
+    (await api.get<{ beaconId: number }[]>(admin, `/beaconList${query}`))[0] ??
+    (await api.post<{ beaconId: number }>(admin, "/beacon", {
+      deviceId: device.deviceId,
+      address: "0A:0B:0C:0D:0E:0F",
+      label: "Sweep band",
+    }));
+  const contact =
+    (await api.get<{ contactId: number }[]>(admin, `/contactList${query}`))[0] ??
+    (await api.post<{ contactId: number }>(admin, "/contact", {
+      deviceId: device.deviceId,
+      contactName: "Sweep contact",
+      phoneE164: "+15550100001",
+    }));
+  return {
+    deviceId: device.deviceId,
+    beaconId: beacon.beaconId,
+    contactId: contact.contactId,
+  };
+};
 
 // Looked up once, through the admin API session global setup saved.
 const readFixtureIds = async (): Promise<FixtureIds> => {
@@ -168,24 +250,37 @@ const readFixtureIds = async (): Promise<FixtureIds> => {
   if (!example || !basic) {
     throw new Error("route sweep: fixture example or basic user missing");
   }
-  fixtureIds = { exampleId: example.exampleId, appUserId: basic.appUserId };
+  fixtureIds = {
+    exampleId: example.exampleId,
+    appUserId: basic.appUserId,
+    ...(await readSweepDeviceIds(admin)),
+  };
   return fixtureIds;
 };
 
 const fillPath = (path: string, ids: FixtureIds): string =>
   path
     .replace("{exampleId}", String(ids.exampleId))
-    .replace("{appUserId}", String(ids.appUserId));
+    .replace("{appUserId}", String(ids.appUserId))
+    .replace("{deviceId}", String(ids.deviceId))
+    .replace("{beaconId}", String(ids.beaconId))
+    .replace("{contactId}", String(ids.contactId));
 
 // The browser logs every refused request as a console error with no URL;
 // refusals are judged from the responses instead (expectedRefusalList).
 const RESOURCE_ERROR = /^Failed to load resource: /;
 
-// The only refusal a page may meet: signed out, the session check on load
+// The only refusals a page may meet: signed out, the session check on load
 // (GET /refresh) answers 401, and that is how the app learns to show the
-// login form.
+// login form. As admin, two answers the monitoring pages expect: the
+// settings page's GET before the tenant's first save (404), and the alert
+// page's probe of the text simulator, whose empty body a live simulator
+// refuses (400; stores/alert-store.ts).
 const expectedRefusalList: Record<Visitor, RegExp[]> = {
-  admin: [],
+  admin: [
+    /^404 GET \/api\/tenantSetting$/,
+    /^400 POST \/api\/smsSimulateInbound$/,
+  ],
   basic: [],
   anonymous: [/^401 GET \/api\/refresh$/],
 };

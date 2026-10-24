@@ -10,6 +10,16 @@ export const ROUTES = {
   APP_USER_GROUP_LIST: "/appUserGroupList",
   APP_USER_GROUP_EDIT: "/appUserGroupEdit",
 
+  // Device monitoring. The device page takes `?deviceId=N` or `=new`; the
+  // band and contact pages take `?beaconId=N` / `?contactId=N` to edit one,
+  // or `?deviceId=N` to add one to that device.
+  DEVICE_LIST: "/deviceList",
+  DEVICE_EDIT: "/deviceEdit",
+  BEACON_EDIT: "/beaconEdit",
+  CONTACT_EDIT: "/contactEdit",
+  ALERT_LIST: "/alertList",
+  TENANT_SETTING: "/tenantSetting",
+
   // Other
   DASHBOARD: "/dashboard",
   EXAMPLE_LIST: "/exampleList",
