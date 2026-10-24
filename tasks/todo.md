@@ -39,14 +39,18 @@ Proof of concept first. Branches: `feature/*` -> `dev` -> `uat`
 
 ## 1. Pi agent (`src/pi-agent/`, own Go module)
 
-- [ ] BLE scan via `tinygo.org/x/bluetooth` (BlueZ over D-Bus); per
+- [x] BLE scan via `tinygo.org/x/bluetooth` (BlueZ over D-Bus); per
       configured address: last seen, smoothed RSSI, present/absent.
-- [ ] Local config file (JSON): server URL, device token, interval,
+- [x] Local config file (JSON): server URL, device token, interval,
       thresholds, band list, config version.
-- [ ] Check-in loop: POST state; immediate check-in on a present/absent
+- [x] Check-in loop: POST state; immediate check-in on a present/absent
       change.
-- [ ] systemd unit; `bin/` script to cross-compile and copy to the Pi.
-- [ ] Verify on the Pi: band on/off shows present/absent in the log.
+- [x] systemd unit; `bin/` script to cross-compile and copy to the Pi.
+- [x] Verify on the Pi: band on/off shows present/absent in the log
+      (2026-10-24: present 09:17:44, absent 09:19:32, present 09:20:52;
+      address unchanged across power cycles). Service installed on the
+      Pi by bin/630, running as user stillthere. Not yet checked: a Pi
+      reboot brings it back.
 
 ## 2. Server
 
