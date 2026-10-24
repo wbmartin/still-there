@@ -84,7 +84,7 @@
 
   | Variable | Read by | Set by |
   | --- | --- | --- |
-  | `TEST_DATABASE_URL` | the database-backed Go tests: `internal/repository/testdb_test.go`, `internal/migrate/migrate_test.go`, `sql/export_scrub_test.go`, `cmd/migrate/invite_test.go`. Without it they skip, so a bare `go test` never writes to a database a config file happened to name | `etc/loc-test.env` (a host: its own `TEST_ENV` file); `bin/300-run-tests go` passes it to `go test` |
+  | `TEST_DATABASE_URL` | the database-backed Go tests: `internal/repository/testdb_test.go`, `internal/migrate/migrate_test.go`, `sql/export_scrub_test.go`, `cmd/migrate/invite_test.go`, `cmd/migrate/bootstrap_admin_test.go`. Without it they skip, so a bare `go test` never writes to a database a config file happened to name | `etc/loc-test.env` (a host: its own `TEST_ENV` file); `bin/300-run-tests go` passes it to `go test` |
   | `TEST_API_ENV` | `tests/conftest.py`: the private API's config file, read for its limits and checked to name a scratch database | `bin/300-run-tests py` (the copy of `etc/e2e-api-srv.env` it writes to the log directory) |
   | `TEST_BASE_URL` | `tests/conftest.py` and the `tests/test_*.py` modules | `bin/300-run-tests py`, from the `TEST_BASE_URL` key in that config file |
   | `E2E_API_ENV` | `src/web-app/playwright.config.ts` (default `etc/e2e-api-srv.env`); `bin/230-run-web-app-e2e`, `bin/300-run-tests`, `bin/330-test-load` | `etc/loc-test.env`; bin/230 and bin/300 make it absolute and export it |

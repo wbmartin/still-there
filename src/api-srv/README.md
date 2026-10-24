@@ -232,7 +232,11 @@ connect as) and `sql/fixtures/` (seed data, e.g. `local-seed.sql`).
 The migrator's subcommands are listed in
 `doc/900-database-guidelines.md`; besides the schema ones, `invite
 <userName>` prints a first sign-in link for an invited login on a host
-whose logins all came from a scrubbed export (doc/330 A9).
+whose logins all came from a scrubbed export (doc/330 A9), and
+`bootstrap-admin <userName> <email>` makes the first login of a tenant
+migrated empty: an Admin group holding every grant in
+`model.AllKnownGrants` and one invited login in it, then prints its link
+(`cmd/migrate/bootstrap_admin.go`).
 
 ## Testing
 
