@@ -607,9 +607,7 @@ relay needs the account's webhook public key, so it goes in with or
 after step 17. Telnyx's URL stays
 `https://webhook.teamtaggle.com/telnyx-inbound` (queue `stillthere`).
 
-Blocks as in How the command blocks work, except that a LAPTOP block
-here checks `uname` is `Darwin` and the script it runs is in the current
-directory, or prints `WRONG HOST: nothing ran`.
+Blocks as in How the command blocks work.
 
 ### R1. Build and upload (laptop)
 
@@ -620,7 +618,7 @@ LAPTOP
 
 ```bash
 : '#===================================='
-if [ "$(uname)" = Darwin ] && [ -x bin/140-build-sms-relay ]; then
+if [ "$(hostname -s)" != prd-wbm ] && [ -x bin/140-build-sms-relay ]; then
   git status --short
   git log -1 --oneline
   bin/140-build-sms-relay
@@ -640,7 +638,7 @@ LAPTOP
 
 ```bash
 : '#===================================='
-if [ "$(uname)" = Darwin ]; then ssh -t prd-wbm sudo -i; else echo "WRONG HOST: nothing ran"; fi
+if [ "$(hostname -s)" != prd-wbm ]; then ssh -t prd-wbm sudo -i; else echo "WRONG HOST: nothing ran"; fi
 : '#===================================='
 ```
 
@@ -898,7 +896,7 @@ LAPTOP
 
 ```bash
 : '#===================================='
-if [ "$(uname)" = Darwin ] && [ -x bin/140-build-sms-relay ]; then
+if [ "$(hostname -s)" != prd-wbm ] && [ -x bin/140-build-sms-relay ]; then
   rm -f dist/smsrelay-infra.tar dist/smsrelay.sha256
 else echo "WRONG HOST: nothing ran"; fi
 : '#===================================='
