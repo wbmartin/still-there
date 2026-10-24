@@ -139,7 +139,7 @@ fi
 # Go analysers are pinned and installed once under tmp/ (go install, no
 # go.mod entry), so every machine runs the same version and a later run
 # needs no network. An installed copy of another version is replaced.
-GO_MODULE_DIR_LIST=(src/api-srv src/load-test)
+GO_MODULE_DIR_LIST=(src/api-srv src/load-test src/pi-agent)
 STATICCHECK_VERSION=v0.8.1
 GOVULNCHECK_VERSION=v1.7.0
 TOOLS_BIN="$PROJECT_ROOT/tmp/tools/bin"
