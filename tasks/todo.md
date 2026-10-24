@@ -54,15 +54,44 @@ Proof of concept first. Branches: `feature/*` -> `dev` -> `uat`
 
 ## 2. Server
 
-- [ ] Migration: device, device_config (versioned), beacon, checkin
-      (latest + history), contact, alert.
-- [ ] `POST /deviceCheckin`, per-device token (stored hashed), not a user
-      JWT.
-- [ ] Watchdog goroutine: missed check-ins, band absent; raise, remind,
-      all-clear.
-- [ ] SMS sender interface; Telnyx implementation; log-only
-      implementation until verification clears.
-- [ ] Admin pages: devices, settings, contacts, alerts (with page help).
+Design agreed 2026-10-24 (staff):
+
+- Device = the Pi. It holds the token (shown once at issue, stored as a
+  SHA-256 hash, reissue kills the old one). Bands carry no credential;
+  the Pi names them by address.
+- Contacts are per device (one household). Added by an admin in the
+  tenant; the contact gets an invite text and is active only after
+  replying Y. STOP opts out of everything; the admin UI shows it, and
+  only the contact texting START re-enables (carriers block sends after
+  STOP). HELP answers with who we are.
+- Tenant settings: time zone, reminder interval (minutes), daily
+  reminder time.
+- Alarm life: raised -> text all; repeat every reminder interval until
+  acknowledged. Acknowledged (reply OK, or in the UI) -> text all "<who>
+  acknowledged"; then one reminder a day at the tenant's time while
+  still open. Admin turns it off in the UI -> text all "<who> turned
+  off"; no more reminders. Band seen again -> resolved; text all
+  "alerting re-activated for <band label>" with who acknowledged or
+  turned it off. A band absence raises again only after the band was
+  seen.
+- Reply OK acknowledges every open alarm on the households that number
+  is a contact for.
+- Per-contact notification preferences per event: raised, reminder,
+  acknowledged, turned off, re-activated, daily reminder, device
+  offline.
+- Check-in history kept in full for the PoC; pruning later.
+- Until Telnyx can reach a public server: SMS_PROVIDER=log and a
+  dev-only "simulate reply" endpoint. Telnyx goes live on the server
+  `prd-wbm`.
+
+Commits on `feature/server-checkin`, each passing `bin/300-run-tests all`:
+
+- [ ] 1. Schema and grants (migration 0008).
+- [ ] 2. Device API: CRUD, `/deviceToken`, `/deviceCheckin`.
+- [ ] 3. Watchdog, SMS sender (log), inbound replies, simulate endpoint.
+- [ ] 4. Admin pages: devices, bands, contacts, alerts, tenant settings
+      (with page help).
+- [ ] Telnyx sender and signed inbound webhook.
 
 ## 3. Config push
 
