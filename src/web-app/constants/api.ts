@@ -48,6 +48,21 @@ export const API_ENDPOINTS = {
   EXAMPLE_LIST: "/exampleList",
   EXAMPLE: "/example",
 
+  // Device monitoring (handler/device_handler.go and its neighbours)
+  DEVICE_LIST: "/deviceList",
+  DEVICE: "/device",
+  DEVICE_TOKEN: "/deviceToken",
+  BEACON_LIST: "/beaconList",
+  BEACON: "/beacon",
+  CONTACT_LIST: "/contactList",
+  CONTACT: "/contact",
+  ALERT_LIST: "/alertList",
+  ALERT_ACKNOWLEDGE: "/alertAcknowledge",
+  ALERT_TURN_OFF: "/alertTurnOff",
+  TENANT_SETTING: "/tenantSetting",
+  // SMS_PROVIDER=log only (handler/sms_handler.go); 404 otherwise
+  SMS_SIMULATE_INBOUND: "/smsSimulateInbound",
+
   // In-app issue reports (handler/issue_report_handler.go;
   // doc/150-issue-report-module.md)
   ISSUE_REPORT: "/issueReport",

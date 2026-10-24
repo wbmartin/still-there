@@ -1,6 +1,7 @@
 # schemas/
 
-Zod schemas for forms. Today that is `loginSchema` (`pages/login.tsx`, via
-`mantine-form-zod-resolver`). The entity edit pages validate inline; whether
-they move to one schema per feature is still open. Add a schema when a
-form uses it, not before.
+Zod schemas for forms, used through `mantine-form-zod-resolver`:
+`loginSchema` (`pages/login.tsx`) and the device monitoring forms (device,
+band, contact, tenant setting, simulated text), each mirroring its Go
+`*Problem` check. The template's entity edit pages still validate inline.
+Add a schema when a form uses it, not before.
