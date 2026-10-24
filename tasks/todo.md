@@ -105,6 +105,31 @@ Commits on `feature/server-checkin`, each passing `bin/300-run-tests all`:
       threshold so sleep does not alarm.
 - [ ] Later: Pi case switch on GPIO.
 
+## 5. SMS relay (`src/sms-relay/`, own Go module; split to its own repo later)
+
+Staff 2026-10-24: one inbound webhook for several apps. Telnyx posts to
+`https://webhook.teamtaggle.com/telnyx-inbound/<queue>`; the relay checks
+the signature once, stores the text in its own Postgres table and answers
+200. Apps read their queue over HTTP: peek, receive (lease), ack.
+At-least-once; apps de-duplicate by relay message id. Outbound texts stay
+in each app.
+
+- [ ] Relay service, own DB, tests.
+- [ ] Still There reads its queue in the watchdog tick (instead of
+      /smsInbound, which stays for local testing).
+- [ ] prd-wbm: relay service, webhook site points at it.
+
+## 6. Wi-Fi setup hotspot on the Pi
+
+Staff 2026-10-24: when the Pi cannot reach the internet, it opens its own
+Wi-Fi network with a plain-HTTP setup page (no TLS, local only) where a
+phone picks the home Wi-Fi and enters its password. Band scanning keeps
+running meanwhile.
+
+- [ ] Network helper (root) on the Pi: connectivity check, hotspot on
+      wlan0, setup page, join the chosen network, fall back to hotspot.
+- [ ] Verify on the Pi 3B (eth0 stays up for ssh during the test).
+
 ## PoC done when
 
 - [ ] Band off -> text within about 10 min.
