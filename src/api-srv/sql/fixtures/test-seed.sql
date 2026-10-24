@@ -43,7 +43,7 @@ SELECT
 FROM common_vars,
 (VALUES
     (1, 'Basic User', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9010]),
-    (2, 'Admin', ARRAY[1,1001,1002,1003,1004,8001,9001,9002,9009,9010,9011,9012,9013,9014,9015,9003,9004,9008,9020]),
+    (2, 'Admin', ARRAY[1,1001,1002,1003,1004,8001,9001,9002,9009,9010,9011,9012,9013,9014,9015,9003,9004,9008,9020,1010,1011,1012,1013,1014,1020,1021,1022,1023,1030,1031,1032,1033,1040,1042,1050,1052]),
     (3, 'New User', ARRAY[1, 1001])
 ) AS data(app_user_group_id, group_name, user_grant_list)
 ON CONFLICT DO NOTHING;
@@ -68,7 +68,7 @@ SELECT
 FROM common_vars,
 (VALUES
     (4, 'Basic2 User', ARRAY[1, 1001, 1002, 1003, 1004, 8001, 9010]),
-    (5, 'Admin2', ARRAY[1,1001,1002,1003,1004,8001,9001,9002,9009,9010,9011,9012,9013,9014,9015,9003,9004,9008,9020])
+    (5, 'Admin2', ARRAY[1,1001,1002,1003,1004,8001,9001,9002,9009,9010,9011,9012,9013,9014,9015,9003,9004,9008,9020,1010,1011,1012,1013,1014,1020,1021,1022,1023,1030,1031,1032,1033,1040,1042,1050,1052])
 ) AS data(app_user_group_id, group_name, user_grant_list)
 ON CONFLICT DO NOTHING;
 
@@ -81,7 +81,9 @@ SELECT setval('app_user_group_app_user_group_id_seq',
 -- alone; mfa (Basic User group, password basic123!) is NOT exempt and starts
 -- with no seed, so the TOTP enrol → verify path is exercised end to end.
 -- switcher (MFA exempt) is homed in 2 with Basic User there and Basic2 User
--- in 3, the one login that can /changeSecurityContext.
+-- and Admin2 in 3, the one login that can /changeSecurityContext; Admin2
+-- makes it a tenant-3 admin for the device isolation tests
+-- (tests/test_device_checkin.py).
 WITH common_vars AS (
     SELECT EXTRACT(EPOCH FROM NOW()) AS ts, 0 AS system_id
 )
@@ -120,7 +122,7 @@ FROM common_vars,
      'Second', 'Factor', 'mfa@example.com', ARRAY[1], FALSE),
     ('switcher',
      '$argon2id$v=19$m=65536,t=3,p=4$kxssq7+N6Of3OSiUThJgrw$S+uHFwjOhp8daiHCYhyto7whkrDjDr2TD0+Y6Cq1kd4',
-     'Context', 'Switcher', 'switcher@example.com', ARRAY[1, 4], TRUE)
+     'Context', 'Switcher', 'switcher@example.com', ARRAY[1, 4, 5], TRUE)
 ) AS data(user_name, pw_hash, first_name, last_name, email,
           app_user_group_membership_list, mfa_exempt)
 ON CONFLICT (user_name) DO NOTHING;

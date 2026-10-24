@@ -19,7 +19,8 @@
 -- issued there (doc/330 A9), sets a password and enrols in MFA. A blocked
 -- login stays blocked; a deleted one keeps its status but loses its
 -- credentials too. Open invite links are revoked: their tokens were shown
--- on the laptop.
+-- on the laptop. Device tokens are cleared (device.token_hash) for the
+-- same reason: a Pi gets a new token issued on the host.
 --
 -- The data it removes: the issue-report module's rows
 -- (doc/150-issue-report-module.md). They are the laptop's conversation
@@ -77,6 +78,8 @@ SET revoked_ts = extract(epoch FROM now()),
     update_ts = extract(epoch FROM now()),
     update_user_id = 0
 WHERE redeemed_ts IS NULL AND revoked_ts IS NULL AND delete_ts IS NULL;
+
+UPDATE device SET token_hash = NULL;
 
 UPDATE app_user
 SET pw_hash = '',

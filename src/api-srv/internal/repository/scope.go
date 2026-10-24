@@ -7,13 +7,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Table and primary-key names for the login-layer tables. Constants, so
-// zeroRowOutcome is never handed caller input to format into SQL.
+// Table and primary-key names for the tables zeroRowOutcome explains.
+// Constants, so it is never handed caller input to format into SQL.
 const (
 	appUserTable      = "app_user"
 	appUserPK         = "app_user_id"
 	appUserGroupTable = "app_user_group"
 	appUserGroupPK    = "app_user_group_id"
+	deviceTable       = "device"
+	devicePK          = "device_id"
+	beaconTable       = "beacon"
+	beaconPK          = "beacon_id"
+	contactTable      = "contact"
+	contactPK         = "contact_id"
 )
 
 // zeroRowOutcome explains a scoped write that matched no row: absent from
